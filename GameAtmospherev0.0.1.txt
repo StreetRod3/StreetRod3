@@ -1,0 +1,52 @@
+So, what atmosphere do we want for each location?
+
+=== Garage ===
+Lighting:
+-Day lighting: Windows plus indoor fluorescent bulbs?
+-Night lighting: Indoor fluorescent bulbs?
+Audio:
+-What background noises can be heard in the garage? Sounds from the street? Crickets at night?
+-What does it sound like when you're working on a car in the garage? Is there echo off the
+concrete floor, or do you just hear the sounds of your tools?
+-If there's a radio in the garage, does it sound like it's sitting in a garage or does it
+play audio directly to your ears?
+Background/Foreground:
+-Does the room itself feel worn-in or still fresh?
+-Is the garage cluttered or mostly bare?
+-Is the stuff in the garage orderly or sitting in piles and causing boxes to crumple?
+-Are there amenities in the garage, or is it strictly tools?
+-Is there unrelated stuff (paints, lawn equipment, workbench) or no?
+Usable Items:
+-What will be used to save the game? A clipboard, like in SR1 and SR2?
+-Which tools will be used for each task? The type, wear, and quality of a given tool
+can help to set the tone.
+-If there's a radio in the garage, what does it look like? What songs are playing?
+
+
+=== Detroit ===
+Lighting:
+-What season is the game taking place in?
+-Which areas are kept in shade by skyscrapers and taller buildings?
+-Which areas are well-lit by street lights? Which areas aren't?
+Audio:
+-What do the different areas of the city sound like?
+Areas:
+-What areas will be depicted for tracks?
+-What should each area feel like?
+People:
+-Traffic vehicles? Parked vehicles?
+-Traffic behavior, if any?
+
+=== The Car Interiors ===
+It's 2022, we can quite easily make cars feel more tangible than was possible in the '90s.
+Lighting:
+-Not really applicable, but how good should car headlights be? This is as much an aesthetic
+decision as it is a gameplay decision.
+-Lights should fade on/off rather than switching on and off like LEDs can do.
+Audio:
+-A lot of things could have sounds associated with them. It really depends on what the player can do.
+Usable Items:
+-Should we have a radio in every car? I know that's a lot of work.
+-Should the turn signals be usable?
+-Should it even be possible to open the glovebox?
+-What if the player could hang stuff from the mirror?
