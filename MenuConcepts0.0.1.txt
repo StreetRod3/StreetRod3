@@ -1,0 +1,28 @@
+Overall Menu Theme Ideas:
+-Generic 2D menus with 2D or 3D background
+-2D menus in a 3D space, camera moves to focus on each menu in the 3D space
+
+
+=== Main Menu ===
+
+=== Career Mode ===
+
+
+=== New Game/Career ===
+-Should there be a cutscene or text intro if the player picks this option,
+or should the player be dropped into an empty garage when choosing this option?
+
+=== Load Game/Old Game ===
+
+
+
+=== Single Race ===
+
+
+=== Options Menu ===
+-What graphics options should be available?
+-What audio options should be available?
+-What gameplay options should be available?
+
+=== Quit Game ===
+-Do we want a "are you sure?" dialog? If so, what should it say?
