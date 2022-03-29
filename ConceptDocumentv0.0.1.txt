@@ -1,0 +1,69 @@
+Game Name: Street Rod 3
+Game Logo: Are we sticking with the current logo or moving on to a different one?
+[Add ideas for a different logo here, if any.]
+Game Catch Phrase: Do we want one?
+
+
+=== General Info ===
+
+
+Genre: Racing
+Subgenre: Street Racing/Drag Racing
+Player Type: Singleplayer, with multiplayer coming eventually.
+Game Play: The player starts with some money, uses that money to buy a car, uses that car to go street racing,
+earns money through street racing to buy parts and cars, and repeats until they can face off against the
+fastest racer in the city.
+Technical Form: Full 3D.
+View: First Person will definitely be an option. Will Third Person be an option? Hood camera?
+Platform: PC
+Device: PC
+Language: C++, maybe?
+
+
+
+
+=== Game Sales ===
+Consumer Group: Fans of SR1/SR2, Muscle car fans, and racing game/sim fans.
+Payment: What's the term for "you buy the game and that's it"?
+Estimated price: TBD
+
+=== Game Atmosphere ===
+TBD
+
+
+
+=== Game Play ===
+Executing Game Application: Do we want a menu to pick resolution and rendering device before launching?
+Do we want any kinds of splash screens or intro videos?
+Game Options: Obviously there should be video, audio (subtitle?), and control options, but what gameplay-affecting
+options should be available? What options should there be for the HUD? Do we want a cheat menu at all?
+Story Synopsis: There's a story?
+Modes: There should be at least two, "Single Race" and "Career". Single Race should allow you to pick and
+customize a car, and Career should be self-explanatory. Multiplayer should be a mode when singleplayer stuff
+is completed.
+Game Elements: Not sure what to put here.
+Game Levels: Various tracks in multiple cities, plus a garage in each city.
+Player's Controls: Keyboard, mouse?, game controller(s).
+Winning: Beat the fastest racer in the country, presumably.
+Losing: Put yourself in a position where you can't race. Run out of money, lose your last car while unable to afford
+another, or damage your last car while unable to afford parts to put it back in running order.
+End: Either a bathroom wall high score list, or a cutscene showing what happens when you win. Either way, you'll
+be returned to the main menu.
+Why Is This All Fun?: Tuning cars is fun, racing cars is fun, and then there's the complicating factor that you'll
+have to wager for every last cent of money you can earn.
+
+=== Key Features ===
+Number of Levels: TBD
+Number of Characters: TBD, but don't forget the fastest racer in the country.
+Time of Game Play: TBD
+Replayability: Should be moderately high, just by virtue of having lots of valid approaches to racing and picking
+opponents/challenges.
+Audio Specifications: TBD
+
+=== Selling Features ===
+Marketing Ideas: "It's Street Rod 3, at long last! The heir to the throne! All of the stuff you liked about the
+earlier games, but modernized and expanded!"
+Unique Features: Immersive-sim levels of immersion in the era, in the style of SR1 and SR2. Also, there just
+aren't many games about muscle cars specifically today.
+Merchandising: Keychains? Shirts? Hats?
+Consumer Group: Aside from us? Fans of the series, fans of muscle cars, and fans of racing games/sims.
