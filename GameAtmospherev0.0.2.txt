@@ -22,6 +22,60 @@ Usable Items:
 can help to set the tone.
 -If there's a radio in the garage, what does it look like? What songs are playing?
 
+=== Cafe ===
+Lighting:
+-Day lighting: Sunlight! The cafe should have interior lighting, of course.
+-Night lighting: Neon, all of it. Light should spill out from inside the cafe.
+Audio:
+-People outside chattering?
+-Cars revving?
+-Music from nearby car stereo?
+Background/Foreground:
+-What kind of cafe is this?
+-What does this cafe feel like?
+-How new or old is this cafe? How worn or fresh is it?
+People:
+-Who's here?
+-What vehicles are parked/driving around?
+-What are your opponents like?
+Usable Items:
+-How do you ask for a specific opponent?
+-What else can you do at the cafe?
+
+=== Gas Station ===
+Lighting:
+-Day lighting: Sunlight, with some lighting inside the station.
+-Night lighting: Is there a roof over the pumps? If so, that's probably lit. The sign and 
+station should definitely be lit.
+Audio:
+-Cars driving past?
+-Gas pump noises?
+Background/Foreground:
+-What is this gas station like?
+-What kind of gas pump are you using?
+-How many pumps are there?
+-Is anyone else getting gas?
+People:
+-Who else is here?
+Usable Items:
+-The gas pump, of course.
+-Washrag and bucket of water?
+-Can you do anything else at the gas station?
+
+=== Aqueduct ===
+Lighting:
+-Day lighting: Sunlight!
+-Night lighting: Moonlight!
+Audio:
+-The sounds of the city, perhaps?
+-Wind?
+-Echoes from your own car?
+Background/Foreground:
+-Is it dirty and dingy here, or is it relatively clean?
+-Is there litter or dumped trash?
+-Are there cars abandoned here?
+People:
+-Is anyone else here?
 
 === Detroit ===
 Lighting:
