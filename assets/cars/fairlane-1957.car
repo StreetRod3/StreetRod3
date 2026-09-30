@@ -1,10 +1,10 @@
 {
-  "id": "vette-1956",
-  "name": "Vette 1956",
+  "id": "fairlane-1957",
+  "name": "Fairlane 500",
   "model": {
-    "path": "res://assets/cars/sr1-c56.glb",
+    "path": "res://assets/cars/sr1-fairlane-1957.glb",
     "position": [0.0, 0.0, 0.0],
-    "height": 1.5
+    "height": 1.6
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
@@ -12,36 +12,36 @@
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.78, 0.36, 1.25],
+        "position": [-1.204, 0.452, 1.996],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.78, 0.36, 1.25],
+        "position": [1.172, 0.452, 1.996],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.78, 0.36, -1.25],
+        "position": [-1.190, 0.452, -1.677],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.78, 0.36, -1.25],
+        "position": [1.217, 0.452, -1.677],
         "rotation": [0, 180, -90]
       }
     ]
   },
   "parts": {
-    "engine": "v8-283",
+    "engine": "v8-265",
     "transmission": "gb_auto3",
     "wheels": "wheel-c1"
   },
   "chassis": {
-    "mass": 1290,
-    "wheelbase": 2.59,
-    "cg_height": 0.48,
-    "front_axle_fraction": 0.46,
-    "max_steer_deg": 30
+    "mass": 1590,
+    "wheelbase": 2.997,
+    "cg_height": 0.56,
+    "front_axle_fraction": 0.45,
+    "max_steer_deg": 28
   }
 }
