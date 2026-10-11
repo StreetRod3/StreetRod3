@@ -1,0 +1,507 @@
+extends Node3D
+
+## Shared car visuals (STL body, wheels, materials) used by garage and race.
+## Defaults match `garage.tscn` / `car_vehicle_visual.tscn`.
+
+@export var wheel_scale: float = 1
+## When set (e.g. opponent), applied to the car body after the STL mesh loads.
+@export var body_paint: StandardMaterial3D
+
+#@export var body_node_path: NodePath = NodePath("body")
+
+const _CarFile := preload("res://scripts/car_file.gd")
+const _PaintShader := preload("res://shaders/car_paint_mask.gdshader")
+
+var _waiting_for_stl: bool = false
+var _previewing: bool = false
+var _preview_spec: Dictionary = {}
+var _preview_color: Color = Color.WHITE
+
+
+## Load a catalog car for a viewport that is not the player's garage car.
+## Call before the node enters the tree. Returns false when the file fails to load.
+func prepare_preview(car_file: String, paint: Color) -> bool:
+	return _load_preview(car_file, paint)
+
+
+## Swap the preview to another catalog car after this node is already on screen.
+func preview_listing(car_file: String, paint: Color) -> bool:
+	if not _load_preview(car_file, paint):
+		return false
+	if is_inside_tree():
+		_apply_car_file()
+		_reload_preview_models()
+		set_car_body_color(_preview_color)
+	return true
+
+
+func _load_preview(car_file: String, paint: Color) -> bool:
+	var spec := _CarFile.load_path(car_file)
+	var errors: Variant = spec.get("errors", [])
+	if typeof(errors) == TYPE_ARRAY and not (errors as Array).is_empty():
+		return false
+	_previewing = true
+	_preview_spec = spec
+	_preview_color = paint
+	return true
+
+
+func reload_player_car() -> void:
+	if _previewing:
+		return
+	_apply_car_file()
+	_reload_preview_models()
+	apply_equipped_wheels()
+	var loaded_body := get_node_or_null("CarBody") as Node
+	if loaded_body != null:
+		_hide_baked_wheels(loaded_body)
+	set_car_body_color(_active_paint_color())
+
+
+func _active_spec() -> Dictionary:
+	if _previewing:
+		return _preview_spec
+	return GameState.car_spec
+
+
+func _active_paint_color() -> Color:
+	if _previewing:
+		return _preview_color
+	return GameState.car_color
+
+
+func _enter_tree() -> void:
+	_apply_car_file()
+
+
+func _ready() -> void:
+	if not _previewing:
+		apply_equipped_wheels()
+	_apply_wheel_scale()
+	var loaded_body := get_node_or_null("CarBody") as Node
+	if loaded_body != null:
+		_hide_baked_wheels(loaded_body)
+		if loaded_body.has_signal(&"stl_loaded"):
+			loaded_body.connect(&"stl_loaded", Callable(self, "_on_body_hide_wheels"))
+	set_car_body_color(_active_paint_color())
+	var car_body := get_node_or_null("body") as MeshInstance3D
+	if car_body != null and body_paint != null:
+		# CarBody `_ready` runs before this node, so the STL may already be loaded.
+		if car_body.mesh != null:
+			_apply_body_paint(car_body)
+		elif car_body.has_signal(&"stl_loaded"):
+			_waiting_for_stl = true
+			car_body.connect(&"stl_loaded", Callable(self, "_on_car_body_stl_loaded").bind(car_body))
+
+func _on_body_hide_wheels(_mesh: Variant) -> void:
+	var loaded_body := get_node_or_null("CarBody") as Node
+	if loaded_body != null:
+		_hide_baked_wheels(loaded_body)
+	set_car_body_color(_active_paint_color())
+
+
+func _hide_baked_wheels(node: Node) -> void:
+	for child in node.get_children():
+		if child is MeshInstance3D and _is_baked_wheel(child as MeshInstance3D):
+			(child as MeshInstance3D).visible = false
+		_hide_baked_wheels(child)
+
+
+func _is_baked_wheel(mesh_instance: MeshInstance3D) -> bool:
+	var label := String(mesh_instance.name).to_lower()
+	if label.contains("wheel") or label.contains("tire"):
+		return true
+	if mesh_instance.mesh == null:
+		return false
+	for i in mesh_instance.mesh.get_surface_count():
+		var mat := mesh_instance.get_surface_override_material(i)
+		if mat == null:
+			mat = mesh_instance.mesh.surface_get_material(i)
+		if mat == null:
+			continue
+		var mat_name := String(mat.resource_name).to_lower()
+		if mat_name.contains("wheel") or mat_name.contains("tire"):
+			return true
+	return false
+
+
+func _on_car_body_stl_loaded(_mesh: Mesh, car_body: MeshInstance3D) -> void:
+	_waiting_for_stl = false
+	_apply_body_paint(car_body)
+
+
+func _apply_car_file() -> void:
+	var spec: Dictionary = _active_spec()
+	if spec.is_empty() or not spec.get("errors", []).is_empty():
+		if _previewing:
+			return
+		spec = _CarFile.load_path(GameState.current_car_file_path())
+	var errors: Variant = spec.get("errors", [])
+	if typeof(errors) == TYPE_ARRAY and not (errors as Array).is_empty():
+		return
+	var wheels: Variant = spec.get("wheels", {})
+	var overlay := true
+	if typeof(wheels) == TYPE_DICTIONARY:
+		overlay = bool((wheels as Dictionary).get("overlay", true))
+	var model: Variant = spec.get("model", {})
+	if typeof(model) == TYPE_DICTIONARY:
+		var model_dict: Dictionary = model
+		var body := get_node_or_null("CarBody") as Node3D
+		_apply_mount(body, str(model_dict.get("path", "")), model_dict, float(model_dict.get("height", 5.0)))
+		if body != null:
+			body.set("snap_to_ground", not overlay)
+	if typeof(wheels) != TYPE_DICTIONARY:
+		return
+	var wheel_dict: Dictionary = wheels
+	_set_overlay_wheels_visible(overlay)
+	if not overlay:
+		return
+	wheel_scale = float(wheel_dict.get("scale", wheel_scale))
+	var mounts: Variant = wheel_dict.get("mounts", [])
+	if typeof(mounts) != TYPE_ARRAY:
+		return
+	var wheel_path := str(wheel_dict.get("path", ""))
+	var wheel_height := float(wheel_dict.get("height", 0.5))
+	for item in mounts:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var mount: Dictionary = item
+		var wheel := get_node_or_null(str(mount.get("node", ""))) as Node3D
+		_apply_mount(wheel, wheel_path, mount, wheel_height)
+
+
+func _set_overlay_wheels_visible(show: bool) -> void:
+	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+		var wheel := get_node_or_null(wname) as Node3D
+		if wheel != null:
+			wheel.visible = show
+
+
+func _apply_mount(node: Node3D, model_path: String, mount: Dictionary, height: float) -> void:
+	if node == null or node.get("stl_path") == null:
+		return
+	if not model_path.is_empty():
+		node.set("stl_path", model_path)
+	var pos: Variant = mount.get("position", null)
+	if pos is Vector3:
+		node.position = pos
+	var rot: Variant = mount.get("rotation", null)
+	if rot is Vector3:
+		node.set("stl_rotation_degrees", rot)
+	node.set("auto_scale_to_height", height)
+
+
+func _reload_preview_models() -> void:
+	_reload_mount(get_node_or_null("CarBody") as Node3D)
+	if not _overlay_wheels_enabled():
+		_set_overlay_wheels_visible(false)
+		return
+	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+		_reload_mount(get_node_or_null(wname) as Node3D)
+
+
+func _reload_mount(node: Node3D) -> void:
+	if node == null or not node.has_method(&"load_model"):
+		return
+	for child in node.get_children():
+		node.remove_child(child)
+		child.free()
+	if node is MeshInstance3D:
+		(node as MeshInstance3D).mesh = null
+	node.call(&"load_model")
+
+
+func apply_equipped_wheels() -> void:
+	if not _overlay_wheels_enabled():
+		_set_overlay_wheels_visible(false)
+		return
+	apply_wheel_set(GameState.get_equipped_wheel())
+
+
+func _overlay_wheels_enabled() -> bool:
+	var wheels: Variant = _active_spec().get("wheels", {})
+	if typeof(wheels) != TYPE_DICTIONARY:
+		return true
+	return bool((wheels as Dictionary).get("overlay", true))
+
+
+func apply_wheel_set(wheel: Dictionary) -> void:
+	if wheel.is_empty():
+		return
+	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+		apply_wheel_to_mount(get_node_or_null(wname) as Node3D, wheel)
+
+
+func apply_wheel_to_mount(mount: Node3D, wheel: Dictionary) -> void:
+	if mount == null or wheel.is_empty():
+		return
+	var path := str(wheel.get("path", ""))
+	if path.is_empty() or mount.get("stl_path") == null:
+		return
+	wheel_scale = float(wheel.get("scale", wheel_scale))
+	var height := float(wheel.get("height", 0.5))
+	var changed := str(mount.get("stl_path")) != path
+	mount.visible = true
+	mount.set("stl_path", path)
+	mount.set("auto_scale_to_height", height)
+	if changed and mount.has_method(&"load_model"):
+		for child in mount.get_children():
+			mount.remove_child(child)
+			child.free()
+		if mount is MeshInstance3D:
+			(mount as MeshInstance3D).mesh = null
+		mount.call(&"load_model")
+	if mount is MeshInstance3D:
+		(mount as MeshInstance3D).scale = Vector3.ONE * wheel_scale
+
+
+func _apply_wheel_scale() -> void:
+	var wheel_names := ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]
+	for wname in wheel_names:
+		var wheel := get_node_or_null(wname) as MeshInstance3D
+		if wheel != null:
+			wheel.scale = Vector3.ONE * wheel_scale
+
+
+func _apply_body_paint(car_body: MeshInstance3D) -> void:
+	if body_paint == null:
+		return
+	var m := body_paint.duplicate()
+	if m is StandardMaterial3D:
+		(m as StandardMaterial3D).albedo_color.a = 1.0
+		(m as StandardMaterial3D).transmission = 0.0
+	car_body.material_override = m
+
+
+## Runtime paint updates (e.g. from the garage spray pistol).
+#func set_car_body_color(color: Color) -> void:
+	#var car_body := get_node_or_null("CarBody") as MeshInstance3D
+	#if car_body == null:
+		#return
+#
+	## Build a material based on whatever is currently on the body.
+	#var base := car_body.material_override
+	#var mat: StandardMaterial3D
+	#if base is StandardMaterial3D:
+		#mat = (base as StandardMaterial3D).duplicate()
+	#elif body_paint != null and body_paint is StandardMaterial3D:
+		#mat = (body_paint as StandardMaterial3D).duplicate()
+	#else:
+		#mat = StandardMaterial3D.new()
+		#mat.metallic = 0.4
+		#mat.roughness = 0.35
+#
+	#var c := color
+	#c.a = 1.0
+	#mat.albedo_color = c
+	#mat.transmission = 0.0
+#
+	#body_paint = mat
+#
+	## If the STL is already loaded, apply immediately; otherwise wait for it.
+	#if car_body.mesh != null:
+		#_apply_body_paint(car_body)
+	#elif car_body.has_signal(&"stl_loaded") and not _waiting_for_stl:
+		#_waiting_for_stl = true
+		#car_body.connect(&"stl_loaded", Callable(self, "_on_car_body_stl_loaded").bind(car_body))
+
+func set_car_body_color(new_color: Color) -> void:
+	var color := new_color
+	color.a = 1.0
+	var named_body := find_child("body", true, false)
+	if named_body is MeshInstance3D and (named_body as MeshInstance3D).mesh != null:
+		_paint_solid_mesh(named_body as MeshInstance3D, color)
+		return
+	var car_body := get_node_or_null("CarBody")
+	if car_body != null:
+		_paint_masked_meshes(car_body, color)
+
+
+func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
+	var surface_count := mesh_instance.mesh.get_surface_count()
+	for i in range(surface_count):
+		var mat: Material = mesh_instance.get_surface_override_material(i)
+		if mat == null:
+			mat = mesh_instance.mesh.surface_get_material(i)
+		if mat == null:
+			mat = StandardMaterial3D.new()
+		var mat_copy := mat.duplicate()
+		mesh_instance.set_surface_override_material(i, mat_copy)
+		if mat_copy is StandardMaterial3D:
+			(mat_copy as StandardMaterial3D).albedo_texture = null
+			(mat_copy as StandardMaterial3D).albedo_color = color
+		elif mat_copy is ShaderMaterial:
+			if (mat_copy as ShaderMaterial).shader != null:
+				(mat_copy as ShaderMaterial).set_shader_parameter("paint_color", color)
+				(mat_copy as ShaderMaterial).set_shader_parameter("albedo_color", color)
+
+
+func _paint_masked_meshes(node: Node, color: Color) -> void:
+	if node is MeshInstance3D:
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance.mesh != null and mesh_instance.visible and not _is_baked_wheel(mesh_instance):
+			_paint_masked_mesh(mesh_instance, color)
+	for child in node.get_children():
+		_paint_masked_meshes(child, color)
+
+
+func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
+	for i in range(mesh_instance.mesh.get_surface_count()):
+		var mat: Material = mesh_instance.get_surface_override_material(i)
+		if mat == null:
+			mat = mesh_instance.mesh.surface_get_material(i)
+		var tex: Texture2D = null
+		if mat is ShaderMaterial:
+			var existing := mat as ShaderMaterial
+			var tagged: Variant = existing.get_shader_parameter("albedo_tex")
+			if tagged is Texture2D:
+				tex = tagged
+			existing.set_shader_parameter("paint_color", color)
+			if tex != null:
+				continue
+		var orm: Texture2D = null
+		var normal: Texture2D = null
+		var normal_scale := 1.0
+		if mat is StandardMaterial3D:
+			var std := mat as StandardMaterial3D
+			tex = std.albedo_texture
+			orm = std.metallic_texture
+			if orm == null:
+				orm = std.roughness_texture
+			normal = std.normal_texture
+			normal_scale = std.normal_scale
+		if tex == null:
+			if mat is StandardMaterial3D:
+				var solid := (mat as StandardMaterial3D).duplicate() as StandardMaterial3D
+				solid.albedo_color = color
+				mesh_instance.set_surface_override_material(i, solid)
+			continue
+		var shader_mat := ShaderMaterial.new()
+		shader_mat.shader = _PaintShader
+		shader_mat.set_shader_parameter("albedo_tex", tex)
+		shader_mat.set_shader_parameter("paint_color", color)
+		if orm != null:
+			shader_mat.set_shader_parameter("orm_tex", orm)
+			shader_mat.set_shader_parameter("use_orm", 1.0)
+		if normal != null:
+			shader_mat.set_shader_parameter("normal_tex", normal)
+			shader_mat.set_shader_parameter("use_normal", 1.0)
+			shader_mat.set_shader_parameter("normal_scale", normal_scale)
+		mesh_instance.set_surface_override_material(i, shader_mat)
+
+## Sit wheel bottoms and the car body on the top of a horizontal floor mesh.
+func align_wheels_to_floor(floor_mesh_instance: MeshInstance3D) -> void:
+	if floor_mesh_instance == null or floor_mesh_instance.mesh == null:
+		fit_parent_collision()
+		return
+
+	var faabb := floor_mesh_instance.get_aabb()
+	var minp := faabb.position
+	var maxp := faabb.position + faabb.size
+	var floor_top_y := -INF
+	for x in [minp.x, maxp.x]:
+		for y in [minp.y, maxp.y]:
+			for z in [minp.z, maxp.z]:
+				var corner := Vector3(x, y, z)
+				var world := floor_mesh_instance.global_transform * corner
+				floor_top_y = maxf(floor_top_y, world.y)
+
+	var wheel_names := ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]
+	for wname in wheel_names:
+		_snap_node_bottom_to_y(get_node_or_null(wname) as Node3D, floor_top_y)
+	_snap_node_bottom_to_y(get_node_or_null("CarBody") as Node3D, floor_top_y)
+	fit_parent_collision()
+
+
+func _snap_node_bottom_to_y(node: Node3D, floor_top_y: float) -> void:
+	if node == null:
+		return
+	var bottom_y := _mesh_bottom_y(node)
+	if bottom_y == INF:
+		return
+	var delta := floor_top_y - bottom_y
+	if absf(delta) > 0.0001:
+		var gp := node.global_position
+		gp.y += delta
+		node.global_position = gp
+
+
+## Size the parent car's box to the visible body. The bottom stays clear of the road.
+func fit_parent_collision() -> void:
+	var body := get_parent() as Node3D
+	if body == null or not is_inside_tree():
+		return
+	var shape_node := body.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if shape_node == null:
+		return
+	force_update_transform()
+	var bounds := _collect_mesh_bounds(self, body.global_transform.affine_inverse())
+	if bounds.size.length_squared() < 0.01:
+		return
+	const BOTTOM_LIFT_M := 0.08
+	if bounds.size.y > BOTTOM_LIFT_M + 0.4:
+		bounds.position.y += BOTTOM_LIFT_M
+		bounds.size.y -= BOTTOM_LIFT_M
+	var box := BoxShape3D.new()
+	box.size = bounds.size
+	shape_node.shape = box
+	shape_node.position = bounds.get_center()
+	shape_node.rotation = Vector3.ZERO
+
+
+func _collect_mesh_bounds(node: Node, to_space: Transform3D) -> AABB:
+	if node is Node3D and not (node as Node3D).is_visible_in_tree():
+		return AABB()
+	var merged := AABB()
+	var started := false
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		if mi.mesh != null:
+			merged = _aabb_in_space(to_space * mi.global_transform, mi.mesh.get_aabb())
+			started = true
+	for child in node.get_children():
+		var child_bounds := _collect_mesh_bounds(child, to_space)
+		if child_bounds.size == Vector3.ZERO:
+			continue
+		if not started:
+			merged = child_bounds
+			started = true
+		else:
+			merged = merged.merge(child_bounds)
+	return merged
+
+
+func _aabb_in_space(xf: Transform3D, local: AABB) -> AABB:
+	var mins := Vector3(INF, INF, INF)
+	var maxs := Vector3(-INF, -INF, -INF)
+	var origin := local.position
+	var extent := local.size
+	for i in 8:
+		var corner := origin
+		if (i & 1) != 0:
+			corner.x += extent.x
+		if (i & 2) != 0:
+			corner.y += extent.y
+		if (i & 4) != 0:
+			corner.z += extent.z
+		var point := xf * corner
+		mins = mins.min(point)
+		maxs = maxs.max(point)
+	return AABB(mins, maxs - mins)
+
+
+func _mesh_bottom_y(node: Node3D) -> float:
+	var bottom_y := INF
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		var aabb := (node as MeshInstance3D).get_aabb()
+		var wmin := aabb.position
+		var wmax := wmin + aabb.size
+		for wx in [wmin.x, wmax.x]:
+			for wy in [wmin.y, wmax.y]:
+				for wz in [wmin.z, wmax.z]:
+					var world := node.global_transform * Vector3(wx, wy, wz)
+					bottom_y = minf(bottom_y, world.y)
+	for child in node.get_children():
+		if child is Node3D:
+			bottom_y = minf(bottom_y, _mesh_bottom_y(child as Node3D))
+	return bottom_y

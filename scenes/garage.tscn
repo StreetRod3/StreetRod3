@@ -1,0 +1,1042 @@
+[gd_scene format=3 uid="uid://cp0x332xqk6tb"]
+
+[ext_resource type="Script" uid="uid://crltef3jr3jdl" path="res://scripts/garage.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://bqj8k2m4n5p6r" path="res://scenes/car_vehicle_visual.tscn" id="2"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
+sky_top_color = Color(0.2, 0.25, 0.35, 1)
+sky_horizon_color = Color(0.45, 0.48, 0.55, 1)
+ground_bottom_color = Color(0.12, 0.12, 0.14, 1)
+ground_horizon_color = Color(0.35, 0.36, 0.4, 1)
+
+[sub_resource type="Sky" id="Sky1"]
+sky_material = SubResource("SkyMat")
+
+[sub_resource type="Environment" id="Env1"]
+background_mode = 2
+sky = SubResource("Sky1")
+ambient_light_source = 2
+ambient_light_color = Color(0.55, 0.58, 0.65, 1)
+ambient_light_energy = 0.6
+
+[sub_resource type="StandardMaterial3D" id="FloorMat"]
+albedo_color = Color(0.22, 0.22, 0.24, 1)
+
+[sub_resource type="BoxMesh" id="FloorMesh"]
+material = SubResource("FloorMat")
+size = Vector3(14.4, 0.3, 24)
+
+[sub_resource type="BoxShape3D" id="FloorShape"]
+size = Vector3(14.4, 0.3, 24)
+
+[sub_resource type="CylinderMesh" id="ClockMesh"]
+top_radius = 0.55
+bottom_radius = 0.55
+height = 0.15
+radial_segments = 24
+
+[sub_resource type="StandardMaterial3D" id="ClockMat"]
+albedo_color = Color(0.9, 0.85, 0.65, 1)
+
+[sub_resource type="CylinderShape3D" id="ClockShape"]
+height = 0.2
+radius = 0.6
+
+[sub_resource type="BoxMesh" id="DeskMesh"]
+size = Vector3(2.2, 0.9, 1.1)
+
+[sub_resource type="StandardMaterial3D" id="DeskMat"]
+albedo_color = Color(0.35, 0.22, 0.12, 1)
+
+[sub_resource type="BoxShape3D" id="DeskShape"]
+size = Vector3(2.2, 0.9, 1.1)
+
+[sub_resource type="StandardMaterial3D" id="ChartBackMat"]
+albedo_color = Color(0.28, 0.24, 0.18, 1)
+
+[sub_resource type="BoxMesh" id="ChartBackMesh"]
+material = SubResource("ChartBackMat")
+size = Vector3(0.46, 0.01, 0.62)
+
+[sub_resource type="StandardMaterial3D" id="ChartMat"]
+albedo_color = Color(0.93, 0.88, 0.72, 1)
+
+[sub_resource type="BoxMesh" id="ChartMesh"]
+material = SubResource("ChartMat")
+size = Vector3(0.42, 0.012, 0.56)
+
+[sub_resource type="StandardMaterial3D" id="ChartLineMat"]
+albedo_color = Color(0.25, 0.32, 0.42, 1)
+
+[sub_resource type="BoxMesh" id="ChartLineMesh"]
+material = SubResource("ChartLineMat")
+size = Vector3(0.34, 0.004, 0.012)
+
+[sub_resource type="BoxShape3D" id="ChartShape"]
+size = Vector3(0.48, 0.08, 0.64)
+
+[sub_resource type="StandardMaterial3D" id="PaperMat"]
+albedo_color = Color(0.86, 0.84, 0.78, 1)
+
+[sub_resource type="BoxMesh" id="PaperMesh"]
+material = SubResource("PaperMat")
+size = Vector3(0.52, 0.014, 0.68)
+
+[sub_resource type="StandardMaterial3D" id="PaperHeadMat"]
+albedo_color = Color(0.45, 0.08, 0.08, 1)
+
+[sub_resource type="BoxMesh" id="PaperHeadMesh"]
+material = SubResource("PaperHeadMat")
+size = Vector3(0.5, 0.006, 0.1)
+
+[sub_resource type="BoxShape3D" id="PaperShape"]
+size = Vector3(0.56, 0.08, 0.72)
+
+[sub_resource type="StandardMaterial3D" id="WallMat"]
+albedo_color = Color(0.46, 0.43, 0.38, 1)
+roughness = 0.88
+
+[sub_resource type="BoxMesh" id="WallSideMesh"]
+material = SubResource("WallMat")
+size = Vector3(0.3, 6.4, 24.3)
+
+[sub_resource type="BoxMesh" id="WallBackMesh"]
+material = SubResource("WallMat")
+size = Vector3(14.4, 6.4, 0.3)
+
+[sub_resource type="BoxMesh" id="WallFrontMesh"]
+material = SubResource("WallMat")
+size = Vector3(4.05, 6.4, 0.3)
+
+[sub_resource type="StandardMaterial3D" id="CeilingMat"]
+albedo_color = Color(0.34, 0.32, 0.28, 1)
+roughness = 0.92
+
+[sub_resource type="BoxMesh" id="CeilingMesh"]
+material = SubResource("CeilingMat")
+size = Vector3(14.4, 0.2, 19.7)
+
+[sub_resource type="StandardMaterial3D" id="LampMetalMat"]
+albedo_color = Color(0.18, 0.18, 0.2, 1)
+metallic = 0.7
+roughness = 0.35
+
+[sub_resource type="CylinderMesh" id="LampHousingMesh"]
+material = SubResource("LampMetalMat")
+top_radius = 0.22
+bottom_radius = 0.22
+height = 0.08
+radial_segments = 16
+
+[sub_resource type="CylinderMesh" id="LampStemMesh"]
+material = SubResource("LampMetalMat")
+top_radius = 0.03
+bottom_radius = 0.03
+height = 0.28
+radial_segments = 12
+
+[sub_resource type="StandardMaterial3D" id="LampShadeMat"]
+albedo_color = Color(0.82, 0.72, 0.45, 1)
+roughness = 0.55
+
+[sub_resource type="CylinderMesh" id="LampShadeMesh"]
+material = SubResource("LampShadeMat")
+top_radius = 0.08
+bottom_radius = 0.38
+height = 0.2
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="LampBulbMat"]
+albedo_color = Color(1, 0.95, 0.75, 1)
+emission_enabled = true
+emission = Color(1, 0.9, 0.55, 1)
+emission_energy_multiplier = 2.4
+
+[sub_resource type="SphereMesh" id="LampBulbMesh"]
+material = SubResource("LampBulbMat")
+radius = 0.07
+height = 0.14
+radial_segments = 12
+rings = 8
+
+[sub_resource type="StandardMaterial3D" id="CalBoardMat"]
+albedo_color = Color(0.38, 0.2, 0.1, 1)
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="CalBoardMesh"]
+material = SubResource("CalBoardMat")
+size = Vector3(0.72, 0.94, 0.04)
+
+[sub_resource type="StandardMaterial3D" id="CalPageMat"]
+albedo_color = Color(0.96, 0.93, 0.86, 1)
+
+[sub_resource type="BoxMesh" id="CalPageMesh"]
+material = SubResource("CalPageMat")
+size = Vector3(0.64, 0.84, 0.012)
+
+[sub_resource type="StandardMaterial3D" id="CalHeadMat"]
+albedo_color = Color(0.62, 0.12, 0.12, 1)
+
+[sub_resource type="BoxMesh" id="CalHeadMesh"]
+material = SubResource("CalHeadMat")
+size = Vector3(0.64, 0.14, 0.008)
+
+[sub_resource type="BoxShape3D" id="CalShape"]
+size = Vector3(0.76, 0.98, 0.12)
+
+[sub_resource type="BoxMesh" id="DoorMesh"]
+size = Vector3(6, 6.4, 0.25)
+
+[sub_resource type="StandardMaterial3D" id="DoorMat"]
+albedo_color = Color(0.28, 0.3, 0.34, 1)
+metallic = 0.2
+
+[sub_resource type="BoxShape3D" id="DoorShape"]
+size = Vector3(6, 6.4, 0.25)
+
+[sub_resource type="BoxMesh" id="SprayMesh"]
+size = Vector3(0.18, 0.38, 0.08)
+
+[sub_resource type="StandardMaterial3D" id="SprayMat"]
+albedo_color = Color(0.17261633, 0.047378488, 0.99999994, 1)
+metallic = 0.8
+metallic_specular = 0.92
+roughness = 0.4
+
+[sub_resource type="BoxShape3D" id="SprayShape"]
+size = Vector3(0.18, 0.38, 0.08)
+
+[sub_resource type="StandardMaterial3D" id="FuelCanMat"]
+albedo_color = Color(0.72, 0.12, 0.1, 1)
+roughness = 0.45
+metallic = 0.35
+
+[sub_resource type="BoxMesh" id="FuelCanBodyMesh"]
+material = SubResource("FuelCanMat")
+size = Vector3(0.22, 0.34, 0.14)
+
+[sub_resource type="StandardMaterial3D" id="FuelCanCapMat"]
+albedo_color = Color(0.15, 0.15, 0.16, 1)
+metallic = 0.6
+roughness = 0.35
+
+[sub_resource type="BoxMesh" id="FuelCanCapMesh"]
+material = SubResource("FuelCanCapMat")
+size = Vector3(0.08, 0.05, 0.08)
+
+[sub_resource type="BoxMesh" id="FuelCanHandleMesh"]
+material = SubResource("FuelCanCapMat")
+size = Vector3(0.03, 0.16, 0.03)
+
+[sub_resource type="BoxShape3D" id="FuelCanShape"]
+size = Vector3(0.36, 0.5, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="ShelfMat"]
+albedo_color = Color(0.32, 0.19, 0.1, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="ShelfMesh"]
+material = SubResource("ShelfMat")
+size = Vector3(2.5, 0.05, 0.28)
+
+[sub_resource type="BoxShape3D" id="ShelfShape"]
+size = Vector3(2.5, 0.05, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="ShelfBracketMat"]
+albedo_color = Color(0.24, 0.23, 0.21, 1)
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="ShelfBracketMesh"]
+material = SubResource("ShelfBracketMat")
+size = Vector3(0.04, 0.14, 0.16)
+
+[sub_resource type="StandardMaterial3D" id="RadioBodyMat"]
+albedo_color = Color(0.22, 0.1, 0.07, 1)
+roughness = 0.55
+
+[sub_resource type="BoxMesh" id="RadioBodyMesh"]
+material = SubResource("RadioBodyMat")
+size = Vector3(0.4, 0.22, 0.18)
+
+[sub_resource type="BoxShape3D" id="RadioShape"]
+size = Vector3(0.42, 0.24, 0.2)
+
+[sub_resource type="StandardMaterial3D" id="RadioSpeakerMat"]
+albedo_color = Color(0.08, 0.08, 0.08, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="RadioSpeakerMesh"]
+material = SubResource("RadioSpeakerMat")
+top_radius = 0.07
+bottom_radius = 0.07
+height = 0.02
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="RadioDialMat"]
+albedo_color = Color(0.9, 0.82, 0.55, 1)
+roughness = 0.35
+
+[sub_resource type="CylinderMesh" id="RadioDialMesh"]
+material = SubResource("RadioDialMat")
+top_radius = 0.035
+bottom_radius = 0.035
+height = 0.018
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="RadioKnobMat"]
+albedo_color = Color(0.12, 0.12, 0.13, 1)
+roughness = 0.45
+
+[sub_resource type="CylinderMesh" id="RadioKnobMesh"]
+material = SubResource("RadioKnobMat")
+top_radius = 0.016
+bottom_radius = 0.018
+height = 0.02
+radial_segments = 12
+
+[sub_resource type="StandardMaterial3D" id="RadioAntennaMat"]
+albedo_color = Color(0.55, 0.55, 0.58, 1)
+metallic = 0.75
+roughness = 0.3
+
+[sub_resource type="CylinderMesh" id="RadioAntennaMesh"]
+material = SubResource("RadioAntennaMat")
+top_radius = 0.004
+bottom_radius = 0.005
+height = 0.28
+radial_segments = 8
+
+[sub_resource type="StandardMaterial3D" id="LiftMetalMat"]
+albedo_color = Color(0.18, 0.18, 0.2, 1)
+metallic = 0.74
+roughness = 0.36
+
+[sub_resource type="StandardMaterial3D" id="LiftRedMat"]
+albedo_color = Color(0.72, 0.14, 0.1, 1)
+roughness = 0.48
+
+[sub_resource type="BoxMesh" id="LiftBaseMesh"]
+material = SubResource("LiftMetalMat")
+size = Vector3(0.52, 0.1, 1.28)
+
+[sub_resource type="BoxMesh" id="LiftArmMesh"]
+material = SubResource("LiftRedMat")
+size = Vector3(0.16, 0.08, 0.78)
+
+[sub_resource type="CylinderMesh" id="LiftPadMesh"]
+material = SubResource("LiftMetalMat")
+top_radius = 0.13
+bottom_radius = 0.13
+height = 0.06
+radial_segments = 16
+
+[sub_resource type="BoxMesh" id="LiftHandleMesh"]
+material = SubResource("LiftRedMat")
+size = Vector3(0.045, 0.045, 0.82)
+
+[sub_resource type="CylinderMesh" id="LiftGripMesh"]
+material = SubResource("LiftMetalMat")
+top_radius = 0.028
+bottom_radius = 0.028
+height = 0.22
+radial_segments = 12
+
+[sub_resource type="CylinderMesh" id="LiftCasterMesh"]
+material = SubResource("LiftMetalMat")
+top_radius = 0.055
+bottom_radius = 0.055
+height = 0.045
+radial_segments = 12
+
+[sub_resource type="BoxMesh" id="LiftPostMesh"]
+material = SubResource("LiftMetalMat")
+size = Vector3(0.1, 1.15, 0.1)
+
+[sub_resource type="BoxShape3D" id="LiftShape"]
+size = Vector3(0.7, 1.2, 1.5)
+
+[node name="Garage" type="Node3D" unique_id=3918559]
+script = ExtResource("1")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=35370019]
+environment = SubResource("Env1")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1236810909]
+transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 4, 10, 6)
+light_energy = 0.45
+shadow_enabled = true
+
+[node name="Floor" type="StaticBody3D" parent="." unique_id=1854814397]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.15, 0)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor" unique_id=1102137988]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.1525574e-06, -0.01594019, 1.5258789e-05)
+mesh = SubResource("FloorMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor" unique_id=1435707338]
+shape = SubResource("FloorShape")
+
+[node name="CarPivot" parent="." unique_id=33668058 instance=ExtResource("2")]
+wheel_scale = 1.0
+
+[node name="InteractClock" type="StaticBody3D" parent="." unique_id=1650387631]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.82, 2.6, 1.8)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="InteractClock" unique_id=736530381]
+transform = Transform3D(-4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
+mesh = SubResource("ClockMesh")
+surface_material_override/0 = SubResource("ClockMat")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractClock" unique_id=1350643422]
+transform = Transform3D(-4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
+shape = SubResource("ClockShape")
+
+[node name="InteractDesk" type="StaticBody3D" parent="." unique_id=691586932]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 6.3, 0.45, 1.8)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="InteractDesk" unique_id=213402081]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0341818, 0, 0)
+mesh = SubResource("DeskMesh")
+surface_material_override/0 = SubResource("DeskMat")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk" unique_id=864220574]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.0341818, 0, 0)
+shape = SubResource("DeskShape")
+
+[node name="InteractChart" type="StaticBody3D" parent="InteractDesk" unique_id=1811908652]
+transform = Transform3D(0.951057, 0, 0.309017, 0, 1, 0, -0.309017, 0, 0.951057, -3.65, 0.462, 0.04)
+
+[node name="Backing" type="MeshInstance3D" parent="InteractDesk/InteractChart" unique_id=1307998690]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.006, 0)
+mesh = SubResource("ChartBackMesh")
+
+[node name="Sheet" type="MeshInstance3D" parent="InteractDesk/InteractChart" unique_id=1118962368]
+mesh = SubResource("ChartMesh")
+
+[node name="Line1" type="MeshInstance3D" parent="InteractDesk/InteractChart" unique_id=778358881]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, -0.12)
+mesh = SubResource("ChartLineMesh")
+
+[node name="Line2" type="MeshInstance3D" parent="InteractDesk/InteractChart" unique_id=1255210929]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0)
+mesh = SubResource("ChartLineMesh")
+
+[node name="Line3" type="MeshInstance3D" parent="InteractDesk/InteractChart" unique_id=85915735]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.01, 0.12)
+mesh = SubResource("ChartLineMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/InteractChart" unique_id=1700931286]
+shape = SubResource("ChartShape")
+
+[node name="InteractNewspaper" type="StaticBody3D" parent="InteractDesk" unique_id=23483620]
+transform = Transform3D(0.927184, 0, -0.374607, 0, 1, 0, 0.374607, 0, 0.927184, 0.78, 0.46, -0.04)
+
+[node name="Sheet" type="MeshInstance3D" parent="InteractDesk/InteractNewspaper" unique_id=418300794]
+transform = Transform3D(0.99999994, 0, 0, 0, 1, 0, 0, 0, 0.99999994, -2.813243, 0, 1.1366248)
+mesh = SubResource("PaperMesh")
+
+[node name="Masthead" type="MeshInstance3D" parent="InteractDesk/InteractNewspaper" unique_id=83492623]
+transform = Transform3D(0.99999994, 0, 0, 0, 1, 0, 0, 0, 0.99999994, -2.8132432, 0.012000024, 0.87662506)
+mesh = SubResource("PaperHeadMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/InteractNewspaper" unique_id=1142989557]
+transform = Transform3D(0.99999994, 0, 0, 0, 1, 0, 0, 0, 0.99999994, -2.813243, 0, 1.1366248)
+shape = SubResource("PaperShape")
+
+[node name="Shelf" type="StaticBody3D" parent="InteractDesk" unique_id=210045001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.634, 1.27, 0.46)
+
+[node name="Board" type="MeshInstance3D" parent="InteractDesk/Shelf" unique_id=210045002]
+mesh = SubResource("ShelfMesh")
+
+[node name="BracketLeft" type="MeshInstance3D" parent="InteractDesk/Shelf" unique_id=210045003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.05, -0.09, 0.05)
+mesh = SubResource("ShelfBracketMesh")
+
+[node name="BracketRight" type="MeshInstance3D" parent="InteractDesk/Shelf" unique_id=210045004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.05, -0.09, 0.05)
+mesh = SubResource("ShelfBracketMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/Shelf" unique_id=210045005]
+shape = SubResource("ShelfShape")
+
+[node name="Radio" type="StaticBody3D" parent="InteractDesk/Shelf" unique_id=210045006]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0.135, 0)
+
+[node name="Body" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045007]
+mesh = SubResource("RadioBodyMesh")
+
+[node name="Speaker" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045008]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -0.1, 0.01, -0.09)
+mesh = SubResource("RadioSpeakerMesh")
+
+[node name="Dial" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045009]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.1, 0.035, -0.09)
+mesh = SubResource("RadioDialMesh")
+
+[node name="KnobLeft" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045010]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.07, -0.055, -0.09)
+mesh = SubResource("RadioKnobMesh")
+
+[node name="KnobRight" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045011]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.13, -0.055, -0.09)
+mesh = SubResource("RadioKnobMesh")
+
+[node name="Antenna" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045012]
+transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0.16, 0.22, 0.04)
+mesh = SubResource("RadioAntennaMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/Shelf/Radio" unique_id=210045013]
+shape = SubResource("RadioShape")
+
+[node name="ShelfOther" type="StaticBody3D" parent="InteractDesk" unique_id=210046001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.634, 1.27, 0.46)
+
+[node name="Board" type="MeshInstance3D" parent="InteractDesk/ShelfOther" unique_id=210046002]
+mesh = SubResource("ShelfMesh")
+
+[node name="BracketLeft" type="MeshInstance3D" parent="InteractDesk/ShelfOther" unique_id=210046003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.05, -0.09, 0.05)
+mesh = SubResource("ShelfBracketMesh")
+
+[node name="BracketRight" type="MeshInstance3D" parent="InteractDesk/ShelfOther" unique_id=210046004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.05, -0.09, 0.05)
+mesh = SubResource("ShelfBracketMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/ShelfOther" unique_id=210046005]
+shape = SubResource("ShelfShape")
+
+[node name="InteractFolder" type="StaticBody3D" parent="InteractDesk/ShelfOther" unique_id=210046010]
+transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0, 0.34, 0)
+
+[node name="Backing" type="MeshInstance3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.006, 0)
+mesh = SubResource("ChartBackMesh")
+
+[node name="Sheet" type="MeshInstance3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046012]
+mesh = SubResource("ChartMesh")
+
+[node name="Sheet2" type="MeshInstance3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046013]
+transform = Transform3D(0.996195, 0, 0.087156, 0, 1, 0, -0.087156, 0, 0.996195, 0.01, 0.008, 0.01)
+mesh = SubResource("ChartMesh")
+
+[node name="Line1" type="MeshInstance3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046014]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.014, -0.12)
+mesh = SubResource("ChartLineMesh")
+
+[node name="Line2" type="MeshInstance3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046015]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.014, 0)
+mesh = SubResource("ChartLineMesh")
+
+[node name="Line3" type="MeshInstance3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046016]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.014, 0.12)
+mesh = SubResource("ChartLineMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046017]
+shape = SubResource("ChartShape")
+
+[node name="Walls" type="Node3D" parent="." unique_id=730314795]
+
+[node name="WallLeft" type="MeshInstance3D" parent="Walls" unique_id=581971347]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7.05, 3.2, 0)
+mesh = SubResource("WallSideMesh")
+
+[node name="WallRight" type="MeshInstance3D" parent="Walls" unique_id=1262460730]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7.05, 3.2, 0)
+mesh = SubResource("WallSideMesh")
+
+[node name="WallBack" type="MeshInstance3D" parent="Walls" unique_id=972699628]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, 12.15)
+mesh = SubResource("WallBackMesh")
+
+[node name="WallFrontLeft" type="MeshInstance3D" parent="Walls" unique_id=658813223]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5.025, 3.2, -7.35)
+mesh = SubResource("WallFrontMesh")
+
+[node name="WallFrontRight" type="MeshInstance3D" parent="Walls" unique_id=1452977070]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5.025, 3.2, -7.35)
+mesh = SubResource("WallFrontMesh")
+
+[node name="Ceiling" type="MeshInstance3D" parent="Walls" unique_id=1353422257]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.5, 2.4)
+mesh = SubResource("CeilingMesh")
+
+[node name="CeilingLamp" type="Node3D" parent="Walls" unique_id=60808588]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 6.28, 0)
+
+[node name="Housing" type="MeshInstance3D" parent="Walls/CeilingLamp" unique_id=207450067]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+mesh = SubResource("LampHousingMesh")
+
+[node name="Stem" type="MeshInstance3D" parent="Walls/CeilingLamp" unique_id=1547409475]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0)
+mesh = SubResource("LampStemMesh")
+
+[node name="Shade" type="MeshInstance3D" parent="Walls/CeilingLamp" unique_id=1734303632]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.24, 0)
+mesh = SubResource("LampShadeMesh")
+
+[node name="Bulb" type="MeshInstance3D" parent="Walls/CeilingLamp" unique_id=54681370]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.22, 0)
+mesh = SubResource("LampBulbMesh")
+
+[node name="OmniLight3D" type="OmniLight3D" parent="Walls/CeilingLamp" unique_id=520274296]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.28, 0)
+light_color = Color(1, 0.92, 0.72, 1)
+light_energy = 3.4
+light_indirect_energy = 1.2
+shadow_enabled = true
+omni_range = 16.0
+omni_attenuation = 1.2
+
+[node name="InteractCalendar" type="StaticBody3D" parent="." unique_id=1660333608]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.2, 2.2, 11.88)
+
+[node name="Board" type="MeshInstance3D" parent="InteractCalendar" unique_id=996529591]
+mesh = SubResource("CalBoardMesh")
+
+[node name="Page" type="MeshInstance3D" parent="InteractCalendar" unique_id=522486649]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.018)
+mesh = SubResource("CalPageMesh")
+
+[node name="Header" type="MeshInstance3D" parent="InteractCalendar" unique_id=1975531614]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.35, -0.026)
+mesh = SubResource("CalHeadMesh")
+
+[node name="Labels" type="Node3D" parent="InteractCalendar" unique_id=48191177]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.03)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractCalendar" unique_id=659283870]
+shape = SubResource("CalShape")
+
+[node name="InteractDoors" type="StaticBody3D" parent="." unique_id=1496841617]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.2, -7.2)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="InteractDoors" unique_id=2028609411]
+mesh = SubResource("DoorMesh")
+surface_material_override/0 = SubResource("DoorMat")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDoors" unique_id=1361924605]
+shape = SubResource("DoorShape")
+
+[node name="InteractSprayPistol" type="StaticBody3D" parent="." unique_id=753276932]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.6, 0.55, -5.4)
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="InteractSprayPistol" unique_id=867806488]
+mesh = SubResource("SprayMesh")
+surface_material_override/0 = SubResource("SprayMat")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractSprayPistol" unique_id=672364029]
+shape = SubResource("SprayShape")
+
+[node name="InteractFuelCan" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.6, 0.2, 1.15)
+
+[node name="Body" type="MeshInstance3D" parent="InteractFuelCan"]
+mesh = SubResource("FuelCanBodyMesh")
+
+[node name="Cap" type="MeshInstance3D" parent="InteractFuelCan"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0.19, 0)
+mesh = SubResource("FuelCanCapMesh")
+
+[node name="Handle" type="MeshInstance3D" parent="InteractFuelCan"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.08, 0.06, 0)
+mesh = SubResource("FuelCanHandleMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractFuelCan"]
+shape = SubResource("FuelCanShape")
+
+[node name="InteractLift" type="StaticBody3D" parent="." unique_id=210050001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.35, 0.06, 1.8)
+
+[node name="Chassis" type="MeshInstance3D" parent="InteractLift" unique_id=210050002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.08, 0)
+mesh = SubResource("LiftBaseMesh")
+
+[node name="PostFront" type="MeshInstance3D" parent="InteractLift" unique_id=210050003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, 0.68, 0.48)
+mesh = SubResource("LiftPostMesh")
+
+[node name="PostRear" type="MeshInstance3D" parent="InteractLift" unique_id=210050004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, 0.68, -0.48)
+mesh = SubResource("LiftPostMesh")
+
+[node name="Handle" type="MeshInstance3D" parent="InteractLift" unique_id=210050005]
+transform = Transform3D(0.94, 0, 0.342, 0, 1, 0, -0.342, 0, 0.94, 0.28, 0.16, 0.62)
+mesh = SubResource("LiftHandleMesh")
+
+[node name="Grip" type="MeshInstance3D" parent="InteractLift" unique_id=210050006]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0.42, 0.16, 0.98)
+mesh = SubResource("LiftGripMesh")
+
+[node name="LiftArm" type="Node3D" parent="InteractLift" unique_id=210050010]
+
+[node name="Beam" type="MeshInstance3D" parent="InteractLift/LiftArm" unique_id=210050011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, 0.18, 0)
+mesh = SubResource("LiftArmMesh")
+
+[node name="Pad" type="MeshInstance3D" parent="InteractLift/LiftArm" unique_id=210050012]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.08, 0.26, 0)
+mesh = SubResource("LiftPadMesh")
+
+[node name="CasterFL" type="MeshInstance3D" parent="InteractLift" unique_id=210050020]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0.2, 0.03, 0.52)
+mesh = SubResource("LiftCasterMesh")
+
+[node name="CasterFR" type="MeshInstance3D" parent="InteractLift" unique_id=210050021]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -0.2, 0.03, 0.52)
+mesh = SubResource("LiftCasterMesh")
+
+[node name="CasterRL" type="MeshInstance3D" parent="InteractLift" unique_id=210050022]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 0.2, 0.03, -0.52)
+mesh = SubResource("LiftCasterMesh")
+
+[node name="CasterRR" type="MeshInstance3D" parent="InteractLift" unique_id=210050023]
+transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, -0.2, 0.03, -0.52)
+mesh = SubResource("LiftCasterMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractLift" unique_id=210050030]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+shape = SubResource("LiftShape")
+
+[node name="CameraPivot" type="Node3D" parent="." unique_id=82855066]
+
+[node name="Pitch" type="Node3D" parent="CameraPivot" unique_id=596518301]
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot/Pitch" unique_id=1752500865]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 7)
+current = true
+fov = 55.0
+
+[node name="GarageUI" type="CanvasLayer" parent="." unique_id=904809540]
+
+[node name="ClockMenu" type="Control" parent="GarageUI" unique_id=622125605]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="GarageUI/ClockMenu" unique_id=1365920077]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -120.0
+offset_right = 160.0
+offset_bottom = 120.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="GarageUI/ClockMenu/Panel" unique_id=706326867]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="GarageUI/ClockMenu/Panel/Margin" unique_id=267214564]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=243301436]
+layout_mode = 2
+text = "Garage menu"
+horizontal_alignment = 1
+
+[node name="SaveBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=700487545]
+layout_mode = 2
+text = "Save game"
+
+[node name="LoadBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=1416030417]
+layout_mode = 2
+text = "Load game"
+
+[node name="SettingsBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=210070010]
+layout_mode = 2
+text = "Settings"
+
+[node name="QuitBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=630363616]
+layout_mode = 2
+text = "Quit to main menu"
+
+[node name="CloseBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=1735926327]
+layout_mode = 2
+text = "Close"
+
+[node name="SettingsPanel" type="PanelContainer" parent="GarageUI/ClockMenu" unique_id=210070020]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -180.0
+offset_top = -180.0
+offset_right = 180.0
+offset_bottom = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="GarageUI/ClockMenu/SettingsPanel" unique_id=210070021]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="GarageUI/ClockMenu/SettingsPanel/Margin" unique_id=210070022]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070023]
+layout_mode = 2
+text = "Settings"
+horizontal_alignment = 1
+
+[node name="FullscreenCheck" type="CheckBox" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070024]
+layout_mode = 2
+text = "Fullscreen"
+
+[node name="MasterLabel" type="Label" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070025]
+layout_mode = 2
+text = "Master volume"
+
+[node name="MasterSlider" type="HSlider" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070026]
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
+[node name="MusicCheck" type="CheckBox" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070027]
+layout_mode = 2
+text = "Music"
+
+[node name="ArcadeCheck" type="CheckBox" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070028]
+layout_mode = 2
+text = "Arcade driving"
+
+[node name="BackBtn" type="Button" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070029]
+layout_mode = 2
+text = "Back"
+
+[node name="StatsPanel" type="Control" parent="GarageUI" unique_id=1655883850]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="GarageUI/StatsPanel" unique_id=1324190942]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -130.0
+offset_right = 200.0
+offset_bottom = 130.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="GarageUI/StatsPanel/Panel" unique_id=316004550]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="GarageUI/StatsPanel/Panel/Margin" unique_id=1671768042]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="StatsTitle" type="Label" parent="GarageUI/StatsPanel/Panel/Margin/VBox" unique_id=363821189]
+layout_mode = 2
+text = "Car statistics"
+horizontal_alignment = 1
+
+[node name="StatsText" type="Label" parent="GarageUI/StatsPanel/Panel/Margin/VBox" unique_id=295640121]
+layout_mode = 2
+text = "—"
+
+[node name="StatsClose" type="Button" parent="GarageUI/StatsPanel/Panel/Margin/VBox" unique_id=494461110]
+layout_mode = 2
+text = "Close"
+
+[node name="ColorPickerMenu" type="Control" parent="GarageUI" unique_id=1600403448]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="GarageUI/ColorPickerMenu" unique_id=840747728]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -160.0
+offset_right = 230.0
+offset_bottom = 160.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="GarageUI/ColorPickerMenu/Panel" unique_id=1298191547]
+layout_mode = 2
+theme_override_constants/margin_left = 16
+theme_override_constants/margin_top = 16
+theme_override_constants/margin_right = 16
+theme_override_constants/margin_bottom = 16
+
+[node name="VBox" type="VBoxContainer" parent="GarageUI/ColorPickerMenu/Panel/Margin" unique_id=1421428037]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Title" type="Label" parent="GarageUI/ColorPickerMenu/Panel/Margin/VBox" unique_id=1286796239]
+layout_mode = 2
+text = "Spray paint"
+horizontal_alignment = 1
+
+[node name="ColorPicker" type="ColorPicker" parent="GarageUI/ColorPickerMenu/Panel/Margin/VBox" unique_id=1775900923]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="GarageUI/ColorPickerMenu/Panel/Margin/VBox" unique_id=1910732739]
+layout_mode = 2
+
+[node name="ConfirmBtn" type="Button" parent="GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox" unique_id=1296032446]
+layout_mode = 2
+text = "Apply"
+
+[node name="CancelBtn" type="Button" parent="GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox" unique_id=257572830]
+layout_mode = 2
+text = "Cancel"
+
+[node name="CalendarHint" type="Label" parent="GarageUI" unique_id=100129660]
+visible = false
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -220.0
+offset_top = -92.0
+offset_right = 220.0
+offset_bottom = -52.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "Click or Esc to hang the calendar back"
+horizontal_alignment = 1
+
+[node name="HudTop" type="Control" parent="GarageUI"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 44.0
+grow_horizontal = 2
+mouse_filter = 0
+mouse_default_cursor_shape = 2
+
+[node name="Bar" type="ColorRect" parent="GarageUI/HudTop"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.12, 0.09, 0.07, 0.92)
+
+[node name="Accent" type="ColorRect" parent="GarageUI/HudTop"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -3.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+color = Color(0.55, 0.12, 0.1, 1)
+
+[node name="CarNameLabel" type="Label" parent="GarageUI/HudTop"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.78, 1)
+theme_override_font_sizes/font_size = 22
+text = "Corvette 1956"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HudBottom" type="Control" parent="GarageUI"]
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -44.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="Bar" type="ColorRect" parent="GarageUI/HudBottom"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.12, 0.09, 0.07, 0.92)
+
+[node name="Accent" type="ColorRect" parent="GarageUI/HudBottom"]
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 3.0
+grow_horizontal = 2
+mouse_filter = 2
+color = Color(0.55, 0.12, 0.1, 1)
+
+[node name="CashLabel" type="Label" parent="GarageUI/HudBottom"]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.95, 0.9, 0.78, 1)
+theme_override_font_sizes/font_size = 22
+text = "Cash: $0"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn" to="." method="_on_clock_save_pressed"]
+[connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/LoadBtn" to="." method="_on_clock_load_pressed"]
+[connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/SettingsBtn" to="." method="_on_clock_settings_pressed"]
+[connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/QuitBtn" to="." method="_on_clock_quit_menu_pressed"]
+[connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/CloseBtn" to="." method="_on_clock_close_pressed"]
+[connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/FullscreenCheck" to="." method="_on_clock_fullscreen_toggled"]
+[connection signal="value_changed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider" to="." method="_on_clock_master_volume_changed"]
+[connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_clock_music_toggled"]
+[connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck" to="." method="_on_clock_arcade_toggled"]
+[connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn" to="." method="_on_clock_settings_back_pressed"]
+[connection signal="pressed" from="GarageUI/StatsPanel/Panel/Margin/VBox/StatsClose" to="." method="_on_stats_close_pressed"]
+[connection signal="pressed" from="GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn" to="." method="_on_spray_confirm_pressed"]
+[connection signal="pressed" from="GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn" to="." method="_on_spray_cancel_pressed"]
