@@ -2,11 +2,13 @@ name: Deploy Godot 4.6.1 to GitHub Pages
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: pages
@@ -21,6 +23,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
     steps:
       - name: Download web build
         uses: actions/download-artifact@v4
@@ -28,34 +34,14 @@ jobs:
           name: web-build
           path: build/web
 
-      - name: Publish to StreetRod3/StreetRod3
-        env:
-          DEPLOY_KEY: ${{ secrets.STREETROD3_DEPLOY_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DEPLOY_KEY}" ]; then
-            echo "Missing Actions secret STREETROD3_DEPLOY_KEY."
-            echo "Add a write deploy key for https://github.com/StreetRod3/StreetRod3."
-            exit 1
-          fi
-          install -d -m 700 "${HOME}/.ssh"
-          printf '%s\n' "${DEPLOY_KEY}" > "${HOME}/.ssh/streetrod3"
-          chmod 600 "${HOME}/.ssh/streetrod3"
-          ssh-keyscan -t ed25519 github.com >> "${HOME}/.ssh/known_hosts"
-          export GIT_SSH_COMMAND="ssh -i ${HOME}/.ssh/streetrod3 -o IdentitiesOnly=yes"
-          site="$(mktemp -d)"
-          remote="git@github.com:StreetRod3/StreetRod3.git"
-          if ! git clone --depth 1 --branch gh-pages "${remote}" "${site}"; then
-            rm -rf "${site}"
-            git init -b gh-pages "${site}"
-            git -C "${site}" remote add origin "${remote}"
-          fi
-          find "${site}" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
-          cp -a build/web/. "${site}/"
-          git -C "${site}" add -A
-          if git -C "${site}" \
-            -c user.name="github-actions[bot]" \
-            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -m "Deploy Street Rod 3 web build"; then
-            git -C "${site}" push -u origin gh-pages
-          fi
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

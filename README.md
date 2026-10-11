@@ -4,7 +4,7 @@ A single-player garage and street-racing game built with Godot 4.6. Buy parts, p
 
 **Play in the browser:** [https://streetrod3.github.io/StreetRod3/](https://streetrod3.github.io/StreetRod3/)
 
-Pushes to `master` export a Web build and publish it to the `gh-pages` branch of [StreetRod3/StreetRod3](https://github.com/StreetRod3/StreetRod3).
+Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRod3/StreetRod3](https://github.com/StreetRod3/StreetRod3).
 
 ## Play
 

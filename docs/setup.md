@@ -70,7 +70,7 @@ A successful export writes `build/web/index.html`, `index.wasm`, and `index.pck`
 | Workflow | When | What it does |
 | --- | --- | --- |
 | `.github/workflows/export-web.yml` | Called by deploy | Godot 4.6.1, headless import, `--export-release "Web"`, uploads `web-build` |
-| `.github/workflows/deploy.yml` | Push to `master`, or manual dispatch | Calls the export workflow, then publishes `build/web` to the `gh-pages` branch of [StreetRod3/StreetRod3](https://github.com/StreetRod3/StreetRod3). The site is [https://streetrod3.github.io/StreetRod3/](https://streetrod3.github.io/StreetRod3/). |
+| `.github/workflows/deploy.yml` | Push to `main`, or manual dispatch | Calls the export workflow, then deploys `build/web` with GitHub Pages. The site is [https://streetrod3.github.io/StreetRod3/](https://streetrod3.github.io/StreetRod3/). |
 
 Local export and CI use the same preset name (`Web`) and the same output checks (`index.html`, `index.wasm`, `index.pck`).
 
