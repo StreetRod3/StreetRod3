@@ -1,6 +1,6 @@
 # Architecture
 
-ChrisRod is a single-player Godot 4.6 game. The player builds a car in a garage, buys parts from a newspaper, then races one opponent on either a straight drag strip or a road course loaded from a `.trk` file.
+Street Rod 3 is a single-player Godot 4.6 game. The player builds a car in a garage, buys parts from a newspaper, then races one opponent on either a straight drag strip or a road course loaded from a `.trk` file.
 
 There is no server, database, or external API. All state lives in the `GameState` autoload and is written to the local `user://` directory.
 
@@ -155,7 +155,7 @@ flowchart LR
 ## File structure
 
 ```
-ChrisRod/
+Street Rod 3/
   project.godot          # name, main scene, autoload, 1280×720
   export_presets.cfg     # Web preset; includes *.trk and *.obj
   scenes/                # one .tscn per screen, plus shared car visual

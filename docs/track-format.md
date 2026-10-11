@@ -1,6 +1,6 @@
 # Track file format (`.trk`)
 
-Race courses are stored as JSON graphs. The file extension is `.trk`. ChrisRod currently loads `res://assets/tracks/track1.trk` for the road race.
+Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race.
 
 The drag strip in `scenes/race.tscn` is still a separate, hardcoded layout. It does not use this format yet.
 

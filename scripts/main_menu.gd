@@ -9,11 +9,11 @@ func _ready() -> void:
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_nav.setup([
-		$Margin/VBox/NewGameButton,
-		$Margin/VBox/SaveGameButton,
-		$Margin/VBox/LoadGameButton,
-		$Margin/VBox/SettingsButton,
-		$Margin/VBox/ExitButton,
+		$Margin/Row/Menu/NewGameButton,
+		$Margin/Row/Menu/SaveGameButton,
+		$Margin/Row/Menu/LoadGameButton,
+		$Margin/Row/Menu/SettingsButton,
+		$Margin/Row/Menu/ExitButton,
 	])
 
 
@@ -63,6 +63,6 @@ func _scene_path_for_save() -> String:
 
 
 func _set_status(text: String) -> void:
-	var label := get_node_or_null("Margin/VBox/StatusLabel") as Label
+	var label := get_node_or_null("Margin/Row/Menu/StatusLabel") as Label
 	if label:
 		label.text = text

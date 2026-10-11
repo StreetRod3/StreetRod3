@@ -1,10 +1,10 @@
-# ChrisRod
+# Street Rod 3
 
 A single-player garage and street-racing game built with Godot 4.6. Buy parts, paint the car, then race a rival on a quarter-mile drag strip or a road course.
 
-**Play in the browser:** [https://kgorecki.github.io/ChrisRod/](https://kgorecki.github.io/ChrisRod/)
+**Play in the browser:** [https://streetrod3.github.io/StreetRod3/](https://streetrod3.github.io/StreetRod3/)
 
-Pushes to `master` export a Web build and deploy it to GitHub Pages.
+Pushes to `master` export a Web build and publish it to the `gh-pages` branch of [StreetRod3/StreetRod3](https://github.com/StreetRod3/StreetRod3).
 
 ## Play
 

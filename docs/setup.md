@@ -12,7 +12,7 @@ No language runtime, package install, or `.env` file is required.
 
 The project reads **no environment variables**.
 
-Local data is created by the game under Godot’s `user://` directory (OS-specific app-data path for the project name `ChrisRod`):
+Local data is created by the game under Godot’s `user://` directory (OS-specific app-data path for the project name `Street Rod 3`):
 
 | File | Format | Contents |
 | --- | --- | --- |
@@ -24,8 +24,8 @@ Delete those files to reset a profile. They are not in the repository.
 ## Get the project
 
 ```bash
-git clone <repo-url> ChrisRod
-cd ChrisRod
+git clone <repo-url> "Street Rod 3"
+cd "Street Rod 3"
 ```
 
 Open the folder in Godot 4.6 (**Import** or **Open**). The editor imports GLB, PNG, MP3, and OBJ on first load and writes caches under `.godot/` (safe to delete; Godot regenerates them).
@@ -70,7 +70,7 @@ A successful export writes `build/web/index.html`, `index.wasm`, and `index.pck`
 | Workflow | When | What it does |
 | --- | --- | --- |
 | `.github/workflows/export-web.yml` | Called by deploy | Godot 4.6.1, headless import, `--export-release "Web"`, uploads `web-build` |
-| `.github/workflows/deploy.yml` | Push to `master`, or manual dispatch | Calls the export workflow, then deploys `build/web` to GitHub Pages |
+| `.github/workflows/deploy.yml` | Push to `master`, or manual dispatch | Calls the export workflow, then publishes `build/web` to the `gh-pages` branch of [StreetRod3/StreetRod3](https://github.com/StreetRod3/StreetRod3). The site is [https://streetrod3.github.io/StreetRod3/](https://streetrod3.github.io/StreetRod3/). |
 
 Local export and CI use the same preset name (`Web`) and the same output checks (`index.html`, `index.wasm`, `index.pck`).
 

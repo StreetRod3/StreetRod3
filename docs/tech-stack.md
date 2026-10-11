@@ -1,6 +1,6 @@
 # Tech stack
 
-ChrisRod is a Godot 4.6 project written entirely in GDScript. It does not use C#, GDExtension, third-party addons, or a package manager.
+Street Rod 3 is a Godot 4.6 project written entirely in GDScript. It does not use C#, GDExtension, third-party addons, or a package manager.
 
 ## Core
 
