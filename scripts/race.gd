@@ -75,9 +75,13 @@ func _ready() -> void:
 	_result.visible = false
 	_reset_pause_pages()
 	_pause_menu.visible = false
-	var i: int = clampi(GameState.selected_opponent_id, 0, GameState.OPPONENTS.size() - 1)
-	var opp: Dictionary = GameState.OPPONENTS[i]
-	_hud_opp.text = "Opponent: %s" % str(opp.get("name", "Rival"))
+	var opp := GameState.selected_opponent()
+	var rival := str(opp.get("name", "Rival"))
+	var car_name := str(opp.get("car_name", ""))
+	if car_name.is_empty():
+		_hud_opp.text = "Opponent: %s" % rival
+	else:
+		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	if _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
 		_hud_hint.text = "W / Up: throttle · S / Down: brake · A/D or arrows: steer · C: camera"
 	else:

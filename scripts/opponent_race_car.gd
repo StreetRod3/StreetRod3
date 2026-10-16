@@ -54,8 +54,8 @@ func _ready() -> void:
 	# Layer 2 is cars. Keep the road mask and also collide with other cars.
 	collision_mask = collision_mask | collision_layer
 	_visual = get_node_or_null("CarPivot") as Node3D
-	var i: int = clampi(GameState.selected_opponent_id, 0, GameState.OPPONENTS.size() - 1)
-	var opp: Dictionary = GameState.OPPONENTS[i]
+	var opp := GameState.selected_opponent()
+	_apply_opponent_look(opp)
 	_drive_scale = float(opp.get("accel_scale", PRESET_ACCEL_REF)) / PRESET_ACCEL_REF
 	_shift_time = float(opp.get("shift_time", 0.35))
 	var player_vmax: float = GameState.get_effective_vmax_kmh() / 3.6
@@ -239,6 +239,20 @@ func _race_track(race: Node) -> Node:
 	if race != null and race.has_method(&"get_race_track"):
 		return race.get_race_track()
 	return null
+
+
+func _apply_opponent_look(opp: Dictionary) -> void:
+	if _visual == null or not _visual.has_method(&"preview_listing"):
+		return
+	var path := str(opp.get("car_file", ""))
+	if path.is_empty():
+		return
+	var paint := Color.WHITE
+	var stored: Variant = opp.get("color", null)
+	if stored is Color:
+		paint = stored
+	if not bool(_visual.call(&"preview_listing", path, paint)):
+		push_warning("Opponent car failed to load: %s" % path)
 
 
 func _apply_car_spec() -> void:
