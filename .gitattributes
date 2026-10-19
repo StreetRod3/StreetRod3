@@ -8,3 +8,4 @@ assets/cars/sr1-c56.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/sr1-fairlane-1957.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/sr1-ford-customized-coupe-1932.glb filter=lfs diff=lfs merge=lfs -text
 assets/opponents/head.glb filter=lfs diff=lfs merge=lfs -text
+assets/opponents/head-hair.glb filter=lfs diff=lfs merge=lfs -text

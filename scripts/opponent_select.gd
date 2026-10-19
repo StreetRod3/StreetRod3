@@ -4,7 +4,6 @@ extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
-const _HEAD_SCENE := preload("res://assets/opponents/head.glb")
 ## Upright height of the rival's head, in meters.
 const _HEAD_HEIGHT := 0.39
 
@@ -85,6 +84,7 @@ var _rival_exit_x: float = 0.0
 var _rival_phase_time: float = 0.0
 var _rival_phase_dur: float = 1.0
 var _rival_wheels: Array[Node3D] = []
+var _head_scenes: Dictionary = {}
 var _chosen_index: int = 0
 var _auto_call_time: float = 0.0
 var _time: float = 0.0
@@ -917,7 +917,8 @@ func _present_rival() -> void:
 		if _side_fits(_node_aabb(root)):
 			break
 		root.position.z -= 0.35
-	_seat_driver(car)
+	var rival_name := str(opp.get("name", ""))
+	_seat_driver(car, GameState.opponent_skin(rival_name), GameState.opponent_head(rival_name))
 	_add_rival_hitbox(root)
 	var lamp := OmniLight3D.new()
 	lamp.position = Vector3(-3.2, 1.4, 0.0)
@@ -1060,7 +1061,7 @@ func _clear_rival() -> void:
 		_hover_prompt.visible = false
 
 
-func _seat_driver(car: Node3D) -> void:
+func _seat_driver(car: Node3D, skin: Color, head_path: String) -> void:
 	var head_pos := Vector3(-0.35, 1.05, 0.2)
 	if car.has_method(&"driver_seat_position"):
 		var seated: Variant = car.call(&"driver_seat_position")
@@ -1070,15 +1071,18 @@ func _seat_driver(car: Node3D) -> void:
 	seat.name = "Driver"
 	seat.position = head_pos
 	car.add_child(seat)
-	var model := _HEAD_SCENE.instantiate() as Node3D
+	var packed := _head_scene(head_path)
+	if packed == null:
+		return
+	var model := packed.instantiate() as Node3D
 	if model == null:
-		push_warning("Opponent head failed to load.")
+		push_warning("Opponent head failed to load: %s" % head_path)
 		return
 	model.name = "Head"
 	# The file is Z-up, with the face toward -Y. Stand it up facing the car's nose.
 	model.rotation_degrees.x = -90.0
 	seat.add_child(model)
-	_paint_driver_skin(model)
+	_paint_driver_skin(model, skin)
 	var bounds := _node_aabb(model)
 	if bounds.size.y > 0.001:
 		model.scale = Vector3.ONE * (_HEAD_HEIGHT / bounds.size.y)
@@ -1088,8 +1092,21 @@ func _seat_driver(car: Node3D) -> void:
 		model.position -= seat.to_local(bounds.get_center())
 
 
-func _paint_driver_skin(model: Node) -> void:
-	var skin := _material(_SKIN, 0.72, 0.0, Color.BLACK, 0.0, 1.0)
+func _head_scene(path: String) -> PackedScene:
+	if _head_scenes.has(path):
+		var cached: Variant = _head_scenes[path]
+		if cached is PackedScene:
+			return cached
+	var packed := load(path) as PackedScene
+	if packed == null:
+		push_warning("Opponent head failed to load: %s" % path)
+		return null
+	_head_scenes[path] = packed
+	return packed
+
+
+func _paint_driver_skin(model: Node, skin_color: Color) -> void:
+	var skin := _material(skin_color, 0.72, 0.0, Color.BLACK, 0.0, 1.0)
 	_paint_driver_skin_on(model, skin)
 
 

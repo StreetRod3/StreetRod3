@@ -18,7 +18,8 @@ const DEFAULT_TANK_L := 60.0
 const FUEL_L_PER_KM := 5.0
 const FUEL_PRICE_PER_L := 2
 const PLAYER_CAR_FILE := "res://assets/cars/sr1-corvette-1956.car"
-const OPPONENT_NAMES_PATH := "res://assets/opponents/names.json"
+const OPPONENTS_PATH := "res://assets/opponents/opponents.json"
+const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const _CarFile := preload("res://scripts/car_file.gd")
@@ -82,6 +83,9 @@ const _OPPONENT_PRESETS: Array[Dictionary] = [
 ## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
 var _opponent_names: Array[String] = []
+## Skin and head model from `OPPONENTS_PATH`, keyed by rival name.
+var _opponent_skins: Dictionary = {}
+var _opponent_heads: Dictionary = {}
 
 const DEFAULT_GEARBOX_ID := "gb_auto3"
 
@@ -372,6 +376,22 @@ func _opponent_name_pool() -> Array[String]:
 	return _opponent_names
 
 
+func opponent_skin(opp_name: String) -> Color:
+	_opponent_name_pool()
+	var stored: Variant = _opponent_skins.get(opp_name, null)
+	if stored is Color:
+		return stored
+	return Color(0.76, 0.58, 0.44)
+
+
+func opponent_head(opp_name: String) -> String:
+	_opponent_name_pool()
+	var path := str(_opponent_heads.get(opp_name, "")).strip_edges()
+	if path.is_empty():
+		return DEFAULT_OPPONENT_HEAD
+	return path
+
+
 func _index_of_opponent(opp_name: String) -> int:
 	for i in opponents.size():
 		if str(opponents[i].get("name", "")) == opp_name:
@@ -408,29 +428,44 @@ func _random_opponent_car() -> Dictionary:
 
 func _load_opponent_names() -> Array[String]:
 	var names: Array[String] = []
-	if not FileAccess.file_exists(OPPONENT_NAMES_PATH):
-		push_error("Opponent names missing: %s" % OPPONENT_NAMES_PATH)
+	if not FileAccess.file_exists(OPPONENTS_PATH):
+		push_error("Opponents file missing: %s" % OPPONENTS_PATH)
 		return names
-	var file := FileAccess.open(OPPONENT_NAMES_PATH, FileAccess.READ)
+	var file := FileAccess.open(OPPONENTS_PATH, FileAccess.READ)
 	if file == null:
-		push_error("Could not open opponent names: %s" % OPPONENT_NAMES_PATH)
+		push_error("Could not open opponents file: %s" % OPPONENTS_PATH)
 		return names
 	var text := file.get_as_text()
 	file.close()
 	var parsed: Variant = JSON.parse_string(text)
 	if typeof(parsed) != TYPE_DICTIONARY:
-		push_error("Opponent names must be a JSON object: %s" % OPPONENT_NAMES_PATH)
+		push_error("Opponents file must be a JSON object: %s" % OPPONENTS_PATH)
 		return names
 	var root: Dictionary = parsed
 	var listed: Variant = root.get("names", [])
 	if typeof(listed) != TYPE_ARRAY:
-		push_error("Opponent names must be a list: %s" % OPPONENT_NAMES_PATH)
+		push_error("Opponents file must contain a names list: %s" % OPPONENTS_PATH)
 		return names
+	_opponent_skins.clear()
+	_opponent_heads.clear()
 	for item in listed:
-		var name := str(item).strip_edges()
+		var name := ""
+		var skin := Color(0.76, 0.58, 0.44)
+		var head := DEFAULT_OPPONENT_HEAD
+		if typeof(item) == TYPE_DICTIONARY:
+			var row: Dictionary = item
+			name = str(row.get("name", "")).strip_edges()
+			skin = _color_from_save(row.get("skin", null), skin)
+			var listed_head := str(row.get("head", "")).strip_edges()
+			if not listed_head.is_empty():
+				head = listed_head
+		else:
+			name = str(item).strip_edges()
 		if name.is_empty() or names.has(name):
 			continue
 		names.append(name)
+		_opponent_skins[name] = skin
+		_opponent_heads[name] = head
 	return names
 
 
