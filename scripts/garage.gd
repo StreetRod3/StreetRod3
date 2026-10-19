@@ -24,6 +24,8 @@ const _MenuNav := preload("res://scripts/menu_nav.gd")
 @onready var _hud_cash: Label = %CashLabel
 @onready var _lift: StaticBody3D = $InteractLift
 @onready var _lift_arm: Node3D = $InteractLift/LiftArm
+@onready var _door_left: Node3D = $InteractDoors/DoorLeft
+@onready var _door_right: Node3D = $InteractDoors/DoorRight
 
 var _orbiting: bool = false
 var _yaw: float = -PI * 0.5
@@ -50,6 +52,7 @@ var _parts_show_wheels: bool = false
 var _lift_home: Transform3D
 var _lift_arm_home: Vector3
 var _wheel_job: bool = false
+var _departing: bool = false
 var _calendar_home: Transform3D
 var _calendar_blend: float = 0.0
 var _calendar_inspecting: bool = false
@@ -83,6 +86,12 @@ const _T_ROLL_SIDE := 1.6
 const _T_ROLL_LONG := 2.2
 const _T_RISE := 0.85
 const _T_PAUSE := 0.28
+const _T_DOOR_OPEN := 1.25
+const _DOOR_SWING := 1.92
+const _T_EXIT_DRIVE := 2.7
+const _EXIT_DISTANCE := 10.4
+const _EXIT_WHEEL_R := 0.27
+const _T_EXIT_FADE := 0.5
 
 func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_GARAGE
@@ -141,7 +150,8 @@ func _align_wheels_to_floor() -> void:
 		_car_pivot.align_wheels_to_floor(floor_mesh_instance)
 
 func _process(_delta: float) -> void:
-	_camera_pivot.global_position = _car_pivot.global_position
+	if not _departing:
+		_camera_pivot.global_position = _car_pivot.global_position
 
 	# Smooth zoom: interpolate distance toward the latest target.
 	# (We don't call `_update_camera_transform()` from input handlers so
@@ -205,6 +215,9 @@ func _debug_car_mesh() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _departing:
+		get_viewport().set_input_as_handled()
+		return
 	if _wheel_job:
 		_handle_camera_only(event)
 		return
@@ -494,7 +507,7 @@ func _update_camera_transform() -> void:
 	_camera_pitch.rotation = Vector3.ZERO
 	_camera_pitch.rotate_object_local(Vector3.RIGHT, -_pitch)
 	_camera.position = Vector3(0.0, 0.6, _cam_distance)
-	_camera.look_at(Vector3(0, 0.4, 0), Vector3.UP)
+	_camera.look_at(_camera_pivot.global_position + Vector3(0.0, 0.4, 0.0), Vector3.UP)
 
 
 func _try_interact(screen_pos: Vector2) -> void:
@@ -526,7 +539,7 @@ func _raycast(screen_pos: Vector2) -> Dictionary:
 
 
 func _handle_interact(kind: Variant) -> void:
-	if _wheel_job:
+	if _wheel_job or _departing:
 		return
 	match kind:
 		&"clock":
@@ -544,7 +557,7 @@ func _handle_interact(kind: Variant) -> void:
 			if _clock_settings.visible:
 				_clock_music.set_pressed_no_signal(GameState.music_enabled)
 		&"doors":
-			get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
+			_start_drive_out()
 		&"spray":
 			_show_spray_picker()
 		&"fuel":
@@ -553,6 +566,97 @@ func _handle_interact(kind: Variant) -> void:
 			_bring_calendar_forward()
 		&"lift":
 			_show_wheel_board()
+
+
+func _start_drive_out() -> void:
+	if _departing or _wheel_job:
+		return
+	if _door_left == null or _door_right == null:
+		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
+		return
+	_departing = true
+	_orbiting = false
+	_snap_calendar_home()
+	_hide_garage_overlays()
+	$GarageUI.visible = false
+	var door_hit := $InteractDoors/CollisionShape3D as CollisionShape3D
+	if door_hit != null:
+		door_hit.disabled = true
+	await _play_drive_out()
+	if not is_instance_valid(self):
+		return
+	get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
+
+
+func _snap_calendar_home() -> void:
+	_calendar_inspecting = false
+	_calendar_hint.visible = false
+	_calendar_blend = 0.0
+	if _calendar_tween != null:
+		_calendar_tween.kill()
+	_calendar.global_transform = _calendar_home
+
+
+func _play_drive_out() -> void:
+	var doors := create_tween()
+	doors.set_parallel(true)
+	doors.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	doors.tween_property(_door_left, "rotation:y", _DOOR_SWING, _T_DOOR_OPEN)
+	doors.tween_property(_door_right, "rotation:y", -_DOOR_SWING, _T_DOOR_OPEN)
+	await doors.finished
+	if not is_instance_valid(self):
+		return
+	await _pause(0.18)
+	if not is_instance_valid(self):
+		return
+	await _reverse_car_out()
+
+
+func _reverse_car_out() -> void:
+	var start := _car_pivot.position
+	var end := start + Vector3(0.0, 0.0, -_EXIT_DISTANCE)
+	var wheels: Array[Node3D] = []
+	var bases: Array[Basis] = []
+	for wname in _WHEEL_NODES:
+		var wheel := _car_pivot.get_node_or_null(wname) as Node3D
+		if wheel == null or not wheel.visible:
+			continue
+		wheels.append(wheel)
+		bases.append(wheel.basis)
+	var travel := start.distance_to(end)
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_method(_apply_drive_out.bind(start, end, wheels, bases, travel), 0.0, 1.0, _T_EXIT_DRIVE)
+	var shade := _black_fade_rect()
+	var fade := create_tween()
+	fade.tween_interval(maxf(_T_EXIT_DRIVE - _T_EXIT_FADE, 0.0))
+	fade.tween_property(shade, "color:a", 1.0, _T_EXIT_FADE)
+	await tw.finished
+	if is_instance_valid(shade):
+		shade.color = Color(0.0, 0.0, 0.0, 1.0)
+
+
+func _apply_drive_out(t: float, start: Vector3, end: Vector3, wheels: Array[Node3D], bases: Array[Basis], travel: float) -> void:
+	_car_pivot.position = start.lerp(end, t)
+	# Local +Y is the axle. Positive spin rolls the tire for travel toward -Z.
+	var spin := (travel * t) / _EXIT_WHEEL_R
+	for i in wheels.size():
+		var wheel := wheels[i]
+		if not is_instance_valid(wheel):
+			continue
+		wheel.basis = bases[i] * Basis(Vector3.UP, spin)
+
+
+func _black_fade_rect() -> ColorRect:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	var shade := ColorRect.new()
+	shade.color = Color(0.0, 0.0, 0.0, 0.0)
+	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(shade)
+	return shade
 
 
 func _show_spray_picker() -> void:
