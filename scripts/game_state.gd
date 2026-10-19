@@ -72,15 +72,16 @@ var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
 var newspaper_colors: Dictionary = {}
 
-## Driving presets assigned when a lineup is rolled.
+## Driving presets assigned the first time a rival is called.
 ## Scales are relative to the player's current effective vmax and 24 m/s² launch.
 const _OPPONENT_PRESETS: Array[Dictionary] = [
 	{"accel_scale": 0.28, "vmax_scale": 0.86, "shift_time": 0.40},
 	{"accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
 	{"accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.36},
 ]
-## Rivals at the drive-in. Rolled from `OPPONENT_NAMES_PATH` with a random car and paint each.
+## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
+var _opponent_names: Array[String] = []
 
 const DEFAULT_GEARBOX_ID := "gb_auto3"
 
@@ -342,28 +343,16 @@ func _random_paint() -> Color:
 	return Color.from_hsv(randf(), randf_range(0.55, 0.95), randf_range(0.45, 0.92))
 
 
-## New names, in a new order, each with their own car and paint.
-func roll_opponents() -> void:
-	var names := _load_opponent_names()
-	names.shuffle()
-	var presets: Array[Dictionary] = _OPPONENT_PRESETS.duplicate()
-	presets.shuffle()
-	opponents.clear()
-	for i in names.size():
-		var preset: Dictionary = presets[i % presets.size()]
-		var car := _random_opponent_car()
-		opponents.append({
-			"id": i,
-			"name": names[i],
-			"car_id": str(car.get("id", "")),
-			"car_name": str(car.get("name", "Car")),
-			"car_file": str(car.get("car_file", "")),
-			"color": _random_paint(),
-			"accel_scale": float(preset.get("accel_scale", 0.3)),
-			"vmax_scale": float(preset.get("vmax_scale", 0.9)),
-			"shift_time": float(preset.get("shift_time", 0.35)),
-		})
-	selected_opponent_id = clampi(selected_opponent_id, 0, maxi(opponents.size() - 1, 0))
+## Picks a name at random. A rival who is not on the list yet gets a car assigned now.
+func call_random_opponent() -> int:
+	var names := _opponent_name_pool()
+	if names.is_empty():
+		return -1
+	var picked := names[randi() % names.size()]
+	var existing := _index_of_opponent(picked)
+	if existing >= 0:
+		return existing
+	return _meet_opponent(picked)
 
 
 func selected_opponent() -> Dictionary:
@@ -371,11 +360,44 @@ func selected_opponent() -> Dictionary:
 
 
 func opponent_at(index: int) -> Dictionary:
-	if opponents.is_empty():
-		roll_opponents()
-	if opponents.is_empty():
+	if index < 0 or index >= opponents.size():
 		return {}
-	return opponents[clampi(index, 0, opponents.size() - 1)]
+	return opponents[index]
+
+
+func _opponent_name_pool() -> Array[String]:
+	if not _opponent_names.is_empty():
+		return _opponent_names
+	_opponent_names = _load_opponent_names()
+	return _opponent_names
+
+
+func _index_of_opponent(opp_name: String) -> int:
+	for i in opponents.size():
+		if str(opponents[i].get("name", "")) == opp_name:
+			return i
+	return -1
+
+
+func _meet_opponent(opp_name: String) -> int:
+	var car := _random_opponent_car()
+	if car.is_empty():
+		push_warning("No cars available for opponent %s" % opp_name)
+		return -1
+	var preset: Dictionary = _OPPONENT_PRESETS[randi() % _OPPONENT_PRESETS.size()]
+	var index := opponents.size()
+	opponents.append({
+		"id": index,
+		"name": opp_name,
+		"car_id": str(car.get("id", "")),
+		"car_name": str(car.get("name", "Car")),
+		"car_file": str(car.get("car_file", "")),
+		"color": _random_paint(),
+		"accel_scale": float(preset.get("accel_scale", 0.3)),
+		"vmax_scale": float(preset.get("vmax_scale", 0.9)),
+		"shift_time": float(preset.get("shift_time", 0.35)),
+	})
+	return index
 
 
 func _random_opponent_car() -> Dictionary:

@@ -4,6 +4,9 @@ extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
+const _HEAD_SCENE := preload("res://assets/opponents/head.glb")
+## Upright height of the rival's head, in meters.
+const _HEAD_HEIGHT := 0.39
 
 ## Diner, parked cars, and the man sit this far behind the rival's drive lane.
 const _SET_BACK := 4.0
@@ -35,6 +38,8 @@ const _WINDOWS: Array[Dictionary] = [
 
 const _RIVAL_CRUISE_MPS := 5.0
 const _RIVAL_IDLE_SEC := 6.0
+## Seconds with nobody called before a random rival drives in.
+const _AUTO_CALL_SEC := 5.0
 const _RIVAL_WHEEL_RADIUS := 0.25
 const _RIVAL_STILL := 0
 const _RIVAL_ARRIVE := 1
@@ -56,7 +61,11 @@ var _cash: Label
 var _hover_prompt: Label
 var _back: Button
 var _opp_root: Control
+var _opp_box: VBoxContainer
+var _opp_list: VBoxContainer
+var _opp_panel: Control
 var _opp_back: Button
+var _call_btn: Button
 var _opp_buttons: Array[Button] = []
 var _race_root: Control
 var _race_hint: Label
@@ -77,6 +86,7 @@ var _rival_phase_time: float = 0.0
 var _rival_phase_dur: float = 1.0
 var _rival_wheels: Array[Node3D] = []
 var _chosen_index: int = 0
+var _auto_call_time: float = 0.0
 var _time: float = 0.0
 var _materials: Dictionary = {}
 var _box_meshes: Dictionary = {}
@@ -85,7 +95,6 @@ var _sphere_meshes: Dictionary = {}
 
 func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_OPPONENT_SELECT
-	GameState.roll_opponents()
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_camera.fov = 54.0
@@ -165,6 +174,7 @@ func _process(delta: float) -> void:
 		var pulse := 0.86 + sin(_time * 5.5) * 0.14
 		_neon.modulate = Color(2.5 * pulse, 1.55 * pulse, 1.65 * pulse)
 	_advance_rival(delta)
+	_advance_auto_call(delta)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -662,19 +672,20 @@ func _build_hud() -> void:
 func _build_opponent_popup() -> void:
 	var built := _make_overlay("Who do you want to race?")
 	_opp_root = built["root"]
-	var box: VBoxContainer = built["box"]
+	_opp_box = built["box"]
+	_opp_panel = built["panel"]
 	var hint := _hint_label("He's waiting by the cars.")
-	box.add_child(hint)
-	for i in range(GameState.opponents.size()):
-		var opp: Dictionary = GameState.opponents[i]
-		var btn := _opponent_button(opp)
-		btn.pressed.connect(_on_opponent_chosen.bind(i))
-		box.add_child(btn)
-		_opp_buttons.append(btn)
+	_opp_box.add_child(hint)
+	_opp_list = VBoxContainer.new()
+	_opp_list.add_theme_constant_override(&"separation", 10)
+	_opp_box.add_child(_opp_list)
+	_call_btn = _menu_button("Call anybody")
+	_call_btn.pressed.connect(_on_call_anybody)
+	_opp_box.add_child(_call_btn)
 	_opp_back = _menu_button("Back")
 	_opp_back.pressed.connect(_hide_popups)
-	box.add_child(_opp_back)
-	_fit_panel(built["panel"])
+	_opp_box.add_child(_opp_back)
+	_rebuild_opponent_list()
 
 
 func _build_race_popup() -> void:
@@ -753,11 +764,7 @@ func _hint_label(text: String) -> Label:
 
 
 func _opponent_button(opp: Dictionary) -> Button:
-	var btn := _menu_button("%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))])
-	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.icon = _color_swatch(_opponent_color(opp))
-	btn.expand_icon = true
-	return btn
+	return _menu_button("%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))])
 
 
 func _opponent_color(opp: Dictionary) -> Color:
@@ -765,12 +772,6 @@ func _opponent_color(opp: Dictionary) -> Color:
 	if paint is Color:
 		return paint
 	return Color(0.8, 0.1, 0.1)
-
-
-func _color_swatch(paint: Color) -> ImageTexture:
-	var img := Image.create(16, 16, false, Image.FORMAT_RGB8)
-	img.fill(paint)
-	return ImageTexture.create_from_image(img)
 
 
 func _menu_button(text: String) -> Button:
@@ -828,10 +829,32 @@ func _show_opponents() -> void:
 	_clear_rival()
 	_fuel_root.visible = false
 	_race_root.visible = false
+	_rebuild_opponent_list()
 	_opp_root.visible = true
 	_hover_prompt.visible = false
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 	_sync_nav()
+
+
+func _rebuild_opponent_list() -> void:
+	for child in _opp_list.get_children():
+		_opp_list.remove_child(child)
+		child.free()
+	_opp_buttons.clear()
+	for i in range(GameState.opponents.size()):
+		var opp: Dictionary = GameState.opponents[i]
+		var btn := _opponent_button(opp)
+		btn.pressed.connect(_on_opponent_chosen.bind(i))
+		_opp_list.add_child(btn)
+		_opp_buttons.append(btn)
+	_fit_panel(_opp_panel)
+
+
+func _on_call_anybody() -> void:
+	var index := GameState.call_random_opponent()
+	if index < 0:
+		return
+	_on_opponent_chosen(index)
 
 
 func _hide_popups() -> void:
@@ -843,10 +866,25 @@ func _hide_popups() -> void:
 
 func _on_opponent_chosen(index: int) -> void:
 	_chosen_index = index
+	_auto_call_time = 0.0
 	_refresh_race_popup()
 	_opp_root.visible = false
 	_present_rival()
 	_sync_nav()
+
+
+func _advance_auto_call(delta: float) -> void:
+	if _rival != null or _popup_open():
+		_auto_call_time = 0.0
+		return
+	_auto_call_time += delta
+	if _auto_call_time < _AUTO_CALL_SEC:
+		return
+	_auto_call_time = 0.0
+	var index := GameState.call_random_opponent()
+	if index < 0:
+		return
+	_on_opponent_chosen(index)
 
 
 func _present_rival() -> void:
@@ -879,7 +917,7 @@ func _present_rival() -> void:
 		if _side_fits(_node_aabb(root)):
 			break
 		root.position.z -= 0.35
-	_seat_driver(root)
+	_seat_driver(car)
 	_add_rival_hitbox(root)
 	var lamp := OmniLight3D.new()
 	lamp.position = Vector3(-3.2, 1.4, 0.0)
@@ -1022,21 +1060,54 @@ func _clear_rival() -> void:
 		_hover_prompt.visible = false
 
 
-func _seat_driver(root: Node3D) -> void:
-	var box := _node_aabb(root)
-	var center := box.get_center()
-	var head := Vector3(center.x + box.size.x * 0.06, box.position.y + box.size.y * 0.78, center.z + box.size.z * 0.4)
+func _seat_driver(car: Node3D) -> void:
+	var head_pos := Vector3(-0.35, 1.05, 0.2)
+	if car.has_method(&"driver_seat_position"):
+		var seated: Variant = car.call(&"driver_seat_position")
+		if seated is Vector3:
+			head_pos = seated
 	var seat := Node3D.new()
-	seat.position = root.to_local(head)
-	seat.scale = Vector3.ONE * 0.55
-	root.add_child(seat)
-	var shirt := Color(0.78, 0.12, 0.1)
-	_add_sphere(seat, 0.13, Vector3.ZERO, _SKIN)
-	_add_sphere(seat, 0.11, Vector3(0.0, 0.05, 0.0), _HAIR, 0.8)
-	_add_sphere(seat, 0.03, Vector3(0.0, -0.01, 0.11), _SKIN)
-	_add_box(seat, Vector3(0.46, 0.42, 0.24), Vector3(0.28, -0.32, 0.0), shirt, 0.55, 0.0, shirt, 0.25)
-	_add_box(seat, Vector3(0.1, 0.36, 0.1), Vector3(0.22, -0.28, 0.22), _SKIN)
-	_add_box(seat, Vector3(0.1, 0.36, 0.1), Vector3(0.22, -0.28, -0.22), _SKIN)
+	seat.name = "Driver"
+	seat.position = head_pos
+	car.add_child(seat)
+	var model := _HEAD_SCENE.instantiate() as Node3D
+	if model == null:
+		push_warning("Opponent head failed to load.")
+		return
+	model.name = "Head"
+	# The file is Z-up, with the face toward -Y. Stand it up facing the car's nose.
+	model.rotation_degrees.x = -90.0
+	seat.add_child(model)
+	_paint_driver_skin(model)
+	var bounds := _node_aabb(model)
+	if bounds.size.y > 0.001:
+		model.scale = Vector3.ONE * (_HEAD_HEIGHT / bounds.size.y)
+		model.force_update_transform()
+		bounds = _node_aabb(model)
+	if bounds.size != Vector3.ZERO:
+		model.position -= seat.to_local(bounds.get_center())
+
+
+func _paint_driver_skin(model: Node) -> void:
+	var skin := _material(_SKIN, 0.72, 0.0, Color.BLACK, 0.0, 1.0)
+	_paint_driver_skin_on(model, skin)
+
+
+func _paint_driver_skin_on(node: Node, skin: Material) -> void:
+	if node is MeshInstance3D and _is_skin_mesh(node.name):
+		(node as MeshInstance3D).material_override = skin
+	for child in node.get_children():
+		_paint_driver_skin_on(child, skin)
+
+
+func _is_skin_mesh(node_name: String) -> bool:
+	var base := node_name
+	if base.length() > 2 and base.substr(base.length() - 2, 1) == "_" and base.substr(base.length() - 1).is_valid_int():
+		base = base.substr(0, base.length() - 2)
+	match base:
+		"Head", "Jaw", "Chin", "Neck", "Ear", "Ear inner", "Nose bridge", "Nose tip", "Nostril", "Cheek":
+			return true
+	return false
 
 
 func _add_rival_hitbox(root: Node3D) -> void:
@@ -1162,6 +1233,7 @@ func _sync_nav() -> void:
 		var items: Array = []
 		for btn in _opp_buttons:
 			items.append(btn)
+		items.append(_call_btn)
 		items.append(_opp_back)
 		_nav.setup(items)
 		return
