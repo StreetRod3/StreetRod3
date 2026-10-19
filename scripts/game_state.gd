@@ -5,7 +5,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 
 const SCENE_MAIN_MENU := "res://scenes/main_menu.tscn"
 const SCENE_GARAGE := "res://scenes/garage.tscn"
-const SCENE_OPPONENT_SELECT := "res://scenes/opponent_select.tscn"
+const SCENE_DRIVE_IN := "res://scenes/drive-in.tscn"
 const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
 const SCENE_SETTINGS := "res://scenes/settings.tscn"
@@ -18,6 +18,8 @@ const DEFAULT_TANK_L := 60.0
 const FUEL_L_PER_KM := 5.0
 const FUEL_PRICE_PER_L := 2
 const PLAYER_CAR_FILE := "res://assets/cars/sr1-corvette-1956.car"
+const OPPONENTS_PATH := "res://assets/opponents/opponents.json"
+const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const _CarFile := preload("res://scripts/car_file.gd")
@@ -39,9 +41,9 @@ var fuel: float = DEFAULT_TANK_L
 var vmax_kmh: float = 220.0
 var engine_power_hp: float = 280.0
 
-## Last scene to restore (garage, opponent_select, race).
+## Last scene to restore (garage, drive-in, race).
 var current_scene_path: String = SCENE_GARAGE
-## Selected opponent id for the next race (0..2).
+## Index into `opponents` for the next race.
 var selected_opponent_id: int = 0
 ## `RACE_DRAG` (straight quarter mile) or `RACE_ROAD` (turning course).
 var selected_race_type: String = RACE_DRAG
@@ -71,13 +73,19 @@ var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
 var newspaper_colors: Dictionary = {}
 
-## Opponent presets for selection and race AI.
+## Driving presets assigned the first time a rival is called.
 ## Scales are relative to the player's current effective vmax and 24 m/s² launch.
-const OPPONENTS: Array[Dictionary] = [
-	{"id": 0, "name": "Rival Nova", "accel_scale": 0.28, "vmax_scale": 0.86, "shift_time": 0.40},
-	{"id": 1, "name": "Street Hawk", "accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
-	{"id": 2, "name": "Night Runner", "accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.36},
+const _OPPONENT_PRESETS: Array[Dictionary] = [
+	{"accel_scale": 0.28, "vmax_scale": 0.86, "shift_time": 0.40},
+	{"accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
+	{"accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.36},
 ]
+## Rivals met so far. A car is assigned the first time they are called and kept for the game.
+var opponents: Array[Dictionary] = []
+var _opponent_names: Array[String] = []
+## Skin and head model from `OPPONENTS_PATH`, keyed by rival name.
+var _opponent_skins: Dictionary = {}
+var _opponent_heads: Dictionary = {}
 
 const DEFAULT_GEARBOX_ID := "gb_auto3"
 
@@ -196,6 +204,7 @@ func new_game() -> void:
 	engine_power_hp = 280.0
 	current_scene_path = SCENE_GARAGE
 	selected_opponent_id = 0
+	opponents.clear()
 	selected_race_type = RACE_DRAG
 	money = 2500
 	current_car_id = DEFAULT_CAR_ID
@@ -228,6 +237,7 @@ func save_game() -> bool:
 		"engine_power_hp": engine_power_hp,
 		"current_scene_path": current_scene_path,
 		"selected_opponent_id": selected_opponent_id,
+		"opponents": _opponents_for_save(),
 		"selected_race_type": selected_race_type,
 		"money": money,
 		"current_car_id": current_car_id,
@@ -275,7 +285,10 @@ func load_game() -> bool:
 	vmax_kmh = float(d.get("vmax_kmh", vmax_kmh))
 	engine_power_hp = float(d.get("engine_power_hp", engine_power_hp))
 	current_scene_path = str(d.get("current_scene_path", SCENE_GARAGE))
+	if current_scene_path == "res://scenes/opponent_select.tscn":
+		current_scene_path = SCENE_DRIVE_IN
 	selected_opponent_id = int(d.get("selected_opponent_id", 0))
+	_load_saved_opponents(d)
 	var race_type := str(d.get("selected_race_type", RACE_DRAG))
 	if race_type == RACE_ROAD:
 		selected_race_type = RACE_ROAD
@@ -334,6 +347,175 @@ func newspaper_color(car_id: String) -> Color:
 
 func _random_paint() -> Color:
 	return Color.from_hsv(randf(), randf_range(0.55, 0.95), randf_range(0.45, 0.92))
+
+
+## Picks a name at random. A rival who is not on the list yet gets a car assigned now.
+func call_random_opponent() -> int:
+	var names := _opponent_name_pool()
+	if names.is_empty():
+		return -1
+	var picked := names[randi() % names.size()]
+	var existing := _index_of_opponent(picked)
+	if existing >= 0:
+		return existing
+	return _meet_opponent(picked)
+
+
+func selected_opponent() -> Dictionary:
+	return opponent_at(selected_opponent_id)
+
+
+func opponent_at(index: int) -> Dictionary:
+	if index < 0 or index >= opponents.size():
+		return {}
+	return opponents[index]
+
+
+func _opponent_name_pool() -> Array[String]:
+	if not _opponent_names.is_empty():
+		return _opponent_names
+	_opponent_names = _load_opponent_names()
+	return _opponent_names
+
+
+func opponent_skin(opp_name: String) -> Color:
+	_opponent_name_pool()
+	var stored: Variant = _opponent_skins.get(opp_name, null)
+	if stored is Color:
+		return stored
+	return Color(0.76, 0.58, 0.44)
+
+
+func opponent_head(opp_name: String) -> String:
+	_opponent_name_pool()
+	var path := str(_opponent_heads.get(opp_name, "")).strip_edges()
+	if path.is_empty():
+		return DEFAULT_OPPONENT_HEAD
+	return path
+
+
+func _index_of_opponent(opp_name: String) -> int:
+	for i in opponents.size():
+		if str(opponents[i].get("name", "")) == opp_name:
+			return i
+	return -1
+
+
+func _meet_opponent(opp_name: String) -> int:
+	var car := _random_opponent_car()
+	if car.is_empty():
+		push_warning("No cars available for opponent %s" % opp_name)
+		return -1
+	var preset: Dictionary = _OPPONENT_PRESETS[randi() % _OPPONENT_PRESETS.size()]
+	var index := opponents.size()
+	opponents.append({
+		"id": index,
+		"name": opp_name,
+		"car_id": str(car.get("id", "")),
+		"car_name": str(car.get("name", "Car")),
+		"car_file": str(car.get("car_file", "")),
+		"color": _random_paint(),
+		"accel_scale": float(preset.get("accel_scale", 0.3)),
+		"vmax_scale": float(preset.get("vmax_scale", 0.9)),
+		"shift_time": float(preset.get("shift_time", 0.35)),
+	})
+	return index
+
+
+func _random_opponent_car() -> Dictionary:
+	if USED_CARS.is_empty():
+		return {}
+	return USED_CARS[randi() % USED_CARS.size()]
+
+
+func _load_opponent_names() -> Array[String]:
+	var names: Array[String] = []
+	if not FileAccess.file_exists(OPPONENTS_PATH):
+		push_error("Opponents file missing: %s" % OPPONENTS_PATH)
+		return names
+	var file := FileAccess.open(OPPONENTS_PATH, FileAccess.READ)
+	if file == null:
+		push_error("Could not open opponents file: %s" % OPPONENTS_PATH)
+		return names
+	var text := file.get_as_text()
+	file.close()
+	var parsed: Variant = JSON.parse_string(text)
+	if typeof(parsed) != TYPE_DICTIONARY:
+		push_error("Opponents file must be a JSON object: %s" % OPPONENTS_PATH)
+		return names
+	var root: Dictionary = parsed
+	var listed: Variant = root.get("names", [])
+	if typeof(listed) != TYPE_ARRAY:
+		push_error("Opponents file must contain a names list: %s" % OPPONENTS_PATH)
+		return names
+	_opponent_skins.clear()
+	_opponent_heads.clear()
+	for item in listed:
+		var name := ""
+		var skin := Color(0.76, 0.58, 0.44)
+		var head := DEFAULT_OPPONENT_HEAD
+		if typeof(item) == TYPE_DICTIONARY:
+			var row: Dictionary = item
+			name = str(row.get("name", "")).strip_edges()
+			skin = _color_from_save(row.get("skin", null), skin)
+			var listed_head := str(row.get("head", "")).strip_edges()
+			if not listed_head.is_empty():
+				head = listed_head
+		else:
+			name = str(item).strip_edges()
+		if name.is_empty() or names.has(name):
+			continue
+		names.append(name)
+		_opponent_skins[name] = skin
+		_opponent_heads[name] = head
+	return names
+
+
+func _opponents_for_save() -> Array:
+	var rows: Array = []
+	for opp in opponents:
+		var paint := Color(0.8, 0.1, 0.1)
+		var stored: Variant = opp.get("color", null)
+		if stored is Color:
+			paint = stored
+		rows.append({
+			"name": str(opp.get("name", "")),
+			"car_id": str(opp.get("car_id", "")),
+			"car_name": str(opp.get("car_name", "")),
+			"car_file": str(opp.get("car_file", "")),
+			"color": [paint.r, paint.g, paint.b, paint.a],
+			"accel_scale": float(opp.get("accel_scale", 0.3)),
+			"vmax_scale": float(opp.get("vmax_scale", 0.9)),
+			"shift_time": float(opp.get("shift_time", 0.35)),
+		})
+	return rows
+
+
+func _load_saved_opponents(d: Dictionary) -> void:
+	opponents.clear()
+	var saved: Variant = d.get("opponents", [])
+	if typeof(saved) != TYPE_ARRAY:
+		return
+	var i := 0
+	for item in saved:
+		if typeof(item) != TYPE_DICTIONARY:
+			continue
+		var row: Dictionary = item
+		var name := str(row.get("name", "")).strip_edges()
+		if name.is_empty():
+			continue
+		opponents.append({
+			"id": i,
+			"name": name,
+			"car_id": str(row.get("car_id", "")),
+			"car_name": str(row.get("car_name", "Car")),
+			"car_file": str(row.get("car_file", "")),
+			"color": _color_from_save(row.get("color", null), Color(0.8, 0.1, 0.1)),
+			"accel_scale": float(row.get("accel_scale", 0.3)),
+			"vmax_scale": float(row.get("vmax_scale", 0.9)),
+			"shift_time": float(row.get("shift_time", 0.35)),
+		})
+		i += 1
 
 
 func listing_by_id(list: Array[Dictionary], item_id: String) -> Dictionary:

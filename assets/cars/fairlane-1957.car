@@ -37,6 +37,9 @@
     "transmission": "gb_auto3",
     "wheels": "wheel-c1"
   },
+  "driver": {
+    "position": [-0.62, 1.18, -1]
+  },
   "chassis": {
     "mass": 1590,
     "wheelbase": 2.997,

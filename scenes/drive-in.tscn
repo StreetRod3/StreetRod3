@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://3s28dc6vn522"]
+
+[ext_resource type="Script" uid="uid://b1adrhaul814m" path="res://scripts/drive-in.gd" id="1"]
+
+[node name="DriveIn" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = true
+fov = 48.0
+far = 180.0
+
+[node name="UI" type="CanvasLayer" parent="."]

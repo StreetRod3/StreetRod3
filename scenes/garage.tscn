@@ -92,6 +92,81 @@ size = Vector3(0.5, 0.006, 0.1)
 [sub_resource type="BoxShape3D" id="PaperShape"]
 size = Vector3(0.56, 0.08, 0.72)
 
+[sub_resource type="StandardMaterial3D" id="ShelfMat"]
+albedo_color = Color(0.32, 0.19, 0.1, 1)
+roughness = 0.82
+
+[sub_resource type="BoxMesh" id="ShelfMesh"]
+material = SubResource("ShelfMat")
+size = Vector3(2.5, 0.05, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="ShelfBracketMat"]
+albedo_color = Color(0.24, 0.23, 0.21, 1)
+roughness = 0.7
+
+[sub_resource type="BoxMesh" id="ShelfBracketMesh"]
+material = SubResource("ShelfBracketMat")
+size = Vector3(0.04, 0.14, 0.16)
+
+[sub_resource type="BoxShape3D" id="ShelfShape"]
+size = Vector3(2.5, 0.05, 0.28)
+
+[sub_resource type="StandardMaterial3D" id="RadioBodyMat"]
+albedo_color = Color(0.22, 0.1, 0.07, 1)
+roughness = 0.55
+
+[sub_resource type="BoxMesh" id="RadioBodyMesh"]
+material = SubResource("RadioBodyMat")
+size = Vector3(0.4, 0.22, 0.18)
+
+[sub_resource type="StandardMaterial3D" id="RadioSpeakerMat"]
+albedo_color = Color(0.08, 0.08, 0.08, 1)
+roughness = 0.9
+
+[sub_resource type="CylinderMesh" id="RadioSpeakerMesh"]
+material = SubResource("RadioSpeakerMat")
+top_radius = 0.07
+bottom_radius = 0.07
+height = 0.02
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="RadioDialMat"]
+albedo_color = Color(0.9, 0.82, 0.55, 1)
+roughness = 0.35
+
+[sub_resource type="CylinderMesh" id="RadioDialMesh"]
+material = SubResource("RadioDialMat")
+top_radius = 0.035
+bottom_radius = 0.035
+height = 0.018
+radial_segments = 16
+
+[sub_resource type="StandardMaterial3D" id="RadioKnobMat"]
+albedo_color = Color(0.12, 0.12, 0.13, 1)
+roughness = 0.45
+
+[sub_resource type="CylinderMesh" id="RadioKnobMesh"]
+material = SubResource("RadioKnobMat")
+top_radius = 0.016
+bottom_radius = 0.018
+height = 0.02
+radial_segments = 12
+
+[sub_resource type="StandardMaterial3D" id="RadioAntennaMat"]
+albedo_color = Color(0.55, 0.55, 0.58, 1)
+metallic = 0.75
+roughness = 0.3
+
+[sub_resource type="CylinderMesh" id="RadioAntennaMesh"]
+material = SubResource("RadioAntennaMat")
+top_radius = 0.004
+bottom_radius = 0.005
+height = 0.28
+radial_segments = 8
+
+[sub_resource type="BoxShape3D" id="RadioShape"]
+size = Vector3(0.42, 0.24, 0.2)
+
 [sub_resource type="StandardMaterial3D" id="WallMat"]
 albedo_color = Color(0.46, 0.43, 0.38, 1)
 roughness = 0.88
@@ -208,8 +283,8 @@ size = Vector3(0.18, 0.38, 0.08)
 
 [sub_resource type="StandardMaterial3D" id="FuelCanMat"]
 albedo_color = Color(0.72, 0.12, 0.1, 1)
-roughness = 0.45
 metallic = 0.35
+roughness = 0.45
 
 [sub_resource type="BoxMesh" id="FuelCanBodyMesh"]
 material = SubResource("FuelCanMat")
@@ -231,104 +306,22 @@ size = Vector3(0.03, 0.16, 0.03)
 [sub_resource type="BoxShape3D" id="FuelCanShape"]
 size = Vector3(0.36, 0.5, 0.28)
 
-[sub_resource type="StandardMaterial3D" id="ShelfMat"]
-albedo_color = Color(0.32, 0.19, 0.1, 1)
-roughness = 0.82
-
-[sub_resource type="BoxMesh" id="ShelfMesh"]
-material = SubResource("ShelfMat")
-size = Vector3(2.5, 0.05, 0.28)
-
-[sub_resource type="BoxShape3D" id="ShelfShape"]
-size = Vector3(2.5, 0.05, 0.28)
-
-[sub_resource type="StandardMaterial3D" id="ShelfBracketMat"]
-albedo_color = Color(0.24, 0.23, 0.21, 1)
-roughness = 0.7
-
-[sub_resource type="BoxMesh" id="ShelfBracketMesh"]
-material = SubResource("ShelfBracketMat")
-size = Vector3(0.04, 0.14, 0.16)
-
-[sub_resource type="StandardMaterial3D" id="RadioBodyMat"]
-albedo_color = Color(0.22, 0.1, 0.07, 1)
-roughness = 0.55
-
-[sub_resource type="BoxMesh" id="RadioBodyMesh"]
-material = SubResource("RadioBodyMat")
-size = Vector3(0.4, 0.22, 0.18)
-
-[sub_resource type="BoxShape3D" id="RadioShape"]
-size = Vector3(0.42, 0.24, 0.2)
-
-[sub_resource type="StandardMaterial3D" id="RadioSpeakerMat"]
-albedo_color = Color(0.08, 0.08, 0.08, 1)
-roughness = 0.9
-
-[sub_resource type="CylinderMesh" id="RadioSpeakerMesh"]
-material = SubResource("RadioSpeakerMat")
-top_radius = 0.07
-bottom_radius = 0.07
-height = 0.02
-radial_segments = 16
-
-[sub_resource type="StandardMaterial3D" id="RadioDialMat"]
-albedo_color = Color(0.9, 0.82, 0.55, 1)
-roughness = 0.35
-
-[sub_resource type="CylinderMesh" id="RadioDialMesh"]
-material = SubResource("RadioDialMat")
-top_radius = 0.035
-bottom_radius = 0.035
-height = 0.018
-radial_segments = 16
-
-[sub_resource type="StandardMaterial3D" id="RadioKnobMat"]
-albedo_color = Color(0.12, 0.12, 0.13, 1)
-roughness = 0.45
-
-[sub_resource type="CylinderMesh" id="RadioKnobMesh"]
-material = SubResource("RadioKnobMat")
-top_radius = 0.016
-bottom_radius = 0.018
-height = 0.02
-radial_segments = 12
-
-[sub_resource type="StandardMaterial3D" id="RadioAntennaMat"]
-albedo_color = Color(0.55, 0.55, 0.58, 1)
-metallic = 0.75
-roughness = 0.3
-
-[sub_resource type="CylinderMesh" id="RadioAntennaMesh"]
-material = SubResource("RadioAntennaMat")
-top_radius = 0.004
-bottom_radius = 0.005
-height = 0.28
-radial_segments = 8
-
 [sub_resource type="StandardMaterial3D" id="LiftMetalMat"]
 albedo_color = Color(0.18, 0.18, 0.2, 1)
 metallic = 0.74
 roughness = 0.36
 
-[sub_resource type="StandardMaterial3D" id="LiftRedMat"]
-albedo_color = Color(0.72, 0.14, 0.1, 1)
-roughness = 0.48
-
 [sub_resource type="BoxMesh" id="LiftBaseMesh"]
 material = SubResource("LiftMetalMat")
 size = Vector3(0.52, 0.1, 1.28)
 
-[sub_resource type="BoxMesh" id="LiftArmMesh"]
-material = SubResource("LiftRedMat")
-size = Vector3(0.16, 0.08, 0.78)
-
-[sub_resource type="CylinderMesh" id="LiftPadMesh"]
+[sub_resource type="BoxMesh" id="LiftPostMesh"]
 material = SubResource("LiftMetalMat")
-top_radius = 0.13
-bottom_radius = 0.13
-height = 0.06
-radial_segments = 16
+size = Vector3(0.1, 1.15, 0.1)
+
+[sub_resource type="StandardMaterial3D" id="LiftRedMat"]
+albedo_color = Color(0.72, 0.14, 0.1, 1)
+roughness = 0.48
 
 [sub_resource type="BoxMesh" id="LiftHandleMesh"]
 material = SubResource("LiftRedMat")
@@ -341,16 +334,23 @@ bottom_radius = 0.028
 height = 0.22
 radial_segments = 12
 
+[sub_resource type="BoxMesh" id="LiftArmMesh"]
+material = SubResource("LiftRedMat")
+size = Vector3(0.16, 0.08, 0.78)
+
+[sub_resource type="CylinderMesh" id="LiftPadMesh"]
+material = SubResource("LiftMetalMat")
+top_radius = 0.13
+bottom_radius = 0.13
+height = 0.06
+radial_segments = 16
+
 [sub_resource type="CylinderMesh" id="LiftCasterMesh"]
 material = SubResource("LiftMetalMat")
 top_radius = 0.055
 bottom_radius = 0.055
 height = 0.045
 radial_segments = 12
-
-[sub_resource type="BoxMesh" id="LiftPostMesh"]
-material = SubResource("LiftMetalMat")
-size = Vector3(0.1, 1.15, 0.1)
 
 [sub_resource type="BoxShape3D" id="LiftShape"]
 size = Vector3(0.7, 1.2, 1.5)
@@ -623,27 +623,31 @@ shape = SubResource("DoorShape")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.6, 0.55, -5.4)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="InteractSprayPistol" unique_id=867806488]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.37807608, 0)
 mesh = SubResource("SprayMesh")
 surface_material_override/0 = SubResource("SprayMat")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractSprayPistol" unique_id=672364029]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.4793353, 0)
 shape = SubResource("SprayShape")
 
-[node name="InteractFuelCan" type="StaticBody3D" parent="."]
+[node name="InteractFuelCan" type="StaticBody3D" parent="." unique_id=1523101691]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3.6, 0.2, 1.15)
 
-[node name="Body" type="MeshInstance3D" parent="InteractFuelCan"]
+[node name="Body" type="MeshInstance3D" parent="InteractFuelCan" unique_id=1374319387]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.7640233, -0.111427784, -5.630432)
 mesh = SubResource("FuelCanBodyMesh")
 
-[node name="Cap" type="MeshInstance3D" parent="InteractFuelCan"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.04, 0.19, 0)
+[node name="Cap" type="MeshInstance3D" parent="InteractFuelCan" unique_id=1338908951]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8040233, 0.0785722, -5.630432)
 mesh = SubResource("FuelCanCapMesh")
 
-[node name="Handle" type="MeshInstance3D" parent="InteractFuelCan"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.08, 0.06, 0)
+[node name="Handle" type="MeshInstance3D" parent="InteractFuelCan" unique_id=1993304849]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.6840234, -0.051427796, -5.630432)
 mesh = SubResource("FuelCanHandleMesh")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractFuelCan"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractFuelCan" unique_id=135487322]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.7640233, -0.111427784, -5.630432)
 shape = SubResource("FuelCanShape")
 
 [node name="InteractLift" type="StaticBody3D" parent="." unique_id=210050001]
@@ -810,7 +814,6 @@ text = "Master volume"
 
 [node name="MasterSlider" type="HSlider" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070026]
 layout_mode = 2
-min_value = 0.0
 max_value = 1.0
 step = 0.01
 value = 1.0
@@ -944,16 +947,16 @@ grow_vertical = 0
 text = "Click or Esc to hang the calendar back"
 horizontal_alignment = 1
 
-[node name="HudTop" type="Control" parent="GarageUI"]
+[node name="HudTop" type="Control" parent="GarageUI" unique_id=1980339762]
+layout_mode = 3
 anchors_preset = 10
 anchor_right = 1.0
 offset_bottom = 44.0
 grow_horizontal = 2
-mouse_filter = 0
 mouse_default_cursor_shape = 2
 
-[node name="Bar" type="ColorRect" parent="GarageUI/HudTop"]
-anchors_preset = 15
+[node name="Bar" type="ColorRect" parent="GarageUI/HudTop" unique_id=2125284394]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -961,8 +964,8 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.12, 0.09, 0.07, 0.92)
 
-[node name="Accent" type="ColorRect" parent="GarageUI/HudTop"]
-anchors_preset = 12
+[node name="Accent" type="ColorRect" parent="GarageUI/HudTop" unique_id=687416624]
+layout_mode = 0
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -972,21 +975,21 @@ grow_vertical = 0
 mouse_filter = 2
 color = Color(0.55, 0.12, 0.1, 1)
 
-[node name="CarNameLabel" type="Label" parent="GarageUI/HudTop"]
+[node name="CarNameLabel" type="Label" parent="GarageUI/HudTop" unique_id=1804455945]
 unique_name_in_owner = true
-anchors_preset = 15
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.95, 0.9, 0.78, 1)
 theme_override_font_sizes/font_size = 22
 text = "Corvette 1956"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="HudBottom" type="Control" parent="GarageUI"]
+[node name="HudBottom" type="Control" parent="GarageUI" unique_id=138034978]
+layout_mode = 3
 anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
@@ -996,8 +999,8 @@ grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
 
-[node name="Bar" type="ColorRect" parent="GarageUI/HudBottom"]
-anchors_preset = 15
+[node name="Bar" type="ColorRect" parent="GarageUI/HudBottom" unique_id=265161666]
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
@@ -1005,22 +1008,21 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.12, 0.09, 0.07, 0.92)
 
-[node name="Accent" type="ColorRect" parent="GarageUI/HudBottom"]
-anchors_preset = 10
+[node name="Accent" type="ColorRect" parent="GarageUI/HudBottom" unique_id=1684675321]
+layout_mode = 0
 anchor_right = 1.0
 offset_bottom = 3.0
 grow_horizontal = 2
 mouse_filter = 2
 color = Color(0.55, 0.12, 0.1, 1)
 
-[node name="CashLabel" type="Label" parent="GarageUI/HudBottom"]
+[node name="CashLabel" type="Label" parent="GarageUI/HudBottom" unique_id=1814876898]
 unique_name_in_owner = true
-anchors_preset = 15
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.95, 0.9, 0.78, 1)
 theme_override_font_sizes/font_size = 22
 text = "Cash: $0"

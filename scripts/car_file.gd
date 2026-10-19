@@ -2,8 +2,11 @@ class_name CarFile
 extends RefCounted
 
 ## Loader for `.car` vehicle files (JSON). A car file names the body mesh,
-## wheel mounts, and chassis numbers. Engines, transmissions, and wheels are
-## ids into the parts register named by `register`.
+## wheel mounts, driver seat, and chassis numbers. Engines, transmissions, and
+## wheels are ids into the parts register named by `register`.
+##
+## `driver.position` is the driver's head in car space, same axes as wheel
+## mounts: +X right, +Y up, +Z forward.
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 
@@ -49,6 +52,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	_parse_wheels(root, result)
 	_parse_parts(root, result)
 	_parse_chassis(root, result)
+	_parse_driver(root, result)
 	return result
 
 
@@ -168,6 +172,28 @@ static func _parse_chassis(root: Dictionary, result: Dictionary) -> void:
 	}
 
 
+static func _parse_driver(root: Dictionary, result: Dictionary) -> void:
+	var fallback := Vector3(-0.35, 1.05, 0.2)
+	var driver: Variant = root.get("driver", null)
+	if driver == null:
+		result.driver = {"position": fallback}
+		return
+	if typeof(driver) != TYPE_DICTIONARY:
+		result.errors.append("Car driver must be an object.")
+		result.driver = {"position": fallback}
+		return
+	var block: Dictionary = driver
+	var pos := fallback
+	var raw: Variant = block.get("position", null)
+	if raw == null:
+		result.errors.append("Car driver is missing a position.")
+	elif typeof(raw) != TYPE_ARRAY or (raw as Array).size() < 3:
+		result.errors.append("Car driver position must be [x, y, z].")
+	else:
+		pos = _vec3(raw)
+	result.driver = {"position": pos}
+
+
 static func _vec3(value: Variant) -> Vector3:
 	if typeof(value) != TYPE_ARRAY or (value as Array).size() < 3:
 		return Vector3.ZERO
@@ -186,5 +212,6 @@ static func _empty_result() -> Dictionary:
 		"engine": {},
 		"transmission": {},
 		"chassis": {},
+		"driver": {},
 		"errors": [],
 	}

@@ -1,0 +1,11 @@
+{
+  "names": [
+    { "name": "Vaelor", "skin": [0.76, 0.58, 0.44], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "Hellmark", "skin": [0.45, 0.30, 0.22], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "TSJ", "skin": [0.90, 0.76, 0.64], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "MP81", "skin": [0.62, 0.46, 0.32], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "CDoubleJJ", "skin": [0.55, 0.36, 0.26], "head": "res://assets/opponents/head.glb" },
+    { "name": "Maxle", "skin": [0.34, 0.22, 0.16], "head": "res://assets/opponents/head.glb" },
+    { "name": "Kshyshieck", "skin": [0.93, 0.78, 0.68], "head": "res://assets/opponents/head.glb" }
+  ]
+}

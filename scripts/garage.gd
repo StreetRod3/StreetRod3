@@ -544,7 +544,7 @@ func _handle_interact(kind: Variant) -> void:
 			if _clock_settings.visible:
 				_clock_music.set_pressed_no_signal(GameState.music_enabled)
 		&"doors":
-			get_tree().change_scene_to_file(GameState.SCENE_OPPONENT_SELECT)
+			get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
 		&"spray":
 			_show_spray_picker()
 		&"fuel":

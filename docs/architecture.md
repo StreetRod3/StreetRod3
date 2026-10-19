@@ -14,7 +14,7 @@ flowchart TD
   settings[Settings]
   garage[Garage]
   paper[Newspaper]
-  select[Opponent select]
+  select[Drive-in]
   race[Race]
 
   menu -->|New game| garage
@@ -39,7 +39,7 @@ flowchart TD
 | `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle |
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
-| `scenes/opponent_select.tscn` | `scripts/opponent_select.gd` | Drag vs road, then pick a rival |
+| `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
 
@@ -97,7 +97,7 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 | `chart` | Stats overlay |
 | `newspaper` | Open the classifieds |
 | `radio` | Toggle music |
-| `doors` | Open opponent select |
+| `doors` | Open the drive-in |
 | `spray` | Color picker; writes `GameState.car_color` |
 | `calendar` | Pulls the wall calendar toward the camera |
 

@@ -20,6 +20,17 @@ var _preview_color: Color = Color.WHITE
 
 ## Load a catalog car for a viewport that is not the player's garage car.
 ## Call before the node enters the tree. Returns false when the file fails to load.
+## Head position from the car file, in this node's space.
+func driver_seat_position() -> Vector3:
+	var driver: Variant = _active_spec().get("driver", {})
+	if typeof(driver) != TYPE_DICTIONARY:
+		return Vector3(-0.35, 1.05, 0.2)
+	var pos: Variant = (driver as Dictionary).get("position", null)
+	if pos is Vector3:
+		return pos
+	return Vector3(-0.35, 1.05, 0.2)
+
+
 func prepare_preview(car_file: String, paint: Color) -> bool:
 	return _load_preview(car_file, paint)
 
