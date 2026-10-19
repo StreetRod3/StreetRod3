@@ -5,7 +5,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 
 const SCENE_MAIN_MENU := "res://scenes/main_menu.tscn"
 const SCENE_GARAGE := "res://scenes/garage.tscn"
-const SCENE_OPPONENT_SELECT := "res://scenes/opponent_select.tscn"
+const SCENE_DRIVE_IN := "res://scenes/drive-in.tscn"
 const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
 const SCENE_SETTINGS := "res://scenes/settings.tscn"
@@ -41,7 +41,7 @@ var fuel: float = DEFAULT_TANK_L
 var vmax_kmh: float = 220.0
 var engine_power_hp: float = 280.0
 
-## Last scene to restore (garage, opponent_select, race).
+## Last scene to restore (garage, drive-in, race).
 var current_scene_path: String = SCENE_GARAGE
 ## Index into `opponents` for the next race.
 var selected_opponent_id: int = 0
@@ -285,6 +285,8 @@ func load_game() -> bool:
 	vmax_kmh = float(d.get("vmax_kmh", vmax_kmh))
 	engine_power_hp = float(d.get("engine_power_hp", engine_power_hp))
 	current_scene_path = str(d.get("current_scene_path", SCENE_GARAGE))
+	if current_scene_path == "res://scenes/opponent_select.tscn":
+		current_scene_path = SCENE_DRIVE_IN
 	selected_opponent_id = int(d.get("selected_opponent_id", 0))
 	_load_saved_opponents(d)
 	var race_type := str(d.get("selected_race_type", RACE_DRAG))

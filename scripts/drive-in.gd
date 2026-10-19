@@ -94,7 +94,7 @@ var _sphere_meshes: Dictionary = {}
 
 
 func _ready() -> void:
-	GameState.current_scene_path = GameState.SCENE_OPPONENT_SELECT
+	GameState.current_scene_path = GameState.SCENE_DRIVE_IN
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_camera.fov = 54.0
