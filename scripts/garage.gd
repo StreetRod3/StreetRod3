@@ -1,6 +1,8 @@
 extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _EngineSound := preload("res://scripts/engine_sound.gd")
+const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
 
 @onready var _car_pivot: Node3D = $CarPivot
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -66,6 +68,17 @@ var _fuel_status: Label
 var _fuel_note: Label
 var _fuel_fill_btn: Button
 var _fuel_close_btn: Button
+var _tune_panel: Control
+var _tune_title: Label
+var _tune_engine: Label
+var _tune_gauge: Control
+var _tune_up: Button
+var _tune_down: Button
+var _tune_close: Button
+var _tune_preview: Control
+var _tune_sound: AudioStreamPlayer
+var _hood: StaticBody3D
+var _hood_shape: BoxShape3D
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -110,6 +123,8 @@ func _ready() -> void:
 	$InteractSprayPistol.set_meta(&"garage_interact", &"spray")
 	$InteractFuelCan.set_meta(&"garage_interact", &"fuel")
 	_build_fuel_panel()
+	_build_tune_panel()
+	_build_hood_target()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
 	_lift_arm_home = _lift_arm.position
@@ -132,6 +147,7 @@ func _ready() -> void:
 	call_deferred(&"_debug_car_mesh")
 	# Also align wheels to the floor after meshes are ready.
 	call_deferred(&"_align_wheels_to_floor")
+	call_deferred(&"_place_hood_target")
 
 	# If the CarBody emits a signal when its STL finishes loading, connect to it
 	var car_body := _car_pivot.get_node_or_null("CarBody") as MeshInstance3D
@@ -139,9 +155,10 @@ func _ready() -> void:
 		car_body.connect("stl_loaded", Callable(self, "_on_carbody_stl_loaded"))
 
 
-func _on_carbody_stl_loaded(mesh) -> void:
+func _on_carbody_stl_loaded(_mesh: Variant) -> void:
 	# When the CarBody's mesh is ready, re-align wheels to the floor.
 	_align_wheels_to_floor()
+	_place_hood_target()
 
 
 func _align_wheels_to_floor() -> void:
@@ -251,6 +268,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hide_fuel_panel()
 		get_viewport().set_input_as_handled()
 		return
+	if _tune_panel != null and _tune_panel.visible and event.is_action_pressed(&"ui_cancel"):
+		_hide_tune_panel()
+		get_viewport().set_input_as_handled()
+		return
 	if _calendar_inspecting and event.is_action_pressed(&"ui_cancel"):
 		_hang_calendar()
 		get_viewport().set_input_as_handled()
@@ -316,6 +337,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
 			if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible:
+				return
+			if _tune_panel != null and _tune_panel.visible:
 				return
 			if _car_list != null and _car_list.visible:
 				_hide_car_list()
@@ -446,6 +469,7 @@ func _hide_garage_overlays() -> void:
 		_car_list.visible = false
 	if _fuel_panel != null:
 		_fuel_panel.visible = false
+	_hide_tune_panel()
 	_sync_menu_nav()
 
 
@@ -478,6 +502,8 @@ func _sync_menu_nav() -> void:
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
 		])
+	elif _tune_panel != null and _tune_panel.visible:
+		_nav.setup([_tune_up, _tune_down, _tune_close])
 	elif _fuel_panel != null and _fuel_panel.visible:
 		_nav.setup([_fuel_fill_btn, _fuel_close_btn])
 	elif _parts_board != null and _parts_board.visible:
@@ -562,6 +588,8 @@ func _handle_interact(kind: Variant) -> void:
 			_show_spray_picker()
 		&"fuel":
 			_show_fuel_panel()
+		&"hood":
+			_show_tune_panel()
 		&"calendar":
 			_bring_calendar_forward()
 		&"lift":
@@ -1154,6 +1182,195 @@ func _apply_active_car_visual() -> void:
 	if _car_pivot.has_method(&"reload_player_car"):
 		_car_pivot.call(&"reload_player_car")
 	_align_wheels_to_floor()
+	call_deferred(&"_place_hood_target")
+
+
+func _build_hood_target() -> void:
+	_hood = StaticBody3D.new()
+	_hood.name = "InteractHood"
+	var col := CollisionShape3D.new()
+	_hood_shape = BoxShape3D.new()
+	_hood_shape.size = Vector3(1.3, 0.28, 1.0)
+	col.shape = _hood_shape
+	_hood.add_child(col)
+	_hood.position = Vector3(0.0, 0.9, 0.85)
+	_car_pivot.add_child(_hood)
+	_hood.set_meta(&"garage_interact", &"hood")
+
+
+func _place_hood_target() -> void:
+	if _hood == null or _hood_shape == null:
+		return
+	var body := _car_pivot.get_node_or_null("CarBody") as Node3D
+	if body == null:
+		return
+	var box := _world_mesh_aabb(body)
+	if box.size.y < 0.2 or box.size.z < 0.4:
+		return
+	var origin := box.position
+	var size := box.size
+	# Front deck, under the roof line: the hood, not the cabin.
+	var hood_min := origin + Vector3(size.x * 0.18, size.y * 0.42, size.z * 0.55)
+	var hood_size := Vector3(size.x * 0.64, size.y * 0.26, size.z * 0.38)
+	_hood.global_position = hood_min + hood_size * 0.5
+	_hood_shape.size = hood_size
+
+
+func _world_mesh_aabb(node: Node) -> AABB:
+	var box := AABB()
+	var started := false
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		var mi := node as MeshInstance3D
+		box = _transformed_aabb(mi.global_transform, mi.mesh.get_aabb())
+		started = true
+	for child in node.get_children():
+		var child_box := _world_mesh_aabb(child)
+		if child_box.size == Vector3.ZERO:
+			continue
+		if not started:
+			box = child_box
+			started = true
+		else:
+			box = box.merge(child_box)
+	return box
+
+
+func _transformed_aabb(xf: Transform3D, local: AABB) -> AABB:
+	var out := AABB(xf * local.get_endpoint(0), Vector3.ZERO)
+	for i in range(1, 8):
+		out = out.expand(xf * local.get_endpoint(i))
+	return out
+
+
+func _build_tune_panel() -> void:
+	var root := Control.new()
+	root.name = "TunePanel"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.visible = false
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := ColorRect.new()
+	dim.color = Color(0.05, 0.05, 0.06, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.offset_left = -250.0
+	panel.offset_top = -270.0
+	panel.offset_right = 250.0
+	panel.offset_bottom = 270.0
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.09, 0.07, 0.98)
+	style.border_color = Color(0.55, 0.12, 0.1, 1.0)
+	style.set_border_width_all(2)
+	style.content_margin_left = 16.0
+	style.content_margin_right = 16.0
+	style.content_margin_top = 14.0
+	style.content_margin_bottom = 14.0
+	panel.add_theme_stylebox_override(&"panel", style)
+	root.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 8)
+	panel.add_child(box)
+	_tune_title = Label.new()
+	_tune_title.text = "Engine tune"
+	_tune_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tune_title.add_theme_font_size_override(&"font_size", 22)
+	_tune_title.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	box.add_child(_tune_title)
+	_tune_engine = Label.new()
+	_tune_engine.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tune_engine.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	box.add_child(_tune_engine)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override(&"separation", 12)
+	_tune_preview = _TunePreview.new()
+	_tune_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tune_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	row.add_child(_tune_preview)
+	var column := VBoxContainer.new()
+	column.alignment = BoxContainer.ALIGNMENT_CENTER
+	column.add_theme_constant_override(&"separation", 6)
+	_tune_up = _TuneArrow.new()
+	(_tune_up as _TuneArrow).points_up = true
+	_tune_up.pressed.connect(_on_tune_step_pressed.bind(1))
+	column.add_child(_tune_up)
+	_tune_gauge = _TuneGauge.new()
+	column.add_child(_tune_gauge)
+	_tune_down = _TuneArrow.new()
+	(_tune_down as _TuneArrow).points_up = false
+	_tune_down.pressed.connect(_on_tune_step_pressed.bind(-1))
+	column.add_child(_tune_down)
+	var center := CenterContainer.new()
+	center.add_child(column)
+	row.add_child(center)
+	box.add_child(row)
+	_tune_close = Button.new()
+	_tune_close.text = "Close"
+	_tune_close.pressed.connect(_hide_tune_panel)
+	box.add_child(_tune_close)
+	$GarageUI.add_child(root)
+	_tune_panel = root
+	_tune_sound = AudioStreamPlayer.new()
+	_tune_sound.name = "TuneEngineSound"
+	_tune_sound.set_script(_EngineSound)
+	_tune_sound.set(&"play_on_ready", false)
+	add_child(_tune_sound)
+
+
+func _show_tune_panel() -> void:
+	if _wheel_job or _departing or _tune_panel == null:
+		return
+	_hide_garage_overlays()
+	_tune_panel.visible = true
+	_refresh_tune_panel()
+	_sync_menu_nav()
+
+
+func _hide_tune_panel() -> void:
+	if _tune_panel == null or not _tune_panel.visible:
+		return
+	_tune_panel.visible = false
+	_stop_tune_sound()
+	_sync_menu_nav()
+
+
+func _on_tune_step_pressed(delta: int) -> void:
+	GameState.set_engine_tune(GameState.engine_tune + delta)
+	_refresh_tune_panel()
+
+
+func _refresh_tune_panel() -> void:
+	GameState.refresh_car_stats()
+	var engine := GameState.get_equipped_engine()
+	var engine_name := str(engine.get("name", "Engine"))
+	_tune_engine.text = engine_name
+	var sweet := GameState.engine_sweet_tune()
+	var tune := GameState.engine_tune
+	if _tune_gauge is _TuneGauge:
+		(_tune_gauge as _TuneGauge).set_tune(tune, sweet)
+	_tune_up.disabled = tune >= GameState.ENGINE_TUNE_MAX
+	_tune_down.disabled = tune <= GameState.ENGINE_TUNE_MIN
+	_tune_up.queue_redraw()
+	_tune_down.queue_redraw()
+	if _tune_preview != null and _tune_preview.has_method(&"set_engine"):
+		_tune_preview.call(&"set_engine", str(engine.get("model", "")))
+		_tune_preview.call(&"set_tune", tune, sweet)
+	if _tune_panel.visible:
+		_sync_tune_sound(tune, sweet)
+
+
+func _sync_tune_sound(tune: int, sweet: int) -> void:
+	if _tune_sound == null or not _tune_sound.has_method(&"set_tune"):
+		return
+	_tune_sound.call(&"set_tune", tune, sweet)
+	GameState.set_music_dimmed(true)
+
+
+func _stop_tune_sound() -> void:
+	if _tune_sound != null and _tune_sound.playing:
+		_tune_sound.stop()
+	GameState.set_music_dimmed(false)
 
 
 func _show_stats() -> void:
@@ -1518,3 +1735,61 @@ func _weekday_sunday0(year: int, month: int, day: int) -> int:
 	if month < 3:
 		y -= 1
 	return (y + int(y / 4) - int(y / 100) + int(y / 400) + int(t[month - 1]) + day) % 7
+
+
+class _TuneArrow extends Button:
+	var points_up: bool = true
+
+	func _ready() -> void:
+		custom_minimum_size = Vector2(64, 40)
+		text = ""
+		focus_mode = Control.FOCUS_ALL
+
+	func _draw() -> void:
+		var color := Color(0.95, 0.9, 0.78, 1.0)
+		if disabled:
+			color.a = 0.35
+		var mid := size * 0.5
+		var pts := PackedVector2Array()
+		if points_up:
+			pts = PackedVector2Array([mid + Vector2(0, -9), mid + Vector2(12, 8), mid + Vector2(-12, 8)])
+		else:
+			pts = PackedVector2Array([mid + Vector2(0, 9), mid + Vector2(12, -8), mid + Vector2(-12, -8)])
+		draw_colored_polygon(pts, color)
+
+
+class _TuneGauge extends Control:
+	var tune: int = 0
+	var sweet: int = 6
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(88, 210)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_tune(next: int, next_sweet: int) -> void:
+		tune = next
+		sweet = next_sweet
+		queue_redraw()
+
+	func _draw() -> void:
+		var steps := GameState.ENGINE_TUNE_MAX
+		var track := Rect2(18.0, 4.0, 52.0, size.y - 8.0)
+		draw_rect(track, Color(0.08, 0.06, 0.05, 1.0))
+		var row_h := track.size.y / float(steps + 1)
+		for step in steps + 1:
+			var scale := GameState.engine_tune_scale(step, sweet)
+			var warmth := clampf((scale - 0.68) / 0.32, 0.0, 1.0)
+			var bar_w := lerpf(8.0, track.size.x - 12.0, warmth)
+			var y := track.position.y + track.size.y - (float(step) + 1.0) * row_h
+			var bar := Rect2(track.position.x + 6.0, y + 2.0, bar_w, maxf(row_h - 4.0, 1.0))
+			var color := Color(0.42, 0.14, 0.1).lerp(Color(0.95, 0.78, 0.32), warmth)
+			draw_rect(bar, color)
+			if step == sweet:
+				draw_rect(Rect2(track.position.x + 2.0, y + 1.0, track.size.x - 4.0, row_h - 2.0), Color(0.95, 0.82, 0.4, 0.28), false, 2.0)
+		var mark_y := track.position.y + track.size.y - (float(tune) + 0.5) * row_h
+		var tip := Vector2(track.position.x - 1.0, mark_y)
+		draw_colored_polygon(PackedVector2Array([
+			tip + Vector2(-12, -6),
+			tip,
+			tip + Vector2(-12, 6),
+		]), Color(0.95, 0.9, 0.78))
