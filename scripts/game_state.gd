@@ -20,6 +20,9 @@ const FUEL_PRICE_PER_L := 2
 const ENGINE_TUNE_MIN := 0
 const ENGINE_TUNE_MAX := 10
 const ENGINE_TUNE_DEFAULT := 4
+## After a race the timing holds, or walks one step either way.
+const ENGINE_TUNE_DRIFT_DOWN := 0.2
+const ENGINE_TUNE_DRIFT_UP := 0.2
 const PLAYER_CAR_FILE := "res://assets/cars/sr1-corvette-1956.car"
 const OPPONENTS_PATH := "res://assets/opponents/opponents.json"
 const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
@@ -624,6 +627,19 @@ func set_engine_tune(step: int) -> void:
 	engine_tune = clampi(step, ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
 	_sync_record_from_active()
 	refresh_car_stats()
+
+
+## Heat from a finished race. Returns how many steps the timing actually moved.
+func drift_engine_tune_after_race() -> int:
+	var before := engine_tune
+	var roll := randf()
+	var delta := 0
+	if roll < ENGINE_TUNE_DRIFT_DOWN:
+		delta = -1
+	elif roll < ENGINE_TUNE_DRIFT_DOWN + ENGINE_TUNE_DRIFT_UP:
+		delta = 1
+	set_engine_tune(before + delta)
+	return engine_tune - before
 
 
 ## Timing step where this engine makes its rated power. Stable for a given engine id.
