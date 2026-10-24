@@ -7,7 +7,7 @@
       "price": 900,
       "hp": 230,
       "vmax": 200,
-      "model": "res://assets/parts/engine-v8-283.glb"
+      "model": "res://assets/parts/engine-v8-265.glb"
     },
     {
       "id": "v8-283",
