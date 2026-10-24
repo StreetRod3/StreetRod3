@@ -1531,23 +1531,26 @@ func _swap_one_wheel(mount: Node3D, wheel: Dictionary, radius: float) -> void:
 	if not is_instance_valid(mount):
 		return
 	await _pause(_T_PAUSE)
-	await _roll_node(mount, side_pos, radius, _T_ROLL_SIDE)
+	var facing := world_xf.basis.orthonormalized()
+	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
 	if not is_instance_valid(mount):
 		return
-	await _roll_node(mount, outside, radius, _T_ROLL_LONG)
+	facing = await _roll_node(mount, outside, radius, _T_ROLL_LONG, world_xf.basis, facing)
 	if not is_instance_valid(mount):
 		return
 	await _pause(_T_PAUSE)
+	var kept_scale := mount.scale
 	if _car_pivot.has_method(&"apply_wheel_to_mount"):
 		_car_pivot.call(&"apply_wheel_to_mount", mount, wheel)
-	mount.global_transform = Transform3D(world_xf.basis, outside)
-	await _roll_node(mount, side_pos, radius, _T_ROLL_LONG)
+	mount.global_transform = Transform3D(world_xf.basis.orthonormalized().scaled(kept_scale), outside)
+	facing = world_xf.basis.orthonormalized()
+	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_LONG, world_xf.basis, facing)
 	if not is_instance_valid(mount):
 		return
-	await _roll_node(mount, floor_pos, radius, _T_ROLL_SIDE)
+	await _roll_node(mount, floor_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
 	if not is_instance_valid(mount):
 		return
-	await _tween_global_pos(mount, axle, _T_RISE)
+	await _lift_to_axle(mount, axle, world_xf.basis, _T_RISE)
 	if not is_instance_valid(mount):
 		return
 	remove_child(mount)
@@ -1578,23 +1581,63 @@ func _tween_global_xform(node: Node3D, to: Transform3D, duration: float) -> void
 	await tw.finished
 
 
-func _roll_node(node: Node3D, to: Vector3, radius: float, duration: float) -> void:
+## Roll `node` along the ground from its current spot to `to`. Local +Y is the axle,
+## same as the drive-out spin. Returns the upright facing at the end of the roll.
+func _roll_node(node: Node3D, to: Vector3, radius: float, duration: float, mounted: Basis, from_facing: Basis) -> Basis:
 	var start_pos := node.global_position
-	var start_basis := node.global_basis
 	var travel := Vector3(to.x - start_pos.x, 0.0, to.z - start_pos.z)
 	var dist := travel.length()
-	var axis := Vector3.RIGHT
-	if dist > 0.001:
-		axis = Vector3.UP.cross(travel / dist)
-		if axis.length() < 0.001:
-			axis = Vector3.RIGHT
-		else:
-			axis = axis.normalized()
+	var facing := _facing_for_travel(mounted, travel)
+	if dist <= 0.001 or not is_instance_valid(node):
+		if is_instance_valid(node):
+			node.global_position = to
+		return facing
+	var wheel_scale := node.scale
 	var safe_r := maxf(radius, 0.08)
 	var tw := create_tween()
 	tw.set_trans(Tween.TRANS_LINEAR)
 	tw.tween_method(
-		_apply_roll.bind(node, start_pos, to, start_basis, axis, dist, safe_r),
+		_apply_roll.bind(node, start_pos, to, from_facing, facing, dist, safe_r, wheel_scale),
+		0.0,
+		1.0,
+		duration
+	)
+	await tw.finished
+	return facing
+
+
+## Upright wheel whose axle (local +Y) is perpendicular to `travel`.
+func _facing_for_travel(mounted: Basis, travel: Vector3) -> Basis:
+	var upright := mounted.orthonormalized()
+	var flat := Vector3(travel.x, 0.0, travel.z)
+	if flat.length() < 0.001:
+		return upright
+	var dir := flat.normalized()
+	var current := upright.y
+	current.y = 0.0
+	if current.length() < 0.001:
+		current = Vector3.RIGHT
+	else:
+		current = current.normalized()
+	var axle := Vector3.UP.cross(dir)
+	if axle.length() < 0.001:
+		return upright
+	axle = axle.normalized()
+	if current.dot(axle) < 0.0:
+		axle = -axle
+	var yaw := current.signed_angle_to(axle, Vector3.UP)
+	return Basis(Vector3.UP, yaw) * upright
+
+
+func _lift_to_axle(node: Node3D, axle: Vector3, mounted: Basis, duration: float) -> void:
+	var start_pos := node.global_position
+	var start_basis := node.global_basis.orthonormalized()
+	var goal := mounted.orthonormalized()
+	var wheel_scale := node.scale
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_method(
+		_apply_lift.bind(node, start_pos, axle, start_basis, goal, wheel_scale),
 		0.0,
 		1.0,
 		duration
@@ -1606,11 +1649,26 @@ func _pause(seconds: float) -> void:
 	await get_tree().create_timer(seconds).timeout
 
 
-func _apply_roll(node: Node3D, start_pos: Vector3, to: Vector3, start_basis: Basis, axis: Vector3, dist: float, safe_r: float, t: float) -> void:
+func _apply_roll(t: float, node: Node3D, start_pos: Vector3, to: Vector3, from_facing: Basis, facing: Basis, dist: float, safe_r: float, wheel_scale: Vector3) -> void:
 	if not is_instance_valid(node):
 		return
-	node.global_position = start_pos.lerp(to, t)
-	node.global_basis = Basis(axis, -(dist * t) / safe_r) * start_basis
+	var turn := clampf(t / 0.22, 0.0, 1.0)
+	var turned := from_facing.slerp(facing, turn)
+	var forward := -turned.x
+	forward.y = 0.0
+	var spin := 0.0
+	var travel := Vector3(to.x - start_pos.x, 0.0, to.z - start_pos.z)
+	if forward.length() > 0.001 and travel.length() > 0.001:
+		spin = signf(travel.normalized().dot(forward.normalized())) * (dist * t) / safe_r
+	var basis := (turned * Basis(Vector3.UP, spin)).scaled(wheel_scale)
+	node.global_transform = Transform3D(basis, start_pos.lerp(to, t))
+
+
+func _apply_lift(t: float, node: Node3D, start_pos: Vector3, to: Vector3, start_basis: Basis, goal: Basis, wheel_scale: Vector3) -> void:
+	if not is_instance_valid(node):
+		return
+	var basis := start_basis.slerp(goal, t).scaled(wheel_scale)
+	node.global_transform = Transform3D(basis, start_pos.lerp(to, t))
 
 
 func _on_stats_close_pressed() -> void:
