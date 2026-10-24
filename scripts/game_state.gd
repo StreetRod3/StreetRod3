@@ -17,6 +17,12 @@ const MAX_OWNED_CARS := 16
 const DEFAULT_TANK_L := 60.0
 const FUEL_L_PER_KM := 5.0
 const FUEL_PRICE_PER_L := 2
+const ENGINE_TUNE_MIN := 0
+const ENGINE_TUNE_MAX := 10
+const ENGINE_TUNE_DEFAULT := 4
+## After a race the timing holds, or walks one step either way.
+const ENGINE_TUNE_DRIFT_DOWN := 0.2
+const ENGINE_TUNE_DRIFT_UP := 0.2
 const PLAYER_CAR_FILE := "res://assets/cars/sr1-corvette-1956.car"
 const OPPONENTS_PATH := "res://assets/opponents/opponents.json"
 const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
@@ -37,9 +43,11 @@ var car_name: String = "Corvette 1956"
 var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
 ## Fuel in the active car's tank, in liters.
 var fuel: float = DEFAULT_TANK_L
-## Fixed stats (km/h and hp) for UI until tuning exists.
+## Top speed and horsepower after parts and engine tune.
 var vmax_kmh: float = 220.0
 var engine_power_hp: float = 280.0
+## Ignition timing for the active car. Power and top speed peak at `engine_sweet_tune()`.
+var engine_tune: int = ENGINE_TUNE_DEFAULT
 
 ## Last scene to restore (garage, drive-in, race).
 var current_scene_path: String = SCENE_GARAGE
@@ -111,6 +119,7 @@ func _ready() -> void:
 	load_player_car()
 	if not car_records.has(current_car_id):
 		_sync_record_from_active()
+	refresh_car_stats()
 
 
 func load_parts_register() -> void:
@@ -202,6 +211,7 @@ func new_game() -> void:
 	fuel = DEFAULT_TANK_L
 	vmax_kmh = 220.0
 	engine_power_hp = 280.0
+	engine_tune = ENGINE_TUNE_DEFAULT
 	current_scene_path = SCENE_GARAGE
 	selected_opponent_id = 0
 	opponents.clear()
@@ -602,12 +612,48 @@ func refresh_car_stats() -> void:
 			car_name = str(car_spec.get("name", car_name))
 		vmax_kmh = float(engine.get("vmax", vmax_kmh))
 		engine_power_hp = float(engine.get("hp", engine_power_hp))
+	var tune_scale := engine_tune_scale(engine_tune, engine_sweet_tune())
+	vmax_kmh *= tune_scale
+	engine_power_hp *= tune_scale
 	for part_id in equipped_part_ids:
 		var part: Dictionary = listing_by_id(PARTS, part_id)
 		if part.is_empty():
 			continue
 		vmax_kmh += float(part.get("vmax", 0.0))
 		engine_power_hp += float(part.get("hp", 0.0))
+
+
+func set_engine_tune(step: int) -> void:
+	engine_tune = clampi(step, ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
+	_sync_record_from_active()
+	refresh_car_stats()
+
+
+## Heat from a finished race. Returns how many steps the timing actually moved.
+func drift_engine_tune_after_race() -> int:
+	var before := engine_tune
+	var roll := randf()
+	var delta := 0
+	if roll < ENGINE_TUNE_DRIFT_DOWN:
+		delta = -1
+	elif roll < ENGINE_TUNE_DRIFT_DOWN + ENGINE_TUNE_DRIFT_UP:
+		delta = 1
+	set_engine_tune(before + delta)
+	return engine_tune - before
+
+
+## Timing step where this engine makes its rated power. Stable for a given engine id.
+func engine_sweet_tune(engine_id: String = "") -> int:
+	var id := equipped_engine_id if engine_id.is_empty() else engine_id
+	if id.is_empty():
+		return 6
+	return 2 + absi(id.hash()) % 7
+
+
+## 1 at the sweet spot, down to 0.68 several steps away.
+func engine_tune_scale(tune: int, sweet: int) -> float:
+	var t := clampf(float(absi(tune - sweet)) / 5.0, 0.0, 1.0)
+	return lerpf(1.0, 0.68, t * t)
 
 
 func buy_part(part_id: String) -> String:
@@ -783,6 +829,7 @@ func _make_car_record(car_id: String, paint: Color) -> Dictionary:
 		"gearbox_id": gearbox_id,
 		"wheel_id": wheel_id,
 		"part_ids": parts,
+		"engine_tune": ENGINE_TUNE_DEFAULT,
 	}
 
 
@@ -840,6 +887,7 @@ func _sync_record_from_active() -> void:
 	rec["gearbox_id"] = equipped_gearbox_id
 	rec["wheel_id"] = equipped_wheel_id
 	rec["part_ids"] = equipped_part_ids.duplicate()
+	rec["engine_tune"] = engine_tune
 	car_records[current_car_id] = rec
 
 
@@ -856,6 +904,7 @@ func _apply_fields_from_record(car_id: String) -> void:
 	equipped_gearbox_id = str(rec.get("gearbox_id", equipped_gearbox_id))
 	equipped_wheel_id = str(rec.get("wheel_id", equipped_wheel_id))
 	equipped_part_ids = _string_array(rec.get("part_ids", []))
+	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
 
 
 func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
@@ -910,6 +959,7 @@ func _cars_for_save() -> Dictionary:
 			"gearbox_id": str(rec.get("gearbox_id", "")),
 			"wheel_id": str(rec.get("wheel_id", "")),
 			"part_ids": _string_array(rec.get("part_ids", [])),
+			"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
 		}
 	return out
 
@@ -945,6 +995,7 @@ func _record_from_save(row: Dictionary) -> Dictionary:
 		"gearbox_id": str(row.get("gearbox_id", "")),
 		"wheel_id": str(row.get("wheel_id", "")),
 		"part_ids": _string_array(row.get("part_ids", [])),
+		"engine_tune": clampi(int(row.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),
 	}
 
 
@@ -956,6 +1007,7 @@ func _record_from_active_snapshot() -> Dictionary:
 		"gearbox_id": equipped_gearbox_id,
 		"wheel_id": equipped_wheel_id,
 		"part_ids": equipped_part_ids.duplicate(),
+		"engine_tune": engine_tune,
 	}
 
 
@@ -1032,6 +1084,12 @@ func set_music_enabled(enabled: bool) -> void:
 func set_arcade_drive(enabled: bool) -> void:
 	arcade_drive = enabled
 	save_settings()
+
+
+func set_music_dimmed(dimmed: bool) -> void:
+	if _music_player == null:
+		return
+	_music_player.volume_db = -16.0 if dimmed else 0.0
 
 
 func update_music() -> void:

@@ -6,7 +6,8 @@
       "name": "265 V8",
       "price": 900,
       "hp": 230,
-      "vmax": 200
+      "vmax": 200,
+      "model": "res://assets/parts/engine-v8-265.glb"
     },
     {
       "id": "v8-283",
@@ -14,7 +15,8 @@
       "name": "283 V8",
       "price": 0,
       "hp": 280,
-      "vmax": 220
+      "vmax": 220,
+      "model": "res://assets/parts/engine-v8-283.glb"
     },
     {
       "id": "v8-327",
@@ -22,7 +24,8 @@
       "name": "327 V8",
       "price": 2400,
       "hp": 350,
-      "vmax": 250
+      "vmax": 250,
+      "model": "res://assets/parts/engine-v8-327.glb"
     }
   ],
   "transmissions": [

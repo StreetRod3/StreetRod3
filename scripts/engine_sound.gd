@@ -2,6 +2,10 @@ extends AudioStreamPlayer
 
 const MIX_RATE := 22050.0
 const BUFFER_S := 0.12
+## Idle rev on the tune screen. The sweet spot is the top of idle; each step away drops a semitone and a half.
+const TUNE_RPM_PEAK := 700.0
+const TUNE_SEMITONES_PER_STEP := 1.5
+const TUNE_THROTTLE := 0.0
 
 var _playback: AudioStreamGeneratorPlayback
 var _phase: float = 0.0
@@ -11,6 +15,7 @@ var _throttle: float = 0.0
 var _blown: bool = false
 var _shifting: bool = false
 var _amp: float = 0.0
+var play_on_ready: bool = true
 
 
 func _ready() -> void:
@@ -20,7 +25,19 @@ func _ready() -> void:
 	stream = gen
 	volume_db = -6.0
 	bus = "Master"
-	_start_playback()
+	if play_on_ready:
+		_start_playback()
+
+
+## Idle speed for this tune step. Highest when `tune` is `sweet`.
+static func tune_rpm(tune: int, sweet: int) -> float:
+	var gap := float(absi(tune - sweet))
+	return TUNE_RPM_PEAK * pow(2.0, -gap * TUNE_SEMITONES_PER_STEP / 12.0)
+
+
+## Idle lope for the garage tune screen. Pitch is highest when `tune` is `sweet`.
+func set_tune(tune: int, sweet: int) -> void:
+	set_state(tune_rpm(tune, sweet), TUNE_THROTTLE, false, false)
 
 
 func set_state(rpm: float, throttle: float, blown: bool, shifting: bool = false) -> void:
@@ -66,7 +83,8 @@ func _fill_buffer() -> void:
 	_amp = lerpf(_amp, target_amp, 0.08)
 
 	# V8 4-stroke: four exhaust pulses per revolution.
-	var fire_hz := maxf(_rpm, 500.0) / 15.0
+	# Floor stays under idle so the tune screen can lope below 500 rpm.
+	var fire_hz := maxf(_rpm, 200.0) / 15.0
 	var rumble_hz := fire_hz * 0.5
 	var roughness := clampf((_rpm - 600.0) / 5900.0, 0.0, 1.0)
 

@@ -304,6 +304,7 @@ func _finish_player() -> void:
 	if _race_over:
 		return
 	_race_over = true
+	GameState.drift_engine_tune_after_race()
 	_show_result(not _opponent_finished)
 
 
@@ -315,6 +316,7 @@ func _show_engine_blown() -> void:
 		_mobile.visible = false
 	if _rpm_meter != null:
 		_rpm_meter.visible = false
+	GameState.drift_engine_tune_after_race()
 	_result_text.text = "You stayed in the red too long — the engine is blown.\n\nFuel left: %.0f L" % GameState.fuel
 	_wire_result_menu()
 
