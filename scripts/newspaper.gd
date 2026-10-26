@@ -30,6 +30,9 @@ var _preview_pivot: Node3D
 
 
 func _ready() -> void:
+	if GameState.is_ruined():
+		GameState.finish_run()
+		return
 	GameState.current_scene_path = GameState.SCENE_NEWSPAPER
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
@@ -163,8 +166,6 @@ func _make_gearbox_card(box: Dictionary) -> Control:
 
 func _make_car_card(car: Dictionary) -> Control:
 	var car_id := str(car.get("id", ""))
-	var owned := GameState.owns_car(car_id)
-	var current := GameState.current_car_id == car_id
 	var price := int(car.get("price", 0))
 	var box := _card()
 	box.set_meta(&"car_id", car_id)
@@ -175,15 +176,7 @@ func _make_car_card(car: Dictionary) -> Control:
 	box.add_child(_heading(str(car.get("name", "Car"))))
 	box.add_child(_body("%.0f km/h   %.0f hp" % [float(car.get("vmax", 0.0)), float(car.get("hp", 0.0))]))
 	var btn := _ink_button()
-	if current:
-		btn.text = "In the garage"
-		btn.disabled = true
-		btn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	elif owned:
-		btn.text = "Pull into garage"
-		btn.pressed.connect(_show_car_preview.bind(car_id))
-		btn.pressed.connect(_on_buy_car.bind(car_id))
-	elif GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
+	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
 		btn.text = "Garage is full"
 		btn.disabled = true
 	else:
@@ -336,24 +329,32 @@ func _make_swap_card(part: Dictionary, equipped_id: String, owned: bool, detail:
 
 func _on_buy_engine(engine_id: String) -> void:
 	var err := GameState.buy_or_equip_engine(engine_id)
+	if _finish_if_ruined():
+		return
 	_status.text = "Engine is in the spare parts folder." if err.is_empty() else err
 	_refresh()
 
 
 func _on_buy_wheel(wheel_id: String) -> void:
 	var err := GameState.buy_or_equip_wheel(wheel_id)
+	if _finish_if_ruined():
+		return
 	_status.text = "Wheels are in the spare parts folder." if err.is_empty() else err
 	_refresh()
 
 
 func _on_buy_gearbox(gearbox_id: String) -> void:
 	var err := GameState.buy_or_equip_gearbox(gearbox_id)
+	if _finish_if_ruined():
+		return
 	_status.text = "Gearbox is in the spare parts folder." if err.is_empty() else err
 	_refresh()
 
 
 func _on_buy_part(part_id: String) -> void:
 	var err := GameState.buy_part(part_id)
+	if _finish_if_ruined():
+		return
 	_status.text = "Part is in the spare parts folder." if err.is_empty() else err
 	_refresh()
 
@@ -366,6 +367,13 @@ func _on_buy_car(car_id: String) -> void:
 		return
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+
+
+func _finish_if_ruined() -> bool:
+	if not GameState.is_ruined():
+		return false
+	GameState.finish_run()
+	return true
 
 
 func _on_used_cars_tab_pressed() -> void:

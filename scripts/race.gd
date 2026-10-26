@@ -317,8 +317,8 @@ func _show_engine_blown() -> void:
 	if _rpm_meter != null:
 		_rpm_meter.visible = false
 	GameState.drift_engine_tune_after_race()
-	_result_text.text = "You stayed in the red too long — the engine is blown.\n\nFuel left: %.0f L" % GameState.fuel
-	_wire_result_menu()
+	_result_text.text = "You stayed in the red too long — the engine is blown.%s\n\nFuel left: %.0f L" % [_stake_line(false), GameState.fuel]
+	_apply_result_actions()
 
 
 func _show_result(player_won: bool) -> void:
@@ -337,8 +337,20 @@ func _show_result(player_won: bool) -> void:
 		_result_text.text = "You crossed the quarter mile first — you win!"
 	else:
 		_result_text.text = "Your opponent reached the line first — you lose."
+	_result_text.text += _stake_line(player_won)
 	_result_text.text += "\n\nFuel left: %.0f L" % GameState.fuel
-	_wire_result_menu()
+	_apply_result_actions()
+
+
+func _stake_line(player_won: bool) -> String:
+	var line := ""
+	var payout := GameState.apply_race_stake(player_won)
+	if payout > 0:
+		line = "\nYou take $%d." % payout
+	elif payout < 0:
+		line = "\nYou hand over $%d." % -payout
+	line += GameState.apply_pink_slips(player_won)
+	return line
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -487,6 +499,12 @@ func _on_pause_confirm_leave_pressed() -> void:
 func _leave_race() -> void:
 	get_tree().paused = false
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+
+
+func _apply_result_actions() -> void:
+	var garage: Button = $RaceUI/ResultPanel/Panel/Margin/VBox/GarageBtn
+	garage.visible = true
+	_wire_result_menu()
 
 
 func _wire_result_menu() -> void:

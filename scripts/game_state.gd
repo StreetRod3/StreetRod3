@@ -36,6 +36,10 @@ const RACE_DRAG := "drag"
 const RACE_ROAD := "road"
 const QUARTER_MILE_M := 402.336
 const ROAD_RACE_LENGTH_M := QUARTER_MILE_M * 6.0
+const DRAG_STAKE_LOW := 10
+const DRAG_STAKE_HIGH := 50
+const ROAD_STAKE_LOW := 25
+const ROAD_STAKE_HIGH := 100
 
 ## Display name of the player's car.
 var car_name: String = "Corvette 1956"
@@ -55,6 +59,10 @@ var current_scene_path: String = SCENE_GARAGE
 var selected_opponent_id: int = 0
 ## `RACE_DRAG` (straight quarter mile) or `RACE_ROAD` (turning course).
 var selected_race_type: String = RACE_DRAG
+## Cash side bet for the next race. Zero is a race for nothing.
+var race_stake: int = 0
+## Road race where the winner takes the loser's car.
+var race_pink_slips: bool = false
 ## The direct-speed driving model from before the tire simulation.
 var arcade_drive: bool = true
 
@@ -63,9 +71,11 @@ var music_enabled: bool = true
 
 ## Cash on hand for classifieds (parts and used cars).
 var money: int = 2500
-## Id of the car currently in the garage.
+## Instance id of the car currently in the garage. Empty when the bay is empty.
 var current_car_id: String = DEFAULT_CAR_ID
+## Instance ids. The same model can appear more than once.
 var owned_car_ids: Array[String] = [DEFAULT_CAR_ID]
+var _next_car_serial: int = 1
 var owned_part_ids: Array[String] = []
 var equipped_part_ids: Array[String] = []
 var owned_gearbox_ids: Array[String] = ["gb_auto3"]
@@ -154,12 +164,42 @@ func _dict_list(value: Variant) -> Array[Dictionary]:
 	return rows
 
 
+func has_active_car() -> bool:
+	return not current_car_id.is_empty() and owned_car_ids.has(current_car_id)
+
+
 func current_car_file_path() -> String:
 	return car_file_path(current_car_id)
 
 
-func car_file_path(car_id: String) -> String:
-	var car: Dictionary = listing_by_id(USED_CARS, car_id)
+## Catalog id for an owned instance. A catalog id is returned unchanged.
+func car_model_id(instance_id: String) -> String:
+	if instance_id.is_empty():
+		return ""
+	var stored: Variant = car_records.get(instance_id, null)
+	if typeof(stored) == TYPE_DICTIONARY:
+		var model := str((stored as Dictionary).get("model_id", ""))
+		if not model.is_empty():
+			return _migrate_car_id(model)
+	var migrated := _migrate_car_id(instance_id)
+	if not listing_by_id(USED_CARS, migrated).is_empty():
+		return migrated
+	return ""
+
+
+func car_display_name(instance_id: String) -> String:
+	var car: Dictionary = listing_by_id(USED_CARS, car_model_id(instance_id))
+	var label := str(car.get("name", ""))
+	if label.is_empty():
+		return "Car"
+	return label
+
+
+func car_file_path(instance_or_model: String) -> String:
+	var model := car_model_id(instance_or_model)
+	if model.is_empty():
+		model = instance_or_model
+	var car: Dictionary = listing_by_id(USED_CARS, model)
 	var path := str(car.get("car_file", ""))
 	if path.is_empty() or not FileAccess.file_exists(path):
 		return PLAYER_CAR_FILE
@@ -167,6 +207,9 @@ func car_file_path(car_id: String) -> String:
 
 
 func load_player_car() -> void:
+	if not has_active_car():
+		car_spec = {}
+		return
 	car_spec = _CarFile.load_path(current_car_file_path())
 	var errors: Variant = car_spec.get("errors", [])
 	if typeof(errors) == TYPE_ARRAY:
@@ -216,9 +259,12 @@ func new_game() -> void:
 	selected_opponent_id = 0
 	opponents.clear()
 	selected_race_type = RACE_DRAG
+	race_stake = 0
+	race_pink_slips = false
 	money = 2500
-	current_car_id = DEFAULT_CAR_ID
-	owned_car_ids = [DEFAULT_CAR_ID]
+	_next_car_serial = 1
+	owned_car_ids.clear()
+	current_car_id = ""
 	owned_part_ids.clear()
 	equipped_part_ids.clear()
 	owned_gearbox_ids.clear()
@@ -228,8 +274,8 @@ func new_game() -> void:
 	equipped_engine_id = ""
 	equipped_wheel_id = ""
 	car_records.clear()
-	car_records[DEFAULT_CAR_ID] = _make_car_record(DEFAULT_CAR_ID, car_color)
-	_install_car(DEFAULT_CAR_ID)
+	current_car_id = _add_owned_car(DEFAULT_CAR_ID, car_color)
+	_install_car(current_car_id)
 
 
 func has_save_file() -> bool:
@@ -249,9 +295,12 @@ func save_game() -> bool:
 		"selected_opponent_id": selected_opponent_id,
 		"opponents": _opponents_for_save(),
 		"selected_race_type": selected_race_type,
+		"race_stake": race_stake,
+		"race_pink_slips": race_pink_slips,
 		"money": money,
 		"current_car_id": current_car_id,
 		"owned_car_ids": owned_car_ids,
+		"next_car_serial": _next_car_serial,
 		"owned_part_ids": owned_part_ids,
 		"equipped_part_ids": equipped_part_ids,
 		"owned_gearbox_ids": owned_gearbox_ids,
@@ -304,7 +353,10 @@ func load_game() -> bool:
 		selected_race_type = RACE_ROAD
 	else:
 		selected_race_type = RACE_DRAG
+	race_stake = maxi(int(d.get("race_stake", 0)), 0)
+	race_pink_slips = bool(d.get("race_pink_slips", false))
 	money = int(d.get("money", money))
+	_next_car_serial = maxi(int(d.get("next_car_serial", 1)), 1)
 	current_car_id = _migrate_car_id(str(d.get("current_car_id", current_car_id)))
 	owned_car_ids = _string_array(d.get("owned_car_ids", owned_car_ids))
 	for i in owned_car_ids.size():
@@ -320,8 +372,6 @@ func load_game() -> bool:
 	equipped_engine_id = str(d.get("equipped_engine_id", equipped_engine_id))
 	owned_wheel_ids = _string_array(d.get("owned_wheel_ids", owned_wheel_ids))
 	equipped_wheel_id = str(d.get("equipped_wheel_id", equipped_wheel_id))
-	if owned_car_ids.is_empty():
-		owned_car_ids = [DEFAULT_CAR_ID]
 	if owned_gearbox_ids.is_empty():
 		owned_gearbox_ids = [DEFAULT_GEARBOX_ID]
 	if listing_by_id(GEARBOXES, equipped_gearbox_id).is_empty():
@@ -329,9 +379,14 @@ func load_game() -> bool:
 	if not owns_gearbox(equipped_gearbox_id):
 		owned_gearbox_ids.append(equipped_gearbox_id)
 	_load_saved_cars(d)
-	load_player_car()
-	_sync_record_from_active()
-	refresh_car_stats()
+	if has_active_car():
+		load_player_car()
+		_sync_record_from_active()
+		refresh_car_stats()
+	else:
+		current_car_id = ""
+		car_spec = {}
+		car_name = "No car"
 	return true
 
 
@@ -543,8 +598,11 @@ func is_part_equipped(part_id: String) -> bool:
 	return equipped_part_ids.has(part_id)
 
 
-func owns_car(car_id: String) -> bool:
-	return owned_car_ids.has(car_id)
+func owns_car(model_id: String) -> bool:
+	for instance_id in owned_car_ids:
+		if car_model_id(instance_id) == model_id:
+			return true
+	return false
 
 
 func owns_gearbox(gearbox_id: String) -> bool:
@@ -600,7 +658,11 @@ func gearbox_ratio_text(box: Dictionary) -> String:
 
 
 func refresh_car_stats() -> void:
-	var car: Dictionary = listing_by_id(USED_CARS, current_car_id)
+	if not has_active_car():
+		car_name = "No car"
+		return
+	var model := car_model_id(current_car_id)
+	var car: Dictionary = listing_by_id(USED_CARS, model)
 	if car.is_empty():
 		car = listing_by_id(USED_CARS, DEFAULT_CAR_ID)
 	car_name = str(car.get("name", car_name))
@@ -608,7 +670,7 @@ func refresh_car_stats() -> void:
 	engine_power_hp = float(car.get("hp", engine_power_hp))
 	var engine := get_equipped_engine()
 	if not engine.is_empty():
-		if current_car_id == DEFAULT_CAR_ID:
+		if model == DEFAULT_CAR_ID:
 			car_name = str(car_spec.get("name", car_name))
 		vmax_kmh = float(engine.get("vmax", vmax_kmh))
 		engine_power_hp = float(engine.get("hp", engine_power_hp))
@@ -761,6 +823,114 @@ func has_fuel_for_race(race_type: String = "") -> bool:
 	return fuel + 0.05 >= race_fuel_liters(race_type)
 
 
+## Pays or collects `race_stake`, then clears it. Positive means the player won the bet.
+func apply_race_stake(player_won: bool) -> int:
+	var stake := maxi(race_stake, 0)
+	race_stake = 0
+	if stake == 0:
+		return 0
+	if player_won:
+		money += stake
+		return stake
+	var paid := mini(stake, money)
+	money -= paid
+	return -paid
+
+
+func cheapest_car_price() -> int:
+	var cheapest := -1
+	for car in USED_CARS:
+		var price := int(car.get("price", 0))
+		if price <= 0:
+			continue
+		if cheapest < 0 or price < cheapest:
+			cheapest = price
+	return cheapest
+
+
+func can_buy_a_car() -> bool:
+	if owned_car_ids.size() >= MAX_OWNED_CARS:
+		return false
+	var cheapest := cheapest_car_price()
+	return cheapest >= 0 and money >= cheapest
+
+
+func is_ruined() -> bool:
+	return owned_car_ids.is_empty() and not can_buy_a_car()
+
+
+func finish_run() -> void:
+	current_scene_path = SCENE_GARAGE
+	var tree := get_tree()
+	if tree != null:
+		tree.change_scene_to_file(SCENE_GARAGE)
+
+
+## Moves the raced car when `race_pink_slips` is set, then clears the flag.
+func apply_pink_slips(player_won: bool) -> String:
+	if not race_pink_slips:
+		return ""
+	race_pink_slips = false
+	if player_won:
+		return _take_opponent_car()
+	return _lose_raced_car()
+
+
+func _take_opponent_car() -> String:
+	var opp := selected_opponent()
+	var model_id := str(opp.get("car_id", ""))
+	var car_name_won := str(opp.get("car_name", "car"))
+	if listing_by_id(USED_CARS, model_id).is_empty() or owned_car_ids.size() >= MAX_OWNED_CARS:
+		return "\nThe %s stays with them." % car_name_won
+	if has_active_car():
+		_sync_record_from_active()
+	var paint := Color(0.8, 0.1, 0.1)
+	var stored: Variant = opp.get("color", null)
+	if stored is Color:
+		paint = stored
+	_add_owned_car(model_id, paint)
+	_replace_opponent_car(selected_opponent_id)
+	return "\nYou take the keys to the %s." % car_name_won
+
+
+func _lose_raced_car() -> String:
+	if not has_active_car():
+		return ""
+	_sync_record_from_active()
+	var lost_id := current_car_id
+	var lost_name := car_name
+	var model_id := car_model_id(lost_id)
+	_set_opponent_car(selected_opponent_id, model_id, car_color)
+	owned_car_ids.erase(lost_id)
+	car_records.erase(lost_id)
+	if owned_car_ids.is_empty():
+		current_car_id = ""
+		car_spec = {}
+		car_name = "No car"
+		return "\nYou hand over the %s." % lost_name
+	current_car_id = owned_car_ids[0]
+	_install_car(current_car_id)
+	return "\nYou hand over the %s." % lost_name
+
+
+func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
+	if index < 0 or index >= opponents.size():
+		return
+	var car := listing_by_id(USED_CARS, model_id)
+	var opp: Dictionary = opponents[index]
+	opp["car_id"] = model_id
+	opp["car_name"] = str(car.get("name", "Car"))
+	opp["car_file"] = str(car.get("car_file", ""))
+	opp["color"] = paint
+
+
+func _replace_opponent_car(index: int) -> void:
+	if USED_CARS.is_empty():
+		return
+	var picked: Dictionary = USED_CARS[randi() % USED_CARS.size()]
+	_set_opponent_car(index, str(picked.get("id", "")), _random_paint())
+
+
 func consume_race_fuel(race_type: String = "") -> void:
 	set_fuel(fuel - race_fuel_liters(race_type))
 
@@ -783,46 +953,63 @@ func refuel_tank() -> String:
 	return ""
 
 
-func buy_or_select_car(car_id: String) -> String:
-	var car: Dictionary = listing_by_id(USED_CARS, car_id)
+func select_owned_car(instance_id: String) -> String:
+	if not owned_car_ids.has(instance_id):
+		return "That car isn't in the garage."
+	if current_car_id == instance_id:
+		return "Already in the garage."
+	if has_active_car():
+		_sync_record_from_active()
+	current_car_id = instance_id
+	_install_car(instance_id)
+	return ""
+
+
+func buy_or_select_car(model_id: String) -> String:
+	var car: Dictionary = listing_by_id(USED_CARS, model_id)
 	if car.is_empty():
 		return "That car is not listed."
-	_sync_record_from_active()
-	if current_car_id == car_id:
-		return "Already in the garage."
-	if owns_car(car_id):
-		current_car_id = car_id
-		_install_car(car_id)
-		return ""
 	if owned_car_ids.size() >= MAX_OWNED_CARS:
 		return "The garage holds %d cars." % MAX_OWNED_CARS
 	var price := int(car.get("price", 0))
 	if money < price:
 		return "Not enough cash."
+	if has_active_car():
+		_sync_record_from_active()
 	money -= price
-	owned_car_ids.append(car_id)
-	current_car_id = car_id
-	car_records[car_id] = _make_car_record(car_id, newspaper_color(car_id))
-	_install_car(car_id)
+	current_car_id = _add_owned_car(model_id, newspaper_color(model_id))
+	_install_car(current_car_id)
 	return ""
 
 
-func _install_car(car_id: String) -> void:
-	_apply_fields_from_record(car_id)
+func _add_owned_car(model_id: String, paint: Color) -> String:
+	var instance_id := "car-%d" % _next_car_serial
+	_next_car_serial += 1
+	owned_car_ids.append(instance_id)
+	car_records[instance_id] = _make_car_record(model_id, paint)
+	return instance_id
+
+
+func _install_car(instance_id: String) -> void:
+	if instance_id.is_empty() or not car_records.has(instance_id):
+		return
+	current_car_id = instance_id
+	_apply_fields_from_record(instance_id)
 	load_player_car()
 	_sync_record_from_active()
 	refresh_car_stats()
 
 
-func _make_car_record(car_id: String, paint: Color) -> Dictionary:
-	var engine_id := _stock_part_id(car_id, "engine")
-	var gearbox_id := _stock_part_id(car_id, "transmission")
-	var wheel_id := _stock_part_id(car_id, "wheels")
+func _make_car_record(model_id: String, paint: Color) -> Dictionary:
+	var engine_id := _stock_part_id(model_id, "engine")
+	var gearbox_id := _stock_part_id(model_id, "transmission")
+	var wheel_id := _stock_part_id(model_id, "wheels")
 	if gearbox_id.is_empty():
 		gearbox_id = DEFAULT_GEARBOX_ID
 	_remember_stock_ids(engine_id, gearbox_id, wheel_id)
 	var parts: Array[String] = []
 	return {
+		"model_id": model_id,
 		"color": paint,
 		"fuel": DEFAULT_TANK_L,
 		"engine_id": engine_id,
@@ -873,14 +1060,23 @@ func _listed_color(car_id: String) -> Color:
 
 
 func _sync_record_from_active() -> void:
-	if current_car_id.is_empty():
+	if not has_active_car():
 		return
 	var rec: Dictionary = {}
 	var existing: Variant = car_records.get(current_car_id, null)
 	if typeof(existing) == TYPE_DICTIONARY:
 		rec = existing
 	else:
-		rec = _make_car_record(current_car_id, car_color)
+		var model := car_model_id(current_car_id)
+		if model.is_empty():
+			model = current_car_id
+		rec = _make_car_record(model, car_color)
+	var model_id := str(rec.get("model_id", ""))
+	if model_id.is_empty():
+		model_id = car_model_id(current_car_id)
+	if model_id.is_empty():
+		model_id = current_car_id
+	rec["model_id"] = model_id
 	rec["color"] = car_color
 	rec["fuel"] = fuel
 	rec["engine_id"] = equipped_engine_id
@@ -891,11 +1087,14 @@ func _sync_record_from_active() -> void:
 	car_records[current_car_id] = rec
 
 
-func _apply_fields_from_record(car_id: String) -> void:
-	var existing: Variant = car_records.get(car_id, null)
+func _apply_fields_from_record(instance_id: String) -> void:
+	var existing: Variant = car_records.get(instance_id, null)
 	if typeof(existing) != TYPE_DICTIONARY:
-		car_records[car_id] = _make_car_record(car_id, _listed_color(car_id))
-	var rec: Dictionary = car_records[car_id]
+		var model := car_model_id(instance_id)
+		if model.is_empty():
+			model = instance_id
+		car_records[instance_id] = _make_car_record(model, _listed_color(model))
+	var rec: Dictionary = car_records[instance_id]
 	var paint: Variant = rec.get("color", car_color)
 	if paint is Color:
 		car_color = paint
@@ -953,6 +1152,7 @@ func _cars_for_save() -> Dictionary:
 		if stored_paint is Color:
 			paint = stored_paint
 		out[str(raw_id)] = {
+			"model_id": str(rec.get("model_id", car_model_id(str(raw_id)))),
 			"color": [paint.r, paint.g, paint.b, paint.a],
 			"fuel": float(rec.get("fuel", fuel)),
 			"engine_id": str(rec.get("engine_id", "")),
@@ -973,22 +1173,38 @@ func _load_saved_cars(d: Dictionary) -> void:
 			var row: Variant = rows[key]
 			if typeof(row) != TYPE_DICTIONARY:
 				continue
-			var car_id := _migrate_car_id(str(key))
-			car_records[car_id] = _record_from_save(row)
+			var instance_id := _migrate_car_id(str(key))
+			var row_d: Dictionary = row
+			var model := str(row_d.get("model_id", ""))
+			if model.is_empty():
+				model = instance_id
+			else:
+				model = _migrate_car_id(model)
+			car_records[instance_id] = _record_from_save(row_d, model)
+			_note_instance_serial(instance_id)
+	var kept: Array[String] = []
 	for car_id in owned_car_ids:
-		if car_records.has(car_id):
-			continue
-		if car_id == current_car_id:
-			car_records[car_id] = _record_from_active_snapshot()
-		else:
-			car_records[car_id] = _make_car_record(car_id, _listed_color(car_id))
-	if not car_records.has(current_car_id):
-		car_records[current_car_id] = _record_from_active_snapshot()
+		if not car_records.has(car_id):
+			var model := car_model_id(car_id)
+			if model.is_empty():
+				model = car_id
+			if listing_by_id(USED_CARS, model).is_empty():
+				continue
+			car_records[car_id] = _make_car_record(model, _listed_color(model))
+		kept.append(car_id)
+		_note_instance_serial(car_id)
+	owned_car_ids = kept
+	if owned_car_ids.is_empty():
+		current_car_id = ""
+		return
+	if not owned_car_ids.has(current_car_id):
+		current_car_id = owned_car_ids[0]
 	_apply_fields_from_record(current_car_id)
 
 
-func _record_from_save(row: Dictionary) -> Dictionary:
+func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 	return {
+		"model_id": model_id,
 		"color": _color_from_save(row.get("color", null), car_color),
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
 		"engine_id": str(row.get("engine_id", "")),
@@ -999,16 +1215,12 @@ func _record_from_save(row: Dictionary) -> Dictionary:
 	}
 
 
-func _record_from_active_snapshot() -> Dictionary:
-	return {
-		"color": car_color,
-		"fuel": fuel,
-		"engine_id": equipped_engine_id,
-		"gearbox_id": equipped_gearbox_id,
-		"wheel_id": equipped_wheel_id,
-		"part_ids": equipped_part_ids.duplicate(),
-		"engine_tune": engine_tune,
-	}
+func _note_instance_serial(instance_id: String) -> void:
+	if not instance_id.begins_with("car-"):
+		return
+	var serial := instance_id.substr(4).to_int()
+	if serial >= _next_car_serial:
+		_next_car_serial = serial + 1
 
 
 func _color_from_save(value: Variant, fallback: Color) -> Color:
@@ -1039,6 +1251,9 @@ func _string_array(value: Variant) -> Array[String]:
 
 
 func go_to_saved_scene(tree: SceneTree) -> void:
+	if is_ruined():
+		finish_run()
+		return
 	var path := current_scene_path
 	if path.is_empty() or not ResourceLoader.exists(path):
 		path = SCENE_GARAGE
