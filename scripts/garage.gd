@@ -79,6 +79,9 @@ var _tune_preview: Control
 var _tune_sound: AudioStreamPlayer
 var _hood: StaticBody3D
 var _hood_shape: BoxShape3D
+var _loss_root: Control
+var _loss_panel: PanelContainer
+var _loss_tail: Node2D
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -136,9 +139,16 @@ func _ready() -> void:
 	_hud_top.gui_input.connect(_on_hud_car_stripe_input)
 	_build_car_list()
 	_refresh_hud()
-	# Apply stored paint color immediately (it will wait for the STL if needed).
-	if _car_pivot.has_method(&"set_car_body_color"):
-		_car_pivot.set_car_body_color(GameState.car_color)
+	if GameState.has_active_car():
+		_car_pivot.visible = true
+		if _car_pivot.has_method(&"set_car_body_color"):
+			_car_pivot.set_car_body_color(GameState.car_color)
+	else:
+		_car_pivot.visible = false
+	_build_loss_bubble()
+	if GameState.is_ruined():
+		_loss_root.visible = true
+		_place_loss_bubble()
 	_cam_distance_target = _cam_distance
 	_update_camera_transform()
 
@@ -166,6 +176,97 @@ func _align_wheels_to_floor() -> void:
 	if _car_pivot.has_method(&"align_wheels_to_floor"):
 		_car_pivot.align_wheels_to_floor(floor_mesh_instance)
 
+
+func _build_loss_bubble() -> void:
+	_loss_root = Control.new()
+	_loss_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_loss_root.visible = false
+	_loss_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_loss_root.gui_input.connect(_on_loss_input)
+	$GarageUI.add_child(_loss_root)
+	_loss_panel = PanelContainer.new()
+	_loss_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_loss_panel.gui_input.connect(_on_loss_input)
+	_loss_panel.add_theme_stylebox_override(&"panel", _loss_bubble_style())
+	_loss_root.add_child(_loss_panel)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override(&"margin_left", 16)
+	margin.add_theme_constant_override(&"margin_right", 16)
+	margin.add_theme_constant_override(&"margin_top", 12)
+	margin.add_theme_constant_override(&"margin_bottom", 12)
+	_loss_panel.add_child(margin)
+	var line := Label.new()
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.text = "You don't have neither car nor money. You lose!"
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line.custom_minimum_size = Vector2(320, 56)
+	line.add_theme_font_size_override(&"font_size", 22)
+	line.add_theme_color_override(&"font_color", Color(0.08, 0.06, 0.05))
+	margin.add_child(line)
+	_loss_tail = Node2D.new()
+	_loss_panel.add_child(_loss_tail)
+	var outline := Line2D.new()
+	outline.width = 5.0
+	outline.default_color = Color(0.08, 0.06, 0.05)
+	outline.joint_mode = Line2D.LINE_JOINT_ROUND
+	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.points = PackedVector2Array([Vector2(-18, 0), Vector2(0, 24), Vector2(18, 0)])
+	_loss_tail.add_child(outline)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.98, 0.97, 0.93)
+	fill.polygon = PackedVector2Array([Vector2(-14, 2), Vector2(0, 18), Vector2(14, 2)])
+	_loss_tail.add_child(fill)
+
+
+func _loss_bubble_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.98, 0.97, 0.93)
+	style.border_color = Color(0.08, 0.06, 0.05)
+	style.set_border_width_all(4)
+	style.set_corner_radius_all(18)
+	return style
+
+
+func _on_loss_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var mb := event as InputEventMouseButton
+	if not mb.pressed:
+		return
+	_leave_after_loss()
+	get_viewport().set_input_as_handled()
+
+
+func _dismiss_loss_bubble() -> void:
+	if _loss_root != null:
+		_loss_root.visible = false
+
+
+func _leave_after_loss() -> void:
+	GameState.current_scene_path = GameState.SCENE_MAIN_MENU
+	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
+
+
+func _place_loss_bubble() -> void:
+	if _loss_root == null or not _loss_root.visible:
+		return
+	var spot := _car_pivot.global_position + Vector3(0.0, 1.35, 0.0)
+	var screen := Vector2(get_viewport().get_visible_rect().size.x * 0.5, 180.0)
+	if not _camera.is_position_behind(spot):
+		screen = _camera.unproject_position(spot)
+	var bubble_size := _loss_panel.get_combined_minimum_size()
+	var vp := get_viewport().get_visible_rect().size
+	var tail_h := 26.0
+	var x := clampf(screen.x - bubble_size.x * 0.5, 16.0, maxf(16.0, vp.x - bubble_size.x - 16.0))
+	var y := clampf(screen.y - bubble_size.y - tail_h - 8.0, 16.0, maxf(16.0, vp.y - bubble_size.y - tail_h - 16.0))
+	_loss_panel.position = Vector2(x, y)
+	_loss_panel.size = bubble_size
+	var tail_x := clampf(screen.x - x, 28.0, maxf(28.0, bubble_size.x - 28.0))
+	_loss_tail.position = Vector2(tail_x, bubble_size.y - 4.0)
+
 func _process(_delta: float) -> void:
 	if not _departing:
 		_camera_pivot.global_position = _car_pivot.global_position
@@ -180,6 +281,7 @@ func _process(_delta: float) -> void:
 		_cam_distance = lerpf(_cam_distance, _cam_distance_target, t)
 		_update_camera_transform()
 	_update_calendar_transform()
+	_place_loss_bubble()
 
 
 func _debug_car_mesh() -> void:
@@ -233,6 +335,10 @@ func _debug_car_mesh() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _departing:
+		get_viewport().set_input_as_handled()
+		return
+	if _loss_root != null and _loss_root.visible and event.is_action_pressed(&"ui_cancel"):
+		_dismiss_loss_bubble()
 		get_viewport().set_input_as_handled()
 		return
 	if _wheel_job:
@@ -567,6 +673,8 @@ func _raycast(screen_pos: Vector2) -> Dictionary:
 func _handle_interact(kind: Variant) -> void:
 	if _wheel_job or _departing:
 		return
+	if _bay_needs_car(kind) and not GameState.has_active_car():
+		return
 	match kind:
 		&"clock":
 			_reset_clock_menu_page()
@@ -596,8 +704,15 @@ func _handle_interact(kind: Variant) -> void:
 			_show_wheel_board()
 
 
+func _bay_needs_car(kind: Variant) -> bool:
+	match kind:
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift":
+			return true
+	return false
+
+
 func _start_drive_out() -> void:
-	if _departing or _wheel_job:
+	if _departing or _wheel_job or not GameState.has_active_car():
 		return
 	if _door_left == null or _door_right == null:
 		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
@@ -1147,8 +1262,7 @@ func _rebuild_car_list() -> void:
 		_car_list_rows.remove_child(child)
 		child.free()
 	for car_id in GameState.owned_car_ids:
-		var car: Dictionary = GameState.listing_by_id(GameState.USED_CARS, car_id)
-		var car_label := str(car.get("name", car_id))
+		var car_label := GameState.car_display_name(car_id)
 		var btn := Button.new()
 		var current := car_id == GameState.current_car_id
 		btn.text = car_label if not current else "%s    ·    in the bay" % car_label
@@ -1169,7 +1283,7 @@ func _rebuild_car_list() -> void:
 
 
 func _on_car_list_pick(car_id: String) -> void:
-	var err := GameState.buy_or_select_car(car_id)
+	var err := GameState.select_owned_car(car_id)
 	if not err.is_empty():
 		_hide_car_list()
 		return
@@ -1179,6 +1293,7 @@ func _on_car_list_pick(car_id: String) -> void:
 
 
 func _apply_active_car_visual() -> void:
+	_car_pivot.visible = GameState.has_active_car()
 	if _car_pivot.has_method(&"reload_player_car"):
 		_car_pivot.call(&"reload_player_car")
 	_align_wheels_to_floor()
@@ -1374,6 +1489,8 @@ func _stop_tune_sound() -> void:
 
 
 func _show_stats() -> void:
+	if not GameState.has_active_car():
+		return
 	_hide_garage_overlays()
 	var box: Dictionary = GameState.get_equipped_gearbox()
 	var gears: Variant = box.get("ratios", [])

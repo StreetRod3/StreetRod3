@@ -71,6 +71,22 @@ var _race_hint: Label
 var _drag_btn: Button
 var _road_btn: Button
 var _race_back: Button
+var _stake_root: Control
+var _stake_hint: Label
+var _stake_kicks: Button
+var _stake_low: Button
+var _stake_high: Button
+var _stake_back: Button
+var _road_stake_root: Control
+var _road_stake_hint: Label
+var _road_stake_low: Button
+var _road_stake_high: Button
+var _road_stake_pink: Button
+var _road_stake_back: Button
+var _speech_root: Control
+var _speech_panel: PanelContainer
+var _speech_tail: Node2D
+var _driver_seat: Node3D
 var _fuel_root: Control
 var _fuel_message: Label
 var _fuel_back: Button
@@ -116,6 +132,9 @@ func _ready() -> void:
 	_build_hud()
 	_build_opponent_popup()
 	_build_race_popup()
+	_build_stake_popup()
+	_build_road_stake_popup()
+	_build_speech_bubble()
 	_build_fuel_monitor()
 	_sync_nav()
 
@@ -175,6 +194,7 @@ func _process(delta: float) -> void:
 		_neon.modulate = Color(2.5 * pulse, 1.55 * pulse, 1.65 * pulse)
 	_advance_rival(delta)
 	_advance_auto_call(delta)
+	_place_speech_bubble()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -706,6 +726,102 @@ func _build_race_popup() -> void:
 	_fit_panel(built["panel"])
 
 
+func _build_stake_popup() -> void:
+	var built := _make_overlay("What's the bet?")
+	_stake_root = built["root"]
+	var box: VBoxContainer = built["box"]
+	_stake_hint = _hint_label("")
+	box.add_child(_stake_hint)
+	_stake_kicks = _menu_button("Just for kicks")
+	_stake_kicks.pressed.connect(_on_stake_chosen.bind(0))
+	box.add_child(_stake_kicks)
+	_stake_low = _menu_button("$%d" % GameState.DRAG_STAKE_LOW)
+	_stake_low.pressed.connect(_on_stake_chosen.bind(GameState.DRAG_STAKE_LOW))
+	box.add_child(_stake_low)
+	_stake_high = _menu_button("$%d" % GameState.DRAG_STAKE_HIGH)
+	_stake_high.pressed.connect(_on_stake_chosen.bind(GameState.DRAG_STAKE_HIGH))
+	box.add_child(_stake_high)
+	_stake_back = _menu_button("Back")
+	_stake_back.pressed.connect(_on_stake_back)
+	box.add_child(_stake_back)
+	_fit_panel(built["panel"])
+
+
+func _build_road_stake_popup() -> void:
+	var built := _make_overlay("What's the bet?")
+	_road_stake_root = built["root"]
+	var box: VBoxContainer = built["box"]
+	_road_stake_hint = _hint_label("")
+	_road_stake_hint.custom_minimum_size = Vector2(400, 96)
+	box.add_child(_road_stake_hint)
+	_road_stake_low = _menu_button("$%d" % GameState.ROAD_STAKE_LOW)
+	_road_stake_low.pressed.connect(_on_road_stake_chosen.bind(GameState.ROAD_STAKE_LOW))
+	box.add_child(_road_stake_low)
+	_road_stake_high = _menu_button("$%d" % GameState.ROAD_STAKE_HIGH)
+	_road_stake_high.pressed.connect(_on_road_stake_chosen.bind(GameState.ROAD_STAKE_HIGH))
+	box.add_child(_road_stake_high)
+	_road_stake_pink = _menu_button("Pink slips")
+	_road_stake_pink.pressed.connect(_on_pink_slips_chosen)
+	box.add_child(_road_stake_pink)
+	_road_stake_back = _menu_button("Back")
+	_road_stake_back.pressed.connect(_on_road_stake_back)
+	box.add_child(_road_stake_back)
+	_fit_panel(built["panel"])
+
+
+func _build_speech_bubble() -> void:
+	_speech_root = Control.new()
+	_speech_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_speech_root.visible = false
+	_speech_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	_speech_root.gui_input.connect(_on_speech_input)
+	_ui.add_child(_speech_root)
+	_speech_panel = PanelContainer.new()
+	_speech_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_speech_panel.gui_input.connect(_on_speech_input)
+	_speech_panel.add_theme_stylebox_override(&"panel", _speech_style())
+	_speech_root.add_child(_speech_panel)
+	var margin := MarginContainer.new()
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_theme_constant_override(&"margin_left", 16)
+	margin.add_theme_constant_override(&"margin_right", 16)
+	margin.add_theme_constant_override(&"margin_top", 12)
+	margin.add_theme_constant_override(&"margin_bottom", 12)
+	_speech_panel.add_child(margin)
+	var line := Label.new()
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	line.text = "You're garage is full, sell some cars first!"
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line.custom_minimum_size = Vector2(280, 52)
+	line.add_theme_font_size_override(&"font_size", 22)
+	line.add_theme_color_override(&"font_color", Color(0.08, 0.06, 0.05))
+	margin.add_child(line)
+	_speech_tail = Node2D.new()
+	_speech_panel.add_child(_speech_tail)
+	var outline := Line2D.new()
+	outline.width = 5.0
+	outline.default_color = Color(0.08, 0.06, 0.05)
+	outline.joint_mode = Line2D.LINE_JOINT_ROUND
+	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.points = PackedVector2Array([Vector2(-18, 0), Vector2(0, 24), Vector2(18, 0)])
+	_speech_tail.add_child(outline)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.98, 0.97, 0.93)
+	fill.polygon = PackedVector2Array([Vector2(-14, 2), Vector2(0, 18), Vector2(14, 2)])
+	_speech_tail.add_child(fill)
+
+
+func _speech_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.98, 0.97, 0.93)
+	style.border_color = Color(0.08, 0.06, 0.05)
+	style.set_border_width_all(4)
+	style.set_corner_radius_all(18)
+	return style
+
+
 func _build_fuel_monitor() -> void:
 	var built := _make_overlay("Low fuel")
 	_fuel_root = built["root"]
@@ -829,6 +945,10 @@ func _show_opponents() -> void:
 	_clear_rival()
 	_fuel_root.visible = false
 	_race_root.visible = false
+	_stake_root.visible = false
+	_road_stake_root.visible = false
+	if _speech_root != null:
+		_speech_root.visible = false
 	_rebuild_opponent_list()
 	_opp_root.visible = true
 	_hover_prompt.visible = false
@@ -860,6 +980,9 @@ func _on_call_anybody() -> void:
 func _hide_popups() -> void:
 	_opp_root.visible = false
 	_race_root.visible = false
+	_stake_root.visible = false
+	_road_stake_root.visible = false
+	_speech_root.visible = false
 	_fuel_root.visible = false
 	_sync_nav()
 
@@ -1053,9 +1176,12 @@ func _clear_rival() -> void:
 		_rival.input_ray_pickable = false
 		_rival.queue_free()
 	_rival = null
+	_driver_seat = null
 	_rival_phase = _RIVAL_STILL
 	_rival_engaged = false
 	_rival_wheels.clear()
+	if _speech_root != null:
+		_speech_root.visible = false
 	if _hover_prompt != null:
 		_hover_prompt.text = "Look for opponent"
 		_hover_prompt.visible = false
@@ -1071,6 +1197,7 @@ func _seat_driver(car: Node3D, skin: Color, head_path: String) -> void:
 	seat.name = "Driver"
 	seat.position = head_pos
 	car.add_child(seat)
+	_driver_seat = seat
 	var packed := _head_scene(head_path)
 	if packed == null:
 		return
@@ -1195,8 +1322,114 @@ func _on_race_type_chosen(race_type: String) -> void:
 	if not GameState.has_fuel_for_race(race_type):
 		_show_fuel_monitor(race_type)
 		return
+	if race_type == GameState.RACE_DRAG:
+		_show_stake_menu()
+		return
+	_show_road_stake_menu()
+
+
+func _show_stake_menu() -> void:
+	_stake_hint.text = "Side bet on the quarter mile.\nBankroll: $%d" % GameState.money
+	_stake_low.disabled = GameState.money < GameState.DRAG_STAKE_LOW
+	_stake_high.disabled = GameState.money < GameState.DRAG_STAKE_HIGH
+	_race_root.visible = false
+	_stake_root.visible = true
+	_sync_nav()
+
+
+func _on_stake_chosen(amount: int) -> void:
+	if amount > GameState.money:
+		return
+	_start_race(GameState.RACE_DRAG, amount)
+
+
+func _on_stake_back() -> void:
+	_stake_root.visible = false
+	_race_root.visible = true
+	_sync_nav()
+
+
+func _show_road_stake_menu() -> void:
+	var opp: Dictionary = {}
+	if _chosen_index >= 0 and _chosen_index < GameState.opponents.size():
+		opp = GameState.opponents[_chosen_index]
+	var car_name := str(opp.get("car_name", "their car"))
+	_road_stake_hint.text = "Side bet on the road course.\nTheir car: %s\nBankroll: $%d" % [car_name, GameState.money]
+	_road_stake_low.disabled = GameState.money < GameState.ROAD_STAKE_LOW
+	_road_stake_high.disabled = GameState.money < GameState.ROAD_STAKE_HIGH
+	_road_stake_pink.disabled = false
+	_race_root.visible = false
+	_road_stake_root.visible = true
+	_sync_nav()
+
+
+func _on_road_stake_chosen(amount: int) -> void:
+	if amount > GameState.money:
+		return
+	_start_race(GameState.RACE_ROAD, amount, false)
+
+
+func _on_pink_slips_chosen() -> void:
+	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
+		_show_full_garage_line()
+		return
+	_start_race(GameState.RACE_ROAD, 0, true)
+
+
+func _show_full_garage_line() -> void:
+	_road_stake_root.visible = false
+	_speech_root.visible = true
+	_place_speech_bubble()
+	_sync_nav()
+
+
+func _dismiss_full_garage_line() -> void:
+	_speech_root.visible = false
+	_road_stake_root.visible = true
+	_sync_nav()
+
+
+func _on_speech_input(event: InputEvent) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var mb := event as InputEventMouseButton
+	if not mb.pressed:
+		return
+	_dismiss_full_garage_line()
+	get_viewport().set_input_as_handled()
+
+
+func _place_speech_bubble() -> void:
+	if _speech_root == null or not _speech_root.visible:
+		return
+	if _driver_seat == null or not is_instance_valid(_driver_seat):
+		return
+	var head := _driver_seat.global_position + Vector3(0.0, 0.42, 0.0)
+	if _camera.is_position_behind(head):
+		return
+	var screen := _camera.unproject_position(head)
+	var bubble_size := _speech_panel.get_combined_minimum_size()
+	var vp := get_viewport().get_visible_rect().size
+	var tail_h := 26.0
+	var x := clampf(screen.x - bubble_size.x * 0.5, 16.0, maxf(16.0, vp.x - bubble_size.x - 16.0))
+	var y := clampf(screen.y - bubble_size.y - tail_h - 6.0, 16.0, maxf(16.0, vp.y - bubble_size.y - tail_h - 16.0))
+	_speech_panel.position = Vector2(x, y)
+	_speech_panel.size = bubble_size
+	var tail_x := clampf(screen.x - x, 28.0, maxf(28.0, bubble_size.x - 28.0))
+	_speech_tail.position = Vector2(tail_x, bubble_size.y - 4.0)
+
+
+func _on_road_stake_back() -> void:
+	_road_stake_root.visible = false
+	_race_root.visible = true
+	_sync_nav()
+
+
+func _start_race(race_type: String, stake: int, pink_slips: bool = false) -> void:
 	GameState.selected_opponent_id = _chosen_index
 	GameState.selected_race_type = race_type
+	GameState.race_stake = stake
+	GameState.race_pink_slips = pink_slips
 	GameState.current_scene_path = GameState.SCENE_RACE
 	get_tree().change_scene_to_file(GameState.SCENE_RACE)
 
@@ -1218,6 +1451,12 @@ func _popup_open() -> bool:
 		return true
 	if _race_root != null and _race_root.visible:
 		return true
+	if _stake_root != null and _stake_root.visible:
+		return true
+	if _road_stake_root != null and _road_stake_root.visible:
+		return true
+	if _speech_root != null and _speech_root.visible:
+		return true
 	if _fuel_root != null and _fuel_root.visible:
 		return true
 	return false
@@ -1226,6 +1465,15 @@ func _popup_open() -> bool:
 func _on_cancel() -> void:
 	if _fuel_root.visible:
 		_hide_fuel()
+		return
+	if _stake_root.visible:
+		_on_stake_back()
+		return
+	if _speech_root.visible:
+		_dismiss_full_garage_line()
+		return
+	if _road_stake_root.visible:
+		_on_road_stake_back()
 		return
 	if _race_root.visible:
 		_show_opponents()
@@ -1242,6 +1490,15 @@ func _on_cancel() -> void:
 func _sync_nav() -> void:
 	if _fuel_root.visible:
 		_nav.setup([_fuel_back])
+		return
+	if _stake_root.visible:
+		_nav.setup([_stake_kicks, _stake_low, _stake_high, _stake_back])
+		return
+	if _speech_root.visible:
+		_nav.clear()
+		return
+	if _road_stake_root.visible:
+		_nav.setup([_road_stake_low, _road_stake_high, _road_stake_pink, _road_stake_back])
 		return
 	if _race_root.visible:
 		_nav.setup([_drag_btn, _road_btn, _race_back])
