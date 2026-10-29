@@ -70,6 +70,8 @@ var selected_race_type: String = RACE_DRAG
 var race_stake: int = 0
 ## Road race where the winner takes the loser's car.
 var race_pink_slips: bool = false
+## The next garage visit rolls the car in from outside. Set by the drive-in. Not saved.
+var drive_into_garage: bool = false
 ## The direct-speed driving model from before the tire simulation.
 var arcade_drive: bool = true
 
@@ -273,6 +275,7 @@ func new_game() -> void:
 	selected_race_type = RACE_DRAG
 	race_stake = 0
 	race_pink_slips = false
+	drive_into_garage = false
 	money = 2500
 	_next_car_serial = 1
 	owned_car_ids.clear()
@@ -367,6 +370,7 @@ func load_game() -> bool:
 		selected_race_type = RACE_DRAG
 	race_stake = maxi(int(d.get("race_stake", 0)), 0)
 	race_pink_slips = bool(d.get("race_pink_slips", false))
+	drive_into_garage = false
 	money = int(d.get("money", money))
 	_next_car_serial = maxi(int(d.get("next_car_serial", 1)), 1)
 	current_car_id = _migrate_car_id(str(d.get("current_car_id", current_car_id)))
