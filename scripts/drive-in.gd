@@ -1436,7 +1436,7 @@ func _start_race(race_type: String, stake: int, pink_slips: bool = false) -> voi
 
 func _show_fuel_monitor(race_type: String) -> void:
 	var need := GameState.race_fuel_liters(race_type)
-	_fuel_message.text = "The tank has %.0f L. This race needs %.0f L.\nFill it up in the garage first." % [GameState.fuel, need]
+	_fuel_message.text = "The tank has %.0f L. This race needs %.0f L.\nFill it up at the gas station first." % [GameState.fuel, need]
 	_fuel_root.visible = true
 	_sync_nav()
 

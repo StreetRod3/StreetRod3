@@ -5,6 +5,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 
 const SCENE_MAIN_MENU := "res://scenes/main_menu.tscn"
 const SCENE_GARAGE := "res://scenes/garage.tscn"
+const SCENE_GAS_STATION := "res://scenes/gas_station.tscn"
 const SCENE_DRIVE_IN := "res://scenes/drive-in.tscn"
 const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
