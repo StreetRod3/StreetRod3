@@ -43,7 +43,8 @@ func record(wheels: Array, body: Transform3D) -> void:
 			wheel.slip_angle,
 			wheel.long_slip,
 			contact,
-			wheel.surface_blend
+			wheel.surface_blend,
+			wheel.peak_curve
 		)
 	flush()
 
@@ -60,14 +61,24 @@ func stamp(
 	slip_angle: float,
 	long_slip: float,
 	contact_speed: float,
-	surface_blend: float
+	surface_blend: float,
+	peak_curve: bool = false
 ) -> void:
 	_ensure(index)
-	var sliding := (
-		utilization >= USE_MARK
-		and contact_speed > 2.5
-		and (absf(slip_angle) > 0.1 or absf(long_slip) > 1.05)
-	)
+	var sliding := false
+	if peak_curve:
+		var past_peak := absf(slip_angle) > 0.14 or absf(long_slip) > 1.05
+		sliding = (
+			contact_speed > 2.5
+			and (utilization >= USE_MARK or (past_peak and utilization >= 0.55))
+			and (absf(slip_angle) > 0.08 or absf(long_slip) > 0.9)
+		)
+	else:
+		sliding = (
+			utilization >= USE_MARK
+			and contact_speed > 2.5
+			and (absf(slip_angle) > 0.1 or absf(long_slip) > 1.05)
+		)
 	var point := Vector3(world.x, MARK_Y, world.z)
 	if not sliding:
 		_drawing[index] = false

@@ -1,4 +1,4 @@
-[gd_scene load_steps=19 format=3 uid="uid://13fdlkxeccj1"]
+[gd_scene load_steps=20 format=3 uid="uid://13fdlkxeccj1"]
 
 [ext_resource type="Script" uid="uid://dmsj4ekbiqrvr" path="res://scripts/race.gd" id="1"]
 [ext_resource type="Script" uid="uid://lmu5w71pep8v" path="res://scripts/player_race_car.gd" id="2"]
@@ -9,6 +9,7 @@
 [ext_resource type="Script" path="res://scripts/race_touch_controls.gd" id="7"]
 [ext_resource type="Script" path="res://scripts/rpm_meter.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/engine_sound.gd" id="9"]
+[ext_resource type="Script" uid="uid://sw7j0jvrew0h" path="res://scripts/vehicle_dynamics.gd" id="10"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.25, 0.35, 0.55, 1)
@@ -92,6 +93,9 @@ rotation_degrees = Vector3(-14, 180, 0)
 current = true
 fov = 68.0
 
+[node name="VehicleDynamics" type="Node" parent="PlayerCar"]
+script = ExtResource("10")
+
 [node name="OpponentCar" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.5, 0.35, 0)
 collision_layer = 2
@@ -105,6 +109,9 @@ body_paint = SubResource("CarMatO")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="OpponentCar"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1.9)
 shape = SubResource("CarShapeO")
+
+[node name="VehicleDynamics" type="Node" parent="OpponentCar"]
+script = ExtResource("10")
 
 [node name="TrackVisuals" type="Node3D" parent="."]
 script = ExtResource("5")

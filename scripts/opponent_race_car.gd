@@ -29,7 +29,7 @@ const LANE_EDGE_MARGIN_M := 1.8
 
 var forward_speed: float = 0.0
 
-var _dynamics: _VehicleDynamics = _VehicleDynamics.new()
+@onready var _dynamics: _VehicleDynamics = get_node_or_null("VehicleDynamics") as _VehicleDynamics
 var _skids: _SkidMarks
 var _visual: Node3D
 var _gearbox: Dictionary = {}
@@ -50,6 +50,10 @@ var _arcade_accel: float = 7.0
 
 
 func _ready() -> void:
+	if _dynamics == null:
+		_dynamics = _VehicleDynamics.new()
+		_dynamics.name = "VehicleDynamics"
+		add_child(_dynamics)
 	motion_mode = MOTION_MODE_FLOATING
 	# Layer 2 is cars. Keep the road mask and also collide with other cars.
 	collision_mask = collision_mask | collision_layer
