@@ -40,6 +40,13 @@ const DRAG_STAKE_LOW := 10
 const DRAG_STAKE_HIGH := 50
 const ROAD_STAKE_LOW := 25
 const ROAD_STAKE_HIGH := 100
+## Engine id for a car whose engine was blown and pulled out.
+const NO_ENGINE_ID := "none"
+## Outcomes of `apply_pink_slips`.
+const PINK_NONE := 0
+const PINK_WON := 1
+const PINK_KEPT := 2
+const PINK_LOST := 3
 
 ## Display name of the player's car.
 var car_name: String = "Corvette 1956"
@@ -168,6 +175,10 @@ func has_active_car() -> bool:
 	return not current_car_id.is_empty() and owned_car_ids.has(current_car_id)
 
 
+func has_engine() -> bool:
+	return has_active_car() and equipped_engine_id != NO_ENGINE_ID
+
+
 func current_car_file_path() -> String:
 	return car_file_path(current_car_id)
 
@@ -224,10 +235,11 @@ func _ensure_stock_fitment() -> void:
 	var wheels: Variant = car_spec.get("wheels", {})
 	if typeof(wheels) == TYPE_DICTIONARY:
 		wheel_id = str((wheels as Dictionary).get("part", wheel_id))
-	if not engine_id.is_empty() and not owned_engine_ids.has(engine_id):
-		owned_engine_ids.append(engine_id)
-	if equipped_engine_id.is_empty() or listing_by_id(ENGINES, equipped_engine_id).is_empty():
-		equipped_engine_id = engine_id
+	if equipped_engine_id != NO_ENGINE_ID:
+		if not engine_id.is_empty() and not owned_engine_ids.has(engine_id):
+			owned_engine_ids.append(engine_id)
+		if equipped_engine_id.is_empty() or listing_by_id(ENGINES, equipped_engine_id).is_empty():
+			equipped_engine_id = engine_id
 	if not wheel_id.is_empty() and not owned_wheel_ids.has(wheel_id):
 		owned_wheel_ids.append(wheel_id)
 	if equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty():
@@ -618,6 +630,8 @@ func owns_wheel(wheel_id: String) -> bool:
 
 
 func get_equipped_engine() -> Dictionary:
+	if equipped_engine_id == NO_ENGINE_ID:
+		return {}
 	var engine: Dictionary = listing_by_id(ENGINES, equipped_engine_id)
 	if engine.is_empty():
 		return get_stock_engine()
@@ -666,6 +680,10 @@ func refresh_car_stats() -> void:
 	if car.is_empty():
 		car = listing_by_id(USED_CARS, DEFAULT_CAR_ID)
 	car_name = str(car.get("name", car_name))
+	if not has_engine():
+		vmax_kmh = 0.0
+		engine_power_hp = 0.0
+		return
 	vmax_kmh = float(car.get("vmax", vmax_kmh))
 	engine_power_hp = float(car.get("hp", engine_power_hp))
 	var engine := get_equipped_engine()
@@ -867,50 +885,79 @@ func finish_run() -> void:
 
 
 ## Moves the raced car when `race_pink_slips` is set, then clears the flag.
-func apply_pink_slips(player_won: bool) -> String:
+## Returns one of the `PINK_*` outcomes. A won car goes straight into the bay.
+func apply_pink_slips(player_won: bool) -> int:
 	if not race_pink_slips:
-		return ""
+		return PINK_NONE
 	race_pink_slips = false
 	if player_won:
-		return _take_opponent_car()
-	return _lose_raced_car()
+		return PINK_WON if _take_opponent_car() else PINK_KEPT
+	_lose_raced_car()
+	return PINK_LOST
 
 
-func _take_opponent_car() -> String:
+func _take_opponent_car() -> bool:
 	var opp := selected_opponent()
 	var model_id := str(opp.get("car_id", ""))
-	var car_name_won := str(opp.get("car_name", "car"))
 	if listing_by_id(USED_CARS, model_id).is_empty() or owned_car_ids.size() >= MAX_OWNED_CARS:
-		return "\nThe %s stays with them." % car_name_won
+		return false
 	if has_active_car():
 		_sync_record_from_active()
 	var paint := Color(0.8, 0.1, 0.1)
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
-	_add_owned_car(model_id, paint)
+	var won_id := _add_owned_car(model_id, paint)
 	_replace_opponent_car(selected_opponent_id)
-	return "\nYou take the keys to the %s." % car_name_won
+	_install_car(won_id)
+	return true
 
 
-func _lose_raced_car() -> String:
+func _lose_raced_car() -> void:
 	if not has_active_car():
-		return ""
+		return
 	_sync_record_from_active()
 	var lost_id := current_car_id
-	var lost_name := car_name
 	var model_id := car_model_id(lost_id)
 	_set_opponent_car(selected_opponent_id, model_id, car_color)
-	owned_car_ids.erase(lost_id)
-	car_records.erase(lost_id)
-	if owned_car_ids.is_empty():
-		current_car_id = ""
-		car_spec = {}
-		car_name = "No car"
-		return "\nYou hand over the %s." % lost_name
-	current_car_id = owned_car_ids[0]
-	_install_car(current_car_id)
-	return "\nYou hand over the %s." % lost_name
+	_drop_active_car()
+	if not owned_car_ids.is_empty():
+		_install_car(owned_car_ids[0])
+
+
+## The active car is destroyed. The bay stays empty even if other cars are owned.
+func wreck_active_car() -> void:
+	if not has_active_car():
+		return
+	_drop_active_car()
+
+
+func _drop_active_car() -> void:
+	owned_car_ids.erase(current_car_id)
+	car_records.erase(current_car_id)
+	current_car_id = ""
+	car_spec = {}
+	car_name = "No car"
+
+
+## Pulls the blown engine out of the active car. It is gone, not a spare.
+func remove_engine() -> void:
+	if not has_engine():
+		return
+	var blown := equipped_engine_id
+	equipped_engine_id = NO_ENGINE_ID
+	_sync_record_from_active()
+	if not _engine_mounted_anywhere(blown):
+		owned_engine_ids.erase(blown)
+	refresh_car_stats()
+
+
+func _engine_mounted_anywhere(engine_id: String) -> bool:
+	for raw_id in car_records.keys():
+		var stored: Variant = car_records[raw_id]
+		if typeof(stored) == TYPE_DICTIONARY and str((stored as Dictionary).get("engine_id", "")) == engine_id:
+			return true
+	return false
 
 
 func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:

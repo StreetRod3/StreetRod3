@@ -24,6 +24,7 @@ const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
 @onready var _hud_top: Control = $GarageUI/HudTop
 @onready var _hud_car_name: Label = %CarNameLabel
 @onready var _hud_cash: Label = %CashLabel
+@onready var _hud_bottom: Control = $GarageUI/HudBottom
 @onready var _lift: StaticBody3D = $InteractLift
 @onready var _lift_arm: Node3D = $InteractLift/LiftArm
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
@@ -82,6 +83,24 @@ var _hood_shape: BoxShape3D
 var _loss_root: Control
 var _loss_panel: PanelContainer
 var _loss_tail: Node2D
+var _tooltip: Label
+
+const _TOOLTIPS := {
+	&"clock": "Menu (Q)",
+	&"chart": "Parts list",
+	&"spares": "Spare parts",
+	&"newspaper": "Newspaper (N)",
+	&"radio": "Radio (M)",
+	&"doors": "Drive out (D)",
+	&"spray": "Paint job (P)",
+	&"fuel": "Fuel",
+	&"hood": "Engine",
+	&"calendar": "Calendar (X)",
+	&"lift": "Wheels (L)",
+}
+const _TOOLTIP_CARS := "Cars"
+const _TOOLTIP_NO_ENGINE := "No engine — fit one from spare parts"
+const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -146,6 +165,7 @@ func _ready() -> void:
 	else:
 		_car_pivot.visible = false
 	_build_loss_bubble()
+	_build_tooltip()
 	if GameState.is_ruined():
 		_loss_root.visible = true
 		_place_loss_bubble()
@@ -236,8 +256,8 @@ func _on_loss_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if not mb.pressed:
 		return
-	_leave_after_loss()
 	get_viewport().set_input_as_handled()
+	_leave_after_loss()
 
 
 func _dismiss_loss_bubble() -> void:
@@ -282,6 +302,59 @@ func _process(_delta: float) -> void:
 		_update_camera_transform()
 	_update_calendar_transform()
 	_place_loss_bubble()
+	_update_tooltip()
+
+
+func _build_tooltip() -> void:
+	_tooltip = Label.new()
+	_tooltip.name = "TooltipLabel"
+	_tooltip.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tooltip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_tooltip.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	_tooltip.add_theme_font_size_override(&"font_size", 22)
+	_hud_bottom.add_child(_tooltip)
+
+
+func _update_tooltip() -> void:
+	if _tooltip != null:
+		_tooltip.text = _tooltip_text_at_mouse()
+
+
+func _tooltip_text_at_mouse() -> String:
+	if _departing or _wheel_job or _orbiting or _calendar_inspecting:
+		return ""
+	var vp := get_viewport()
+	var hovered := vp.gui_get_hovered_control()
+	if hovered != null:
+		if hovered == _hud_top or _hud_top.is_ancestor_of(hovered):
+			return _TOOLTIP_CARS
+		return ""
+	var kind: Variant = _interact_kind_at(vp.get_mouse_position())
+	if kind == null:
+		return ""
+	if _bay_needs_car(kind) and not GameState.has_active_car():
+		return ""
+	if not GameState.has_engine():
+		if kind == &"hood":
+			return _TOOLTIP_NO_ENGINE
+		if kind == &"doors":
+			return _TOOLTIP_DOORS_NO_ENGINE
+	return str(_TOOLTIPS.get(kind, ""))
+
+
+func _interact_kind_at(screen_pos: Vector2) -> Variant:
+	var hit := _raycast(screen_pos)
+	if hit.is_empty():
+		return null
+	var node := hit.get("collider") as Node
+	# The hit can be a child of the tagged body, so walk up to find the meta.
+	while node != null:
+		if node.has_meta(&"garage_interact"):
+			return node.get_meta(&"garage_interact")
+		node = node.get_parent()
+	return null
 
 
 func _debug_car_mesh() -> void:
@@ -643,22 +716,9 @@ func _update_camera_transform() -> void:
 
 
 func _try_interact(screen_pos: Vector2) -> void:
-	var hit := _raycast(screen_pos)
-	if hit.is_empty():
-		return
-	var collider: Object = hit.get("collider")
-	if collider == null:
-		return
-	var node := collider as Node
-	if node == null:
-		return
-	# Godot may return the collider node itself (e.g. `CollisionShape3D`) instead of its parent
-	# `StaticBody3D`. Walk up the tree until we find the interaction metadata.
-	while node != null:
-		if node.has_meta(&"garage_interact"):
-			_handle_interact(node.get_meta(&"garage_interact"))
-			return
-		node = node.get_parent()
+	var kind: Variant = _interact_kind_at(screen_pos)
+	if kind != null:
+		_handle_interact(kind)
 
 
 func _raycast(screen_pos: Vector2) -> Dictionary:
@@ -697,7 +757,10 @@ func _handle_interact(kind: Variant) -> void:
 		&"fuel":
 			_show_fuel_panel()
 		&"hood":
-			_show_tune_panel()
+			if GameState.has_engine():
+				_show_tune_panel()
+			else:
+				_show_spares_board()
 		&"calendar":
 			_bring_calendar_forward()
 		&"lift":
@@ -712,7 +775,7 @@ func _bay_needs_car(kind: Variant) -> bool:
 
 
 func _start_drive_out() -> void:
-	if _departing or _wheel_job or not GameState.has_active_car():
+	if _departing or _wheel_job or not GameState.has_engine():
 		return
 	if _door_left == null or _door_right == null:
 		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
@@ -1092,7 +1155,7 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 
 func _refresh_hud() -> void:
 	_hud_car_name.text = GameState.car_name
-	_hud_cash.text = "Cash: $%d" % GameState.money
+	_hud_cash.text = "Bankroll: $%d" % GameState.money
 
 
 func _on_hud_car_stripe_input(event: InputEvent) -> void:
