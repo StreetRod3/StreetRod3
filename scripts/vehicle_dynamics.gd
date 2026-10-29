@@ -1,12 +1,44 @@
-extends RefCounted
+extends Node
 
-## Planar rigid-body vehicle. Steering sets the front wheel angle. Tires make
-## forces. Forces make yaw torque. Torque changes yaw rate, and yaw rate turns
-## the car. Nothing steers the body toward a target heading.
+## Planar vehicle. Steering sets the front wheel angle. Tires make forces.
+## Forces make yaw torque. Torque changes yaw rate, and yaw rate turns the car.
+## Nothing steers the body toward a target heading.
 ##
-## Asphalt and grass, four wheels, rear-wheel drive, one grip value. Normal
-## load moves with acceleration, but there is no suspension. Grass is a strong
+## Each wheel is a raycast spring with a damper. That spring force is the tire
+## normal load, so weight transfer arrives as the body squats instead of as an
+## instant split of the static weight. Grip peaks at a small slip and then
+## falls to a sliding value. The steering rack chases the input over time, and
+## it slows its return while the car is sliding.
+##
+## Asphalt and grass, four wheels, rear-wheel drive. Grass is a strong
 ## deterrent: less grip, less drive, and a speed-dependent drag.
+## The cars stay CharacterBody3D nodes. These rays read the ground under that
+## body. Step runs from the car's `_physics_process`.
+
+@export_group("Suspension")
+## Off uses the instant, filtered load-transfer formula on a flat body.
+@export var use_spring_suspension: bool = true
+## Newtons per meter of spring compression at each wheel.
+@export var spring_stiffness: float = 52000.0
+## Newtons per meter per second. Resists bump and rebound.
+@export var damper_coefficient: float = 7000.0
+@export_group("Tires")
+## Off uses the saturating slip curve, where force never falls past the limit.
+@export var use_peak_slip_curve: bool = true
+## Where grip peaks. 0.08 is 8% longitudinal slip and an 8 degree slip angle.
+@export_range(0.06, 0.10, 0.005) var peak_slip_threshold: float = 0.08
+## Grip left once the tire is well past the peak, as a fraction of peak grip.
+@export_range(0.45, 0.95, 0.01) var sliding_grip_factor: float = 0.76
+@export_group("Steering")
+## Off uses a fixed rack speed with no speed or slide dependence.
+@export var use_dynamic_steering: bool = true
+## How fast the front wheels chase the steering input, in radians per second.
+@export_range(0.4, 8.0, 0.1) var steering_damping_speed: float = 2.0
+@export_group("Brakes")
+## Off chases the brake with the same fast response as the throttle.
+@export var use_brake_ramp: bool = true
+## Seconds a held brake key takes to reach full brake. Release stays fast.
+@export_range(0.1, 1.5, 0.05) var brake_build_time: float = 0.45
 
 class SurfaceProfile:
 	var grip_multiplier: float = 1.0
@@ -41,26 +73,25 @@ class Config:
 	var steer_input_response: float = 8.0
 	## 1 is linear. Higher values keep a short press near center; holding still reaches full lock.
 	var steer_input_curve: float = 1.8
-	## Maximum steering-rack speed.
+	## Rack speed when dynamic steering is off.
 	var steer_rate_rad_s: float = 2.4
-
+	## Saturating curve, used when the peak slip curve is off. Lateral slip
+	## where a pure cornering tire is entering saturation. Force there is about
+	## 80% of the grip limit, and further slip adds very little.
+	var slip_angle_full_grip_rad: float = 0.11
+	## Higher values stay linear longer, then flatten. 2 is a gentle circle.
+	var slip_curve_order: float = 3.0
+	## How quickly normal load follows acceleration when spring suspension is off.
+	var load_transfer_response_s: float = 0.06
 	## Friction coefficient at grip_reference_rating. Force limit is grip * normal load.
 	var grip_mu: float = 1.05
 	var grip_reference_rating: float = 3.0
 	var grip_mu_per_rating: float = 0.12
-	## Lateral slip where a pure cornering tire is entering saturation.
-	## Force there is about 80% of the grip limit. Twice that slip is near the
-	## limit, and further slip adds very little.
-	var slip_angle_full_grip_rad: float = 0.11
-	## Higher values stay linear longer, then flatten. 2 is a gentle circle.
-	var slip_curve_order: float = 3.0
 	## Added to forward speed in the slip angle so a stopped wheel does not
 	## treat a tiny lateral velocity as a right angle.
 	var slip_speed_regularization_mps: float = 1.5
 	## Smooths the sign of brake and rolling forces around zero speed.
 	var longitudinal_smoothing_mps: float = 0.4
-	## How quickly normal load follows acceleration. Keeps transfer continuous.
-	var load_transfer_response_s: float = 0.06
 
 	## Propulsion force at reference_gear_ratio, before the tire limit.
 	## The player scales this by the current gear and horsepower.
@@ -99,8 +130,8 @@ class Wheel:
 	var forward_velocity: float = 0.0
 	var lateral_velocity: float = 0.0
 	var slip_angle: float = 0.0
-	## Drive/brake demand divided by the current grip limit. Past 1, more
-	## demand adds almost no longitudinal force. There is no wheel spin model.
+	## Signed longitudinal slip divided by the peak-slip threshold.
+	## 1 is the grip peak. Past 1 the tire is sliding. There is no wheel spin model.
 	var long_slip: float = 0.0
 	var long_force: float = 0.0
 	var lat_force: float = 0.0
@@ -110,6 +141,19 @@ class Wheel:
 	## 0 is asphalt, 1 is fully on grass.
 	var surface_blend: float = 0.0
 	var surface_name: String = "asphalt"
+	## True when `long_slip` is on the peak curve, where 1 is the grip peak.
+	## False when it is demand over the grip limit.
+	var peak_curve: bool = false
+	## Spring travel. `ride_drop` is the ray length at the settled ride height.
+	## 0 means it has never been captured for this wheel layout.
+	var ride_drop: float = 0.0
+	var ride_recapture: bool = true
+	var rest_length: float = 0.0
+	var compression: float = 0.0
+	var compression_speed: float = 0.0
+	var suspension_force: float = 0.0
+	var grounded: bool = false
+	var suspension_ready: bool = false
 
 
 var config := Config.new()
@@ -132,6 +176,37 @@ var _static_front_axle: float = 0.0
 var _static_rear_axle: float = 0.0
 var _drive_filtered: float = 0.0
 var _brake_filtered: float = 0.0
+var _heave: float = 0.0
+var _heave_vel: float = 0.0
+var _pitch: float = 0.0
+var _pitch_vel: float = 0.0
+var _roll: float = 0.0
+var _roll_vel: float = 0.0
+var _pitch_inertia: float = 2500.0
+var _roll_inertia: float = 600.0
+
+## Flat road used when a wheel ray misses. The road mesh has no collider.
+const _GROUND_Y := 0.0
+const _WORLD_MASK := 1
+const _RAY_LENGTH_M := 2.5
+## Hub height above the road for the race spawn, used when the first
+## ride-height sample is implausible.
+const _DEFAULT_RIDE_DROP_M := 0.71
+const _MIN_RIDE_DROP_M := 0.1
+const _MAX_RIDE_DROP_M := 1.2
+## A recapture further than this from the last good ride height is ignored.
+const _RIDE_RECAPTURE_TOLERANCE_M := 0.08
+const _MAX_TRAVEL_M := 0.22
+const _BUMP_STIFFNESS := 6.0
+const _LOAD_CAP := 4.0
+const _HEAVE_LIMIT_M := 0.18
+const _LEAN_LIMIT_RAD := 0.12
+## How fast normalized longitudinal slip chases the force the driver asked for.
+const _SLIP_RESPONSE := 9.0
+## Return rate while a slide still needs the current steering angle.
+const _COUNTERSTEER_RETURN := 0.4
+const _SLIDE_YAW_RATE := 0.4
+const _SLIDE_LATERAL_MPS := 2.5
 
 
 func _init() -> void:
@@ -243,7 +318,19 @@ func reset_motion() -> void:
 	_lat_accel = 0.0
 	_drive_filtered = 0.0
 	_brake_filtered = 0.0
-	_restore_static_loads()
+	_heave = 0.0
+	_heave_vel = 0.0
+	_pitch = 0.0
+	_pitch_vel = 0.0
+	_roll = 0.0
+	_roll_vel = 0.0
+	for wheel in _wheels:
+		wheel.long_slip = 0.0
+		wheel.compression_speed = 0.0
+		wheel.suspension_ready = false
+		wheel.ride_recapture = true
+		wheel.suspension_force = wheel.static_load
+		wheel.normal_load = wheel.static_load
 
 
 func reset_all_motion() -> void:
@@ -254,7 +341,6 @@ func reset_all_motion() -> void:
 		wheel.steer_angle = 0.0
 		wheel.force_body = Vector3.ZERO
 		wheel.slip_angle = 0.0
-		wheel.long_slip = 0.0
 		wheel.long_force = 0.0
 		wheel.lat_force = 0.0
 		wheel.grip_utilization = 0.0
@@ -348,6 +434,8 @@ func step(dt: float, steer_input: float, drive_force_n: float, brake_input: floa
 
 
 func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input: float) -> void:
+	if use_spring_suspension:
+		_update_suspension(dt)
 	_apply_steering(dt, steer_input)
 	var basis := _basis()
 	var drive_each := 0.0
@@ -361,7 +449,7 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 	var force_body := Vector3.ZERO
 	var torque := 0.0
 	for wheel in _wheels:
-		var tire := _tire_force(wheel, basis, drive_each, brake_input)
+		var tire := _tire_force(wheel, basis, drive_each, brake_input, dt)
 		force_body += tire
 		# Yaw component of r × F. Positive yaw swings the nose toward body +X.
 		torque += wheel.offset.z * tire.x - wheel.offset.x * tire.z
@@ -373,7 +461,10 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 	yaw = wrapf(yaw + yaw_rate * dt, -PI, PI)
 	_long_accel = force_body.z / config.mass_kg
 	_lat_accel = force_body.x / config.mass_kg
-	_update_load_transfer(dt)
+	if use_spring_suspension:
+		_integrate_suspension(dt)
+	else:
+		_update_load_transfer(dt)
 
 
 func _apply_steering(dt: float, steer_input: float) -> void:
@@ -381,7 +472,8 @@ func _apply_steering(dt: float, steer_input: float) -> void:
 	var blend := 1.0 - exp(-config.steer_input_response * dt)
 	_steer_input = lerpf(_steer_input, target_input, blend)
 	var target_angle := _shaped_steer(_steer_input) * _steer_angle_limit()
-	_steer_angle = move_toward(_steer_angle, target_angle, config.steer_rate_rad_s * dt)
+	var rate := _steering_rate(target_angle)
+	_steer_angle = move_toward(_steer_angle, target_angle, rate * dt)
 	var front_blend := 0.0
 	var front_count := 0
 	for wheel in _wheels:
@@ -395,7 +487,9 @@ func _apply_steering(dt: float, steer_input: float) -> void:
 		wheel.steer_angle = _steer_angle * steer_scale if wheel.front else 0.0
 
 
-## Ground speed, so a slide does not open the rack just because the nose is no longer pointing along the velocity.
+## Full lock at walking pace. The rack closes as forward speed rises, down to the
+## angle that asks for `steer_full_lateral_accel`. Ground speed is used so a
+## slide does not open the rack just because the nose is no longer along the velocity.
 func _steer_angle_limit() -> float:
 	var speed := Vector2(cg_velocity.x, cg_velocity.z).length()
 	var cap := config.max_steer_rad
@@ -406,12 +500,35 @@ func _steer_angle_limit() -> float:
 	return minf(cap, atan(ay * wheelbase / (speed * speed)))
 
 
+## Rack speed. High speed shortens it. During a slide the wheel is allowed to
+## move into counter-steer, and its return toward center is slowed.
+func _steering_rate(target_angle: float) -> float:
+	if not use_dynamic_steering:
+		return config.steer_rate_rad_s
+	var speed := maxf(longitudinal_speed(), 0.0)
+	var rate := maxf(steering_damping_speed, 0.2) / (1.0 + speed * 0.015)
+	if not _slide_needs_catch():
+		return rate
+	var adding_catch := target_angle * yaw_rate < 0.0 and absf(target_angle) > absf(_steer_angle)
+	if adding_catch:
+		return rate
+	return rate * _COUNTERSTEER_RETURN
+
+
+func _slide_needs_catch() -> bool:
+	if absf(yaw_rate) < _SLIDE_YAW_RATE or absf(lateral_speed()) < _SLIDE_LATERAL_MPS:
+		return false
+	if longitudinal_speed() < 6.0:
+		return false
+	return _steer_input * yaw_rate <= 0.02
+
+
 func _shaped_steer(amount: float) -> float:
 	var curve := maxf(config.steer_input_curve, 1.0)
 	return signf(amount) * pow(absf(amount), curve)
 
 
-func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: float) -> Vector3:
+func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: float, dt: float) -> Vector3:
 	var omega := Vector3(0.0, yaw_rate, 0.0)
 	var contact_world: Vector3 = cg_velocity + omega.cross(basis * wheel.offset)
 	var contact_body := basis.inverse() * contact_world
@@ -448,11 +565,20 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 		wheel.force_body = unloaded
 		return unloaded
 
-	var slip_scale := maxf(config.slip_angle_full_grip_rad, 0.01)
-	var s_long := long_request / limit
-	var s_lat := slip / slip_scale
-	wheel.long_slip = s_long
-	var combined := _combined_slip_force(s_long, s_lat, limit)
+	var requested := long_request / limit
+	var combined := Vector2.ZERO
+	wheel.peak_curve = use_peak_slip_curve
+	if use_peak_slip_curve:
+		var peak_ratio := clampf(peak_slip_threshold, 0.06, 0.10)
+		var slip_target := _slip_target(requested)
+		var chase := _SLIP_RESPONSE + absf(v_long) * 0.25
+		wheel.long_slip = move_toward(wheel.long_slip, slip_target, chase * dt)
+		var s_lat := slip / maxf(deg_to_rad(peak_ratio * 100.0), 0.05)
+		combined = _combined_slip_force(wheel.long_slip, s_lat, limit)
+	else:
+		wheel.long_slip = requested
+		var s_lat := slip / maxf(config.slip_angle_full_grip_rad, 0.01)
+		combined = _saturating_slip_force(requested, s_lat, limit)
 	wheel.long_force = combined.x
 	wheel.lat_force = combined.y
 	wheel.grip_utilization = combined.length() / limit
@@ -474,17 +600,60 @@ func _surface_drag(blend: float, contact_body: Vector3) -> Vector3:
 func _chase_pedals(dt: float, drive_target: float, brake_target: float) -> void:
 	var blend := 1.0 - exp(-config.throttle_response * dt)
 	_drive_filtered = lerpf(_drive_filtered, drive_target, blend)
-	_brake_filtered = lerpf(_brake_filtered, brake_target, blend)
+	if use_brake_ramp and brake_target > _brake_filtered:
+		var rise := 1.0 / maxf(brake_build_time, 0.05)
+		_brake_filtered = move_toward(_brake_filtered, brake_target, rise * dt)
+	else:
+		_brake_filtered = lerpf(_brake_filtered, brake_target, blend)
 
 
 func _blended(blend: float, asphalt_value: float, grass_value: float) -> float:
 	return lerpf(asphalt_value, grass_value, clampf(blend, 0.0, 1.0))
 
 
-## One smooth curve for both axes. Small slip is nearly linear. Large slip
-## sits on the friction circle and extra slip barely increases the force.
-## The mix of s_long and s_lat is the direction on that circle.
+## Normalized slip of 1 sits on the grip peak. The input is signed demand
+## divided by the friction limit. Demand the tire can hold stays at or below
+## the peak. Demand past the limit runs out onto the sliding side.
+func _slip_target(requested: float) -> float:
+	var mag := absf(requested)
+	if mag <= 0.001:
+		return 0.0
+	var signed := 0.0
+	if mag <= 1.0:
+		signed = asin(mag) / (PI * 0.5)
+	else:
+		signed = 1.0 + (mag - 1.0) * 1.6
+	return clampf(signf(requested) * signed, -3.5, 3.5)
+
+
+## Simplified peak-and-fall curve. `normalized_slip` is 1 at the grip peak.
+## The rise is a quarter sine, so the slope is zero at the peak. Past the peak
+## a smooth step falls to `sliding_grip_factor` and stays there.
+func _grip_curve(normalized_slip: float) -> float:
+	var x := absf(normalized_slip)
+	if x <= 0.00001:
+		return 0.0
+	if x <= 1.0:
+		return sin(x * PI * 0.5)
+	var slide := clampf(sliding_grip_factor, 0.45, 0.95)
+	var t := clampf((x - 1.0) / 1.35, 0.0, 1.0)
+	var blend := t * t * (3.0 - 2.0 * t)
+	return lerpf(1.0, slide, blend)
+
+
+## Friction circle. The slip vector picks the direction. The curve picks how
+## much of the limit that direction is allowed to use.
 func _combined_slip_force(s_long: float, s_lat: float, limit: float) -> Vector2:
+	var slip_mag := sqrt(s_long * s_long + s_lat * s_lat)
+	if slip_mag <= 0.00001:
+		return Vector2.ZERO
+	var scale := limit * _grip_curve(slip_mag) / slip_mag
+	return Vector2(s_long * scale, -s_lat * scale)
+
+
+## Small slip is nearly linear. Large slip sits on the friction circle and
+## extra slip barely increases the force. Force never falls past the limit.
+func _saturating_slip_force(s_long: float, s_lat: float, limit: float) -> Vector2:
 	var slip_mag := sqrt(s_long * s_long + s_lat * s_lat)
 	if slip_mag <= 0.00001:
 		return Vector2.ZERO
@@ -556,21 +725,127 @@ func _update_load_transfer(dt: float) -> void:
 		wheel.normal_load = lerpf(wheel.normal_load, target, blend)
 
 
-func _restore_static_loads() -> void:
+## Ray length under each hub. A physics hit on the road wins. A miss uses the
+## flat y=0 surface the track is built on, because the road mesh has no collider.
+func _update_suspension(dt: float) -> void:
+	if _wheels.is_empty():
+		return
+	var car := get_parent() as CollisionObject3D
+	if car == null:
+		return
+	var space: PhysicsDirectSpaceState3D = null
+	var world := car.get_world_3d()
+	if world != null:
+		space = world.direct_space_state
+	var stiffness := maxf(spring_stiffness, 1000.0)
+	var damper := maxf(damper_coefficient, 0.0)
 	for wheel in _wheels:
-		wheel.normal_load = wheel.static_load
+		var origin := car.global_transform * wheel.local_position
+		origin.y += _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
+		var ground_y := _raycast_ground(space, car, origin)
+		var drop := origin.y - ground_y
+		if wheel.ride_recapture:
+			wheel.ride_drop = _ride_drop_sample(wheel.ride_drop, drop)
+			wheel.ride_recapture = false
+		var sag := wheel.static_load / stiffness
+		wheel.rest_length = wheel.ride_drop + sag
+		var travel := wheel.rest_length - drop
+		var compression := clampf(travel, 0.0, _MAX_TRAVEL_M)
+		if not wheel.suspension_ready:
+			wheel.compression = compression
+			wheel.compression_speed = 0.0
+			wheel.suspension_ready = true
+		else:
+			var raw_speed := (compression - wheel.compression) / maxf(dt, 0.0001)
+			var blend := 1.0 - exp(-16.0 * dt)
+			wheel.compression_speed = lerpf(wheel.compression_speed, raw_speed, blend)
+			wheel.compression = compression
+		var force := compression * stiffness + wheel.compression_speed * damper
+		if travel > _MAX_TRAVEL_M:
+			force += (travel - _MAX_TRAVEL_M) * stiffness * _BUMP_STIFFNESS
+		var cap := maxf(wheel.static_load, 1.0) * _LOAD_CAP
+		force = clampf(force, 0.0, cap)
+		wheel.suspension_force = force
+		wheel.normal_load = force
+		wheel.grounded = travel > 0.0
+
+
+## Rest ride height for a wheel, sampled on the first step after a reset or a
+## new wheel layout. A sample outside the plausible range, or one that jumps
+## away from the last good height (a body lifted by a collision), is ignored.
+func _ride_drop_sample(previous: float, drop: float) -> float:
+	var plausible := drop >= _MIN_RIDE_DROP_M and drop <= _MAX_RIDE_DROP_M
+	if previous <= 0.0:
+		return drop if plausible else _DEFAULT_RIDE_DROP_M
+	if plausible and absf(drop - previous) <= _RIDE_RECAPTURE_TOLERANCE_M:
+		return drop
+	return previous
+
+
+func _raycast_ground(space: PhysicsDirectSpaceState3D, car: CollisionObject3D, origin: Vector3) -> float:
+	var end := origin + Vector3(0.0, -_RAY_LENGTH_M, 0.0)
+	if space != null:
+		var exclude: Array[RID] = [car.get_rid()]
+		var query := PhysicsRayQueryParameters3D.create(origin, end, _WORLD_MASK, exclude)
+		query.collide_with_areas = false
+		query.hit_from_inside = false
+		var hit := space.intersect_ray(query)
+		if not hit.is_empty():
+			var normal: Vector3 = hit.get("normal", Vector3.UP)
+			var point: Vector3 = hit.get("position", end)
+			var near_road := point.y <= _GROUND_Y + 0.4 and point.y >= _GROUND_Y - 1.0
+			if normal.y > 0.45 and point.y <= origin.y and near_road:
+				return point.y
+	if origin.y >= _GROUND_Y - _RAY_LENGTH_M:
+		return _GROUND_Y
+	return origin.y + _RAY_LENGTH_M
+
+
+## Heave, pitch, and roll from the spring forces plus the inertial couple at the
+## mass center. Positive pitch lifts the nose. Positive roll lowers the left side.
+func _integrate_suspension(dt: float) -> void:
+	if _wheels.is_empty() or config.mass_kg <= 0.0:
+		return
+	var support := 0.0
+	var pitch_moment := 0.0
+	var roll_moment := 0.0
+	for wheel in _wheels:
+		var force := wheel.suspension_force
+		support += force
+		pitch_moment += force * wheel.offset.z
+		roll_moment += force * wheel.offset.x
+	var mass := config.mass_kg
+	var height := maxf(config.cg_height_m, 0.0)
+	_heave_vel += (support - mass * config.gravity) / mass * dt
+	_pitch_vel += (pitch_moment + mass * _long_accel * height) / _pitch_inertia * dt
+	_roll_vel += (roll_moment + mass * _lat_accel * height) / _roll_inertia * dt
+	_heave += _heave_vel * dt
+	_pitch += _pitch_vel * dt
+	_roll += _roll_vel * dt
+	if absf(_heave) > _HEAVE_LIMIT_M:
+		_heave = clampf(_heave, -_HEAVE_LIMIT_M, _HEAVE_LIMIT_M)
+		_heave_vel = 0.0
+	if absf(_pitch) > _LEAN_LIMIT_RAD:
+		_pitch = clampf(_pitch, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
+		_pitch_vel = 0.0
+	if absf(_roll) > _LEAN_LIMIT_RAD:
+		_roll = clampf(_roll, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
+		_roll_vel = 0.0
 
 
 func _update_inertia() -> void:
 	if config.yaw_inertia_override_kgm2 > 0.0:
 		yaw_inertia = config.yaw_inertia_override_kgm2
-		return
-	if _wheels.size() != 4:
+	elif _wheels.size() != 4:
 		yaw_inertia = config.mass_kg * config.wheelbase_m * config.wheelbase_m / 12.0
-		return
-	var to_front := absf((_wheels[0].offset.z + _wheels[1].offset.z) * 0.5)
-	var to_rear := absf((_wheels[2].offset.z + _wheels[3].offset.z) * 0.5)
-	yaw_inertia = maxf(config.mass_kg * to_front * to_rear, 1.0)
+	else:
+		var to_front := absf((_wheels[0].offset.z + _wheels[1].offset.z) * 0.5)
+		var to_rear := absf((_wheels[2].offset.z + _wheels[3].offset.z) * 0.5)
+		yaw_inertia = maxf(config.mass_kg * to_front * to_rear, 1.0)
+	var height := config.cg_height_m
+	_pitch_inertia = maxf(yaw_inertia + config.mass_kg * height * height, 1.0)
+	var track := maxf((_front_track + _rear_track) * 0.5, 0.4)
+	_roll_inertia = maxf(config.mass_kg * (height * height + track * track / 12.0), 1.0)
 
 
 func _apply_grip_to_wheels() -> void:

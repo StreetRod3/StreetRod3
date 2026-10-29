@@ -28,7 +28,7 @@ const CAM_BUMPER := 3
 @onready var _engine_sound: Node = $EngineSound
 @onready var _visual: Node3D = $CarPivot
 var _cam_mode: int = CAM_FAR
-var _dynamics: _VehicleDynamics = _VehicleDynamics.new()
+@onready var _dynamics: _VehicleDynamics = get_node_or_null("VehicleDynamics") as _VehicleDynamics
 var _arcade: _ArcadeDrive = _ArcadeDrive.new()
 var _skids: _SkidMarks
 var _car_center := Vector3(0.0, 0.0, 1.9)
@@ -43,6 +43,10 @@ var _engine_blown: bool = false
 var _arcade_active: bool = false
 
 func _ready() -> void:
+	if _dynamics == null:
+		_dynamics = _VehicleDynamics.new()
+		_dynamics.name = "VehicleDynamics"
+		add_child(_dynamics)
 	motion_mode = MOTION_MODE_FLOATING
 	# Layer 2 is cars. Keep the road mask and also collide with other cars.
 	collision_mask = collision_mask | collision_layer
@@ -514,7 +518,7 @@ func _update_debug_draw() -> void:
 			var surface := wheel.surface_name
 			if wheel.surface_blend > 0.02 and wheel.surface_blend < 0.98:
 				surface = "%s %.0f%%" % [wheel.surface_name, wheel.surface_blend * 100.0]
-			label.text = "%s\n%.0f N\nuse %.0f%%\nlat %.0f deg\nlong %.2f" % [
+			label.text = "%s\n%.0f N\nuse %.0f%%\nlat %.0f deg\nslip %.2f" % [
 				surface,
 				wheel.normal_load,
 				wheel.grip_utilization * 100.0,
