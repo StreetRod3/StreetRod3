@@ -34,6 +34,11 @@ extends Node
 @export var use_dynamic_steering: bool = true
 ## How fast the front wheels chase the steering input, in radians per second.
 @export_range(0.4, 8.0, 0.1) var steering_damping_speed: float = 2.0
+@export_group("Brakes")
+## Off chases the brake with the same fast response as the throttle.
+@export var use_brake_ramp: bool = true
+## Seconds a held brake key takes to reach full brake. Release stays fast.
+@export_range(0.1, 1.5, 0.05) var brake_build_time: float = 0.45
 
 class SurfaceProfile:
 	var grip_multiplier: float = 1.0
@@ -595,7 +600,11 @@ func _surface_drag(blend: float, contact_body: Vector3) -> Vector3:
 func _chase_pedals(dt: float, drive_target: float, brake_target: float) -> void:
 	var blend := 1.0 - exp(-config.throttle_response * dt)
 	_drive_filtered = lerpf(_drive_filtered, drive_target, blend)
-	_brake_filtered = lerpf(_brake_filtered, brake_target, blend)
+	if use_brake_ramp and brake_target > _brake_filtered:
+		var rise := 1.0 / maxf(brake_build_time, 0.05)
+		_brake_filtered = move_toward(_brake_filtered, brake_target, rise * dt)
+	else:
+		_brake_filtered = lerpf(_brake_filtered, brake_target, blend)
 
 
 func _blended(blend: float, asphalt_value: float, grass_value: float) -> float:
