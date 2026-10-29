@@ -27,6 +27,8 @@ flowchart TD
   garage -->|Newspaper| paper
   paper -->|Back| garage
   garage -->|Doors| select
+  garage -->|Under the car| trans[Transmission]
+  trans -->|Done| garage
   select -->|Pick rival| race
   select -->|Back| garage
   race -->|Garage or menu| garage
@@ -39,6 +41,7 @@ flowchart TD
 | `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle |
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
+| `scenes/transmission.tscn` | `scripts/transmission.gd` | Under the car: bellhousing bolts, gearbox out and in on a jack |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
@@ -78,7 +81,7 @@ flowchart LR
 
 `scripts/game_state.gd` is the only autoload (`GameState`). It owns:
 
-- Economy and garage: cash, owned cars, parts, gearboxes, equipped gearbox, paint color.
+- Economy and garage: cash, owned cars, parts, gearboxes, equipped gearbox and its bolt turns, paint color.
 - Catalogs: `USED_CARS`, `PARTS`, `GEARBOXES`, `OPPONENTS` (static dictionaries, not resources).
 - Race selection: `selected_race_type` (`drag` or `road`) and `selected_opponent_id`.
 - Derived stats: `refresh_car_stats()` rebuilds base vmax and horsepower from the current car plus owned parts. `get_effective_vmax_kmh()` then scales by the equipped gearbox `top_speed`.
@@ -100,6 +103,18 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 | `doors` | Open the drive-in |
 | `spray` | Color picker; writes `GameState.car_color` |
 | `calendar` | Pulls the wall calendar toward the camera |
+| `transmission` | Opens the transmission scene (low band between the wheels, or T) |
+
+### Transmission
+
+`transmission.gd` shows the underside of the car on a lift: the equipped engine model at real scale, a gearbox built from primitives (iron with a pan for automatics, aluminum with a rib per gear for manuals, black and red for racing boxes), two bellhousing bolts, and a transmission jack. Bolt state lives on `GameState.gearbox_bolts` (0 out to `GEARBOX_BOLT_TIGHT`) and is saved per car.
+
+- Clicking a bolt hole threads the bolt in. Each click tightens it a turn until it is tight. Clicking a tight bolt backs it out a turn at a time until it drops to the floor.
+- With both bolts out, `GameState.remove_gearbox()` sets the gearbox to `NO_GEARBOX_ID` and it goes to spare parts. The jack takes it down after the crossmember is pulled.
+- Select lists spare gearboxes. It refuses while a gearbox is still in. `fit_gearbox()` raises the chosen one in with both bolts at one turn.
+- `GameState.can_drive()` needs an engine and both bolts tight. The garage doors use it.
+
+Bought gearboxes go to spare parts (`buy_gearbox`). The spare-parts Fit button for a gearbox opens this scene instead of swapping it instantly.
 
 The calendar page is built at runtime from the system date (`Label3D` grid).
 

@@ -18,7 +18,7 @@ Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRo
 
 On a phone or a narrow window, on-screen pedals and a steering wheel replace the keyboard hint.
 
-New Game starts in the garage with cash, a basic car, and an automatic 3-speed. Click the newspaper to buy parts, and the garage doors to pick a rival.
+New Game starts in the garage with cash, a basic car, and an automatic 3-speed. Click the newspaper to buy parts, and the garage doors to pick a rival. Click low on the car between the wheels (or press T) to get under it and change the transmission: back both bellhousing bolts out to drop the gearbox, select a spare, and tighten the bolts before driving out.
 
 ## Run locally
 

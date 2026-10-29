@@ -83,6 +83,8 @@ var _tune_preview: Control
 var _tune_sound: AudioStreamPlayer
 var _hood: StaticBody3D
 var _hood_shape: BoxShape3D
+var _under_car: StaticBody3D
+var _under_car_shape: BoxShape3D
 var _loss_root: Control
 var _loss_panel: PanelContainer
 var _loss_tail: Node2D
@@ -100,10 +102,13 @@ const _TOOLTIPS := {
 	&"hood": "Engine",
 	&"calendar": "Calendar (X)",
 	&"lift": "Wheels (L)",
+	&"transmission": "Transmission (T)",
 }
 const _TOOLTIP_CARS := "Cars"
 const _TOOLTIP_NO_ENGINE := "No engine — fit one from spare parts"
 const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
+const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
+const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -155,6 +160,7 @@ func _ready() -> void:
 	_build_fuel_panel()
 	_build_tune_panel()
 	_build_hood_target()
+	_build_under_car_target()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
 	_lift_arm_home = _lift_arm.position
@@ -185,7 +191,7 @@ func _ready() -> void:
 	call_deferred(&"_debug_car_mesh")
 	# Also align wheels to the floor after meshes are ready.
 	call_deferred(&"_align_wheels_to_floor")
-	call_deferred(&"_place_hood_target")
+	call_deferred(&"_place_bay_targets")
 	if _wants_drive_in():
 		call_deferred(&"_play_drive_in")
 
@@ -198,7 +204,7 @@ func _ready() -> void:
 func _on_carbody_stl_loaded(_mesh: Variant) -> void:
 	# When the CarBody's mesh is ready, re-align wheels to the floor.
 	_align_wheels_to_floor()
-	_place_hood_target()
+	_place_bay_targets()
 
 
 func _align_wheels_to_floor() -> void:
@@ -351,6 +357,10 @@ func _tooltip_text_at_mouse() -> String:
 			return _TOOLTIP_NO_ENGINE
 		if kind == &"doors":
 			return _TOOLTIP_DOORS_NO_ENGINE
+	if kind == &"doors" and not GameState.has_gearbox():
+		return _TOOLTIP_DOORS_NO_GEARBOX
+	if kind == &"doors" and not GameState.is_gearbox_bolted():
+		return _TOOLTIP_DOORS_LOOSE
 	return str(_TOOLTIPS.get(kind, ""))
 
 
@@ -636,6 +646,8 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_hide_parts_board()
 			else:
 				_show_wheel_board()
+		KEY_T:
+			_handle_interact(&"transmission")
 		_:
 			return false
 	_sync_menu_nav()
@@ -775,17 +787,25 @@ func _handle_interact(kind: Variant) -> void:
 			_bring_calendar_forward()
 		&"lift":
 			_show_wheel_board()
+		&"transmission":
+			_open_transmission()
 
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"transmission":
 			return true
 	return false
 
 
+func _open_transmission() -> void:
+	if _bay_busy or _departing or not GameState.has_active_car():
+		return
+	get_tree().change_scene_to_file(GameState.SCENE_TRANSMISSION)
+
+
 func _start_drive_out() -> void:
-	if _departing or _bay_busy or not GameState.has_engine():
+	if _departing or _bay_busy or not GameState.can_drive():
 		return
 	if _door_left == null or _door_right == null:
 		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
@@ -837,7 +857,7 @@ func _play_drive_in() -> void:
 	if not is_instance_valid(self):
 		return
 	_car_pivot.position = _bay_home
-	_place_hood_target()
+	_place_bay_targets()
 	await _swing_doors(0.0)
 	if not is_instance_valid(self):
 		return
@@ -923,7 +943,7 @@ func _swap_car_in_bay(car_id: String) -> void:
 		if not is_instance_valid(self):
 			return
 	_car_pivot.position = bay
-	_place_hood_target()
+	_place_bay_targets()
 	await _swing_doors(0.0)
 	if not is_instance_valid(self):
 		return
@@ -1133,7 +1153,11 @@ func _rebuild_parts_board() -> void:
 	]
 	if not engine.is_empty():
 		_parts_list.add_child(_mounted_line("Engine", _parts_row_text(engine, "engine")))
-	if not box.is_empty():
+	if box.is_empty():
+		_parts_list.add_child(_mounted_line("Transmission", "none"))
+	elif not GameState.is_gearbox_bolted():
+		_parts_list.add_child(_mounted_line("Transmission", "%s  (bolts loose)" % _parts_row_text(box, "transmission")))
+	else:
 		_parts_list.add_child(_mounted_line("Transmission", _parts_row_text(box, "transmission")))
 	if not wheel.is_empty():
 		_parts_list.add_child(_mounted_line("Wheels", _parts_row_text(wheel, "wheels")))
@@ -1256,7 +1280,10 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 		"engine":
 			err = GameState.buy_or_equip_engine(part_id)
 		"transmission":
-			err = GameState.buy_or_equip_gearbox(part_id)
+			# Gearboxes go in from under the car, bolts and all.
+			_hide_parts_board()
+			_open_transmission()
+			return
 		"wheels":
 			if GameState.owns_wheel(part_id) and part_id != GameState.equipped_wheel_id:
 				_hide_parts_board()
@@ -1477,7 +1504,7 @@ func _apply_active_car_visual() -> void:
 	if _car_pivot.has_method(&"reload_player_car"):
 		_car_pivot.call(&"reload_player_car")
 	_align_wheels_to_floor()
-	call_deferred(&"_place_hood_target")
+	call_deferred(&"_place_bay_targets")
 
 
 func _build_hood_target() -> void:
@@ -1493,7 +1520,7 @@ func _build_hood_target() -> void:
 	_hood.set_meta(&"garage_interact", &"hood")
 
 
-func _place_hood_target() -> void:
+func _place_bay_targets() -> void:
 	if _hood == null or _hood_shape == null:
 		return
 	var body := _car_pivot.get_node_or_null("CarBody") as Node3D
@@ -1509,6 +1536,26 @@ func _place_hood_target() -> void:
 	var hood_size := Vector3(size.x * 0.64, size.y * 0.26, size.z * 0.38)
 	_hood.global_position = hood_min + hood_size * 0.5
 	_hood_shape.size = hood_size
+	if _under_car == null or _under_car_shape == null:
+		return
+	# Low band between the axles, just behind the engine: where the gearbox sits.
+	var under_min := origin + Vector3(size.x * -0.02, 0.0, size.z * 0.38)
+	var under_size := Vector3(size.x * 1.04, size.y * 0.3, size.z * 0.28)
+	_under_car.global_position = under_min + under_size * 0.5
+	_under_car_shape.size = under_size
+
+
+func _build_under_car_target() -> void:
+	_under_car = StaticBody3D.new()
+	_under_car.name = "InteractTransmission"
+	var col := CollisionShape3D.new()
+	_under_car_shape = BoxShape3D.new()
+	_under_car_shape.size = Vector3(1.8, 0.4, 1.2)
+	col.shape = _under_car_shape
+	_under_car.add_child(col)
+	_under_car.position = Vector3(0.0, 0.2, 0.3)
+	_car_pivot.add_child(_under_car)
+	_under_car.set_meta(&"garage_interact", &"transmission")
 
 
 func _world_mesh_aabb(node: Node) -> AABB:
@@ -1678,6 +1725,8 @@ func _show_stats() -> void:
 	if typeof(gears) == TYPE_ARRAY:
 		gear_count = gears.size()
 	var kind := "automatic" if bool(box.get("automatic", false)) else "manual"
+	if box.is_empty():
+		kind = "not fitted"
 	var t := "Car: %s\n\nTop speed: %.0f km/h\nEngine power: %.0f hp\nGearbox: %s\n%s, %d gears\nFuel: %.0f L" % [
 		GameState.car_name,
 		GameState.get_effective_vmax_kmh(),

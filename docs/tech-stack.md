@@ -27,7 +27,7 @@ Godot imports GLB, PNG, MP3, and OBJ through the normal import pipeline (`.impor
 - **Scene and script pairs.** Each screen is `scenes/<name>.tscn` with `scripts/<name>.gd`. Race subsystems (`player_race_car`, `race_track`, `rpm_meter`, and so on) are child nodes of `race.tscn`.
 - **One autoload.** `GameState` is the shared model. Do not add another singleton unless the data must outlive a scene change.
 - **Catalogs are `const` arrays of dictionaries** on `GameState` (`PARTS`, `GEARBOXES`, `USED_CARS`, `OPPONENTS`). Ids are strings except opponent ids, which are integers `0..2`.
-- **Purchases return an empty string on success** and a short player-facing error otherwise (`buy_part`, `buy_or_equip_gearbox`, `buy_or_select_car`).
+- **Purchases return an empty string on success** and a short player-facing error otherwise (`buy_part`, `buy_gearbox`, `buy_or_select_car`).
 - **Cross-node calls use `has_method`.** Race code does not cast to script types except `TrackFile`.
 - **Input is raw keys**, not the Input Map. Desktop: W/Up throttle, S/Down brake, A/D or arrows steer, Q/E shift, C camera. Touch controls override those when visible.
 - **World axes.** Planar track `x` is world X. Planar track `y` is world Z. Height is always Y = 0. Car yaw 0 faces `+Z`.
