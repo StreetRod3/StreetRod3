@@ -16,6 +16,8 @@ const RPM_REDLINE := 6500.0
 const RPM_CRITICAL := 6700.0
 const RPM_METER_MAX := 7000.0
 const OVERREV_HOLD_S := 0.55
+## Speed straight into a barrier that wrecks the car. Glancing scrapes stay below it.
+const WRECK_BARRIER_MPS := 6.0
 
 const CAM_FAR := 0
 const CAM_CLOSE := 1
@@ -40,6 +42,7 @@ var _gear: int = 0
 var _shift_timer: float = 0.0
 var _overrev_time: float = 0.0
 var _engine_blown: bool = false
+var _wrecked: bool = false
 var _arcade_active: bool = false
 
 func _ready() -> void:
@@ -142,6 +145,10 @@ func is_automatic_gearbox() -> bool:
 
 func is_engine_blown() -> bool:
 	return _engine_blown
+
+
+func is_wrecked() -> bool:
+	return _wrecked
 
 
 func get_rpm() -> float:
@@ -287,8 +294,9 @@ func _physics_simulation(delta: float) -> void:
 	_dynamics.step(delta, steer, drive, brake_input)
 	_sync_motion_state()
 	_dynamics.pose_body(self, true)
+	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle():
+	if _slide_hit_obstacle(before):
 		_dynamics.reset_motion()
 		_sync_motion_state()
 		velocity = Vector3.ZERO
@@ -350,8 +358,9 @@ func _physics_arcade(delta: float) -> void:
 		GameState.get_effective_vmax_kmh() / 3.6,
 		_car_center
 	)
+	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle():
+	if _slide_hit_obstacle(before):
 		_arcade.reset()
 		velocity = Vector3.ZERO
 	forward_speed = _arcade.forward_speed
@@ -464,13 +473,16 @@ func _escape_obstacle(track: Node) -> bool:
 	return true
 
 
-func _slide_hit_obstacle() -> bool:
+func _slide_hit_obstacle(before: Vector3) -> bool:
+	var hit := false
 	for i in get_slide_collision_count():
 		var col := get_slide_collision(i)
 		var collider := col.get_collider()
 		if collider is Node and (collider as Node).has_meta(&"track_obstacle"):
-			return true
-	return false
+			hit = true
+			if -before.dot(col.get_normal()) >= WRECK_BARRIER_MPS:
+				_wrecked = true
+	return hit
 
 
 func _update_debug_draw() -> void:

@@ -25,7 +25,8 @@ var _race_started: bool = false
 @onready var _rpm_meter: Control = $RaceUI/RpmMeter
 @onready var _mobile: Control = $RaceUI/MobileControls
 @onready var _result: Control = $RaceUI/ResultPanel
-@onready var _result_text: Label = $RaceUI/ResultPanel/Panel/Margin/VBox/ResultLabel
+@onready var _result_bubble: PanelContainer = $RaceUI/ResultPanel/Bubble
+@onready var _result_text: Label = $RaceUI/ResultPanel/Bubble/Margin/ResultLabel
 @onready var _traffic: Control = $RaceUI/TrafficLights
 @onready var _light_red: ColorRect = $RaceUI/TrafficLights/Center/HBox/LightRed
 @onready var _light_orange: ColorRect = $RaceUI/TrafficLights/Center/HBox/LightOrange
@@ -50,6 +51,12 @@ var _opponent_finished: bool = false
 var _is_road: bool = false
 var _elapsed: float = 0.0
 var _nav = _MenuNav.new()
+var _result_tail: Node2D
+## Scene the result bubble leads to when clicked. Empty until the race ends.
+var _result_scene: String = ""
+
+## Closing speed between the two cars that wrecks the player's car. Ordinary bumps stay below it.
+const WRECK_BUMP_MPS := 9.0
 
 ## Dim “off” lamp colors (same hue, low value).
 const _DIM_RED := Color(0.12, 0.05, 0.05, 1)
@@ -73,6 +80,7 @@ func _ready() -> void:
 	_is_road = GameState.selected_race_type == GameState.RACE_ROAD
 	_setup_race_layout()
 	_result.visible = false
+	_build_result_bubble()
 	_reset_pause_pages()
 	_pause_menu.visible = false
 	var opp := GameState.selected_opponent()
@@ -195,7 +203,8 @@ func _debug_mesh_instances_recursive(node: Node, label: String) -> void:
 func _physics_process(_delta: float) -> void:
 	if get_tree().paused or _race_over or not _race_started:
 		return
-	_car_bump.resolve(_player, _opponent)
+	if _car_bump.resolve(_player, _opponent) >= WRECK_BUMP_MPS:
+		_show_wreck()
 
 
 func _process(delta: float) -> void:
@@ -206,6 +215,9 @@ func _process(delta: float) -> void:
 	_update_rpm_meter()
 	if _race_started and not _race_over and _player.has_method(&"is_engine_blown") and _player.is_engine_blown():
 		_show_engine_blown()
+		return
+	if _race_started and _player.has_method(&"is_wrecked") and _player.is_wrecked():
+		_show_wreck()
 		return
 	if not _race_started:
 		_advance_countdown(delta)
@@ -309,58 +321,137 @@ func _finish_player() -> void:
 
 
 func _show_engine_blown() -> void:
-	_resume_race()
 	_race_over = true
-	_result.visible = true
-	if _mobile != null:
-		_mobile.visible = false
-	if _rpm_meter != null:
-		_rpm_meter.visible = false
-	GameState.drift_engine_tune_after_race()
-	_result_text.text = "You stayed in the red too long — the engine is blown.%s\n\nFuel left: %.0f L" % [_stake_line(false), GameState.fuel]
-	_apply_result_actions()
+	_end_race_ui()
+	GameState.remove_engine()
+	var payout := GameState.apply_race_stake(false)
+	var text := "You blew the engine!"
+	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
+		text += "\nThey took your car!"
+	text += _lost_bucks_line(payout)
+	_show_bubble(text, GameState.SCENE_GARAGE)
+
+
+func _show_wreck() -> void:
+	if _race_over:
+		return
+	_race_over = true
+	_end_race_ui()
+	# A wrecked car can't be handed over, so pink slips are void.
+	GameState.race_pink_slips = false
+	var payout := GameState.apply_race_stake(false)
+	GameState.wreck_active_car()
+	_show_bubble("You wrecked the car!" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 
 
 func _show_result(player_won: bool) -> void:
+	_end_race_ui()
+	var payout := GameState.apply_race_stake(player_won)
+	var pink := GameState.apply_pink_slips(player_won)
+	if player_won:
+		if pink == GameState.PINK_WON:
+			_show_bubble("You just won a helluva car!", GameState.SCENE_GARAGE)
+		elif payout > 0:
+			_show_bubble("You just won %d bucks!" % payout, GameState.SCENE_DRIVE_IN)
+		else:
+			_show_bubble("You just won the race!", GameState.SCENE_DRIVE_IN)
+		return
+	if pink == GameState.PINK_LOST:
+		_show_bubble("They took your car!" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+	elif payout < 0:
+		_show_bubble("You lost %d bucks!" % -payout, GameState.SCENE_DRIVE_IN)
+	else:
+		_show_bubble("You lost the race!", GameState.SCENE_DRIVE_IN)
+
+
+func _lost_bucks_line(payout: int) -> String:
+	if payout >= 0:
+		return ""
+	return "\nYou lost %d bucks!" % -payout
+
+
+func _end_race_ui() -> void:
 	_resume_race()
-	_result.visible = true
 	if _mobile != null:
 		_mobile.visible = false
 	if _rpm_meter != null:
 		_rpm_meter.visible = false
-	if _is_road:
-		if player_won:
-			_result_text.text = "You finished the road course first — you win!"
-		else:
-			_result_text.text = "Your opponent reached the finish first — you lose."
-	elif player_won:
-		_result_text.text = "You crossed the quarter mile first — you win!"
-	else:
-		_result_text.text = "Your opponent reached the line first — you lose."
-	_result_text.text += _stake_line(player_won)
-	_result_text.text += "\n\nFuel left: %.0f L" % GameState.fuel
-	_apply_result_actions()
 
 
-func _stake_line(player_won: bool) -> String:
-	var line := ""
-	var payout := GameState.apply_race_stake(player_won)
-	if payout > 0:
-		line = "\nYou take $%d." % payout
-	elif payout < 0:
-		line = "\nYou hand over $%d." % -payout
-	line += GameState.apply_pink_slips(player_won)
-	return line
+func _build_result_bubble() -> void:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.98, 0.97, 0.93)
+	style.border_color = Color(0.08, 0.06, 0.05)
+	style.set_border_width_all(4)
+	style.set_corner_radius_all(18)
+	_result_bubble.add_theme_stylebox_override(&"panel", style)
+	_result.gui_input.connect(_on_result_input)
+	_result_tail = Node2D.new()
+	_result_bubble.add_child(_result_tail)
+	var outline := Line2D.new()
+	outline.width = 5.0
+	outline.default_color = Color(0.08, 0.06, 0.05)
+	outline.joint_mode = Line2D.LINE_JOINT_ROUND
+	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
+	outline.points = PackedVector2Array([Vector2(-18, 0), Vector2(0, 24), Vector2(18, 0)])
+	_result_tail.add_child(outline)
+	var fill := Polygon2D.new()
+	fill.color = Color(0.98, 0.97, 0.93)
+	fill.polygon = PackedVector2Array([Vector2(-14, 2), Vector2(0, 18), Vector2(14, 2)])
+	_result_tail.add_child(fill)
+	get_viewport().size_changed.connect(_place_result_bubble)
+
+
+func _show_bubble(text: String, next_scene: String) -> void:
+	_result_text.text = text
+	_result_scene = next_scene
+	_result.visible = true
+	_place_result_bubble()
+
+
+## Above the player's car, tail pointing down at it.
+func _place_result_bubble() -> void:
+	if not _result.visible:
+		return
+	var vp := get_viewport().get_visible_rect().size
+	var bubble_size := _result_bubble.get_combined_minimum_size()
+	var x := (vp.x - bubble_size.x) * 0.5
+	var y := clampf(vp.y * 0.42 - bubble_size.y, 16.0, maxf(16.0, vp.y - bubble_size.y - 42.0))
+	_result_bubble.position = Vector2(x, y)
+	_result_bubble.size = bubble_size
+	_result_tail.position = Vector2(bubble_size.x * 0.5, bubble_size.y - 4.0)
+
+
+func _on_result_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
+		get_viewport().set_input_as_handled()
+		_leave_result()
+
+
+func _leave_result() -> void:
+	if _result_scene.is_empty():
+		return
+	var next_scene := _result_scene
+	_result_scene = ""
+	get_tree().paused = false
+	GameState.current_scene_path = next_scene
+	get_tree().change_scene_to_file(next_scene)
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _result.visible:
+		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
+			get_viewport().set_input_as_handled()
+			_leave_result()
+		return
 	if event.is_action_pressed(&"ui_cancel"):
 		_handle_escape()
 		var viewport := get_viewport()
 		if viewport != null:
 			viewport.set_input_as_handled()
 		return
-	if _result.visible or _pause_menu.visible:
+	if _pause_menu.visible:
 		if _nav.handle_event(self, event):
 			var viewport := get_viewport()
 			if viewport != null:
@@ -368,8 +459,6 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _handle_escape() -> void:
-	if _result.visible:
-		return
 	if _pause_confirm.visible:
 		_hide_pause_confirm()
 		return
@@ -499,26 +588,3 @@ func _on_pause_confirm_leave_pressed() -> void:
 func _leave_race() -> void:
 	get_tree().paused = false
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
-
-
-func _apply_result_actions() -> void:
-	var garage: Button = $RaceUI/ResultPanel/Panel/Margin/VBox/GarageBtn
-	garage.visible = true
-	_wire_result_menu()
-
-
-func _wire_result_menu() -> void:
-	_nav.setup([
-		$RaceUI/ResultPanel/Panel/Margin/VBox/GarageBtn,
-		$RaceUI/ResultPanel/Panel/Margin/VBox/MenuBtn,
-	])
-
-
-func _on_back_garage_pressed() -> void:
-	get_tree().paused = false
-	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
-
-
-func _on_main_menu_pressed() -> void:
-	get_tree().paused = false
-	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)

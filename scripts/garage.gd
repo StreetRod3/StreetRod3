@@ -24,6 +24,7 @@ const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
 @onready var _hud_top: Control = $GarageUI/HudTop
 @onready var _hud_car_name: Label = %CarNameLabel
 @onready var _hud_cash: Label = %CashLabel
+@onready var _hud_bottom: Control = $GarageUI/HudBottom
 @onready var _lift: StaticBody3D = $InteractLift
 @onready var _lift_arm: Node3D = $InteractLift/LiftArm
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
@@ -53,8 +54,11 @@ var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
 var _lift_home: Transform3D
 var _lift_arm_home: Vector3
-var _wheel_job: bool = false
+var _bay_busy: bool = false
 var _departing: bool = false
+var _swapping_car: bool = false
+## Where the car sits in the bay. Kept while it rolls in from outside.
+var _bay_home: Vector3 = Vector3.ZERO
 var _calendar_home: Transform3D
 var _calendar_blend: float = 0.0
 var _calendar_inspecting: bool = false
@@ -82,6 +86,24 @@ var _hood_shape: BoxShape3D
 var _loss_root: Control
 var _loss_panel: PanelContainer
 var _loss_tail: Node2D
+var _tooltip: Label
+
+const _TOOLTIPS := {
+	&"clock": "Menu (Q)",
+	&"chart": "Parts list",
+	&"spares": "Spare parts",
+	&"newspaper": "Newspaper (N)",
+	&"radio": "Radio (M)",
+	&"doors": "Drive out (D)",
+	&"spray": "Paint job (P)",
+	&"fuel": "Fuel",
+	&"hood": "Engine",
+	&"calendar": "Calendar (X)",
+	&"lift": "Wheels (L)",
+}
+const _TOOLTIP_CARS := "Cars"
+const _TOOLTIP_NO_ENGINE := "No engine — fit one from spare parts"
+const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -108,6 +130,11 @@ const _T_EXIT_DRIVE := 2.7
 const _EXIT_DISTANCE := 10.4
 const _EXIT_WHEEL_R := 0.27
 const _T_EXIT_FADE := 0.5
+## Engine note while a car rolls out of the bay or back in.
+const _ROLL_RPM_IDLE := 700.0
+const _ROLL_RPM_PULL := 2600.0
+const _ROLL_VOL_NEAR := -4.0
+const _ROLL_VOL_FAR := -16.0
 
 func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_GARAGE
@@ -146,6 +173,7 @@ func _ready() -> void:
 	else:
 		_car_pivot.visible = false
 	_build_loss_bubble()
+	_build_tooltip()
 	if GameState.is_ruined():
 		_loss_root.visible = true
 		_place_loss_bubble()
@@ -158,6 +186,8 @@ func _ready() -> void:
 	# Also align wheels to the floor after meshes are ready.
 	call_deferred(&"_align_wheels_to_floor")
 	call_deferred(&"_place_hood_target")
+	if _wants_drive_in():
+		call_deferred(&"_play_drive_in")
 
 	# If the CarBody emits a signal when its STL finishes loading, connect to it
 	var car_body := _car_pivot.get_node_or_null("CarBody") as MeshInstance3D
@@ -236,8 +266,8 @@ func _on_loss_input(event: InputEvent) -> void:
 	var mb := event as InputEventMouseButton
 	if not mb.pressed:
 		return
-	_leave_after_loss()
 	get_viewport().set_input_as_handled()
+	_leave_after_loss()
 
 
 func _dismiss_loss_bubble() -> void:
@@ -268,7 +298,7 @@ func _place_loss_bubble() -> void:
 	_loss_tail.position = Vector2(tail_x, bubble_size.y - 4.0)
 
 func _process(_delta: float) -> void:
-	if not _departing:
+	if not _departing and not _swapping_car:
 		_camera_pivot.global_position = _car_pivot.global_position
 
 	# Smooth zoom: interpolate distance toward the latest target.
@@ -282,6 +312,59 @@ func _process(_delta: float) -> void:
 		_update_camera_transform()
 	_update_calendar_transform()
 	_place_loss_bubble()
+	_update_tooltip()
+
+
+func _build_tooltip() -> void:
+	_tooltip = Label.new()
+	_tooltip.name = "TooltipLabel"
+	_tooltip.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_tooltip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tooltip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_tooltip.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	_tooltip.add_theme_font_size_override(&"font_size", 22)
+	_hud_bottom.add_child(_tooltip)
+
+
+func _update_tooltip() -> void:
+	if _tooltip != null:
+		_tooltip.text = _tooltip_text_at_mouse()
+
+
+func _tooltip_text_at_mouse() -> String:
+	if _departing or _bay_busy or _orbiting or _calendar_inspecting:
+		return ""
+	var vp := get_viewport()
+	var hovered := vp.gui_get_hovered_control()
+	if hovered != null:
+		if hovered == _hud_top or _hud_top.is_ancestor_of(hovered):
+			return _TOOLTIP_CARS
+		return ""
+	var kind: Variant = _interact_kind_at(vp.get_mouse_position())
+	if kind == null:
+		return ""
+	if _bay_needs_car(kind) and not GameState.has_active_car():
+		return ""
+	if not GameState.has_engine():
+		if kind == &"hood":
+			return _TOOLTIP_NO_ENGINE
+		if kind == &"doors":
+			return _TOOLTIP_DOORS_NO_ENGINE
+	return str(_TOOLTIPS.get(kind, ""))
+
+
+func _interact_kind_at(screen_pos: Vector2) -> Variant:
+	var hit := _raycast(screen_pos)
+	if hit.is_empty():
+		return null
+	var node := hit.get("collider") as Node
+	# The hit can be a child of the tagged body, so walk up to find the meta.
+	while node != null:
+		if node.has_meta(&"garage_interact"):
+			return node.get_meta(&"garage_interact")
+		node = node.get_parent()
+	return null
 
 
 func _debug_car_mesh() -> void:
@@ -341,7 +424,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dismiss_loss_bubble()
 		get_viewport().set_input_as_handled()
 		return
-	if _wheel_job:
+	if _bay_busy:
 		_handle_camera_only(event)
 		return
 	if _clock_menu.visible and event.is_action_pressed(&"ui_cancel"):
@@ -643,22 +726,9 @@ func _update_camera_transform() -> void:
 
 
 func _try_interact(screen_pos: Vector2) -> void:
-	var hit := _raycast(screen_pos)
-	if hit.is_empty():
-		return
-	var collider: Object = hit.get("collider")
-	if collider == null:
-		return
-	var node := collider as Node
-	if node == null:
-		return
-	# Godot may return the collider node itself (e.g. `CollisionShape3D`) instead of its parent
-	# `StaticBody3D`. Walk up the tree until we find the interaction metadata.
-	while node != null:
-		if node.has_meta(&"garage_interact"):
-			_handle_interact(node.get_meta(&"garage_interact"))
-			return
-		node = node.get_parent()
+	var kind: Variant = _interact_kind_at(screen_pos)
+	if kind != null:
+		_handle_interact(kind)
 
 
 func _raycast(screen_pos: Vector2) -> Dictionary:
@@ -671,7 +741,7 @@ func _raycast(screen_pos: Vector2) -> Dictionary:
 
 
 func _handle_interact(kind: Variant) -> void:
-	if _wheel_job or _departing:
+	if _bay_busy or _departing:
 		return
 	if _bay_needs_car(kind) and not GameState.has_active_car():
 		return
@@ -697,7 +767,10 @@ func _handle_interact(kind: Variant) -> void:
 		&"fuel":
 			_show_fuel_panel()
 		&"hood":
-			_show_tune_panel()
+			if GameState.has_engine():
+				_show_tune_panel()
+			else:
+				_show_spares_board()
 		&"calendar":
 			_bring_calendar_forward()
 		&"lift":
@@ -712,7 +785,7 @@ func _bay_needs_car(kind: Variant) -> bool:
 
 
 func _start_drive_out() -> void:
-	if _departing or _wheel_job or not GameState.has_active_car():
+	if _departing or _bay_busy or not GameState.has_engine():
 		return
 	if _door_left == null or _door_right == null:
 		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
@@ -740,24 +813,66 @@ func _snap_calendar_home() -> void:
 	_calendar.global_transform = _calendar_home
 
 
+func _wants_drive_in() -> bool:
+	var arriving := GameState.drive_into_garage
+	GameState.drive_into_garage = false
+	if not arriving or not GameState.has_active_car() or _door_left == null or _door_right == null:
+		return false
+	_bay_home = _car_pivot.position
+	_car_pivot.position = _bay_home + Vector3(0.0, 0.0, -_EXIT_DISTANCE)
+	_door_left.rotation.y = _DOOR_SWING
+	_door_right.rotation.y = -_DOOR_SWING
+	_bay_busy = true
+	_swapping_car = true
+	_orbiting = false
+	return true
+
+
+## Doors are already open. The car rolls in from outside, then the doors close.
+func _play_drive_in() -> void:
+	await _pause(0.35)
+	if not is_instance_valid(self):
+		return
+	await _roll_car(_car_pivot.position, _bay_home, Tween.EASE_OUT)
+	if not is_instance_valid(self):
+		return
+	_car_pivot.position = _bay_home
+	_place_hood_target()
+	await _swing_doors(0.0)
+	if not is_instance_valid(self):
+		return
+	_swapping_car = false
+	_bay_busy = false
+
+
 func _play_drive_out() -> void:
-	var doors := create_tween()
-	doors.set_parallel(true)
-	doors.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
-	doors.tween_property(_door_left, "rotation:y", _DOOR_SWING, _T_DOOR_OPEN)
-	doors.tween_property(_door_right, "rotation:y", -_DOOR_SWING, _T_DOOR_OPEN)
-	await doors.finished
+	await _swing_doors(_DOOR_SWING)
 	if not is_instance_valid(self):
 		return
 	await _pause(0.18)
 	if not is_instance_valid(self):
 		return
-	await _reverse_car_out()
+	var shade := _black_fade_rect()
+	var fade := create_tween()
+	fade.tween_interval(maxf(_T_EXIT_DRIVE - _T_EXIT_FADE, 0.0))
+	fade.tween_property(shade, "color:a", 1.0, _T_EXIT_FADE)
+	await _roll_car(_car_pivot.position, _car_pivot.position + Vector3(0.0, 0.0, -_EXIT_DISTANCE), Tween.EASE_IN)
+	if is_instance_valid(shade):
+		shade.color = Color(0.0, 0.0, 0.0, 1.0)
 
 
-func _reverse_car_out() -> void:
-	var start := _car_pivot.position
-	var end := start + Vector3(0.0, 0.0, -_EXIT_DISTANCE)
+## Opens (`_DOOR_SWING`) or closes (0) both garage doors.
+func _swing_doors(angle: float) -> void:
+	var doors := create_tween()
+	doors.set_parallel(true)
+	doors.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	doors.tween_property(_door_left, "rotation:y", angle, _T_DOOR_OPEN)
+	doors.tween_property(_door_right, "rotation:y", -angle, _T_DOOR_OPEN)
+	await doors.finished
+
+
+## Rolls the car along Z from `start` to `end`, spinning the wheels to match.
+func _roll_car(start: Vector3, end: Vector3, ease_type: Tween.EaseType) -> void:
 	var wheels: Array[Node3D] = []
 	var bases: Array[Basis] = []
 	for wname in _WHEEL_NODES:
@@ -766,20 +881,57 @@ func _reverse_car_out() -> void:
 			continue
 		wheels.append(wheel)
 		bases.append(wheel.basis)
-	var travel := start.distance_to(end)
+	var travel := (start.z - end.z)
+	var pulling_away := travel > 0.0
+	_start_roll_engine()
 	var tw := create_tween()
-	tw.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_method(_apply_drive_out.bind(start, end, wheels, bases, travel), 0.0, 1.0, _T_EXIT_DRIVE)
-	var shade := _black_fade_rect()
-	var fade := create_tween()
-	fade.tween_interval(maxf(_T_EXIT_DRIVE - _T_EXIT_FADE, 0.0))
-	fade.tween_property(shade, "color:a", 1.0, _T_EXIT_FADE)
+	tw.set_trans(Tween.TRANS_QUAD).set_ease(ease_type)
+	tw.tween_method(_apply_drive_out.bind(start, end, wheels, bases, travel, pulling_away), 0.0, 1.0, _T_EXIT_DRIVE)
 	await tw.finished
-	if is_instance_valid(shade):
-		shade.color = Color(0.0, 0.0, 0.0, 1.0)
+	for i in wheels.size():
+		if is_instance_valid(wheels[i]):
+			wheels[i].basis = bases[i]
+	_stop_roll_engine()
 
 
-func _apply_drive_out(t: float, start: Vector3, end: Vector3, wheels: Array[Node3D], bases: Array[Basis], travel: float) -> void:
+func _swap_car_in_bay(car_id: String) -> void:
+	_bay_busy = true
+	_swapping_car = true
+	_orbiting = false
+	_hide_garage_overlays()
+	var bay := _car_pivot.position
+	var outside := bay + Vector3(0.0, 0.0, -_EXIT_DISTANCE)
+	await _swing_doors(_DOOR_SWING)
+	if not is_instance_valid(self):
+		return
+	if GameState.has_active_car() and _car_pivot.visible:
+		await _pause(0.18)
+		if not is_instance_valid(self):
+			return
+		await _roll_car(bay, outside, Tween.EASE_IN)
+		if not is_instance_valid(self):
+			return
+	var err := GameState.select_owned_car(car_id)
+	_car_pivot.position = outside
+	_apply_active_car_visual()
+	_refresh_hud()
+	if err.is_empty() and GameState.has_active_car():
+		await _pause(0.3)
+		if not is_instance_valid(self):
+			return
+		await _roll_car(outside, bay, Tween.EASE_OUT)
+		if not is_instance_valid(self):
+			return
+	_car_pivot.position = bay
+	_place_hood_target()
+	await _swing_doors(0.0)
+	if not is_instance_valid(self):
+		return
+	_swapping_car = false
+	_bay_busy = false
+
+
+func _apply_drive_out(t: float, start: Vector3, end: Vector3, wheels: Array[Node3D], bases: Array[Basis], travel: float, pulling_away: bool) -> void:
 	_car_pivot.position = start.lerp(end, t)
 	# Local +Y is the axle. Positive spin rolls the tire for travel toward -Z.
 	var spin := (travel * t) / _EXIT_WHEEL_R
@@ -788,6 +940,37 @@ func _apply_drive_out(t: float, start: Vector3, end: Vector3, wheels: Array[Node
 		if not is_instance_valid(wheel):
 			continue
 		wheel.basis = bases[i] * Basis(Vector3.UP, spin)
+	var span := maxf(absf(end.z - start.z), 0.001)
+	var away := clampf(absf(_car_pivot.position.z - maxf(start.z, end.z)) / span, 0.0, 1.0)
+	_update_roll_engine(t, pulling_away, away)
+
+
+func _start_roll_engine() -> void:
+	if _tune_sound == null or not _tune_sound.has_method(&"set_state") or not GameState.has_engine():
+		return
+	GameState.set_music_dimmed(true)
+	_tune_sound.volume_db = _ROLL_VOL_NEAR
+	_tune_sound.call(&"set_state", _ROLL_RPM_IDLE, 0.15, false)
+
+
+func _update_roll_engine(t: float, pulling_away: bool, away: float) -> void:
+	if _tune_sound == null or not _tune_sound.playing:
+		return
+	var rpm := lerpf(_ROLL_RPM_IDLE, _ROLL_RPM_PULL, t)
+	var throttle := lerpf(0.3, 0.9, t)
+	if not pulling_away:
+		rpm = lerpf(_ROLL_RPM_PULL, _ROLL_RPM_IDLE, t)
+		throttle = lerpf(0.55, 0.0, t)
+	_tune_sound.volume_db = lerpf(_ROLL_VOL_NEAR, _ROLL_VOL_FAR, away)
+	_tune_sound.call(&"set_state", rpm, throttle, false)
+
+
+func _stop_roll_engine() -> void:
+	if _tune_sound != null:
+		_tune_sound.volume_db = -6.0
+		if _tune_sound.playing:
+			_tune_sound.stop()
+	GameState.set_music_dimmed(false)
 
 
 func _black_fade_rect() -> ColorRect:
@@ -909,7 +1092,7 @@ func _show_spares_board() -> void:
 
 
 func _show_wheel_board() -> void:
-	if _wheel_job:
+	if _bay_busy:
 		return
 	_parts_show_spares = false
 	_parts_show_wheels = true
@@ -1092,11 +1275,11 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 
 func _refresh_hud() -> void:
 	_hud_car_name.text = GameState.car_name
-	_hud_cash.text = "Cash: $%d" % GameState.money
+	_hud_cash.text = "Bankroll: $%d" % GameState.money
 
 
 func _on_hud_car_stripe_input(event: InputEvent) -> void:
-	if _wheel_job or not event is InputEventMouseButton:
+	if _bay_busy or not event is InputEventMouseButton:
 		return
 	var mb := event as InputEventMouseButton
 	if not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
@@ -1149,7 +1332,7 @@ func _build_car_list() -> void:
 
 
 func _toggle_car_list() -> void:
-	if _wheel_job or _car_list == null:
+	if _bay_busy or _car_list == null:
 		return
 	if _car_list.visible:
 		_hide_car_list()
@@ -1216,7 +1399,7 @@ func _build_fuel_panel() -> void:
 
 
 func _show_fuel_panel() -> void:
-	if _wheel_job or _fuel_panel == null:
+	if _bay_busy or _fuel_panel == null:
 		return
 	_hide_garage_overlays()
 	_refresh_fuel_panel()
@@ -1283,13 +1466,10 @@ func _rebuild_car_list() -> void:
 
 
 func _on_car_list_pick(car_id: String) -> void:
-	var err := GameState.select_owned_car(car_id)
-	if not err.is_empty():
-		_hide_car_list()
-		return
-	_apply_active_car_visual()
-	_refresh_hud()
 	_hide_car_list()
+	if _bay_busy or _departing or not GameState.owned_car_ids.has(car_id):
+		return
+	_swap_car_in_bay(car_id)
 
 
 func _apply_active_car_visual() -> void:
@@ -1434,7 +1614,7 @@ func _build_tune_panel() -> void:
 
 
 func _show_tune_panel() -> void:
-	if _wheel_job or _departing or _tune_panel == null:
+	if _bay_busy or _departing or _tune_panel == null:
 		return
 	_hide_garage_overlays()
 	_tune_panel.visible = true
@@ -1583,19 +1763,19 @@ func _on_clock_arcade_toggled(pressed: bool) -> void:
 
 
 func _start_wheel_change(wheel_id: String) -> void:
-	if _wheel_job:
+	if _bay_busy:
 		return
 	if not GameState.owns_wheel(wheel_id) or wheel_id == GameState.equipped_wheel_id:
 		return
 	var wheel: Dictionary = GameState.listing_by_id(GameState.WHEELS, wheel_id)
 	if wheel.is_empty():
 		return
-	_wheel_job = true
+	_bay_busy = true
 	_hide_garage_overlays()
 	await _run_wheel_change(wheel)
 	if not is_instance_valid(self):
 		return
-	_wheel_job = false
+	_bay_busy = false
 
 
 func _run_wheel_change(wheel: Dictionary) -> void:

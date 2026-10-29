@@ -1,7 +1,8 @@
 extends RefCounted
 
 ## Bumper contact between the two race cars. Overlap is pushed apart and
-## closing speed is shared. The hit never stops a car or ends the race.
+## closing speed is shared. `resolve` reports the closing speed so the race
+## can decide whether the hit was hard enough to wreck.
 
 const CONTACT_MARGIN_M := 0.05
 const SEPARATION_SLOP_M := 0.02
@@ -9,20 +10,21 @@ const MIN_OVERLAP_M := 0.01
 const MIN_CLOSING_MPS := 0.25
 const RESTITUTION := 0.2
 
-func resolve(a: CharacterBody3D, b: CharacterBody3D) -> void:
+## Returns the closing speed in m/s, or 0 when the cars are not touching.
+func resolve(a: CharacterBody3D, b: CharacterBody3D) -> float:
 	if a == null or b == null:
-		return
+		return 0.0
 	if not a.has_method(&"planar_velocity") or not a.has_method(&"apply_car_bump"):
-		return
+		return 0.0
 	if not b.has_method(&"planar_velocity") or not b.has_method(&"apply_car_bump"):
-		return
+		return 0.0
 	var box_a := _box(a)
 	var box_b := _box(b)
 	if box_a.is_empty() or box_b.is_empty():
-		return
+		return 0.0
 	var hit := _overlap(box_a, box_b)
 	if hit.is_empty():
-		return
+		return 0.0
 
 	var normal := hit["normal"] as Vector2
 	var depth := float(hit["depth"])
@@ -38,15 +40,17 @@ func resolve(a: CharacterBody3D, b: CharacterBody3D) -> void:
 	var new_a := vel_a
 	var new_b := vel_b
 	if rel < -MIN_CLOSING_MPS:
-		# Equal mass. Each car takes half of the bounce; neither is wrecked.
+		# Equal mass. Each car takes half of the bounce.
 		var change := -(1.0 + RESTITUTION) * rel * 0.5
 		var delta := Vector3(normal.x, 0.0, normal.y) * change
 		new_a = vel_a - delta
 		new_b = vel_b + delta
+	var closing := maxf(-rel, 0.0)
 	if offset_a.is_zero_approx() and offset_b.is_zero_approx() and new_a.is_equal_approx(vel_a):
-		return
+		return closing
 	a.apply_car_bump(offset_a, new_a)
 	b.apply_car_bump(offset_b, new_b)
+	return closing
 
 
 func _box(body: CharacterBody3D) -> Dictionary:

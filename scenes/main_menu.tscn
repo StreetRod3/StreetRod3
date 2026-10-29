@@ -48,11 +48,6 @@ custom_minimum_size = Vector2(280, 44)
 layout_mode = 2
 text = "New Game"
 
-[node name="SaveGameButton" type="Button" parent="Margin/Row/Menu" unique_id=1401732415]
-custom_minimum_size = Vector2(280, 44)
-layout_mode = 2
-text = "Save Game"
-
 [node name="LoadGameButton" type="Button" parent="Margin/Row/Menu" unique_id=668962882]
 custom_minimum_size = Vector2(280, 44)
 layout_mode = 2
@@ -84,7 +79,6 @@ expand_mode = 1
 stretch_mode = 5
 
 [connection signal="pressed" from="Margin/Row/Menu/NewGameButton" to="." method="_on_new_game_pressed"]
-[connection signal="pressed" from="Margin/Row/Menu/SaveGameButton" to="." method="_on_save_game_pressed"]
 [connection signal="pressed" from="Margin/Row/Menu/LoadGameButton" to="." method="_on_load_game_pressed"]
 [connection signal="pressed" from="Margin/Row/Menu/SettingsButton" to="." method="_on_settings_pressed"]
 [connection signal="pressed" from="Margin/Row/Menu/ExitButton" to="." method="_on_exit_pressed"]

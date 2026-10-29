@@ -1515,4 +1515,6 @@ func _sync_nav() -> void:
 
 
 func _on_back_pressed() -> void:
+	GameState.drive_into_garage = true
+	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
