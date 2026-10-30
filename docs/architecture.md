@@ -29,6 +29,8 @@ flowchart TD
   garage -->|Doors| select
   garage -->|Under the car| trans[Transmission]
   trans -->|Done| garage
+  garage -->|Creeper| under[Under the car]
+  under -->|Done| garage
   select -->|Pick rival| race
   select -->|Back| garage
   race -->|Garage or menu| garage
@@ -42,6 +44,7 @@ flowchart TD
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
 | `scenes/transmission.tscn` | `scripts/transmission.gd` | Under the car: bellhousing bolts, gearbox out and in on a jack |
+| `scenes/under_car.tscn` | `scripts/under_car.gd` | On the creeper: exhaust manifolds, muffler, and rear end |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
@@ -104,6 +107,7 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 | `spray` | Color picker; writes `GameState.car_color` |
 | `calendar` | Pulls the wall calendar toward the camera |
 | `transmission` | Opens the transmission scene (low band between the wheels, or T) |
+| `creeper` | Opens the under-car scene (the creeper on the floor, or U) |
 
 ### Transmission
 
@@ -115,6 +119,17 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 - `GameState.can_drive()` needs an engine and both bolts tight. The garage doors use it.
 
 Bought gearboxes go to spare parts (`buy_gearbox`). The spare-parts Fit button for a gearbox opens this scene instead of swapping it instantly.
+
+### Under the car
+
+`under_car.gd` looks up at the whole underside of the car on jack stands, front to the right of the screen and tilted a little across the car. It shows the equipped engine model and a driveline, exhaust, and axle built from primitives. The wheel zooms and right-drag tilts the view.
+
+Three slots hold one part each: exhaust manifolds, muffler, and rear end (`GameState.UNDER_CAR_SLOTS`). Parts in the register's `parts` list name their slot in `slot` and their look in `style`. The parts are drawn per style: log manifolds, shorty or long-tube headers, oval, turbo, or glasspack mufflers, and iron, chrome, finned, or girdled rear-end covers with the ratio on a tag. Each car starts with the `stock` parts in `STOCK_SLOT_PARTS`. The active car's slots live on `GameState.slot_part_ids`, apart from the bolt-ons in `equipped_part_ids`, and are saved per car as `slot_parts`.
+
+- Clicking a part, or pressing 1, 2, or 3, lists the spares for that slot. `fit_slot_part()` swaps one in, and the old part goes to spare parts.
+- With a muffler on, the list also offers to take it off (`remove_muffler()`). The slot holds `NO_PART_ID`, and the engine sound is `OPEN_EXHAUST_DB` louder. A muffler's `loud_db` sets how much louder it is than stock.
+- Manifolds and mufflers add `hp` and `vmax` like bolt-ons. A rear end's `accel` scales the drive force in every gear (`final_drive_accel()`), and its `top_speed` scales `get_effective_vmax_kmh()`.
+- Bought slot parts go to spare parts. Their spare-parts Fit button opens this scene. Older saves that kept the headers as a bolt-on get them moved into the manifold slot.
 
 The calendar page is built at runtime from the system date (`Label3D` grid).
 

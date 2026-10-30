@@ -10,6 +10,7 @@ const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
 const SCENE_SETTINGS := "res://scenes/settings.tscn"
 const SCENE_TRANSMISSION := "res://scenes/transmission.tscn"
+const SCENE_UNDER_CAR := "res://scenes/under_car.tscn"
 
 const MUSIC_GARAGE := "res://assets/music/garage.mp3"
 const MUSIC_RACE := "res://assets/music/race.mp3"
@@ -49,6 +50,21 @@ const NO_GEARBOX_ID := "none"
 const GEARBOX_BOLT_COUNT := 2
 ## Turns that seat a bellhousing bolt. Zero is out of its hole.
 const GEARBOX_BOLT_TIGHT := 3
+## Parts changed from the creeper. A car has one of each; parts name theirs in `slot`.
+const SLOT_MANIFOLD := "manifold"
+const SLOT_MUFFLER := "muffler"
+const SLOT_DIFFERENTIAL := "differential"
+const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_MUFFLER, SLOT_DIFFERENTIAL]
+## What every car rolls out of the factory with.
+const STOCK_SLOT_PARTS := {
+	SLOT_MANIFOLD: "manifold-iron",
+	SLOT_MUFFLER: "muffler-stock",
+	SLOT_DIFFERENTIAL: "diff-308",
+}
+## Slot id for an empty slot. Only the muffler can come off for good.
+const NO_PART_ID := "none"
+## Engine sound boost with the muffler off, in dB.
+const OPEN_EXHAUST_DB := 6.0
 ## Outcomes of `apply_pink_slips`.
 const PINK_NONE := 0
 const PINK_WON := 1
@@ -98,6 +114,8 @@ var owned_gearbox_ids: Array[String] = ["gb_auto3"]
 var equipped_gearbox_id: String = "gb_auto3"
 ## Turns on each bellhousing bolt of the active car, 0 (out) to `GEARBOX_BOLT_TIGHT`.
 var gearbox_bolts: Array[int] = [GEARBOX_BOLT_TIGHT, GEARBOX_BOLT_TIGHT]
+## Manifolds, muffler, and rear end of the active car, by slot. Not in `equipped_part_ids`.
+var slot_part_ids: Dictionary = STOCK_SLOT_PARTS.duplicate()
 var owned_engine_ids: Array[String] = ["v8-283"]
 var equipped_engine_id: String = "v8-283"
 var owned_wheel_ids: Array[String] = ["wheel-c1"]
@@ -315,6 +333,7 @@ func new_game() -> void:
 	owned_wheel_ids.clear()
 	equipped_gearbox_id = DEFAULT_GEARBOX_ID
 	gearbox_bolts = _tight_bolts()
+	slot_part_ids = STOCK_SLOT_PARTS.duplicate()
 	equipped_engine_id = ""
 	equipped_wheel_id = ""
 	car_records.clear()
@@ -641,7 +660,7 @@ func owns_part(part_id: String) -> bool:
 
 
 func is_part_equipped(part_id: String) -> bool:
-	return equipped_part_ids.has(part_id)
+	return equipped_part_ids.has(part_id) or slot_part_ids.values().has(part_id)
 
 
 func owns_car(model_id: String) -> bool:
@@ -694,7 +713,23 @@ func get_equipped_gearbox() -> Dictionary:
 
 
 func get_effective_vmax_kmh() -> float:
-	return vmax_kmh * float(get_equipped_gearbox().get("top_speed", 1.0))
+	var top := float(get_equipped_gearbox().get("top_speed", 1.0))
+	return vmax_kmh * top * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0))
+
+
+## Pull of the rear end against the stock gears. A shorter rear end pulls harder.
+func final_drive_accel() -> float:
+	return float(slot_part(SLOT_DIFFERENTIAL).get("accel", 1.0))
+
+
+## How much louder the exhaust is than stock, in dB.
+func exhaust_volume_db() -> float:
+	if not has_active_car():
+		return 0.0
+	var muffler := slot_part(SLOT_MUFFLER)
+	if muffler.is_empty():
+		return OPEN_EXHAUST_DB
+	return float(muffler.get("loud_db", 0.0))
 
 
 func gearbox_ratio_text(box: Dictionary) -> String:
@@ -731,7 +766,10 @@ func refresh_car_stats() -> void:
 	var tune_scale := engine_tune_scale(engine_tune, engine_sweet_tune())
 	vmax_kmh *= tune_scale
 	engine_power_hp *= tune_scale
-	for part_id in equipped_part_ids:
+	var fitted: Array[String] = equipped_part_ids.duplicate()
+	for slot in UNDER_CAR_SLOTS:
+		fitted.append(str(slot_part_ids.get(slot, NO_PART_ID)))
+	for part_id in fitted:
 		var part: Dictionary = listing_by_id(PARTS, part_id)
 		if part.is_empty():
 			continue
@@ -787,6 +825,8 @@ func buy_part(part_id: String) -> String:
 
 
 func equip_part(part_id: String) -> String:
+	if not part_slot(part_id).is_empty():
+		return fit_slot_part(part_id)
 	if not owns_part(part_id):
 		return "That part is not in spare parts."
 	if is_part_equipped(part_id):
@@ -859,6 +899,76 @@ func fit_gearbox(gearbox_id: String) -> String:
 	gearbox_bolts.clear()
 	for i in GEARBOX_BOLT_COUNT:
 		gearbox_bolts.append(1)
+	_sync_record_from_active()
+	refresh_car_stats()
+	return ""
+
+
+## Under-car slot a part fits, or "" for a plain bolt-on.
+func part_slot(part_id: String) -> String:
+	return str(listing_by_id(PARTS, part_id).get("slot", ""))
+
+
+## The part in `slot` on the active car, or {} when the slot is empty.
+func slot_part(slot: String) -> Dictionary:
+	return listing_by_id(PARTS, str(slot_part_ids.get(slot, NO_PART_ID)))
+
+
+## Owned parts for `slot` that are not on the active car, in register order.
+func spare_slot_parts(slot: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var fitted := str(slot_part_ids.get(slot, NO_PART_ID))
+	for part in PARTS:
+		var part_id := str(part.get("id", ""))
+		if str(part.get("slot", "")) == slot and owns_part(part_id) and part_id != fitted:
+			out.append(part)
+	return out
+
+
+## One line on what a part does, for ads and lists.
+func part_detail(part: Dictionary) -> String:
+	if part.has("accel"):
+		return "%d%% more pull · %d%% top speed" % [
+			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
+			roundi(float(part.get("top_speed", 1.0)) * 100.0),
+		]
+	var bits: Array[String] = ["+%d hp" % int(part.get("hp", 0))]
+	var vmax := int(part.get("vmax", 0))
+	if vmax != 0:
+		bits.append("%+d km/h" % vmax)
+	var loud := float(part.get("loud_db", 0.0))
+	if loud >= 3.0:
+		bits.append("loud")
+	elif loud > 0.0:
+		bits.append("a little louder")
+	return "   ".join(bits)
+
+
+## Swaps a spare part into its slot under the active car. What was there goes to spare parts.
+func fit_slot_part(part_id: String) -> String:
+	if not has_active_car():
+		return "There is no car in the garage."
+	var slot := part_slot(part_id)
+	if slot.is_empty():
+		return "That part does not go under the car."
+	if not owns_part(part_id):
+		return "That part is not in spare parts."
+	if str(slot_part_ids.get(slot, NO_PART_ID)) == part_id:
+		return "Already on the car."
+	slot_part_ids[slot] = part_id
+	_take_mount_from_other_cars("slot", part_id)
+	_sync_record_from_active()
+	refresh_car_stats()
+	return ""
+
+
+## Takes the muffler off into spare parts. The exhaust runs open until another goes on.
+func remove_muffler() -> String:
+	if not has_active_car():
+		return "There is no car in the garage."
+	if slot_part(SLOT_MUFFLER).is_empty():
+		return "There is no muffler on the car."
+	slot_part_ids[SLOT_MUFFLER] = NO_PART_ID
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -1146,6 +1256,7 @@ func _make_car_record(model_id: String, paint: Color) -> Dictionary:
 		"gearbox_bolts": _tight_bolts(),
 		"wheel_id": wheel_id,
 		"part_ids": parts,
+		"slot_parts": STOCK_SLOT_PARTS.duplicate(),
 		"engine_tune": ENGINE_TUNE_DEFAULT,
 	}
 
@@ -1166,6 +1277,38 @@ func _bolts_from(value: Variant) -> Array[int]:
 	for i in mini(saved.size(), bolts.size()):
 		bolts[i] = clampi(int(saved[i]), 0, GEARBOX_BOLT_TIGHT)
 	return bolts
+
+
+## Saved slot parts, with stock parts in any slot the save does not name.
+func _slots_from(value: Variant) -> Dictionary:
+	var slots := STOCK_SLOT_PARTS.duplicate()
+	if typeof(value) != TYPE_DICTIONARY:
+		return slots
+	var saved: Dictionary = value
+	for slot in UNDER_CAR_SLOTS:
+		var part_id := str(saved.get(slot, ""))
+		if part_id == NO_PART_ID and slot == SLOT_MUFFLER:
+			slots[slot] = part_id
+		elif str(listing_by_id(PARTS, part_id).get("slot", "")) == slot:
+			slots[slot] = part_id
+	return slots
+
+
+## Moves slot parts that older saves kept with the bolt-ons into their slots, and
+## makes sure whatever is in a slot is owned.
+func _settle_slot_parts() -> void:
+	var bolt_ons: Array[String] = []
+	for part_id in equipped_part_ids:
+		var slot := part_slot(part_id)
+		if slot.is_empty():
+			bolt_ons.append(part_id)
+		else:
+			slot_part_ids[slot] = part_id
+	equipped_part_ids = bolt_ons
+	for slot in UNDER_CAR_SLOTS:
+		var part_id := str(slot_part_ids.get(slot, NO_PART_ID))
+		if part_id != NO_PART_ID and not owned_part_ids.has(part_id):
+			owned_part_ids.append(part_id)
 
 
 func _remember_stock_ids(engine_id: String, gearbox_id: String, wheel_id: String) -> void:
@@ -1232,6 +1375,7 @@ func _sync_record_from_active() -> void:
 	rec["gearbox_bolts"] = gearbox_bolts.duplicate()
 	rec["wheel_id"] = equipped_wheel_id
 	rec["part_ids"] = equipped_part_ids.duplicate()
+	rec["slot_parts"] = slot_part_ids.duplicate()
 	rec["engine_tune"] = engine_tune
 	car_records[current_car_id] = rec
 
@@ -1253,6 +1397,8 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	gearbox_bolts = _bolts_from(rec.get("gearbox_bolts", null))
 	equipped_wheel_id = str(rec.get("wheel_id", equipped_wheel_id))
 	equipped_part_ids = _string_array(rec.get("part_ids", []))
+	slot_part_ids = _slots_from(rec.get("slot_parts", null))
+	_settle_slot_parts()
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
 
 
@@ -1267,6 +1413,14 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
 		var rec: Dictionary = stored
+		if slot == "slot":
+			var slots := _slots_from(rec.get("slot_parts", null))
+			for key in UNDER_CAR_SLOTS:
+				if str(slots[key]) == part_id and part_id != str(STOCK_SLOT_PARTS[key]):
+					slots[key] = STOCK_SLOT_PARTS[key]
+			rec["slot_parts"] = slots
+			car_records[car_id] = rec
+			continue
 		if slot == "part":
 			var kept: Array[String] = []
 			for item in _string_array(rec.get("part_ids", [])):
@@ -1312,6 +1466,7 @@ func _cars_for_save() -> Dictionary:
 			"gearbox_bolts": _bolts_from(rec.get("gearbox_bolts", null)),
 			"wheel_id": str(rec.get("wheel_id", "")),
 			"part_ids": _string_array(rec.get("part_ids", [])),
+			"slot_parts": _slots_from(rec.get("slot_parts", null)),
 			"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
 		}
 	return out
@@ -1365,6 +1520,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"gearbox_bolts": _bolts_from(row.get("gearbox_bolts", null)),
 		"wheel_id": str(row.get("wheel_id", "")),
 		"part_ids": _string_array(row.get("part_ids", [])),
+		"slot_parts": _slots_from(row.get("slot_parts", null)),
 		"engine_tune": clampi(int(row.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),
 	}
 

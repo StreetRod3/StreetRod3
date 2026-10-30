@@ -101,6 +101,13 @@ func _rebuild_parts() -> void:
 		_parts_list.add_child(_make_wheel_card(wheel))
 	_parts_list.add_child(_heading("ENGINE & CHASSIS"))
 	for part in GameState.PARTS:
+		if not str(part.get("slot", "")).is_empty():
+			continue
+		_parts_list.add_child(_make_part_card(part))
+	_parts_list.add_child(_heading("UNDER THE CAR"))
+	for part in GameState.PARTS:
+		if str(part.get("slot", "")).is_empty() or bool(part.get("stock", false)):
+			continue
 		_parts_list.add_child(_make_part_card(part))
 
 
@@ -118,7 +125,7 @@ func _make_part_card(part: Dictionary) -> Control:
 	var price := int(part.get("price", 0))
 	var box := _card()
 	box.add_child(_heading(str(part.get("name", "Part"))))
-	box.add_child(_body("+%d hp   +%d km/h" % [int(part.get("hp", 0)), int(part.get("vmax", 0))]))
+	box.add_child(_body(GameState.part_detail(part)))
 	var btn := _ink_button()
 	if equipped:
 		btn.text = "On the car"
