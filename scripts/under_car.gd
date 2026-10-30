@@ -688,16 +688,17 @@ func _build_exhaust_pipes() -> void:
 	var soot := _mat(_SOOT, 0.0, 1.0)
 	var inlet := _muffler_x - MUFFLER_LEN * 0.5
 	var outlet := _muffler_x + MUFFLER_LEN * 0.5
-	var merge_x := inlet - 0.35
-	for side in [-1.0, 1.0]:
-		var start := _pipe_start(side)
-		var points: Array[Vector3] = [start, Vector3(merge_x - 0.25, PIPE_Y, PIPE_Z * side)]
-		if side < 0.0:
-			# Crosses under the driveshaft to meet the right-hand pipe.
-			points.append(Vector3(merge_x, PIPE_Y - 0.02, 0.0))
-		points.append(Vector3(merge_x + 0.18, PIPE_Y, MUFFLER_Z))
-		_pipe(self, points, 0.026, pipe)
-	_tube(self, Vector3(merge_x + 0.18, PIPE_Y, MUFFLER_Z), Vector3(inlet - 0.08, PIPE_Y, MUFFLER_Z), 0.03, pipe)
+	# Every run heads back from the manifold flanges, never forward. The right-hand
+	# pipe goes straight to the muffler; the left one steps back, then crosses under
+	# the driveshaft and joins it just ahead of the muffler.
+	var right := _pipe_start(1.0)
+	var left := _pipe_start(-1.0)
+	var end := Vector3(inlet - 0.08, PIPE_Y, MUFFLER_Z)
+	var span := end.x - right.x
+	var join := Vector3(end.x - span * 0.15, PIPE_Y, MUFFLER_Z)
+	_tube(self, right, end, 0.028, pipe)
+	var cross: Array[Vector3] = [left, Vector3(left.x + span * 0.12, PIPE_Y, left.z), join]
+	_pipe(self, cross, 0.026, pipe)
 	_cylinder_x(self, 0.031, 0.031, 0.012, inlet - 0.09, soot, PIPE_Y, MUFFLER_Z, 16)
 	# Tailpipe kicks up over the axle and out the back.
 	var tail: Array[Vector3] = [
