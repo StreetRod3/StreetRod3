@@ -119,7 +119,9 @@ const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
 const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
 const _SLOT_NAMES := {
 	"manifold": "Exhaust manifolds",
+	"exhaust": "Exhaust",
 	"muffler": "Muffler",
+	"muffler_left": "Left muffler",
 	"differential": "Rear end",
 }
 ## Where the creeper lies on the floor, beside the car on the camera's side.
@@ -1201,10 +1203,13 @@ func _rebuild_parts_board() -> void:
 		_parts_list.add_child(_mounted_line("Transmission", _parts_row_text(box, "transmission")))
 	if not wheel.is_empty():
 		_parts_list.add_child(_mounted_line("Wheels", _parts_row_text(wheel, "wheels")))
-	for slot in GameState.UNDER_CAR_SLOTS:
+	for slot in GameState.active_slots():
 		var fitted := GameState.slot_part(slot)
 		var detail := "none" if fitted.is_empty() else _parts_row_text(fitted, "part")
-		_parts_list.add_child(_mounted_line(_SLOT_NAMES[slot], detail))
+		var label := str(_SLOT_NAMES[slot])
+		if slot == GameState.SLOT_MUFFLER and GameState.has_dual_exhaust():
+			label = "Right muffler"
+		_parts_list.add_child(_mounted_line(label, detail))
 	for part_id in GameState.equipped_part_ids:
 		var part: Dictionary = GameState.listing_by_id(GameState.PARTS, part_id)
 		if part.is_empty():
@@ -1249,7 +1254,10 @@ func _rebuild_spares_list() -> void:
 			count += 1
 	for part in GameState.PARTS:
 		var part_id := str(part.get("id", ""))
-		if GameState.owns_part(part_id) and not GameState.is_part_equipped(part_id):
+		var spare := GameState.owns_part(part_id) and not GameState.is_part_equipped(part_id)
+		if part.has("slot"):
+			spare = GameState.spare_count(part_id) > 0
+		if spare:
 			_parts_list.add_child(_parts_row(part, "part", ""))
 			count += 1
 	if count == 0:

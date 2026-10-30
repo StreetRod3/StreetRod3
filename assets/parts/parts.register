@@ -112,6 +112,8 @@
     {"id": "manifold-iron", "slot": "manifold", "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 0, "hp": 0, "vmax": 0},
     {"id": "exhaust", "slot": "manifold", "style": "shorty", "name": "Tube headers", "price": 380, "hp": 18, "vmax": 5},
     {"id": "headers-long", "slot": "manifold", "style": "long-tube", "name": "Long-tube headers, ceramic coated", "price": 690, "hp": 28, "vmax": 7},
+    {"id": "exhaust-single", "slot": "exhaust", "stock": true, "style": "single", "name": "Single exhaust", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "exhaust-dual", "slot": "exhaust", "style": "dual", "dual": true, "name": "Dual exhaust", "price": 340, "hp": 12, "vmax": 3},
     {"id": "muffler-stock", "slot": "muffler", "stock": true, "style": "oval", "name": "Stock muffler", "price": 0, "hp": 0, "vmax": 0, "loud_db": 0.0},
     {"id": "muffler-turbo", "slot": "muffler", "style": "turbo", "name": "Turbo muffler", "price": 150, "hp": 6, "vmax": 1, "loud_db": 1.5},
     {"id": "muffler-glasspack", "slot": "muffler", "style": "glasspack", "name": "Glasspack muffler", "price": 110, "hp": 9, "vmax": 2, "loud_db": 4.0},

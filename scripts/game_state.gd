@@ -52,18 +52,27 @@ const GEARBOX_BOLT_COUNT := 2
 const GEARBOX_BOLT_TIGHT := 3
 ## Parts changed from the creeper. A car has one of each; parts name theirs in `slot`.
 const SLOT_MANIFOLD := "manifold"
+const SLOT_EXHAUST := "exhaust"
 const SLOT_MUFFLER := "muffler"
+## The second muffler, on the left pipe of a dual exhaust. It takes the same parts as
+## `SLOT_MUFFLER`, which is the one muffler of a single exhaust.
+const SLOT_MUFFLER_LEFT := "muffler_left"
 const SLOT_DIFFERENTIAL := "differential"
-const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_MUFFLER, SLOT_DIFFERENTIAL]
+const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
+## Slot id for an empty slot. Only the exhaust and the mufflers can come off for good.
+const NO_PART_ID := "none"
+const REMOVABLE_SLOTS: Array[String] = [SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT]
 ## What every car rolls out of the factory with.
 const STOCK_SLOT_PARTS := {
 	SLOT_MANIFOLD: "manifold-iron",
+	SLOT_EXHAUST: "exhaust-single",
 	SLOT_MUFFLER: "muffler-stock",
+	SLOT_MUFFLER_LEFT: NO_PART_ID,
 	SLOT_DIFFERENTIAL: "diff-308",
 }
-## Slot id for an empty slot. Only the muffler can come off for good.
-const NO_PART_ID := "none"
-## Engine sound boost with the muffler off, in dB.
+## Mufflers can be owned two at a time, one for each side of a dual exhaust.
+const MUFFLER_COPIES := 2
+## Engine sound boost with the exhaust off and the headers open, in dB.
 const OPEN_EXHAUST_DB := 6.0
 ## Outcomes of `apply_pink_slips`.
 const PINK_NONE := 0
@@ -722,14 +731,19 @@ func final_drive_accel() -> float:
 	return float(slot_part(SLOT_DIFFERENTIAL).get("accel", 1.0))
 
 
-## How much louder the exhaust is than stock, in dB.
+## How much louder the exhaust is than stock, in dB. Open headers or an open pipe count
+## `OPEN_EXHAUST_DB`; the two sides of a dual exhaust are averaged.
 func exhaust_volume_db() -> float:
 	if not has_active_car():
 		return 0.0
-	var muffler := slot_part(SLOT_MUFFLER)
-	if muffler.is_empty():
+	if slot_part(SLOT_EXHAUST).is_empty():
 		return OPEN_EXHAUST_DB
-	return float(muffler.get("loud_db", 0.0))
+	var spots := muffler_slots()
+	var total := 0.0
+	for spot in spots:
+		var muffler := slot_part(spot)
+		total += OPEN_EXHAUST_DB if muffler.is_empty() else float(muffler.get("loud_db", 0.0))
+	return total / float(spots.size())
 
 
 func gearbox_ratio_text(box: Dictionary) -> String:
@@ -766,15 +780,20 @@ func refresh_car_stats() -> void:
 	var tune_scale := engine_tune_scale(engine_tune, engine_sweet_tune())
 	vmax_kmh *= tune_scale
 	engine_power_hp *= tune_scale
-	var fitted: Array[String] = equipped_part_ids.duplicate()
-	for slot in UNDER_CAR_SLOTS:
-		fitted.append(str(slot_part_ids.get(slot, NO_PART_ID)))
-	for part_id in fitted:
-		var part: Dictionary = listing_by_id(PARTS, part_id)
-		if part.is_empty():
-			continue
-		vmax_kmh += float(part.get("vmax", 0.0))
-		engine_power_hp += float(part.get("hp", 0.0))
+	for part_id in equipped_part_ids:
+		_add_part_stats(listing_by_id(PARTS, part_id), 1.0)
+	# Each muffler of a dual exhaust does half the work.
+	var muffler_share := 1.0 / float(muffler_slots().size())
+	for slot in active_slots():
+		var share := muffler_share if spot_kind(slot) == SLOT_MUFFLER else 1.0
+		_add_part_stats(slot_part(slot), share)
+
+
+func _add_part_stats(part: Dictionary, share: float) -> void:
+	if part.is_empty():
+		return
+	vmax_kmh += float(part.get("vmax", 0.0)) * share
+	engine_power_hp += float(part.get("hp", 0.0)) * share
 
 
 func set_engine_tune(step: int) -> void:
@@ -814,7 +833,7 @@ func buy_part(part_id: String) -> String:
 	var part: Dictionary = listing_by_id(PARTS, part_id)
 	if part.is_empty():
 		return "That part is not in the paper."
-	if owns_part(part_id):
+	if part_count(part_id) >= max_copies(part):
 		return "Already in spare parts."
 	var price := int(part.get("price", 0))
 	if money < price:
@@ -822,6 +841,28 @@ func buy_part(part_id: String) -> String:
 	money -= price
 	owned_part_ids.append(part_id)
 	return ""
+
+
+## Copies of a part that are owned, on a car or not.
+func part_count(part_id: String) -> int:
+	return owned_part_ids.count(part_id)
+
+
+## How many copies of `part` may be owned: two of a muffler, one of anything else.
+func max_copies(part: Dictionary) -> int:
+	if str(part.get("slot", "")) == SLOT_MUFFLER and not bool(part.get("stock", false)):
+		return MUFFLER_COPIES
+	return 1
+
+
+## Copies of a part that are owned but not on the active car.
+func spare_count(part_id: String) -> int:
+	if not owns_part(part_id):
+		return 0
+	var fitted := slot_part_ids.values().count(part_id)
+	if bool(listing_by_id(PARTS, part_id).get("stock", false)):
+		return 0 if fitted > 0 else 1
+	return part_count(part_id) - fitted
 
 
 func equip_part(part_id: String) -> String:
@@ -909,18 +950,46 @@ func part_slot(part_id: String) -> String:
 	return str(listing_by_id(PARTS, part_id).get("slot", ""))
 
 
+## The kind of part `slot` takes: the left muffler slot takes mufflers.
+func spot_kind(slot: String) -> String:
+	return SLOT_MUFFLER if slot == SLOT_MUFFLER_LEFT else slot
+
+
+func has_dual_exhaust() -> bool:
+	return bool(slot_part(SLOT_EXHAUST).get("dual", false))
+
+
+## The muffler slots the exhaust has: one, or two for a dual exhaust.
+func muffler_slots() -> Array[String]:
+	if has_dual_exhaust():
+		return [SLOT_MUFFLER, SLOT_MUFFLER_LEFT]
+	return [SLOT_MUFFLER]
+
+
+## Slots in use on the active car. The left muffler is there only behind a dual exhaust.
+func active_slots() -> Array[String]:
+	var out: Array[String] = []
+	for slot in UNDER_CAR_SLOTS:
+		if slot != SLOT_MUFFLER_LEFT or has_dual_exhaust():
+			out.append(slot)
+	return out
+
+
 ## The part in `slot` on the active car, or {} when the slot is empty.
 func slot_part(slot: String) -> Dictionary:
 	return listing_by_id(PARTS, str(slot_part_ids.get(slot, NO_PART_ID)))
 
 
-## Owned parts for `slot` that are not on the active car, in register order.
+## Owned parts that could go in `slot` now, in register order. Stock parts never run out.
 func spare_slot_parts(slot: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
+	var kind := spot_kind(slot)
 	var fitted := str(slot_part_ids.get(slot, NO_PART_ID))
 	for part in PARTS:
 		var part_id := str(part.get("id", ""))
-		if str(part.get("slot", "")) == slot and owns_part(part_id) and part_id != fitted:
+		if str(part.get("slot", "")) != kind or part_id == fitted or not owns_part(part_id):
+			continue
+		if bool(part.get("stock", false)) or spare_count(part_id) > 0:
 			out.append(part)
 	return out
 
@@ -944,31 +1013,52 @@ func part_detail(part: Dictionary) -> String:
 	return "   ".join(bits)
 
 
-## Swaps a spare part into its slot under the active car. What was there goes to spare parts.
-func fit_slot_part(part_id: String) -> String:
+## Swaps a spare part into a slot under the active car (its own slot unless `slot` is
+## given). What was there goes to spare parts. A single exhaust has no left muffler, so
+## fitting one sends that muffler to spare parts too.
+func fit_slot_part(part_id: String, slot: String = "") -> String:
 	if not has_active_car():
 		return "There is no car in the garage."
-	var slot := part_slot(part_id)
-	if slot.is_empty():
+	var kind := part_slot(part_id)
+	if kind.is_empty():
 		return "That part does not go under the car."
+	if slot.is_empty():
+		slot = kind
+	if spot_kind(slot) != kind:
+		return "That part does not go there."
 	if not owns_part(part_id):
 		return "That part is not in spare parts."
 	if str(slot_part_ids.get(slot, NO_PART_ID)) == part_id:
 		return "Already on the car."
+	if kind == SLOT_MUFFLER and slot_part(SLOT_EXHAUST).is_empty():
+		return "Put an exhaust on first."
+	if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
+		return "Only a dual exhaust has a second muffler."
+	var part := listing_by_id(PARTS, part_id)
+	if not bool(part.get("stock", false)) and spare_count(part_id) <= 0:
+		return "That part is already on the car."
 	slot_part_ids[slot] = part_id
+	if slot == SLOT_EXHAUST and not bool(part.get("dual", false)):
+		slot_part_ids[SLOT_MUFFLER_LEFT] = NO_PART_ID
 	_take_mount_from_other_cars("slot", part_id)
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
 
 
-## Takes the muffler off into spare parts. The exhaust runs open until another goes on.
-func remove_muffler() -> String:
+## Takes the exhaust or a muffler off into spare parts. With the exhaust off the headers
+## are open, and the mufflers come off with it; with a muffler off its pipe ends open.
+func remove_slot_part(slot: String) -> String:
 	if not has_active_car():
 		return "There is no car in the garage."
-	if slot_part(SLOT_MUFFLER).is_empty():
-		return "There is no muffler on the car."
-	slot_part_ids[SLOT_MUFFLER] = NO_PART_ID
+	if not REMOVABLE_SLOTS.has(slot):
+		return "That has to stay on the car."
+	if slot_part(slot).is_empty():
+		return "There is nothing there to take off."
+	slot_part_ids[slot] = NO_PART_ID
+	if slot == SLOT_EXHAUST:
+		slot_part_ids[SLOT_MUFFLER] = NO_PART_ID
+		slot_part_ids[SLOT_MUFFLER_LEFT] = NO_PART_ID
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -1279,18 +1369,23 @@ func _bolts_from(value: Variant) -> Array[int]:
 	return bolts
 
 
-## Saved slot parts, with stock parts in any slot the save does not name.
+## Saved slot parts, with stock parts in any slot the save does not name. Mufflers come
+## off with the exhaust, and the left one goes without a dual exhaust.
 func _slots_from(value: Variant) -> Dictionary:
 	var slots := STOCK_SLOT_PARTS.duplicate()
-	if typeof(value) != TYPE_DICTIONARY:
-		return slots
-	var saved: Dictionary = value
-	for slot in UNDER_CAR_SLOTS:
-		var part_id := str(saved.get(slot, ""))
-		if part_id == NO_PART_ID and slot == SLOT_MUFFLER:
-			slots[slot] = part_id
-		elif str(listing_by_id(PARTS, part_id).get("slot", "")) == slot:
-			slots[slot] = part_id
+	if typeof(value) == TYPE_DICTIONARY:
+		var saved: Dictionary = value
+		for slot in UNDER_CAR_SLOTS:
+			var part_id := str(saved.get(slot, ""))
+			if part_id == NO_PART_ID and REMOVABLE_SLOTS.has(slot):
+				slots[slot] = part_id
+			elif str(listing_by_id(PARTS, part_id).get("slot", "")) == spot_kind(slot):
+				slots[slot] = part_id
+	var exhaust := listing_by_id(PARTS, str(slots[SLOT_EXHAUST]))
+	if exhaust.is_empty():
+		slots[SLOT_MUFFLER] = NO_PART_ID
+	if not bool(exhaust.get("dual", false)):
+		slots[SLOT_MUFFLER_LEFT] = NO_PART_ID
 	return slots
 
 
@@ -1414,12 +1509,16 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 			continue
 		var rec: Dictionary = stored
 		if slot == "slot":
+			# Stock parts never run out. Others go back to stock on the other cars
+			# until no more copies are fitted than are owned.
+			if bool(listing_by_id(PARTS, part_id).get("stock", false)) or _slot_copies_fitted(part_id) <= part_count(part_id):
+				return
 			var slots := _slots_from(rec.get("slot_parts", null))
 			for key in UNDER_CAR_SLOTS:
-				if str(slots[key]) == part_id and part_id != str(STOCK_SLOT_PARTS[key]):
+				if str(slots[key]) == part_id and _slot_copies_fitted(part_id) > part_count(part_id):
 					slots[key] = STOCK_SLOT_PARTS[key]
-			rec["slot_parts"] = slots
-			car_records[car_id] = rec
+					rec["slot_parts"] = _slots_from(slots)
+					car_records[car_id] = rec
 			continue
 		if slot == "part":
 			var kept: Array[String] = []
@@ -1443,6 +1542,18 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if slot == "transmission":
 			rec["gearbox_bolts"] = _tight_bolts()
 		car_records[car_id] = rec
+
+
+## Copies of `part_id` in the slots of every car, the active one included.
+func _slot_copies_fitted(part_id: String) -> int:
+	var count := slot_part_ids.values().count(part_id)
+	for raw_id in car_records.keys():
+		if str(raw_id) == current_car_id:
+			continue
+		var stored: Variant = car_records[raw_id]
+		if typeof(stored) == TYPE_DICTIONARY:
+			count += _slots_from((stored as Dictionary).get("slot_parts", null)).values().count(part_id)
+	return count
 
 
 func _cars_for_save() -> Dictionary:

@@ -120,21 +120,19 @@ func _rebuild_cars() -> void:
 
 func _make_part_card(part: Dictionary) -> Control:
 	var part_id := str(part.get("id", ""))
-	var owned := GameState.owns_part(part_id)
+	var owned := GameState.part_count(part_id)
 	var equipped := GameState.is_part_equipped(part_id)
 	var price := int(part.get("price", 0))
 	var box := _card()
 	box.add_child(_heading(str(part.get("name", "Part"))))
 	box.add_child(_body(GameState.part_detail(part)))
 	var btn := _ink_button()
-	if equipped:
-		btn.text = "On the car"
-		btn.disabled = true
-	elif owned:
-		btn.text = "In spare parts"
+	if owned >= GameState.max_copies(part):
+		btn.text = "On the car" if equipped else "In spare parts"
 		btn.disabled = true
 	else:
-		btn.text = "Buy — $%d" % price
+		# Mufflers come two to a car with a dual exhaust, so a second can be bought.
+		btn.text = ("Buy another — $%d" if owned > 0 else "Buy — $%d") % price
 		btn.disabled = GameState.money < price
 		btn.pressed.connect(_on_buy_part.bind(part_id))
 	box.add_child(btn)

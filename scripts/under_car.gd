@@ -2,8 +2,9 @@ extends Node3D
 
 ## On the creeper under the car, which sits on jack stands, looking up at the whole
 ## underside with the front of the car to the right. Click the exhaust manifolds, the
-## muffler, or the rear end to swap it for a spare. The muffler can also come off and
-## leave the exhaust open.
+## exhaust pipes, a muffler, or the rear end to swap it for a spare. The exhaust can
+## come off and leave the headers open, and a muffler can come off and leave its pipe
+## ending open where the muffler bolted on. A dual exhaust has a muffler on each side.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 
@@ -26,9 +27,12 @@ const BODY_HALF := 0.86
 const PORT_COUNT := 4
 const PORT_STEP := 0.13
 const HEAD_Z := 0.235
-## The pipes run back at this spread and the muffler hangs on the right of the tunnel.
+## The pipes run back at this spread, and the mufflers hang this far either side of the
+## tunnel. A single exhaust's muffler is on the right.
 const PIPE_Z := 0.3
 const MUFFLER_Z := 0.3
+## The car's right side is -Z: it faces -X with +Y up.
+const RIGHT := -1.0
 const MUFFLER_LEN := 0.62
 ## Camera distance below the parts it looks up at, and how far it can tilt off straight up.
 const CAM_DISTANCE := 2.35
@@ -51,18 +55,31 @@ const T_PAUSE := 0.15
 
 const SLOT_NAMES := {
 	"manifold": "Exhaust manifolds",
+	"exhaust": "Exhaust",
 	"muffler": "Muffler",
+	"muffler_left": "Left muffler",
 	"differential": "Rear end",
 }
 const SLOT_PLURALS := {
 	"manifold": "exhaust manifolds",
+	"exhaust": "exhausts",
 	"muffler": "mufflers",
+	"muffler_left": "mufflers",
 	"differential": "rear ends",
 }
 const SLOT_KEYS := {
 	"manifold": "1",
-	"muffler": "2",
-	"differential": "3",
+	"exhaust": "2",
+	"muffler": "3",
+	"muffler_left": "4",
+	"differential": "5",
+}
+const _SLOT_KEYCODES := {
+	KEY_1: "manifold",
+	KEY_2: "exhaust",
+	KEY_3: "muffler",
+	KEY_4: "muffler_left",
+	KEY_5: "differential",
 }
 
 const _IRON := Color(0.22, 0.2, 0.19)
@@ -102,7 +119,7 @@ var _part_labels := {}
 var _stats_label: Label
 var _hint: Label
 var _tooltip: Label
-var _slot_btns: Array[Button] = []
+var _slot_btns := {}
 var _done_btn: Button
 var _picker: Control
 var _picker_slot: String = ""
@@ -126,7 +143,6 @@ func _ready() -> void:
 	_build_chassis()
 	_build_engine()
 	_build_driveline()
-	_build_exhaust_pipes()
 	for slot in GameState.UNDER_CAR_SLOTS:
 		_rebuild_rig(slot)
 	_build_zones()
@@ -197,17 +213,12 @@ func _handle_key(key: InputEventKey) -> void:
 		return
 	if key.echo:
 		return
-	match key.keycode:
-		KEY_1:
-			_open_picker(GameState.SLOT_MANIFOLD)
-		KEY_2:
-			_open_picker(GameState.SLOT_MUFFLER)
-		KEY_3:
-			_open_picker(GameState.SLOT_DIFFERENTIAL)
-		KEY_ESCAPE:
-			_on_done_pressed()
-		_:
-			return
+	if key.keycode == KEY_ESCAPE:
+		_on_done_pressed()
+	elif _SLOT_KEYCODES.has(key.keycode):
+		_open_picker(str(_SLOT_KEYCODES[key.keycode]))
+	else:
+		return
 	get_viewport().set_input_as_handled()
 
 
@@ -236,7 +247,8 @@ func _slot_at(screen_pos: Vector2) -> String:
 	var node := hit.get("collider") as Node
 	if node == null or not node.has_meta(&"under_car_slot"):
 		return ""
-	return str(node.get_meta(&"under_car_slot"))
+	var slot := str(node.get_meta(&"under_car_slot"))
+	return slot if GameState.active_slots().has(slot) else ""
 
 
 func _update_hover() -> void:
@@ -272,12 +284,19 @@ func _light_rig(slot: String, lit: bool) -> void:
 func _slot_hint(slot: String) -> String:
 	var part := GameState.slot_part(slot)
 	if part.is_empty():
-		return "%s — none, click to fit one" % SLOT_NAMES[slot]
-	return "%s — %s" % [SLOT_NAMES[slot], str(part.get("name", "Part"))]
+		return "%s — none, click to fit one" % _slot_name(slot)
+	return "%s — %s" % [_slot_name(slot), str(part.get("name", "Part"))]
+
+
+## The muffler of a dual exhaust is the right-hand one.
+func _slot_name(slot: String) -> String:
+	if slot == GameState.SLOT_MUFFLER and GameState.has_dual_exhaust():
+		return "Right muffler"
+	return str(SLOT_NAMES[slot])
 
 
 func _open_picker(slot: String) -> void:
-	if _busy or slot.is_empty():
+	if _busy or slot.is_empty() or not GameState.active_slots().has(slot):
 		return
 	_picker_slot = slot
 	_picker_title.text = "Spare %s" % SLOT_PLURALS[slot]
@@ -288,13 +307,20 @@ func _open_picker(slot: String) -> void:
 	var spares := GameState.spare_slot_parts(slot)
 	for part in spares:
 		_picker_rows.add_child(_picker_row(str(part.get("name", "Part")), GameState.part_detail(part), "Fit", str(part.get("id", ""))))
-	if slot == GameState.SLOT_MUFFLER and not fitted.is_empty():
-		_picker_rows.add_child(_picker_row("Take the muffler off", "Open exhaust: loud, and no faster", "Remove", ""))
-	var on_car := "Nothing on the car now." if fitted.is_empty() else "On the car: %s" % str(fitted.get("name", "Part"))
+	if GameState.REMOVABLE_SLOTS.has(slot) and not fitted.is_empty():
+		if slot == GameState.SLOT_EXHAUST:
+			_picker_rows.add_child(_picker_row("Take the exhaust off", "Open headers: loud, and the mufflers come off too", "Remove", ""))
+		else:
+			_picker_rows.add_child(_picker_row("Take the muffler off", "Open pipe: loud, and no faster", "Remove", ""))
+	var lines: Array[String] = ["Nothing on the car now." if fitted.is_empty() else "On the car: %s" % str(fitted.get("name", "Part"))]
 	if spares.is_empty():
-		_picker_note.text = "%s\nNo spare %s. The newspaper sells them." % [on_car, SLOT_PLURALS[slot]]
-	else:
-		_picker_note.text = on_car
+		lines.append("No spare %s. The newspaper sells them." % SLOT_PLURALS[slot])
+	if GameState.spot_kind(slot) == GameState.SLOT_MUFFLER:
+		if GameState.slot_part(GameState.SLOT_EXHAUST).is_empty():
+			lines.append("Put an exhaust on first: a muffler needs a pipe to hang on.")
+		elif GameState.has_dual_exhaust():
+			lines.append("Each muffler on a dual exhaust gives half its gain.")
+	_picker_note.text = "\n".join(lines)
 	_picker.visible = true
 	_tooltip.visible = false
 	_sync_nav()
@@ -329,11 +355,12 @@ func _sync_nav() -> void:
 
 
 ## Takes the part in `slot` down and puts `part_id` up in its place. An empty id takes
-## the muffler off and leaves the slot empty.
+## the part off and leaves the slot empty. The mufflers hang on the exhaust, so they come
+## down with it, and any that stay on go back up with the new one.
 func _swap(slot: String, part_id: String) -> void:
 	if _busy:
 		return
-	var err := GameState.remove_muffler() if part_id.is_empty() else GameState.fit_slot_part(part_id)
+	var err := GameState.remove_slot_part(slot) if part_id.is_empty() else GameState.fit_slot_part(part_id, slot)
 	if not err.is_empty():
 		_picker_note.text = err
 		return
@@ -342,27 +369,38 @@ func _swap(slot: String, part_id: String) -> void:
 	_light_rig(_hover, false)
 	_hover = ""
 	_refresh_ui()
-	var old: Node3D = _rigs.get(slot, null)
-	_rigs.erase(slot)
-	if old != null:
-		_hint.text = "Unbolting the %s…" % SLOT_NAMES[slot].to_lower()
+	var affected: Array[String] = [slot]
+	if slot == GameState.SLOT_EXHAUST:
+		affected.append_array([GameState.SLOT_MUFFLER, GameState.SLOT_MUFFLER_LEFT])
+	var old: Array[Node3D] = []
+	for each in affected:
+		if _rigs.has(each):
+			old.append(_rigs[each])
+			_rigs.erase(each)
+	if not old.is_empty():
+		_hint.text = "Unbolting the %s…" % _slot_name(slot).to_lower()
 		_play(_sfx_ratchet)
 		await _pause(T_UNBOLT)
 		_play(_sfx_ratchet)
 		await _pause(T_UNBOLT)
-		await _move_rig(old, Vector3(0.0, -LOWER, 0.0), T_LOWER)
+		await _move_rigs(old, Vector3(0.0, -LOWER, 0.0), T_LOWER)
 		_play(_sfx_clunk)
-		await _move_rig(old, Vector3(0.0, -LOWER, SLIDE_OUT), T_SLIDE)
+		await _move_rigs(old, Vector3(0.0, -LOWER, SLIDE_OUT), T_SLIDE)
 		if not is_instance_valid(self):
 			return
-		old.queue_free()
-	var rig := _rebuild_rig(slot)
-	if rig != null:
+		for rig in old:
+			rig.queue_free()
+	var fresh: Array[Node3D] = []
+	for each in affected:
+		var rig := _rebuild_rig(each)
+		if rig != null:
+			rig.position = Vector3(0.0, -LOWER, -SLIDE_OUT)
+			fresh.append(rig)
+	if not fresh.is_empty():
 		_hint.text = "Putting the %s up…" % str(GameState.slot_part(slot).get("name", "part")).to_lower()
-		rig.position = Vector3(0.0, -LOWER, -SLIDE_OUT)
 		await _pause(T_PAUSE)
-		await _move_rig(rig, Vector3(0.0, -LOWER, 0.0), T_SLIDE)
-		await _move_rig(rig, Vector3.ZERO, T_LOWER)
+		await _move_rigs(fresh, Vector3(0.0, -LOWER, 0.0), T_SLIDE)
+		await _move_rigs(fresh, Vector3.ZERO, T_LOWER)
 		_play(_sfx_clunk)
 		await _pause(T_PAUSE)
 		_play(_sfx_ratchet)
@@ -375,12 +413,16 @@ func _swap(slot: String, part_id: String) -> void:
 	_refresh_ui()
 
 
-func _move_rig(rig: Node3D, to: Vector3, duration: float) -> void:
-	if not is_instance_valid(self) or not is_instance_valid(rig):
+## Moves the rigs together, each to `to` off its place on the car.
+func _move_rigs(rigs: Array[Node3D], to: Vector3, duration: float) -> void:
+	if not is_instance_valid(self):
 		return
 	var tw := create_tween()
+	tw.set_parallel(true)
 	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
-	tw.tween_property(rig, "position", to, duration)
+	for rig in rigs:
+		if is_instance_valid(rig):
+			tw.tween_property(rig, "position", to, duration)
 	await tw.finished
 
 
@@ -401,20 +443,29 @@ func _on_done_pressed() -> void:
 
 
 func _refresh_ui() -> void:
+	var active := GameState.active_slots()
 	for slot in GameState.UNDER_CAR_SLOTS:
 		var part := GameState.slot_part(slot)
 		var label: Label = _part_labels[slot]
-		label.text = "%s: %s" % [SLOT_NAMES[slot], "none" if part.is_empty() else str(part.get("name", "Part"))]
-	_stats_label.text = "%.0f hp · %.0f km/h" % [GameState.engine_power_hp, GameState.get_effective_vmax_kmh()]
-	for btn in _slot_btns:
+		label.visible = active.has(slot)
+		label.text = "%s: %s" % [_slot_name(slot), "none" if part.is_empty() else str(part.get("name", "Part"))]
+		var btn: Button = _slot_btns[slot]
+		btn.visible = active.has(slot)
 		btn.disabled = _busy
+		btn.text = "%s (%s)" % [_slot_name(slot).replace("Exhaust manifolds", "Manifolds"), SLOT_KEYS[slot]]
+	_stats_label.text = "%.0f hp · %.0f km/h" % [GameState.engine_power_hp, GameState.get_effective_vmax_kmh()]
 	_done_btn.disabled = _busy
 	if _busy:
 		return
-	if GameState.slot_part(GameState.SLOT_MUFFLER).is_empty():
-		_hint.text = "The exhaust is open with no muffler. Click a part to change it."
-	else:
-		_hint.text = "Click a part to change it. The wheel zooms; right-drag tilts the view."
+	var tip := "Click a part to change it. The wheel zooms; right-drag tilts the view."
+	if GameState.slot_part(GameState.SLOT_EXHAUST).is_empty():
+		_hint.text = "The headers are open with no exhaust on. " + tip
+		return
+	for slot in GameState.muffler_slots():
+		if GameState.slot_part(slot).is_empty():
+			_hint.text = "A pipe ends open where its muffler would bolt on. " + tip
+			return
+	_hint.text = tip
 
 
 func _build_ui() -> void:
@@ -439,23 +490,27 @@ func _build_ui() -> void:
 	bottom.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	bottom.offset_left = 16.0
 	bottom.offset_right = -16.0
-	bottom.offset_top = -72.0
+	bottom.offset_top = -100.0
 	bottom.offset_bottom = -16.0
 	_ui.add_child(bottom)
+	var rows := VBoxContainer.new()
+	rows.add_theme_constant_override(&"separation", 6)
+	bottom.add_child(rows)
+	_hint = _ui_label("", 18)
+	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	rows.add_child(_hint)
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override(&"separation", 12)
-	bottom.add_child(bar)
-	_hint = _ui_label("", 18)
-	_hint.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	bar.add_child(_hint)
+	rows.add_child(bar)
 	for slot in GameState.UNDER_CAR_SLOTS:
 		var btn := Button.new()
-		btn.text = "%s (%s)" % [SLOT_NAMES[slot], SLOT_KEYS[slot]]
 		btn.focus_mode = Control.FOCUS_NONE
 		btn.pressed.connect(_open_picker.bind(slot))
 		bar.add_child(btn)
-		_slot_btns.append(btn)
+		_slot_btns[slot] = btn
+	var gap := Control.new()
+	gap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bar.add_child(gap)
 	_done_btn = Button.new()
 	_done_btn.text = "Done"
 	_done_btn.focus_mode = Control.FOCUS_NONE
@@ -681,36 +736,46 @@ func _build_driveline() -> void:
 		_box(self, Vector3(0.8, 0.025, 0.055), Vector3(_rear_x, AXLE_Y - 0.085, FRAME_HALF * side), spring)
 
 
-## Head pipes back from the manifolds, the crossover, and the tailpipe. They stop
-## short of the muffler, so an empty slot leaves the pipe ends open.
-func _build_exhaust_pipes() -> void:
-	var pipe := _mat(_ALUMINIZED.darkened(0.25), 0.6, 0.55)
+## Head pipes from the manifold flanges back to where the muffler bolts on. A single
+## exhaust crosses the left pipe over to the right one ahead of its muffler; a dual
+## exhaust runs a pipe straight back on each side. An open end shows with no muffler.
+func _build_exhaust(rig: Node3D, dual: bool) -> void:
+	var pipe := _exhaust_pipe_mat()
 	var soot := _mat(_SOOT, 0.0, 1.0)
-	var inlet := _muffler_x - MUFFLER_LEN * 0.5
-	var outlet := _muffler_x + MUFFLER_LEN * 0.5
-	# Every run heads back from the manifold flanges, never forward. The right-hand
-	# pipe goes straight to the muffler; the left one steps back, then crosses under
-	# the driveshaft and joins it just ahead of the muffler.
-	var right := _pipe_start(1.0)
-	var left := _pipe_start(-1.0)
-	var end := Vector3(inlet - 0.08, PIPE_Y, MUFFLER_Z)
-	var span := end.x - right.x
-	var join := Vector3(end.x - span * 0.15, PIPE_Y, MUFFLER_Z)
-	_tube(self, right, end, 0.028, pipe)
+	var end_x := _muffler_x - MUFFLER_LEN * 0.5 - 0.08
+	var ends: Array[float] = [RIGHT]
+	if dual:
+		ends.append(-RIGHT)
+	for side in ends:
+		_tube(rig, _pipe_start(side), Vector3(end_x, PIPE_Y, MUFFLER_Z * side), 0.028, pipe)
+		_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * side, 16)
+	if dual:
+		return
+	# Every run heads back from the flanges, never forward: the left pipe steps back,
+	# then crosses under the driveshaft and joins the right one ahead of the muffler.
+	var left := _pipe_start(-RIGHT)
+	var span := end_x - _pipe_start(RIGHT).x
+	var join := Vector3(end_x - span * 0.15, PIPE_Y, MUFFLER_Z * RIGHT)
 	var cross: Array[Vector3] = [left, Vector3(left.x + span * 0.12, PIPE_Y, left.z), join]
-	_pipe(self, cross, 0.026, pipe)
-	_cylinder_x(self, 0.031, 0.031, 0.012, inlet - 0.09, soot, PIPE_Y, MUFFLER_Z, 16)
-	# Tailpipe kicks up over the axle and out the back.
+	_pipe(rig, cross, 0.026, pipe)
+
+
+func _exhaust_pipe_mat() -> StandardMaterial3D:
+	return _mat(_ALUMINIZED.darkened(0.25), 0.6, 0.55)
+
+
+## Kicks up over the axle on `side` and out the back.
+func _build_tailpipe(rig: Node3D, side: float) -> void:
+	var outlet := _muffler_x + MUFFLER_LEN * 0.5
 	var tail: Array[Vector3] = [
-		Vector3(outlet + 0.08, PIPE_Y, MUFFLER_Z),
-		Vector3(_rear_x - 0.2, PIPE_Y, MUFFLER_Z),
-		Vector3(_rear_x - 0.06, AXLE_Y + 0.22, MUFFLER_Z + 0.08),
-		Vector3(_rear_x + 0.2, AXLE_Y + 0.22, MUFFLER_Z + 0.08),
-		Vector3(_rear_x + 0.4, PIPE_Y + 0.02, MUFFLER_Z + 0.1),
-		Vector3(_rear_x + 1.1, PIPE_Y + 0.02, MUFFLER_Z + 0.1),
+		Vector3(outlet + 0.08, PIPE_Y, MUFFLER_Z * side),
+		Vector3(_rear_x - 0.2, PIPE_Y, MUFFLER_Z * side),
+		Vector3(_rear_x - 0.06, AXLE_Y + 0.22, (MUFFLER_Z + 0.08) * side),
+		Vector3(_rear_x + 0.2, AXLE_Y + 0.22, (MUFFLER_Z + 0.08) * side),
+		Vector3(_rear_x + 0.4, PIPE_Y + 0.02, (MUFFLER_Z + 0.1) * side),
+		Vector3(_rear_x + 1.1, PIPE_Y + 0.02, (MUFFLER_Z + 0.1) * side),
 	]
-	_pipe(self, tail, 0.027, pipe)
-	_cylinder_x(self, 0.028, 0.028, 0.012, outlet + 0.07, soot, PIPE_Y, MUFFLER_Z, 16)
+	_pipe(rig, tail, 0.027, _exhaust_pipe_mat())
 
 
 ## Where a head pipe leaves the manifold on `side`, behind the bellhousing.
@@ -718,11 +783,16 @@ func _pipe_start(side: float) -> Vector3:
 	return Vector3(_engine_rear + 0.28, PIPE_Y, PIPE_Z * side)
 
 
-## Static hot spots for each slot, so an empty muffler slot can still be clicked.
+## Static hot spots for each slot, so an empty one can still be clicked.
 func _build_zones() -> void:
 	for side in [-1.0, 1.0]:
 		_zone(GameState.SLOT_MANIFOLD, Vector3(0.82, 0.3, 0.16), Vector3(_engine_rear - 0.18, CRANK_Y - 0.05, 0.3 * side))
-	_zone(GameState.SLOT_MUFFLER, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, MUFFLER_Z))
+	_zone(GameState.SLOT_MUFFLER, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, MUFFLER_Z * RIGHT))
+	_zone(GameState.SLOT_MUFFLER_LEFT, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, -MUFFLER_Z * RIGHT))
+	# The head pipes, between the manifold flanges and the mufflers.
+	var pipes_from := _pipe_start(RIGHT).x
+	var pipes_to := _muffler_x - MUFFLER_LEN * 0.5 - 0.08
+	_zone(GameState.SLOT_EXHAUST, Vector3(pipes_to - pipes_from, 0.14, MUFFLER_Z * 2.0 + 0.12), Vector3((pipes_from + pipes_to) * 0.5, PIPE_Y, 0.0))
 	_zone(GameState.SLOT_DIFFERENTIAL, Vector3(0.62, 0.34, 0.4), Vector3(_rear_x - 0.06, AXLE_Y, 0.0))
 
 
@@ -758,8 +828,12 @@ func _rebuild_rig(slot: String) -> Node3D:
 		GameState.SLOT_MANIFOLD:
 			for side in [-1.0, 1.0]:
 				_build_manifold(rig, style, side)
-		GameState.SLOT_MUFFLER:
-			_build_muffler(rig, style)
+		GameState.SLOT_EXHAUST:
+			_build_exhaust(rig, bool(part.get("dual", false)))
+		GameState.SLOT_MUFFLER, GameState.SLOT_MUFFLER_LEFT:
+			var side := -RIGHT if slot == GameState.SLOT_MUFFLER_LEFT else RIGHT
+			_build_muffler(rig, style, MUFFLER_Z * side)
+			_build_tailpipe(rig, side)
 		GameState.SLOT_DIFFERENTIAL:
 			_build_rear_end(rig, style, float(part.get("ratio", 3.08)))
 	_rigs[slot] = rig
@@ -776,6 +850,8 @@ func _build_manifold(rig: Node3D, style: String, side: float) -> void:
 	var start := _pipe_start(side)
 	var flange := _mat(_STEEL.darkened(0.2), 0.7, 0.4)
 	_cylinder_x(rig, 0.04, 0.04, 0.012, start.x - 0.012, flange, start.y, start.z, 16)
+	# Sooty bore, seen when no exhaust is bolted on.
+	_cylinder_x(rig, 0.024, 0.024, 0.002, start.x, _mat(_SOOT, 0.0, 1.0), start.y, start.z, 16)
 	match style:
 		"shorty", "long-tube":
 			var long := style == "long-tube"
@@ -803,7 +879,8 @@ func _build_manifold(rig: Node3D, style: String, side: float) -> void:
 			_pipe(rig, [elbow, Vector3(last + 0.04, PIPE_Y + 0.06, (PIPE_Z + 0.02) * side), start], 0.03, iron)
 
 
-func _build_muffler(rig: Node3D, style: String) -> void:
+## One muffler between the head pipe and the tailpipe, hung at `z` across the car.
+func _build_muffler(rig: Node3D, style: String, z: float) -> void:
 	var inlet := _muffler_x - MUFFLER_LEN * 0.5
 	var outlet := _muffler_x + MUFFLER_LEN * 0.5
 	var nipple := _mat(_ALUMINIZED.darkened(0.2), 0.6, 0.5)
@@ -811,23 +888,23 @@ func _build_muffler(rig: Node3D, style: String) -> void:
 		"glasspack":
 			var shell := _mat(_CHROME, 0.95, 0.12)
 			var band := _mat(Color(0.55, 0.08, 0.06), 0.3, 0.4)
-			_cylinder_x(rig, 0.03, 0.058, 0.08, inlet - 0.08, shell, PIPE_Y, MUFFLER_Z, 20)
-			_cylinder_x(rig, 0.058, 0.058, MUFFLER_LEN, inlet, shell, PIPE_Y, MUFFLER_Z, 24)
-			_cylinder_x(rig, 0.058, 0.03, 0.08, outlet, shell, PIPE_Y, MUFFLER_Z, 20)
+			_cylinder_x(rig, 0.03, 0.058, 0.08, inlet - 0.08, shell, PIPE_Y, z, 20)
+			_cylinder_x(rig, 0.058, 0.058, MUFFLER_LEN, inlet, shell, PIPE_Y, z, 24)
+			_cylinder_x(rig, 0.058, 0.03, 0.08, outlet, shell, PIPE_Y, z, 20)
 			for at in [0.12, MUFFLER_LEN - 0.14]:
-				_cylinder_x(rig, 0.061, 0.061, 0.02, inlet + at, band, PIPE_Y, MUFFLER_Z, 24)
+				_cylinder_x(rig, 0.061, 0.061, 0.02, inlet + at, band, PIPE_Y, z, 24)
 		"turbo":
 			var shell := _mat(_ALUMINIZED, 0.7, 0.4)
-			var can := _cylinder_x(rig, 0.11, 0.11, MUFFLER_LEN - 0.12, inlet + 0.06, shell, PIPE_Y, MUFFLER_Z, 28)
+			var can := _cylinder_x(rig, 0.11, 0.11, MUFFLER_LEN - 0.12, inlet + 0.06, shell, PIPE_Y, z, 28)
 			can.scale = Vector3(0.55, 1.0, 1.45)
-			_cylinder_x(rig, 0.03, 0.03, 0.14, inlet - 0.08, nipple, PIPE_Y, MUFFLER_Z, 16)
-			_cylinder_x(rig, 0.03, 0.03, 0.14, outlet - 0.06, nipple, PIPE_Y, MUFFLER_Z, 16)
+			_cylinder_x(rig, 0.03, 0.03, 0.14, inlet - 0.08, nipple, PIPE_Y, z, 16)
+			_cylinder_x(rig, 0.03, 0.03, 0.14, outlet - 0.06, nipple, PIPE_Y, z, 16)
 		_:
 			var shell := _mat(Color(0.3, 0.29, 0.27), 0.5, 0.65)
-			var can := _cylinder_x(rig, 0.12, 0.12, MUFFLER_LEN - 0.06, inlet + 0.03, shell, PIPE_Y + 0.02, MUFFLER_Z, 28)
+			var can := _cylinder_x(rig, 0.12, 0.12, MUFFLER_LEN - 0.06, inlet + 0.03, shell, PIPE_Y + 0.02, z, 28)
 			can.scale = Vector3(0.75, 1.0, 1.15)
-			_cylinder_x(rig, 0.03, 0.03, 0.12, inlet - 0.08, nipple, PIPE_Y, MUFFLER_Z, 16)
-			_cylinder_x(rig, 0.03, 0.03, 0.12, outlet - 0.04, nipple, PIPE_Y, MUFFLER_Z, 16)
+			_cylinder_x(rig, 0.03, 0.03, 0.12, inlet - 0.08, nipple, PIPE_Y, z, 16)
+			_cylinder_x(rig, 0.03, 0.03, 0.12, outlet - 0.04, nipple, PIPE_Y, z, 16)
 
 
 ## The center section: pinion snout, carrier, and cover, with the ratio on a tag.
