@@ -130,7 +130,7 @@ The slots are the exhaust manifolds, the exhaust, the muffler, a left muffler, a
 - The exhaust and the mufflers can come off (`remove_slot_part()`, `REMOVABLE_SLOTS`); the slot then holds `NO_PART_ID`. With the exhaust off the headers are open, and the mufflers come off with it. With a muffler off its pipe ends where the muffler bolts on, with no tailpipe. Going from a dual to a single exhaust takes the left muffler off.
 - An open header or open pipe is `OPEN_EXHAUST_DB` louder than stock, and a muffler's `loud_db` sets how much louder it is; the two sides of a dual exhaust are averaged (`exhaust_volume_db()`).
 - Manifolds, the exhaust, and mufflers add `hp` and `vmax` like bolt-ons. Each muffler on a dual exhaust adds half. A rear end's `accel` scales the drive force in every gear (`final_drive_accel()`), and its `top_speed` scales `get_effective_vmax_kmh()`.
-- Up to `MUFFLER_COPIES` of a muffler can be owned, so a dual exhaust can run a matched pair (`part_count()`, `max_copies()`, `spare_count()`). Stock parts never run out. Fitting a part takes it off other cars only when more copies are fitted than are owned.
+- Any number of copies of a part from the parts list can be bought, bolt-ons included, one for each car or each side of a dual exhaust (`part_count()`, `spare_count()`). Stock parts never run out. Fitting a part takes a copy off another car only when more copies are fitted than are owned.
 - Bought slot parts go to spare parts. Their spare-parts Fit button opens this scene. Older saves that kept the headers as a bolt-on get them moved into the manifold slot, and saves from before the exhaust slot get a stock single exhaust.
 
 The calendar page is built at runtime from the system date (`Label3D` grid).

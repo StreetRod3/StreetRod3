@@ -1254,10 +1254,7 @@ func _rebuild_spares_list() -> void:
 			count += 1
 	for part in GameState.PARTS:
 		var part_id := str(part.get("id", ""))
-		var spare := GameState.owns_part(part_id) and not GameState.is_part_equipped(part_id)
-		if part.has("slot"):
-			spare = GameState.spare_count(part_id) > 0
-		if spare:
+		if GameState.spare_count(part_id) > 0:
 			_parts_list.add_child(_parts_row(part, "part", ""))
 			count += 1
 	if count == 0:

@@ -127,11 +127,13 @@ func _make_part_card(part: Dictionary) -> Control:
 	box.add_child(_heading(str(part.get("name", "Part"))))
 	box.add_child(_body(GameState.part_detail(part)))
 	var btn := _ink_button()
-	if owned >= GameState.max_copies(part):
+	if owned > 0:
+		box.add_child(_body("You have %d%s" % [owned, " · on this car" if equipped else ""]))
+	if bool(part.get("stock", false)) and owned > 0:
 		btn.text = "On the car" if equipped else "In spare parts"
 		btn.disabled = true
 	else:
-		# Mufflers come two to a car with a dual exhaust, so a second can be bought.
+		# Buy as many as you like: one for each car, or each side of a dual exhaust.
 		btn.text = ("Buy another — $%d" if owned > 0 else "Buy — $%d") % price
 		btn.disabled = GameState.money < price
 		btn.pressed.connect(_on_buy_part.bind(part_id))
