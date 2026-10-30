@@ -32,12 +32,18 @@ const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
 
 var _orbiting: bool = false
 var _yaw: float = -PI * 0.5
-var _pitch: float = 0.35
-var _cam_distance: float = 7.0
-var _cam_distance_target: float = 7.0
+var _pitch: float = 0.24
+var _cam_distance: float = CAM_DISTANCE_DEFAULT
+var _cam_distance_target: float = CAM_DISTANCE_DEFAULT
 
 # Camera zoom limits (mouse wheel + pinch).
-const CAM_DISTANCE_DEFAULT := 7.0
+const CAM_DISTANCE_DEFAULT := 6.6
+## Height above the car the camera aims at. Above the roof, so the back wall, its
+## shelves and clock, and the ceiling fill the frame the way Street Rod 2's garage did.
+const CAM_LOOK_HEIGHT := 1.9
+## Inside faces of the walls and ceiling, less a margin. The camera stays in the room.
+const ROOM_MIN := Vector3(-6.75, 0.3, -7.05)
+const ROOM_MAX := Vector3(4.45, 6.2, 6.85)
 const CAM_DISTANCE_MIN := 2.5
 const CAM_DISTANCE_MAX := 20.0
 const ZOOM_STEP := 0.75
@@ -117,7 +123,7 @@ const _SLOT_NAMES := {
 	"differential": "Rear end",
 }
 ## Where the creeper lies on the floor, beside the car on the camera's side.
-const _CREEPER_SPOT := Vector3(-1.75, 0.0, -0.35)
+const _CREEPER_SPOT := Vector3(-1.85, 0.0, -1.75)
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -746,7 +752,21 @@ func _update_camera_transform() -> void:
 	_camera_pitch.rotation = Vector3.ZERO
 	_camera_pitch.rotate_object_local(Vector3.RIGHT, -_pitch)
 	_camera.position = Vector3(0.0, 0.6, _cam_distance)
-	_camera.look_at(_camera_pivot.global_position + Vector3(0.0, 0.4, 0.0), Vector3.UP)
+	var target := _camera_pivot.global_position + Vector3(0.0, CAM_LOOK_HEIGHT, 0.0)
+	_camera.global_position = _inside_room(target, _camera.global_position)
+	_camera.look_at(target, Vector3.UP)
+
+
+## `eye`, pulled in toward `target` until it is inside the walls.
+func _inside_room(target: Vector3, eye: Vector3) -> Vector3:
+	var t := 1.0
+	for axis in 3:
+		var reach := eye[axis] - target[axis]
+		if absf(reach) < 0.0001:
+			continue
+		var limit := ROOM_MAX[axis] if reach > 0.0 else ROOM_MIN[axis]
+		t = minf(t, clampf((limit - target[axis]) / reach, 0.0, 1.0))
+	return target.lerp(eye, t)
 
 
 func _try_interact(screen_pos: Vector2) -> void:
@@ -1605,7 +1625,7 @@ func _build_creeper() -> void:
 	var rubber := _prop_mat(Color(0.04, 0.04, 0.04), 0.0, 0.9)
 	_prop_box(_creeper, Vector3(1.0, 0.025, 0.42), Vector3(0.0, 0.1, 0.0), frame)
 	_prop_box(_creeper, Vector3(0.78, 0.03, 0.36), Vector3(-0.08, 0.127, 0.0), pad)
-	# Headrest at the end that goes under the car.
+	# Headrest at the head end, toward the front of the car.
 	_prop_box(_creeper, Vector3(0.16, 0.05, 0.3), Vector3(0.4, 0.137, 0.0), pad)
 	for cx in [-0.42, 0.0, 0.42]:
 		for cz in [-0.17, 0.17]:
@@ -1621,7 +1641,7 @@ func _build_creeper() -> void:
 			wheel.position = Vector3(cx, 0.03, cz)
 			_creeper.add_child(wheel)
 	_creeper.position = _CREEPER_SPOT
-	_creeper.rotation.y = 0.12
+	_creeper.rotation.y = 0.12 - PI * 0.5
 	add_child(_creeper)
 	_creeper.set_meta(&"garage_interact", &"creeper")
 
