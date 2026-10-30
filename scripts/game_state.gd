@@ -9,6 +9,7 @@ const SCENE_DRIVE_IN := "res://scenes/drive-in.tscn"
 const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
 const SCENE_SETTINGS := "res://scenes/settings.tscn"
+const SCENE_TRANSMISSION := "res://scenes/transmission.tscn"
 
 const MUSIC_GARAGE := "res://assets/music/garage.mp3"
 const MUSIC_RACE := "res://assets/music/race.mp3"
@@ -42,6 +43,12 @@ const ROAD_STAKE_LOW := 25
 const ROAD_STAKE_HIGH := 100
 ## Engine id for a car whose engine was blown and pulled out.
 const NO_ENGINE_ID := "none"
+## Gearbox id for a car whose transmission was taken out. The gearbox goes to spare parts.
+const NO_GEARBOX_ID := "none"
+## Bellhousing bolts holding the gearbox to the engine.
+const GEARBOX_BOLT_COUNT := 2
+## Turns that seat a bellhousing bolt. Zero is out of its hole.
+const GEARBOX_BOLT_TIGHT := 3
 ## Outcomes of `apply_pink_slips`.
 const PINK_NONE := 0
 const PINK_WON := 1
@@ -89,6 +96,8 @@ var owned_part_ids: Array[String] = []
 var equipped_part_ids: Array[String] = []
 var owned_gearbox_ids: Array[String] = ["gb_auto3"]
 var equipped_gearbox_id: String = "gb_auto3"
+## Turns on each bellhousing bolt of the active car, 0 (out) to `GEARBOX_BOLT_TIGHT`.
+var gearbox_bolts: Array[int] = [GEARBOX_BOLT_TIGHT, GEARBOX_BOLT_TIGHT]
 var owned_engine_ids: Array[String] = ["v8-283"]
 var equipped_engine_id: String = "v8-283"
 var owned_wheel_ids: Array[String] = ["wheel-c1"]
@@ -179,6 +188,25 @@ func has_active_car() -> bool:
 
 func has_engine() -> bool:
 	return has_active_car() and equipped_engine_id != NO_ENGINE_ID
+
+
+func has_gearbox() -> bool:
+	return has_active_car() and equipped_gearbox_id != NO_GEARBOX_ID
+
+
+## Both bellhousing bolts are in and tight.
+func is_gearbox_bolted() -> bool:
+	if not has_gearbox():
+		return false
+	for turns in gearbox_bolts:
+		if turns < GEARBOX_BOLT_TIGHT:
+			return false
+	return true
+
+
+## The car can leave the garage under its own power.
+func can_drive() -> bool:
+	return has_engine() and is_gearbox_bolted()
 
 
 func current_car_file_path() -> String:
@@ -286,6 +314,7 @@ func new_game() -> void:
 	owned_engine_ids.clear()
 	owned_wheel_ids.clear()
 	equipped_gearbox_id = DEFAULT_GEARBOX_ID
+	gearbox_bolts = _tight_bolts()
 	equipped_engine_id = ""
 	equipped_wheel_id = ""
 	car_records.clear()
@@ -390,10 +419,11 @@ func load_game() -> bool:
 	equipped_wheel_id = str(d.get("equipped_wheel_id", equipped_wheel_id))
 	if owned_gearbox_ids.is_empty():
 		owned_gearbox_ids = [DEFAULT_GEARBOX_ID]
-	if listing_by_id(GEARBOXES, equipped_gearbox_id).is_empty():
-		equipped_gearbox_id = DEFAULT_GEARBOX_ID
-	if not owns_gearbox(equipped_gearbox_id):
-		owned_gearbox_ids.append(equipped_gearbox_id)
+	if equipped_gearbox_id != NO_GEARBOX_ID:
+		if listing_by_id(GEARBOXES, equipped_gearbox_id).is_empty():
+			equipped_gearbox_id = DEFAULT_GEARBOX_ID
+		if not owns_gearbox(equipped_gearbox_id):
+			owned_gearbox_ids.append(equipped_gearbox_id)
 	_load_saved_cars(d)
 	if has_active_car():
 		load_player_car()
@@ -650,6 +680,8 @@ func get_equipped_wheel() -> Dictionary:
 
 
 func get_equipped_gearbox() -> Dictionary:
+	if equipped_gearbox_id == NO_GEARBOX_ID:
+		return {}
 	var stock := get_stock_transmission()
 	if equipped_gearbox_id == str(stock.get("id", "")) and not stock.is_empty():
 		return stock
@@ -766,23 +798,69 @@ func equip_part(part_id: String) -> String:
 	return ""
 
 
-func buy_or_equip_gearbox(gearbox_id: String) -> String:
+## A bought gearbox goes to spare parts. It is fitted under the car (`fit_gearbox`).
+func buy_gearbox(gearbox_id: String) -> String:
 	var box: Dictionary = listing_by_id(GEARBOXES, gearbox_id)
 	if box.is_empty():
 		return "That gearbox is not in the paper."
 	if equipped_gearbox_id == gearbox_id:
 		return "Already on the car."
 	if owns_gearbox(gearbox_id):
-		equipped_gearbox_id = gearbox_id
-		_take_mount_from_other_cars("transmission", gearbox_id)
-		_sync_record_from_active()
-		refresh_car_stats()
-		return ""
+		return "Already in spare parts."
 	var price := int(box.get("price", 0))
 	if money < price:
 		return "Not enough cash."
 	money -= price
 	owned_gearbox_ids.append(gearbox_id)
+	return ""
+
+
+## Owned gearboxes that are not in the active car, in register order.
+func spare_gearboxes() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for box in GEARBOXES:
+		var box_id := str(box.get("id", ""))
+		if owns_gearbox(box_id) and box_id != equipped_gearbox_id:
+			out.append(box)
+	return out
+
+
+## Turns one bellhousing bolt to `turns` (0 takes it out, `GEARBOX_BOLT_TIGHT` seats it).
+func set_gearbox_bolt(index: int, turns: int) -> void:
+	if index < 0 or index >= gearbox_bolts.size() or not has_gearbox():
+		return
+	gearbox_bolts[index] = clampi(turns, 0, GEARBOX_BOLT_TIGHT)
+	_sync_record_from_active()
+
+
+## Drops the gearbox out of the active car into spare parts. Both bolts must be out.
+func remove_gearbox() -> String:
+	if not has_gearbox():
+		return "There is no transmission in the car."
+	for turns in gearbox_bolts:
+		if turns > 0:
+			return "Take both bolts out first."
+	equipped_gearbox_id = NO_GEARBOX_ID
+	_sync_record_from_active()
+	refresh_car_stats()
+	return ""
+
+
+## Raises a spare gearbox into the empty bellhousing. Its bolts start in, but loose.
+func fit_gearbox(gearbox_id: String) -> String:
+	if not has_active_car():
+		return "There is no car in the garage."
+	if has_gearbox():
+		return "Take the old transmission out first."
+	if not owns_gearbox(gearbox_id) or listing_by_id(GEARBOXES, gearbox_id).is_empty():
+		return "That gearbox is not in spare parts."
+	equipped_gearbox_id = gearbox_id
+	_take_mount_from_other_cars("transmission", gearbox_id)
+	gearbox_bolts.clear()
+	for i in GEARBOX_BOLT_COUNT:
+		gearbox_bolts.append(1)
+	_sync_record_from_active()
+	refresh_car_stats()
 	return ""
 
 
@@ -1065,10 +1143,29 @@ func _make_car_record(model_id: String, paint: Color) -> Dictionary:
 		"fuel": DEFAULT_TANK_L,
 		"engine_id": engine_id,
 		"gearbox_id": gearbox_id,
+		"gearbox_bolts": _tight_bolts(),
 		"wheel_id": wheel_id,
 		"part_ids": parts,
 		"engine_tune": ENGINE_TUNE_DEFAULT,
 	}
+
+
+func _tight_bolts() -> Array[int]:
+	var bolts: Array[int] = []
+	for i in GEARBOX_BOLT_COUNT:
+		bolts.append(GEARBOX_BOLT_TIGHT)
+	return bolts
+
+
+## Saved bolt turns, or tight bolts for records from before the transmission screen.
+func _bolts_from(value: Variant) -> Array[int]:
+	var bolts := _tight_bolts()
+	if typeof(value) != TYPE_ARRAY:
+		return bolts
+	var saved: Array = value
+	for i in mini(saved.size(), bolts.size()):
+		bolts[i] = clampi(int(saved[i]), 0, GEARBOX_BOLT_TIGHT)
+	return bolts
 
 
 func _remember_stock_ids(engine_id: String, gearbox_id: String, wheel_id: String) -> void:
@@ -1132,6 +1229,7 @@ func _sync_record_from_active() -> void:
 	rec["fuel"] = fuel
 	rec["engine_id"] = equipped_engine_id
 	rec["gearbox_id"] = equipped_gearbox_id
+	rec["gearbox_bolts"] = gearbox_bolts.duplicate()
 	rec["wheel_id"] = equipped_wheel_id
 	rec["part_ids"] = equipped_part_ids.duplicate()
 	rec["engine_tune"] = engine_tune
@@ -1152,6 +1250,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	fuel = float(rec.get("fuel", DEFAULT_TANK_L))
 	equipped_engine_id = str(rec.get("engine_id", equipped_engine_id))
 	equipped_gearbox_id = str(rec.get("gearbox_id", equipped_gearbox_id))
+	gearbox_bolts = _bolts_from(rec.get("gearbox_bolts", null))
 	equipped_wheel_id = str(rec.get("wheel_id", equipped_wheel_id))
 	equipped_part_ids = _string_array(rec.get("part_ids", []))
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
@@ -1187,6 +1286,8 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if part_id == stock:
 			continue
 		rec[key] = stock
+		if slot == "transmission":
+			rec["gearbox_bolts"] = _tight_bolts()
 		car_records[car_id] = rec
 
 
@@ -1208,6 +1309,7 @@ func _cars_for_save() -> Dictionary:
 			"fuel": float(rec.get("fuel", fuel)),
 			"engine_id": str(rec.get("engine_id", "")),
 			"gearbox_id": str(rec.get("gearbox_id", "")),
+			"gearbox_bolts": _bolts_from(rec.get("gearbox_bolts", null)),
 			"wheel_id": str(rec.get("wheel_id", "")),
 			"part_ids": _string_array(rec.get("part_ids", [])),
 			"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
@@ -1260,6 +1362,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
 		"engine_id": str(row.get("engine_id", "")),
 		"gearbox_id": str(row.get("gearbox_id", "")),
+		"gearbox_bolts": _bolts_from(row.get("gearbox_bolts", null)),
 		"wheel_id": str(row.get("wheel_id", "")),
 		"part_ids": _string_array(row.get("part_ids", [])),
 		"engine_tune": clampi(int(row.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),

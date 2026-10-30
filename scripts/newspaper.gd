@@ -344,7 +344,7 @@ func _on_buy_wheel(wheel_id: String) -> void:
 
 
 func _on_buy_gearbox(gearbox_id: String) -> void:
-	var err := GameState.buy_or_equip_gearbox(gearbox_id)
+	var err := GameState.buy_gearbox(gearbox_id)
 	if _finish_if_ruined():
 		return
 	_status.text = "Gearbox is in the spare parts folder." if err.is_empty() else err
