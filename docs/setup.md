@@ -16,10 +16,10 @@ Local data is created by the game under Godot’s `user://` directory (OS-specif
 
 | File | Format | Contents |
 | --- | --- | --- |
-| `user://savegame.json` | JSON, `version` 1 | Car, cash, ownership, equipped gearbox, paint, opponent, race type, scene to resume |
+| `user://saves/slot_1.json` … `slot_8.json` | JSON, `version` 2 | One save slot each: car, cash, ownership, every car's parts, paint, opponents, race type, scene to resume, and `saved_at` (Unix time) for the slot list |
 | `user://settings.cfg` | Godot `ConfigFile` | `display/fullscreen`, `audio/master_db`, `audio/music_enabled` |
 
-Delete those files to reset a profile. They are not in the repository.
+Delete those files to reset a profile. They are not in the repository. A `user://savegame.json` from before save slots is moved into slot 1 the first time the slots are listed.
 
 ## Get the project
 
@@ -79,6 +79,6 @@ Local export and CI use the same preset name (`Web`) and the same output checks 
 1. **New Game** on the main menu. Starts with $2500, the Basic Car, and the automatic 3-speed.
 2. In the garage, orbit with the right mouse button and zoom with the wheel. Click the newspaper to buy parts, click the doors to race.
 3. Choose **Drag race** (quarter mile) or **Road race** (course in `assets/tracks/track1.trk`), then a rival.
-4. **Save** from the main menu or the garage clock. **Load** returns to the saved scene.
+4. **Save** from the garage clock into one of eight slots. **Load** (main menu or garage clock) lists the slots with each one's car, cash, number of cars and save time, and returns to the saved scene.
 
 Controls during a race: **W / Up** throttle, **S / Down** brake, **A / D** or arrows steer, **Q / E** shift on a manual gearbox, **C** cycle camera. Narrow or touch viewports replace the keyboard hint with on-screen controls.

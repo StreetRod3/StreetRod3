@@ -39,12 +39,14 @@ flowchart TD
 
 | Scene | Script | Role |
 | --- | --- | --- |
-| `scenes/main_menu.tscn` | `scripts/main_menu.gd` | New game, save, load, settings, quit |
+| `scenes/main_menu.tscn` | `scripts/main_menu.gd` | New game, load (from the save slot list), settings, quit |
 | `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle |
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
 | `scenes/transmission.tscn` | `scripts/transmission.gd` | Under the car: bellhousing bolts, gearbox out and in on a jack |
 | `scenes/under_car.tscn` | `scripts/under_car.gd` | On the creeper: exhaust manifolds, muffler, and rear end |
+| `scenes/hood.tscn` | `scripts/hood.gd` | Under the hood: engine, intake, carburetors, distributor, air cleaner, plug wires |
+| `scenes/tune.tscn` | `scripts/tune.gd` | Timing light on the balancer: advance or retard the distributor |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
@@ -54,7 +56,7 @@ flowchart TD
 ```mermaid
 flowchart LR
   subgraph persist [Persistence]
-    save["user://savegame.json"]
+    save["user://saves/slot_N.json"]
     settings["user://settings.cfg"]
   end
 
@@ -99,7 +101,7 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 
 | Tag | Result |
 | --- | --- |
-| `clock` | Save, load, or return to the main menu |
+| `clock` | Save or load through the save slot list (`save_slots.gd`), or return to the main menu |
 | `chart` | Stats overlay |
 | `newspaper` | Open the classifieds |
 | `radio` | Toggle music |
@@ -113,12 +115,28 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 
 `transmission.gd` shows the underside of the car on a lift: the equipped engine model at real scale, a gearbox built from primitives (iron with a pan for automatics, aluminum with a rib per gear for manuals, black and red for racing boxes), two bellhousing bolts, and a transmission jack. Bolt state lives on `GameState.gearbox_bolts` (0 out to `GEARBOX_BOLT_TIGHT`) and is saved per car.
 
-- Clicking a bolt hole threads the bolt in. Each click tightens it a turn until it is tight. Clicking a tight bolt backs it out a turn at a time until it drops to the floor.
+- Clicks follow `GameState.next_bolt_turns()`: clicking a bolt hole threads the bolt in and runs it down by hand (`BOLT_THREADED`), and the next click tightens it. Clicking a tight bolt loosens it back to a turn, and the next click backs it out to drop to the floor. Each way is two clicks, and a bolt left loose by fitting tightens in two.
 - With both bolts out, `GameState.remove_gearbox()` sets the gearbox to `NO_GEARBOX_ID` and it goes to spare parts. The jack takes it down after the crossmember is pulled.
 - Select lists spare gearboxes. It refuses while a gearbox is still in. `fit_gearbox()` raises the chosen one in with both bolts at one turn.
-- `GameState.can_drive()` needs an engine and both bolts tight. The garage doors use it.
+- `GameState.can_drive()` needs an engine that runs (`engine_runs()`, see Under the hood) and both bolts tight. The garage doors use it.
 
 Bought gearboxes go to spare parts (`buy_gearbox`). The spare-parts Fit button for a gearbox opens this scene instead of swapping it instantly.
+
+### Under the hood
+
+`hood.gd` looks down into the engine bay from in front of the car; the wheel zooms and right-drag orbits. The engine is built by `engine_assembly.gd` in layers, as in Street Rod 2, each a rig of its own: the engine on two mounts, the cylinder heads on the engine, the intake on the heads, one to three carburetors and the distributor in the intake, the air cleaner over the carburetors, and the plug wires from the cap to the plugs. Each engine uses its own `assets/parts/engine-v8-*.glb` (the 350 shares the 327's), split by node name: the long block is the model less its heads (with their valve covers), intake, carburetor, distributor, and front drive, and the cast-iron intake, the stock four-barrel carburetor, and the distributor are those nodes of the same model in rigs of their own. The front drive (balancer, timing tab, pulleys, belt, alternator), the other intakes, the two-barrel carburetor, the air cleaners, the cap's plug towers, and the wires are built from primitives in the models' frame: +X toward the back of the car with the block from -1.5 to 1.5, +Z up, the crank at Z -0.36.
+
+The hood slots are `GameState.HOOD_SLOTS`: `heads`, `intake`, `carb`, `carb_2`, `carb_3`, `distributor`, and `air_cleaner`, kept in `slot_part_ids` with the under-car slots and saved the same way. An intake's `carbs` and `barrels` say how many carburetors it takes and of what kind (`carb_slots()`, `carb_fits_intake()`); a carburetor has `cfm`, a distributor its cap color and `drift`. Every part is held by the bolts in `HOOD_BOLT_COUNTS`, turned like the bellhousing bolts and saved per car as `engine_bolts`; a part with no entry is tight, so older saves load bolted down. `plug_wires` is saved per car too.
+
+- Bolt holes have click spheres on a physics layer of their own, and each part has a click box from its meshes' bounds. A bolt under the pointer wins over a part box unless the box's face is more than 10 cm in front of it, since a part's box takes in its own bolts. Bolts click as the bellhousing bolts do (`next_bolt_turns()`), two clicks in and two out; one backed out goes into the tray on the fender. Each carburetor is held by two nuts on opposite corners of its base. When all of a part's bolts are out and nothing is on top of it (`hood_part_blocker()`), it lifts off into spare parts (`remove_hood_part()`), and the parts under it follow if their bolts are out too. The air cleaner is on top of the carburetors, the carburetors and the distributor on the intake, the intake on the heads, and the heads on the engine; the plug wires have to come off before the distributor and the heads. The heads are one part however many the engine has (`engine_head_count()`, an engine's `heads`, 2 when not given), held by `HEAD_BOLTS` bolts on each (`hood_bolt_count()`), so a V8's heads have four. `engine_assembly.gd` builds each head in a node of its own and the hood screen gives each its own click box.
+- Parts lists the spares for every empty spot (`hood_spot_trouble()` says why a spot cannot take one yet). `fit_engine()` and `fit_hood_part()` lower the part in with its bolts at one turn.
+- `engine_runs()` needs the engine, heads, intake, every carburetor the intake takes, and the distributor in and tight, and the plug wires on. `engine_trouble()` says what is wrong, for the hint and the garage doors' tooltip. The air cleaner is optional.
+- Hood parts add `hp` and `vmax` like the under-car parts; each carburetor of a multi-carb intake adds its share. `carb_flow_factor()` takes power off when the carburetors' total `cfm` is well under what the engine's `cid` wants or far over it.
+- A blown engine (`remove_engine()`) leaves what was bolted on top of it in spare parts. Spare engines and hood parts open this scene from the spare-parts Fit button. The old performance carburetor and intake bolt-ons are now hood parts, and saves that had them fitted get them moved into their slots.
+
+### Timing
+
+`tune.gd` is Street Rod 2's tune screen: the engine idles, a timing light flashes once every two crank turns, and each flash stops the balancer with its mark at the timing against the tab (`engine_assembly.gd`'s `mark_angle()`, the tab drawn wider than real so it can be read). `engine_tune` is the timing in steps of `TIMING_DEG_PER_STEP` degrees before top dead center (`timing_degrees()`); Advance and Retard step it. The tune-up sticker shows the engine's sweet spot, and as in Street Rod 2 there is a pointer to set the mark against: a lit red pointer on the tab at the sweet spot. The mark stays where the last flash caught it and glows for a moment after each flash. Away from the sweet spot the mark wanders from flash to flash, and the idle drops, while `engine_sound.gd`'s `set_tune()` adds a second firing beat that drifts against the first and misses a firing now and then, both more often the further off it is. This is after Street Rod 2's two engine notes that only agree in tune. The idle plays louder there and the music is all but muted. The distributor's `drift` scales how likely the timing is to move after a race. Tune is open only when the engine runs, and Done goes back under the hood.
 
 ### Under the car
 
