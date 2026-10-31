@@ -104,9 +104,15 @@ func _rebuild_parts() -> void:
 		if not str(part.get("slot", "")).is_empty():
 			continue
 		_parts_list.add_child(_make_part_card(part))
+	_parts_list.add_child(_heading("UNDER THE HOOD"))
+	for part in GameState.PARTS:
+		if not GameState.is_hood_kind(str(part.get("slot", ""))) or bool(part.get("stock", false)):
+			continue
+		_parts_list.add_child(_make_part_card(part))
 	_parts_list.add_child(_heading("UNDER THE CAR"))
 	for part in GameState.PARTS:
-		if str(part.get("slot", "")).is_empty() or bool(part.get("stock", false)):
+		var slot := str(part.get("slot", ""))
+		if slot.is_empty() or GameState.is_hood_kind(slot) or bool(part.get("stock", false)):
 			continue
 		_parts_list.add_child(_make_part_card(part))
 

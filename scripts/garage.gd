@@ -2,7 +2,6 @@ extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
-const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
 @onready var _car_pivot: Node3D = $CarPivot
@@ -74,15 +73,8 @@ var _nav = _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
-var _tune_panel: Control
-var _tune_title: Label
-var _tune_engine: Label
-var _tune_gauge: Control
-var _tune_up: Button
-var _tune_down: Button
-var _tune_close: Button
-var _tune_preview: Control
-var _tune_sound: AudioStreamPlayer
+## The engine heard rolling out of and into the bay.
+var _engine_sound: AudioStreamPlayer
 var _hood: StaticBody3D
 var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
@@ -100,15 +92,16 @@ const _TOOLTIPS := {
 	&"doors": "Drive out (D)",
 	&"spray": "Paint job (P)",
 	&"fuel": "Gas station",
-	&"hood": "Engine",
+	&"hood": "Under the hood (H)",
 	&"calendar": "Calendar (X)",
 	&"lift": "Wheels (L)",
 	&"transmission": "Transmission (T)",
 	&"creeper": "Under the car (U)",
 }
 const _TOOLTIP_CARS := "Cars"
-const _TOOLTIP_NO_ENGINE := "No engine — fit one from spare parts"
+const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
 const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
+const _TOOLTIP_DOORS_NO_RUN := "Won't start: %s"
 const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
 const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
 const _SLOT_NAMES := {
@@ -117,6 +110,12 @@ const _SLOT_NAMES := {
 	"muffler": "Muffler",
 	"muffler_left": "Left muffler",
 	"differential": "Rear end",
+	"intake": "Intake manifold",
+	"carb": "Carburetor",
+	"carb_2": "Second carburetor",
+	"carb_3": "Third carburetor",
+	"distributor": "Distributor",
+	"air_cleaner": "Air cleaner",
 }
 ## Where the creeper lies on the floor, beside the car on the camera's side.
 const _CREEPER_SPOT := Vector3(-1.85, 0.0, -1.75)
@@ -168,7 +167,7 @@ func _ready() -> void:
 	$InteractDoors.set_meta(&"garage_interact", &"doors")
 	$InteractSprayPistol.set_meta(&"garage_interact", &"spray")
 	$InteractFuelCan.set_meta(&"garage_interact", &"fuel")
-	_build_tune_panel()
+	_build_engine_sound()
 	_build_hood_target()
 	_build_under_car_target()
 	_build_creeper()
@@ -297,6 +296,8 @@ func _tooltip_text_at_mouse() -> String:
 			return _TOOLTIP_NO_ENGINE
 		if kind == &"doors" or kind == &"fuel":
 			return _TOOLTIP_DOORS_NO_ENGINE
+	if (kind == &"doors" or kind == &"fuel") and not GameState.engine_runs():
+		return _TOOLTIP_DOORS_NO_RUN % GameState.engine_trouble().to_lower().trim_suffix(".")
 	if kind == &"doors" and not GameState.has_gearbox():
 		return _TOOLTIP_DOORS_NO_GEARBOX
 	if kind == &"doors" and not GameState.is_gearbox_bolted():
@@ -403,10 +404,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hide_car_list()
 		get_viewport().set_input_as_handled()
 		return
-	if _tune_panel != null and _tune_panel.visible and event.is_action_pressed(&"ui_cancel"):
-		_hide_tune_panel()
-		get_viewport().set_input_as_handled()
-		return
 	if _calendar_inspecting and event.is_action_pressed(&"ui_cancel"):
 		_hang_calendar()
 		get_viewport().set_input_as_handled()
@@ -472,8 +469,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
 			if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible:
-				return
-			if _tune_panel != null and _tune_panel.visible:
 				return
 			if _car_list != null and _car_list.visible:
 				_hide_car_list()
@@ -582,6 +577,8 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_hide_parts_board()
 			else:
 				_show_wheel_board()
+		KEY_H:
+			_handle_interact(&"hood")
 		KEY_T:
 			_handle_interact(&"transmission")
 		KEY_U:
@@ -606,7 +603,6 @@ func _hide_garage_overlays() -> void:
 		_parts_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
-	_hide_tune_panel()
 	_sync_menu_nav()
 
 
@@ -639,8 +635,6 @@ func _sync_menu_nav() -> void:
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
 		])
-	elif _tune_panel != null and _tune_panel.visible:
-		_nav.setup([_tune_up, _tune_down, _tune_close])
 	elif _parts_board != null and _parts_board.visible:
 		_nav.setup(_nav.collect_buttons(_parts_board))
 	elif _car_list != null and _car_list.visible:
@@ -727,10 +721,7 @@ func _handle_interact(kind: Variant) -> void:
 		&"fuel":
 			_start_drive_out(GameState.SCENE_GAS_STATION)
 		&"hood":
-			if GameState.has_engine():
-				_show_tune_panel()
-			else:
-				_show_spares_board()
+			_open_hood()
 		&"calendar":
 			_bring_calendar_forward()
 		&"lift":
@@ -752,6 +743,12 @@ func _open_transmission() -> void:
 	if _bay_busy or _departing or not GameState.has_active_car():
 		return
 	get_tree().change_scene_to_file(GameState.SCENE_TRANSMISSION)
+
+
+func _open_hood() -> void:
+	if _bay_busy or _departing or not GameState.has_active_car():
+		return
+	get_tree().change_scene_to_file(GameState.SCENE_HOOD)
 
 
 func _open_under_car() -> void:
@@ -922,30 +919,30 @@ func _apply_drive_out(t: float, start: Vector3, end: Vector3, wheels: Array[Node
 
 
 func _start_roll_engine() -> void:
-	if _tune_sound == null or not _tune_sound.has_method(&"set_state") or not GameState.has_engine():
+	if _engine_sound == null or not _engine_sound.has_method(&"set_state") or not GameState.has_engine():
 		return
 	GameState.set_music_dimmed(true)
-	_tune_sound.volume_db = _ROLL_VOL_NEAR
-	_tune_sound.call(&"set_state", _ROLL_RPM_IDLE, 0.15, false)
+	_engine_sound.volume_db = _ROLL_VOL_NEAR
+	_engine_sound.call(&"set_state", _ROLL_RPM_IDLE, 0.15, false)
 
 
 func _update_roll_engine(t: float, pulling_away: bool, away: float) -> void:
-	if _tune_sound == null or not _tune_sound.playing:
+	if _engine_sound == null or not _engine_sound.playing:
 		return
 	var rpm := lerpf(_ROLL_RPM_IDLE, _ROLL_RPM_PULL, t)
 	var throttle := lerpf(0.3, 0.9, t)
 	if not pulling_away:
 		rpm = lerpf(_ROLL_RPM_PULL, _ROLL_RPM_IDLE, t)
 		throttle = lerpf(0.55, 0.0, t)
-	_tune_sound.volume_db = lerpf(_ROLL_VOL_NEAR, _ROLL_VOL_FAR, away)
-	_tune_sound.call(&"set_state", rpm, throttle, false)
+	_engine_sound.volume_db = lerpf(_ROLL_VOL_NEAR, _ROLL_VOL_FAR, away)
+	_engine_sound.call(&"set_state", rpm, throttle, false)
 
 
 func _stop_roll_engine() -> void:
-	if _tune_sound != null:
-		_tune_sound.volume_db = -6.0
-		if _tune_sound.playing:
-			_tune_sound.stop()
+	if _engine_sound != null:
+		_engine_sound.volume_db = -6.0
+		if _engine_sound.playing:
+			_engine_sound.stop()
 	GameState.set_music_dimmed(false)
 
 
@@ -1112,6 +1109,8 @@ func _rebuild_parts_board() -> void:
 	for slot in GameState.active_slots():
 		var fitted := GameState.slot_part(slot)
 		var detail := "none" if fitted.is_empty() else _parts_row_text(fitted, "part")
+		if not fitted.is_empty() and GameState.is_hood_kind(GameState.spot_kind(slot)) and not GameState.is_hood_part_bolted(slot):
+			detail += "  (bolts loose)"
 		var label := str(_SLOT_NAMES[slot])
 		if slot == GameState.SLOT_MUFFLER and GameState.has_dual_exhaust():
 			label = "Right muffler"
@@ -1235,6 +1234,11 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 	var err := ""
 	match kind:
 		"engine":
+			if GameState.owns_engine(part_id):
+				# Engines go in from under the hood, mounts and all.
+				_hide_parts_board()
+				_open_hood()
+				return
 			err = GameState.buy_or_equip_engine(part_id)
 		"transmission":
 			# Gearboxes go in from under the car, bolts and all.
@@ -1248,6 +1252,11 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 				return
 			err = GameState.buy_or_equip_wheel(part_id)
 		"part":
+			if GameState.is_hood_kind(GameState.part_slot(part_id)):
+				# Intakes, carburetors, distributors, and air cleaners go on under the hood.
+				_hide_parts_board()
+				_open_hood()
+				return
 			if not GameState.part_slot(part_id).is_empty():
 				# Manifolds, mufflers, and rear ends go on from the creeper.
 				_hide_parts_board()
@@ -1511,135 +1520,12 @@ func _transformed_aabb(xf: Transform3D, local: AABB) -> AABB:
 	return out
 
 
-func _build_tune_panel() -> void:
-	var root := Control.new()
-	root.name = "TunePanel"
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.visible = false
-	root.mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = Color(0.05, 0.05, 0.06, 0.55)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(dim)
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -250.0
-	panel.offset_top = -270.0
-	panel.offset_right = 250.0
-	panel.offset_bottom = 270.0
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.07, 0.98)
-	style.border_color = Color(0.55, 0.12, 0.1, 1.0)
-	style.set_border_width_all(2)
-	style.content_margin_left = 16.0
-	style.content_margin_right = 16.0
-	style.content_margin_top = 14.0
-	style.content_margin_bottom = 14.0
-	panel.add_theme_stylebox_override(&"panel", style)
-	root.add_child(panel)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 8)
-	panel.add_child(box)
-	_tune_title = Label.new()
-	_tune_title.text = "Engine tune"
-	_tune_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tune_title.add_theme_font_size_override(&"font_size", 22)
-	_tune_title.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
-	box.add_child(_tune_title)
-	_tune_engine = Label.new()
-	_tune_engine.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tune_engine.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
-	box.add_child(_tune_engine)
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override(&"separation", 12)
-	_tune_preview = _TunePreview.new()
-	_tune_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_tune_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	row.add_child(_tune_preview)
-	var column := VBoxContainer.new()
-	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_theme_constant_override(&"separation", 6)
-	_tune_up = _TuneArrow.new()
-	(_tune_up as _TuneArrow).points_up = true
-	_tune_up.pressed.connect(_on_tune_step_pressed.bind(1))
-	column.add_child(_tune_up)
-	_tune_gauge = _TuneGauge.new()
-	column.add_child(_tune_gauge)
-	_tune_down = _TuneArrow.new()
-	(_tune_down as _TuneArrow).points_up = false
-	_tune_down.pressed.connect(_on_tune_step_pressed.bind(-1))
-	column.add_child(_tune_down)
-	var center := CenterContainer.new()
-	center.add_child(column)
-	row.add_child(center)
-	box.add_child(row)
-	_tune_close = Button.new()
-	_tune_close.text = "Close"
-	_tune_close.pressed.connect(_hide_tune_panel)
-	box.add_child(_tune_close)
-	$GarageUI.add_child(root)
-	_tune_panel = root
-	_tune_sound = AudioStreamPlayer.new()
-	_tune_sound.name = "TuneEngineSound"
-	_tune_sound.set_script(_EngineSound)
-	_tune_sound.set(&"play_on_ready", false)
-	add_child(_tune_sound)
-
-
-func _show_tune_panel() -> void:
-	if _bay_busy or _departing or _tune_panel == null:
-		return
-	_hide_garage_overlays()
-	_tune_panel.visible = true
-	_refresh_tune_panel()
-	_sync_menu_nav()
-
-
-func _hide_tune_panel() -> void:
-	if _tune_panel == null or not _tune_panel.visible:
-		return
-	_tune_panel.visible = false
-	_stop_tune_sound()
-	_sync_menu_nav()
-
-
-func _on_tune_step_pressed(delta: int) -> void:
-	GameState.set_engine_tune(GameState.engine_tune + delta)
-	_refresh_tune_panel()
-
-
-func _refresh_tune_panel() -> void:
-	GameState.refresh_car_stats()
-	var engine := GameState.get_equipped_engine()
-	var engine_name := str(engine.get("name", "Engine"))
-	_tune_engine.text = engine_name
-	var sweet := GameState.engine_sweet_tune()
-	var tune := GameState.engine_tune
-	if _tune_gauge is _TuneGauge:
-		(_tune_gauge as _TuneGauge).set_tune(tune, sweet)
-	_tune_up.disabled = tune >= GameState.ENGINE_TUNE_MAX
-	_tune_down.disabled = tune <= GameState.ENGINE_TUNE_MIN
-	_tune_up.queue_redraw()
-	_tune_down.queue_redraw()
-	if _tune_preview != null and _tune_preview.has_method(&"set_engine"):
-		_tune_preview.call(&"set_engine", str(engine.get("model", "")))
-		_tune_preview.call(&"set_tune", tune, sweet)
-	if _tune_panel.visible:
-		_sync_tune_sound(tune, sweet)
-
-
-func _sync_tune_sound(tune: int, sweet: int) -> void:
-	if _tune_sound == null or not _tune_sound.has_method(&"set_tune"):
-		return
-	_tune_sound.call(&"set_tune", tune, sweet)
-	GameState.set_music_dimmed(true)
-
-
-func _stop_tune_sound() -> void:
-	if _tune_sound != null and _tune_sound.playing:
-		_tune_sound.stop()
-	GameState.set_music_dimmed(false)
+func _build_engine_sound() -> void:
+	_engine_sound = AudioStreamPlayer.new()
+	_engine_sound.name = "EngineSound"
+	_engine_sound.set_script(_EngineSound)
+	_engine_sound.set(&"play_on_ready", false)
+	add_child(_engine_sound)
 
 
 func _show_stats() -> void:
@@ -2068,61 +1954,3 @@ func _weekday_sunday0(year: int, month: int, day: int) -> int:
 	if month < 3:
 		y -= 1
 	return (y + int(y / 4) - int(y / 100) + int(y / 400) + int(t[month - 1]) + day) % 7
-
-
-class _TuneArrow extends Button:
-	var points_up: bool = true
-
-	func _ready() -> void:
-		custom_minimum_size = Vector2(64, 40)
-		text = ""
-		focus_mode = Control.FOCUS_ALL
-
-	func _draw() -> void:
-		var color := Color(0.95, 0.9, 0.78, 1.0)
-		if disabled:
-			color.a = 0.35
-		var mid := size * 0.5
-		var pts := PackedVector2Array()
-		if points_up:
-			pts = PackedVector2Array([mid + Vector2(0, -9), mid + Vector2(12, 8), mid + Vector2(-12, 8)])
-		else:
-			pts = PackedVector2Array([mid + Vector2(0, 9), mid + Vector2(12, -8), mid + Vector2(-12, -8)])
-		draw_colored_polygon(pts, color)
-
-
-class _TuneGauge extends Control:
-	var tune: int = 0
-	var sweet: int = 6
-
-	func _init() -> void:
-		custom_minimum_size = Vector2(88, 210)
-		mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	func set_tune(next: int, next_sweet: int) -> void:
-		tune = next
-		sweet = next_sweet
-		queue_redraw()
-
-	func _draw() -> void:
-		var steps := GameState.ENGINE_TUNE_MAX
-		var track := Rect2(18.0, 4.0, 52.0, size.y - 8.0)
-		draw_rect(track, Color(0.08, 0.06, 0.05, 1.0))
-		var row_h := track.size.y / float(steps + 1)
-		for step in steps + 1:
-			var scale := GameState.engine_tune_scale(step, sweet)
-			var warmth := clampf((scale - 0.68) / 0.32, 0.0, 1.0)
-			var bar_w := lerpf(8.0, track.size.x - 12.0, warmth)
-			var y := track.position.y + track.size.y - (float(step) + 1.0) * row_h
-			var bar := Rect2(track.position.x + 6.0, y + 2.0, bar_w, maxf(row_h - 4.0, 1.0))
-			var color := Color(0.42, 0.14, 0.1).lerp(Color(0.95, 0.78, 0.32), warmth)
-			draw_rect(bar, color)
-			if step == sweet:
-				draw_rect(Rect2(track.position.x + 2.0, y + 1.0, track.size.x - 4.0, row_h - 2.0), Color(0.95, 0.82, 0.4, 0.28), false, 2.0)
-		var mark_y := track.position.y + track.size.y - (float(tune) + 0.5) * row_h
-		var tip := Vector2(track.position.x - 1.0, mark_y)
-		draw_colored_polygon(PackedVector2Array([
-			tip + Vector2(-12, -6),
-			tip,
-			tip + Vector2(-12, 6),
-		]), Color(0.95, 0.9, 0.78))

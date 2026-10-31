@@ -7,7 +7,8 @@
       "price": 900,
       "hp": 230,
       "vmax": 200,
-      "model": "res://assets/parts/engine-v8-265.glb"
+      "cid": 265,
+      "model": "res://assets/parts/engine-sbc.glb"
     },
     {
       "id": "v8-283",
@@ -16,7 +17,8 @@
       "price": 0,
       "hp": 280,
       "vmax": 220,
-      "model": "res://assets/parts/engine-v8-283.glb"
+      "cid": 283,
+      "model": "res://assets/parts/engine-sbc.glb"
     },
     {
       "id": "v8-327",
@@ -25,7 +27,18 @@
       "price": 2400,
       "hp": 350,
       "vmax": 250,
-      "model": "res://assets/parts/engine-v8-327.glb"
+      "cid": 327,
+      "model": "res://assets/parts/engine-sbc.glb"
+    },
+    {
+      "id": "v8-350",
+      "concern": "GM",
+      "name": "350 V8",
+      "price": 3100,
+      "hp": 370,
+      "vmax": 262,
+      "cid": 350,
+      "model": "res://assets/parts/engine-sbc.glb"
     }
   ],
   "transmissions": [
@@ -105,8 +118,19 @@
     }
   ],
   "parts": [
-    {"id": "carb", "name": "Four-barrel carburetor", "price": 450, "hp": 25, "vmax": 4},
-    {"id": "intake", "name": "Performance intake", "price": 320, "hp": 15, "vmax": 2},
+    {"id": "intake-iron4", "slot": "intake", "stock": true, "style": "iron4", "carbs": 1, "barrels": 4, "name": "Cast-iron four-barrel intake", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "intake", "slot": "intake", "style": "highrise", "carbs": 1, "barrels": 4, "name": "Aluminum high-rise intake", "price": 320, "hp": 15, "vmax": 2},
+    {"id": "intake-tripower", "slot": "intake", "style": "tripower", "carbs": 3, "barrels": 2, "name": "Tri-power intake", "price": 420, "hp": 22, "vmax": 3},
+    {"id": "intake-dualquad", "slot": "intake", "style": "dualquad", "carbs": 2, "barrels": 4, "name": "Dual-quad intake", "price": 560, "hp": 30, "vmax": 4},
+    {"id": "carb-4bbl-stock", "slot": "carb", "stock": true, "style": "4bbl", "barrels": 4, "cfm": 450, "name": "Stock four-barrel carburetor", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "carb", "slot": "carb", "style": "4bbl", "finish": "bright", "barrels": 4, "cfm": 650, "name": "650 cfm four-barrel carburetor", "price": 450, "hp": 25, "vmax": 4},
+    {"id": "carb-750", "slot": "carb", "style": "4bbl", "finish": "silver", "barrels": 4, "cfm": 750, "name": "750 cfm double-pumper four-barrel", "price": 620, "hp": 34, "vmax": 5},
+    {"id": "carb-2bbl", "slot": "carb", "style": "2bbl", "barrels": 2, "cfm": 260, "name": "Two-barrel carburetor", "price": 90, "hp": 12, "vmax": 2},
+    {"id": "dist-points", "slot": "distributor", "stock": true, "cap": "black", "drift": 1.0, "name": "Points distributor", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "dist-dualpoint", "slot": "distributor", "cap": "red", "drift": 0.6, "name": "Dual-point distributor", "price": 140, "hp": 6, "vmax": 1},
+    {"id": "dist-transistor", "slot": "distributor", "cap": "blue", "drift": 0.3, "name": "Transistor ignition", "price": 260, "hp": 10, "vmax": 2},
+    {"id": "air-cleaner-stock", "slot": "air_cleaner", "stock": true, "style": "stock", "name": "Stock air cleaner", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "air-cleaner-chrome", "slot": "air_cleaner", "style": "chrome", "name": "Chrome open-element air cleaner", "price": 60, "hp": 4, "vmax": 1},
     {"id": "cam", "name": "Racing camshaft", "price": 520, "hp": 30, "vmax": 6},
     {"id": "tires", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8},
     {"id": "manifold-iron", "slot": "manifold", "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 0, "hp": 0, "vmax": 0},

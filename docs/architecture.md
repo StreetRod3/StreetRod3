@@ -45,6 +45,8 @@ flowchart TD
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
 | `scenes/transmission.tscn` | `scripts/transmission.gd` | Under the car: bellhousing bolts, gearbox out and in on a jack |
 | `scenes/under_car.tscn` | `scripts/under_car.gd` | On the creeper: exhaust manifolds, muffler, and rear end |
+| `scenes/hood.tscn` | `scripts/hood.gd` | Under the hood: engine, intake, carburetors, distributor, air cleaner, plug wires |
+| `scenes/tune.tscn` | `scripts/tune.gd` | Timing light on the balancer: advance or retard the distributor |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
@@ -116,9 +118,25 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 - Clicking a bolt hole threads the bolt in. Each click tightens it a turn until it is tight. Clicking a tight bolt backs it out a turn at a time until it drops to the floor.
 - With both bolts out, `GameState.remove_gearbox()` sets the gearbox to `NO_GEARBOX_ID` and it goes to spare parts. The jack takes it down after the crossmember is pulled.
 - Select lists spare gearboxes. It refuses while a gearbox is still in. `fit_gearbox()` raises the chosen one in with both bolts at one turn.
-- `GameState.can_drive()` needs an engine and both bolts tight. The garage doors use it.
+- `GameState.can_drive()` needs an engine that runs (`engine_runs()`, see Under the hood) and both bolts tight. The garage doors use it.
 
 Bought gearboxes go to spare parts (`buy_gearbox`). The spare-parts Fit button for a gearbox opens this scene instead of swapping it instantly.
+
+### Under the hood
+
+`hood.gd` looks down into the engine bay from in front of the car; the wheel zooms and right-drag orbits. The engine is built by `engine_assembly.gd` in layers, as in Street Rod 2, each a rig of its own: the engine on two mounts, the intake on the engine, one to three carburetors and the distributor in the intake, the air cleaner over the carburetors, and the plug wires from the cap to the plugs. All four small blocks use `assets/parts/engine-sbc.glb`, the long block with the front drive (balancer, timing tab, pulleys, belt, alternator) added in code. The cast-iron intake, the four-barrel carburetor, and the distributor are models too; the other intakes, the two-barrel carburetor, the air cleaners, and the wires are built from primitives. The four models are split out of a small block 3DS model in the frame the game's engine models use: +X toward the back of the car with the block from -1.5 to 1.5, +Z up, the crank at Z -0.36.
+
+The hood slots are `GameState.HOOD_SLOTS`: `intake`, `carb`, `carb_2`, `carb_3`, `distributor`, and `air_cleaner`, kept in `slot_part_ids` with the under-car slots and saved the same way. An intake's `carbs` and `barrels` say how many carburetors it takes and of what kind (`carb_slots()`, `carb_fits_intake()`); a carburetor has `cfm`, a distributor its cap color and `drift`. Every part is held by the bolts in `HOOD_BOLT_COUNTS`, turned like the bellhousing bolts and saved per car as `engine_bolts`; a part with no entry is tight, so older saves load bolted down. `plug_wires` is saved per car too.
+
+- Clicking a bolt hole threads its bolt in, each click after that tightens it, and clicking a tight bolt backs it out into the tray on the fender. When all of a part's bolts are out and nothing is on top of it (`hood_part_blocker()`), it lifts off into spare parts (`remove_hood_part()`), and the parts under it follow if their bolts are out too. The air cleaner is on top of the carburetors, the carburetors and the distributor on the intake, and the intake on the engine; the plug wires have to come off before the distributor.
+- Parts lists the spares for every empty spot (`hood_spot_trouble()` says why a spot cannot take one yet). `fit_engine()` and `fit_hood_part()` lower the part in with its bolts at one turn.
+- `engine_runs()` needs the engine, intake, every carburetor the intake takes, and the distributor in and tight, and the plug wires on. `engine_trouble()` says what is wrong, for the hint and the garage doors' tooltip. The air cleaner is optional.
+- Hood parts add `hp` and `vmax` like the under-car parts; each carburetor of a multi-carb intake adds its share. `carb_flow_factor()` takes power off when the carburetors' total `cfm` is well under what the engine's `cid` wants or far over it.
+- A blown engine (`remove_engine()`) leaves what was bolted on top of it in spare parts. Spare engines and hood parts open this scene from the spare-parts Fit button. The old performance carburetor and intake bolt-ons are now hood parts, and saves that had them fitted get them moved into their slots.
+
+### Timing
+
+`tune.gd` is Street Rod 2's tune screen: the engine idles, a timing light flashes once every two crank turns, and each flash stops the balancer with its mark at the timing against the tab (`engine_assembly.gd`'s `mark_angle()`, the tab drawn wider than real so it can be read). `engine_tune` is the timing in steps of `TIMING_DEG_PER_STEP` degrees before top dead center (`timing_degrees()`); Advance and Retard step it. The tune-up sticker shows the engine's sweet spot. Away from it the idle drops (`engine_sound.gd`'s `set_tune()`) and the mark wanders on each flash. The distributor's `drift` scales how likely the timing is to move after a race. Tune is open only when the engine runs, and Done goes back under the hood.
 
 ### Under the car
 
