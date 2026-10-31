@@ -101,6 +101,13 @@ func _rebuild_parts() -> void:
 		_parts_list.add_child(_make_wheel_card(wheel))
 	_parts_list.add_child(_heading("ENGINE & CHASSIS"))
 	for part in GameState.PARTS:
+		if not str(part.get("slot", "")).is_empty():
+			continue
+		_parts_list.add_child(_make_part_card(part))
+	_parts_list.add_child(_heading("UNDER THE CAR"))
+	for part in GameState.PARTS:
+		if str(part.get("slot", "")).is_empty() or bool(part.get("stock", false)):
+			continue
 		_parts_list.add_child(_make_part_card(part))
 
 
@@ -113,21 +120,21 @@ func _rebuild_cars() -> void:
 
 func _make_part_card(part: Dictionary) -> Control:
 	var part_id := str(part.get("id", ""))
-	var owned := GameState.owns_part(part_id)
+	var owned := GameState.part_count(part_id)
 	var equipped := GameState.is_part_equipped(part_id)
 	var price := int(part.get("price", 0))
 	var box := _card()
 	box.add_child(_heading(str(part.get("name", "Part"))))
-	box.add_child(_body("+%d hp   +%d km/h" % [int(part.get("hp", 0)), int(part.get("vmax", 0))]))
+	box.add_child(_body(GameState.part_detail(part)))
 	var btn := _ink_button()
-	if equipped:
-		btn.text = "On the car"
-		btn.disabled = true
-	elif owned:
-		btn.text = "In spare parts"
+	if owned > 0:
+		box.add_child(_body("You have %d%s" % [owned, " · on this car" if equipped else ""]))
+	if bool(part.get("stock", false)) and owned > 0:
+		btn.text = "On the car" if equipped else "In spare parts"
 		btn.disabled = true
 	else:
-		btn.text = "Buy — $%d" % price
+		# Buy as many as you like: one for each car, or each side of a dual exhaust.
+		btn.text = ("Buy another — $%d" if owned > 0 else "Buy — $%d") % price
 		btn.disabled = GameState.money < price
 		btn.pressed.connect(_on_buy_part.bind(part_id))
 	box.add_child(btn)

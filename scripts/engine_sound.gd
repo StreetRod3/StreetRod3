@@ -23,7 +23,7 @@ func _ready() -> void:
 	gen.mix_rate = MIX_RATE
 	gen.buffer_length = BUFFER_S
 	stream = gen
-	volume_db = -6.0
+	volume_db = -6.0 + GameState.exhaust_volume_db()
 	bus = "Master"
 	if play_on_ready:
 		_start_playback()

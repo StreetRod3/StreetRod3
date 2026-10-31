@@ -32,12 +32,18 @@ const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
 
 var _orbiting: bool = false
 var _yaw: float = -PI * 0.5
-var _pitch: float = 0.35
-var _cam_distance: float = 7.0
-var _cam_distance_target: float = 7.0
+var _pitch: float = 0.24
+var _cam_distance: float = CAM_DISTANCE_DEFAULT
+var _cam_distance_target: float = CAM_DISTANCE_DEFAULT
 
 # Camera zoom limits (mouse wheel + pinch).
-const CAM_DISTANCE_DEFAULT := 7.0
+const CAM_DISTANCE_DEFAULT := 6.6
+## Height above the car the camera aims at. Above the roof, so the back wall, its
+## shelves and clock, and the ceiling fill the frame the way Street Rod 2's garage did.
+const CAM_LOOK_HEIGHT := 1.9
+## Inside faces of the walls and ceiling, less a margin. The camera stays in the room.
+const ROOM_MIN := Vector3(-6.75, 0.3, -7.05)
+const ROOM_MAX := Vector3(4.45, 6.2, 6.85)
 const CAM_DISTANCE_MIN := 2.5
 const CAM_DISTANCE_MAX := 20.0
 const ZOOM_STEP := 0.75
@@ -85,6 +91,7 @@ var _hood: StaticBody3D
 var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
+var _creeper: StaticBody3D
 var _loss_root: Control
 var _loss_panel: PanelContainer
 var _loss_tail: Node2D
@@ -103,12 +110,22 @@ const _TOOLTIPS := {
 	&"calendar": "Calendar (X)",
 	&"lift": "Wheels (L)",
 	&"transmission": "Transmission (T)",
+	&"creeper": "Under the car (U)",
 }
 const _TOOLTIP_CARS := "Cars"
 const _TOOLTIP_NO_ENGINE := "No engine — fit one from spare parts"
 const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
 const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
 const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
+const _SLOT_NAMES := {
+	"manifold": "Exhaust manifolds",
+	"exhaust": "Exhaust",
+	"muffler": "Muffler",
+	"muffler_left": "Left muffler",
+	"differential": "Rear end",
+}
+## Where the creeper lies on the floor, beside the car on the camera's side.
+const _CREEPER_SPOT := Vector3(-1.85, 0.0, -1.75)
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",
@@ -161,6 +178,7 @@ func _ready() -> void:
 	_build_tune_panel()
 	_build_hood_target()
 	_build_under_car_target()
+	_build_creeper()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
 	_lift_arm_home = _lift_arm.position
@@ -648,6 +666,8 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_show_wheel_board()
 		KEY_T:
 			_handle_interact(&"transmission")
+		KEY_U:
+			_handle_interact(&"creeper")
 		_:
 			return false
 	_sync_menu_nav()
@@ -734,7 +754,21 @@ func _update_camera_transform() -> void:
 	_camera_pitch.rotation = Vector3.ZERO
 	_camera_pitch.rotate_object_local(Vector3.RIGHT, -_pitch)
 	_camera.position = Vector3(0.0, 0.6, _cam_distance)
-	_camera.look_at(_camera_pivot.global_position + Vector3(0.0, 0.4, 0.0), Vector3.UP)
+	var target := _camera_pivot.global_position + Vector3(0.0, CAM_LOOK_HEIGHT, 0.0)
+	_camera.global_position = _inside_room(target, _camera.global_position)
+	_camera.look_at(target, Vector3.UP)
+
+
+## `eye`, pulled in toward `target` until it is inside the walls.
+func _inside_room(target: Vector3, eye: Vector3) -> Vector3:
+	var t := 1.0
+	for axis in 3:
+		var reach := eye[axis] - target[axis]
+		if absf(reach) < 0.0001:
+			continue
+		var limit := ROOM_MAX[axis] if reach > 0.0 else ROOM_MIN[axis]
+		t = minf(t, clampf((limit - target[axis]) / reach, 0.0, 1.0))
+	return target.lerp(eye, t)
 
 
 func _try_interact(screen_pos: Vector2) -> void:
@@ -789,11 +823,13 @@ func _handle_interact(kind: Variant) -> void:
 			_show_wheel_board()
 		&"transmission":
 			_open_transmission()
+		&"creeper":
+			_open_under_car()
 
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"transmission":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"transmission", &"creeper":
 			return true
 	return false
 
@@ -802,6 +838,12 @@ func _open_transmission() -> void:
 	if _bay_busy or _departing or not GameState.has_active_car():
 		return
 	get_tree().change_scene_to_file(GameState.SCENE_TRANSMISSION)
+
+
+func _open_under_car() -> void:
+	if _bay_busy or _departing or not GameState.has_active_car():
+		return
+	get_tree().change_scene_to_file(GameState.SCENE_UNDER_CAR)
 
 
 func _start_drive_out() -> void:
@@ -1161,6 +1203,13 @@ func _rebuild_parts_board() -> void:
 		_parts_list.add_child(_mounted_line("Transmission", _parts_row_text(box, "transmission")))
 	if not wheel.is_empty():
 		_parts_list.add_child(_mounted_line("Wheels", _parts_row_text(wheel, "wheels")))
+	for slot in GameState.active_slots():
+		var fitted := GameState.slot_part(slot)
+		var detail := "none" if fitted.is_empty() else _parts_row_text(fitted, "part")
+		var label := str(_SLOT_NAMES[slot])
+		if slot == GameState.SLOT_MUFFLER and GameState.has_dual_exhaust():
+			label = "Right muffler"
+		_parts_list.add_child(_mounted_line(label, detail))
 	for part_id in GameState.equipped_part_ids:
 		var part: Dictionary = GameState.listing_by_id(GameState.PARTS, part_id)
 		if part.is_empty():
@@ -1205,7 +1254,7 @@ func _rebuild_spares_list() -> void:
 			count += 1
 	for part in GameState.PARTS:
 		var part_id := str(part.get("id", ""))
-		if GameState.owns_part(part_id) and not GameState.is_part_equipped(part_id):
+		if GameState.spare_count(part_id) > 0:
 			_parts_list.add_child(_parts_row(part, "part", ""))
 			count += 1
 	if count == 0:
@@ -1256,6 +1305,8 @@ func _parts_row_text(item: Dictionary, kind: String) -> String:
 	if kind == "transmission":
 		var kind_name := "auto" if bool(item.get("automatic", false)) else "manual"
 		return "%s  %s" % [name, kind_name]
+	if kind == "part" and item.has("slot"):
+		return "%s  %s" % [name, GameState.part_detail(item)]
 	if kind == "part":
 		return "%s  +%d hp" % [name, int(item.get("hp", 0))]
 	return name
@@ -1291,6 +1342,11 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 				return
 			err = GameState.buy_or_equip_wheel(part_id)
 		"part":
+			if not GameState.part_slot(part_id).is_empty():
+				# Manifolds, mufflers, and rear ends go on from the creeper.
+				_hide_parts_board()
+				_open_under_car()
+				return
 			err = GameState.equip_part(part_id)
 	if not err.is_empty():
 		_parts_status.text = err
@@ -1558,6 +1614,61 @@ func _build_under_car_target() -> void:
 	_under_car.set_meta(&"garage_interact", &"transmission")
 
 
+## A mechanic's creeper on the floor beside the car: padded deck on six casters.
+func _build_creeper() -> void:
+	_creeper = StaticBody3D.new()
+	_creeper.name = "InteractCreeper"
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(1.05, 0.16, 0.48)
+	col.shape = shape
+	col.position = Vector3(0.0, 0.08, 0.0)
+	_creeper.add_child(col)
+	var frame := _prop_mat(Color(0.55, 0.12, 0.08), 0.4, 0.45)
+	var pad := _prop_mat(Color(0.08, 0.075, 0.07), 0.0, 0.65)
+	var steel := _prop_mat(Color(0.6, 0.6, 0.62), 0.8, 0.3)
+	var rubber := _prop_mat(Color(0.04, 0.04, 0.04), 0.0, 0.9)
+	_prop_box(_creeper, Vector3(1.0, 0.025, 0.42), Vector3(0.0, 0.1, 0.0), frame)
+	_prop_box(_creeper, Vector3(0.78, 0.03, 0.36), Vector3(-0.08, 0.127, 0.0), pad)
+	# Headrest at the head end, toward the front of the car.
+	_prop_box(_creeper, Vector3(0.16, 0.05, 0.3), Vector3(0.4, 0.137, 0.0), pad)
+	for cx in [-0.42, 0.0, 0.42]:
+		for cz in [-0.17, 0.17]:
+			_prop_box(_creeper, Vector3(0.04, 0.03, 0.04), Vector3(cx, 0.075, cz), steel)
+			var wheel := MeshInstance3D.new()
+			var mesh := CylinderMesh.new()
+			mesh.top_radius = 0.03
+			mesh.bottom_radius = 0.03
+			mesh.height = 0.022
+			wheel.mesh = mesh
+			wheel.material_override = rubber
+			wheel.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+			wheel.position = Vector3(cx, 0.03, cz)
+			_creeper.add_child(wheel)
+	_creeper.position = _CREEPER_SPOT
+	_creeper.rotation.y = 0.12 - PI * 0.5
+	add_child(_creeper)
+	_creeper.set_meta(&"garage_interact", &"creeper")
+
+
+func _prop_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+
+
+func _prop_mat(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.metallic = metallic
+	mat.roughness = roughness
+	return mat
+
+
 func _world_mesh_aabb(node: Node) -> AABB:
 	var box := AABB()
 	var started := false
@@ -1727,13 +1838,15 @@ func _show_stats() -> void:
 	var kind := "automatic" if bool(box.get("automatic", false)) else "manual"
 	if box.is_empty():
 		kind = "not fitted"
-	var t := "Car: %s\n\nTop speed: %.0f km/h\nEngine power: %.0f hp\nGearbox: %s\n%s, %d gears\nFuel: %.0f L" % [
+	var rear_end := GameState.slot_part(GameState.SLOT_DIFFERENTIAL)
+	var t := "Car: %s\n\nTop speed: %.0f km/h\nEngine power: %.0f hp\nGearbox: %s\n%s, %d gears\nRear end: %s\nFuel: %.0f L" % [
 		GameState.car_name,
 		GameState.get_effective_vmax_kmh(),
 		GameState.engine_power_hp,
 		str(box.get("name", "—")),
 		kind,
 		gear_count,
+		str(rear_end.get("name", "—")),
 		GameState.fuel,
 	]
 	_stats_label.text = t

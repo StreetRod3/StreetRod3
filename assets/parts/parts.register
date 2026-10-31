@@ -107,8 +107,19 @@
   "parts": [
     {"id": "carb", "name": "Four-barrel carburetor", "price": 450, "hp": 25, "vmax": 4},
     {"id": "intake", "name": "Performance intake", "price": 320, "hp": 15, "vmax": 2},
-    {"id": "exhaust", "name": "Headers & exhaust", "price": 380, "hp": 18, "vmax": 5},
     {"id": "cam", "name": "Racing camshaft", "price": 520, "hp": 30, "vmax": 6},
-    {"id": "tires", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8}
+    {"id": "tires", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8},
+    {"id": "manifold-iron", "slot": "manifold", "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "exhaust", "slot": "manifold", "style": "shorty", "name": "Tube headers", "price": 380, "hp": 18, "vmax": 5},
+    {"id": "headers-long", "slot": "manifold", "style": "long-tube", "name": "Long-tube headers, ceramic coated", "price": 690, "hp": 28, "vmax": 7},
+    {"id": "exhaust-single", "slot": "exhaust", "stock": true, "style": "single", "name": "Single exhaust", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "exhaust-dual", "slot": "exhaust", "style": "dual", "dual": true, "name": "Dual exhaust", "price": 340, "hp": 12, "vmax": 3},
+    {"id": "muffler-stock", "slot": "muffler", "stock": true, "style": "oval", "name": "Stock muffler", "price": 0, "hp": 0, "vmax": 0, "loud_db": 0.0},
+    {"id": "muffler-turbo", "slot": "muffler", "style": "turbo", "name": "Turbo muffler", "price": 150, "hp": 6, "vmax": 1, "loud_db": 1.5},
+    {"id": "muffler-glasspack", "slot": "muffler", "style": "glasspack", "name": "Glasspack muffler", "price": 110, "hp": 9, "vmax": 2, "loud_db": 4.0},
+    {"id": "diff-308", "slot": "differential", "stock": true, "style": "iron", "name": "3.08 rear end", "price": 0, "ratio": 3.08, "accel": 1.0, "top_speed": 1.0},
+    {"id": "diff-355", "slot": "differential", "style": "chrome", "name": "3.55 rear end", "price": 260, "ratio": 3.55, "accel": 1.1, "top_speed": 0.96},
+    {"id": "diff-411", "slot": "differential", "style": "finned", "name": "4.11 Positraction rear end", "price": 480, "ratio": 4.11, "accel": 1.2, "top_speed": 0.91},
+    {"id": "diff-456", "slot": "differential", "style": "girdle", "name": "4.56 drag rear end", "price": 620, "ratio": 4.56, "accel": 1.28, "top_speed": 0.86}
   ]
 }

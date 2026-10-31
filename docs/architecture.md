@@ -29,6 +29,8 @@ flowchart TD
   garage -->|Doors| select
   garage -->|Under the car| trans[Transmission]
   trans -->|Done| garage
+  garage -->|Creeper| under[Under the car]
+  under -->|Done| garage
   select -->|Pick rival| race
   select -->|Back| garage
   race -->|Garage or menu| garage
@@ -42,6 +44,7 @@ flowchart TD
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
 | `scenes/transmission.tscn` | `scripts/transmission.gd` | Under the car: bellhousing bolts, gearbox out and in on a jack |
+| `scenes/under_car.tscn` | `scripts/under_car.gd` | On the creeper: exhaust manifolds, muffler, and rear end |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
@@ -104,6 +107,7 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 | `spray` | Color picker; writes `GameState.car_color` |
 | `calendar` | Pulls the wall calendar toward the camera |
 | `transmission` | Opens the transmission scene (low band between the wheels, or T) |
+| `creeper` | Opens the under-car scene (the creeper on the floor, or U) |
 
 ### Transmission
 
@@ -115,6 +119,19 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 - `GameState.can_drive()` needs an engine and both bolts tight. The garage doors use it.
 
 Bought gearboxes go to spare parts (`buy_gearbox`). The spare-parts Fit button for a gearbox opens this scene instead of swapping it instantly.
+
+### Under the car
+
+`under_car.gd` looks up at the whole underside of the car on jack stands, front to the right of the screen and tilted a little across the car. It shows the equipped engine model and a driveline, exhaust, and axle built from primitives. The wheel zooms and right-drag tilts the view.
+
+The slots are the exhaust manifolds, the exhaust, the muffler, a left muffler, and the rear end (`GameState.UNDER_CAR_SLOTS`). The left muffler is used only behind a dual exhaust (`active_slots()`, `muffler_slots()`); a single exhaust's one muffler is `SLOT_MUFFLER`, on the car's right. Parts in the register's `parts` list name the kind of slot they fit in `slot` (both muffler slots take `muffler` parts, `spot_kind()`), their look in `style`, and a dual exhaust has `dual`. The parts are drawn per style: log manifolds, shorty or long-tube headers, single or dual head pipes, oval, turbo, or glasspack mufflers each with its tailpipe, and iron, chrome, finned, or girdled rear-end covers with the ratio on a tag. Each car starts with the `stock` parts in `STOCK_SLOT_PARTS`. The active car's slots live on `GameState.slot_part_ids`, apart from the bolt-ons in `equipped_part_ids`, and are saved per car as `slot_parts`.
+
+- Clicking a part, or pressing 1 to 5, lists the spares for that slot. `fit_slot_part(part_id, slot)` swaps one in, and the old part goes to spare parts. A muffler needs an exhaust to hang on.
+- The exhaust and the mufflers can come off (`remove_slot_part()`, `REMOVABLE_SLOTS`); the slot then holds `NO_PART_ID`. With the exhaust off the headers are open, and the mufflers come off with it. With a muffler off its pipe ends where the muffler bolts on, with no tailpipe. Going from a dual to a single exhaust takes the left muffler off.
+- An open header or open pipe is `OPEN_EXHAUST_DB` louder than stock, and a muffler's `loud_db` sets how much louder it is; the two sides of a dual exhaust are averaged (`exhaust_volume_db()`).
+- Manifolds, the exhaust, and mufflers add `hp` and `vmax` like bolt-ons. Each muffler on a dual exhaust adds half. A rear end's `accel` scales the drive force in every gear (`final_drive_accel()`), and its `top_speed` scales `get_effective_vmax_kmh()`.
+- Any number of copies of a part from the parts list can be bought, bolt-ons included, one for each car or each side of a dual exhaust (`part_count()`, `spare_count()`). Stock parts never run out. Fitting a part takes a copy off another car only when more copies are fitted than are owned.
+- Bought slot parts go to spare parts. Their spare-parts Fit button opens this scene. Older saves that kept the headers as a bolt-on get them moved into the manifold slot, and saves from before the exhaust slot get a stock single exhaust.
 
 The calendar page is built at runtime from the system date (`Label3D` grid).
 
