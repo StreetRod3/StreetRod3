@@ -8,7 +8,7 @@
       "hp": 230,
       "vmax": 200,
       "cid": 265,
-      "model": "res://assets/parts/engine-sbc.glb"
+      "model": "res://assets/parts/engine-v8-265.glb"
     },
     {
       "id": "v8-283",
@@ -18,7 +18,7 @@
       "hp": 280,
       "vmax": 220,
       "cid": 283,
-      "model": "res://assets/parts/engine-sbc.glb"
+      "model": "res://assets/parts/engine-v8-283.glb"
     },
     {
       "id": "v8-327",
@@ -28,7 +28,7 @@
       "hp": 350,
       "vmax": 250,
       "cid": 327,
-      "model": "res://assets/parts/engine-sbc.glb"
+      "model": "res://assets/parts/engine-v8-327.glb"
     },
     {
       "id": "v8-350",
@@ -38,7 +38,7 @@
       "hp": 370,
       "vmax": 262,
       "cid": 350,
-      "model": "res://assets/parts/engine-sbc.glb"
+      "model": "res://assets/parts/engine-v8-327.glb"
     }
   ],
   "transmissions": [

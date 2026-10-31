@@ -24,4 +24,4 @@ The newspaper has an "Under the hood" section: an aluminum high-rise intake (the
 
 Tune opens a separate timing screen like Street Rod 2's: a close-up of the balancer and timing tab with a timing light in the foreground, flashing each time the number one plug fires, so the mark stands still at the timing. Advance and Retard turn the distributor two degrees at a time, and the tune-up sticker gives the timing the engine wants. Off the mark the idle drops and the mark wanders.
 
-The 265, 283, and 327 now use a new small block Chevy model, split into the long block, the cast-iron intake, the carburetor, and the distributor, and a 350 V8 is in the newspaper.
+The engines keep their own models, which the hood screen splits into the long block, the cast-iron intake, the carburetor, and the distributor, and a 350 V8 is in the newspaper.

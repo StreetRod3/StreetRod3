@@ -14,29 +14,38 @@ const CRANK_Z := -0.36
 const WIRES := "wires"
 
 ## Where the cast-iron intake's carburetor pad is, and the distributor's base on any intake.
-const IRON_PAD := Vector3(0.048, 0.022, 1.457)
-const DISTRIBUTOR_BASE := Vector3(1.222, 0.0, 1.038)
-## Tops of the distributor cap's plug towers, from its base.
-const CAP_TOWERS: Array[Vector3] = [
-	Vector3(0.196, 0.117, 0.632), Vector3(-0.176, -0.068, 0.632), Vector3(-0.087, 0.196, 0.632),
-	Vector3(0.107, -0.147, 0.632), Vector3(-0.193, 0.07, 0.632), Vector3(0.062, 0.24, 0.632),
-	Vector3(0.222, -0.043, 0.632), Vector3(-0.052, -0.173, 0.632),
-]
+## The engine models carry their stock intake, carburetor and distributor at these spots.
+const IRON_PAD := Vector3(0.0, 0.0, 1.08)
+const DISTRIBUTOR_BASE := Vector3(0.92, 0.0, 1.05)
+## The cap's plug towers stand in a ring this wide, their tops this high off the base.
+const CAP_TOWER_R := 0.12
+const CAP_TOWER_TOP := 0.42
 ## Cylinder centers along the block, front to back.
-const BORES_X: Array[float] = [-1.045, -0.342, 0.351, 1.018]
+const BORES_X: Array[float] = [-1.05, -0.355, 0.355, 1.05]
 ## Spark plugs stand out of the heads' outer faces, this far out and this high.
-const PLUG_Y := 1.42
-const PLUG_Z := 0.5
-## Ends of the intake runners where it bolts down, one each side.
-const INTAKE_BOLTS: Array[Vector3] = [Vector3(-1.0, 0.9, 1.13), Vector3(1.0, -0.95, 1.13)]
+const PLUG_Y := 0.86
+const PLUG_Z := 0.72
+## Plug wires run up over the valve covers here and down the outside of the heads here,
+## as (out from the middle, height).
+const WIRE_OVER := Vector2(0.72, 1.42)
+const WIRE_BEND := Vector2(1.08, 1.36)
+const WIRE_DOWN := Vector2(1.04, 0.95)
+## Ports on the heads' top faces that a runner intake bolts to, out from the middle.
+const PORT_Y := 0.36
+const PORT_Z := 1.18
+## The bottom of an aftermarket intake's plenum, down in the valley.
+const INTAKE_FLOOR := 0.9
+const INTAKE_WIDTH := 0.5
+## Ends of the intake where it bolts down, one each side.
+const INTAKE_BOLTS: Array[Vector3] = [Vector3(-0.74, 0.2, 1.08), Vector3(0.74, -0.2, 1.08)]
 ## Engine mounts on the front face of the block either side of the timing cover.
-const MOUNT_BOLTS: Array[Vector3] = [Vector3(-1.52, 0.78, -0.12), Vector3(-1.52, -0.78, -0.12)]
-## The distributor's hold-down clamp bolt.
-const CLAMP_BOLT := Vector3(1.04, -0.15, 1.08)
+const MOUNT_BOLTS: Array[Vector3] = [Vector3(-1.5, 0.48, -0.12), Vector3(-1.5, -0.48, -0.12)]
+## The distributor's hold-down clamp bolt, on the boss behind it.
+const CLAMP_BOLT := Vector3(1.16, 0.0, 1.05)
 
 ## The front drive. The timing cover's face is at `COVER_X`; pulleys line up on `BELT_X`.
-const COVER_X := -1.62
-const BELT_X := -1.97
+const COVER_X := -1.67
+const BELT_X := -2.02
 const BALANCER_R := 0.38
 const PUMP_CENTER := Vector2(0.0, 0.32)
 const ALTERNATOR_CENTER := Vector2(0.95, 0.45)
@@ -47,13 +56,16 @@ const TAB_ARC_PER_DEG := 2.5
 const TAB_BTDC_MAX := 20
 const TAB_ATDC_MAX := 4
 
-const _MODEL_ENGINE := "res://assets/parts/engine-sbc.glb"
-const _MODEL_INTAKE := "res://assets/parts/intake-iron4.glb"
-const _MODEL_CARB := "res://assets/parts/carb-4bbl.glb"
-const _MODEL_DISTRIBUTOR := "res://assets/parts/distributor-sbc.glb"
+const _MODEL_DEFAULT := "res://assets/parts/engine-v8-283.glb"
+## Nodes of an engine model by part. The long block is everything else, less the front
+## drive the assembly builds itself.
+const _NODES_INTAKE: Array[String] = ["intake_manifold"]
+const _NODES_CARB: Array[String] = ["carburetor", "carb_throat"]
+const _NODES_DISTRIBUTOR: Array[String] = ["distributor"]
+const _NODES_FRONT_DRIVE: Array[String] = ["crank_pulley", "upper_pulley", "alternator_pulley", "water_pump_housing", "accessory_bracket"]
 
-## The block's orange as the models carry it, in linear color.
-const PAINT := Color(0.62, 0.17, 0.04)
+## The block's paint as the models carry it, in linear color.
+const PAINT := Color(0.41, 0.44, 0.46)
 const _ALUMINUM := Color(0.7, 0.7, 0.69)
 const _CHROME := Color(0.9, 0.9, 0.92)
 const _STEEL := Color(0.62, 0.62, 0.63)
@@ -153,7 +165,7 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		_:
 			if GameState.CARB_SLOTS.has(key):
 				var four := int(GameState.slot_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
-				var nut := Vector3(-0.34, -0.33, 0.1) if four else Vector3(-0.2, -0.17, 0.07)
+				var nut := Vector3(-0.25, -0.2, 0.1) if four else Vector3(-0.2, -0.17, 0.07)
 				out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + nut))
 	return out
 
@@ -162,11 +174,11 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 static func pads_for(style: String) -> Array[Vector3]:
 	match style:
 		"highrise":
-			return [Vector3(0.048, 0.022, 1.62)]
+			return [Vector3(0.0, 0.0, 1.26)]
 		"tripower":
-			return [Vector3(-0.62, 0.022, 1.42), Vector3(0.0, 0.022, 1.42), Vector3(0.62, 0.022, 1.42)]
+			return [Vector3(-0.58, 0.0, 1.24), Vector3(0.0, 0.0, 1.24), Vector3(0.58, 0.0, 1.24)]
 		"dualquad":
-			return [Vector3(-0.47, 0.022, 1.52), Vector3(0.43, 0.022, 1.52)]
+			return [Vector3(-0.42, 0.0, 1.3), Vector3(0.42, 0.0, 1.3)]
 	return [IRON_PAD]
 
 
@@ -178,7 +190,7 @@ func carb_pad(slot: String) -> Vector3:
 
 ## Height of a carburetor's air horn above its pad.
 func _carb_height() -> float:
-	return 0.43 if int(GameState.slot_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4 else 0.36
+	return 0.48 if int(GameState.slot_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4 else 0.36
 
 
 func _cleaner_top() -> float:
@@ -194,12 +206,17 @@ static func mark_angle(degrees: float) -> float:
 
 
 func _build_engine(rig: Node3D) -> void:
-	_add_model(rig, _MODEL_ENGINE)
+	var leave: Array[String] = []
+	for nodes in [_NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
+		leave.append_array(nodes)
+	_add_model_nodes(rig, leave, false)
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
 	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
 	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
 	var white := _mat("mark", Color(0.95, 0.95, 0.9), 0.0, 0.5)
-	var paint := _mat("paint", PAINT.linear_to_srgb(), 0.15, 0.45)
+	var paint := _paint()
+	# The boss in the valley behind the intake that the distributor stands in.
+	_box(rig, Vector3(0.5, 0.2, DISTRIBUTOR_BASE.z - 0.7), Vector3((DISTRIBUTOR_BASE.x + CLAMP_BOLT.x) * 0.5, 0.0, (DISTRIBUTOR_BASE.z + 0.7) * 0.5), paint)
 	# Balancer: steel hub, rubber ring, steel rim with the mark across its face.
 	balancer = Node3D.new()
 	balancer.name = "Balancer"
@@ -284,40 +301,39 @@ func _build_timing_tab(rig: Node3D) -> void:
 func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	var style := str(part.get("style", "iron4"))
 	if style == "iron4":
-		_add_model(rig, _MODEL_INTAKE)
+		_add_model_nodes(rig, _NODES_INTAKE, true)
 		return
-	var metal := _mat("paint", PAINT.linear_to_srgb(), 0.15, 0.45) if style == "tripower" else _mat("aluminum", _ALUMINUM, 0.75, 0.35)
+	var metal := _paint() if style == "tripower" else _mat("aluminum", _ALUMINUM, 0.75, 0.35)
 	var pads := pads_for(style)
-	var front := pads[0].x - 0.42
-	var back := pads[pads.size() - 1].x + 0.42
+	var front := pads[0].x - 0.36
+	var back := pads[pads.size() - 1].x + 0.36
 	var top := pads[0].z
-	# Runners from the plenum floor out to each port, four a side.
+	var floor_z := INTAKE_FLOOR
+	# Runners from the plenum out to each port on the heads, four a side.
 	for side in [-1.0, 1.0]:
 		for bx in BORES_X:
-			var port := Vector3(bx + 0.12 * side, 0.86 * side, 1.08)
-			var root := Vector3(clampf(bx * 0.55, front + 0.15, back - 0.15), 0.18 * side, top - 0.2)
-			var mid := Vector3((port.x + root.x) * 0.5, 0.55 * side, top - 0.05)
+			var port := Vector3(bx + 0.1 * side, PORT_Y * side, PORT_Z)
+			var root := Vector3(clampf(bx * 0.55, front + 0.12, back - 0.12), INTAKE_WIDTH * 0.3 * side, top - 0.14)
+			var mid := Vector3((port.x + root.x) * 0.5, (PORT_Y + 0.04) * side, top - 0.02)
 			var runner := MeshInstance3D.new()
-			runner.mesh = sweep_mesh(_bezier(root, mid, port, 10), 0.11, 10, false)
+			runner.mesh = sweep_mesh(_bezier(root, mid, port, 10), 0.075, 10, false)
 			runner.material_override = metal
 			rig.add_child(runner)
-			_box(rig, Vector3(0.3, 0.06, 0.2), port + Vector3(0.0, 0.0, -0.02), metal)
+			_box(rig, Vector3(0.22, 0.2, 0.04), port + Vector3(0.0, 0.0, 0.01), metal)
 	# Plenum and the pads on top, and the flanges the bolts go through.
-	_box(rig, Vector3(back - front, 0.62, top - 1.05), Vector3((front + back) * 0.5, 0.022, (top + 1.05) * 0.5 - 0.02), metal)
+	_box(rig, Vector3(back - front, INTAKE_WIDTH, top - floor_z), Vector3((front + back) * 0.5, 0.0, (top + floor_z) * 0.5 - 0.02), metal)
 	for pad in pads:
-		var size := Vector3(0.62, 0.62, 0.04) if style != "tripower" else Vector3(0.44, 0.4, 0.04)
+		var size := Vector3(0.5, INTAKE_WIDTH, 0.04) if style != "tripower" else Vector3(0.44, 0.4, 0.04)
 		_box(rig, size, pad - Vector3(0.0, 0.0, 0.02), metal)
 	if style == "dualquad":
 		# Cast fins down the plenum between the carburetors.
 		for i in 5:
-			_box(rig, Vector3(0.025, 0.66, 0.06), Vector3(lerpf(-0.18, 0.14, float(i) / 4.0), 0.022, top - 0.08), metal)
+			_box(rig, Vector3(0.025, INTAKE_WIDTH + 0.04, 0.06), Vector3(lerpf(-0.16, 0.16, float(i) / 4.0), 0.0, top - 0.08), metal)
 	for p in INTAKE_BOLTS:
-		_box(rig, Vector3(0.22, 0.22, 0.08), p - Vector3(0.0, 0.0, 0.04), metal)
-	# Distributor boss at the back, and the thermostat housing and water neck in front.
-	_cyl_z(rig, 0.17, 0.17, 0.12, DISTRIBUTOR_BASE - Vector3(0.0, 0.0, 0.12), metal, 20)
-	_box(rig, Vector3(0.36, 0.62, 0.1), Vector3((DISTRIBUTOR_BASE.x + back) * 0.5, 0.022, 1.0), metal)
-	_box(rig, Vector3(0.5, 0.5, top - 1.05), Vector3(front - 0.2, 0.022, (top + 1.05) * 0.5 - 0.02), metal)
-	_cyl_z(rig, 0.14, 0.12, 0.16, Vector3(front - 0.25, 0.022, top - 0.02), _mat("steel", _STEEL, 0.6, 0.35), 16)
+		_box(rig, Vector3(0.18, 0.18, p.z - floor_z), Vector3(p.x, p.y, (p.z + floor_z) * 0.5), metal)
+	# Thermostat housing and water neck in front.
+	_box(rig, Vector3(0.36, 0.36, top - floor_z), Vector3(front - 0.16, 0.0, (top + floor_z) * 0.5 - 0.02), metal)
+	_cyl_z(rig, 0.11, 0.09, 0.14, Vector3(front - 0.2, 0.0, top - 0.02), _mat("steel", _STEEL, 0.6, 0.35), 16)
 
 
 # --- Carburetors ---------------------------------------------------------------------
@@ -327,13 +343,14 @@ func _build_carb(rig: Node3D, part: Dictionary, pad: Vector3) -> void:
 	if int(part.get("barrels", 4)) == 2:
 		_build_two_barrel(rig, pad)
 		return
-	var model := _add_model(rig, _MODEL_CARB)
+	var model := _add_model_nodes(rig, _NODES_CARB, true)
 	if model == null:
 		return
-	model.position = pad
+	model.position = pad - IRON_PAD
 	var finish: Variant = _CARB_FINISHES.get(str(part.get("finish", "")), null)
-	if finish is Color:
-		_recolor(model, "carb", _mat("carb_" + str(part.get("finish", "")), finish, 0.85, 0.3))
+	var body := model.find_child("carburetor", true, false) as MeshInstance3D
+	if finish is Color and body != null:
+		body.material_override = _mat("carb_" + str(part.get("finish", "")), finish, 0.85, 0.3)
 
 
 func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
@@ -356,14 +373,17 @@ func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
 
 
 func _build_distributor(rig: Node3D, part: Dictionary) -> void:
-	var model := _add_model(rig, _MODEL_DISTRIBUTOR)
+	var model := _add_model_nodes(rig, _NODES_DISTRIBUTOR, true)
 	if model == null:
 		return
-	model.position = DISTRIBUTOR_BASE
 	var color: Variant = _CAP_COLORS.get(str(part.get("cap", "black")), _CAP_COLORS["black"])
+	var cap_mat := _mat("cap_" + str(part.get("cap", "black")), color, 0.0, 0.35)
 	var cap := model.find_child("distributor_cap", true, false) as MeshInstance3D
 	if cap != null:
-		cap.material_override = _mat("cap_" + str(part.get("cap", "black")), color, 0.0, 0.35)
+		cap.material_override = cap_mat
+	# The plug towers round the top of the cap.
+	for tower in cap_towers():
+		_cyl_z(rig, 0.03, 0.025, 0.08, DISTRIBUTOR_BASE + tower - Vector3(0.0, 0.0, 0.08), cap_mat, 10)
 	# Hold-down clamp from the bolt over the distributor's flange.
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
 	var reach := Vector2(DISTRIBUTOR_BASE.x - CLAMP_BOLT.x, DISTRIBUTOR_BASE.y - CLAMP_BOLT.y)
@@ -388,7 +408,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		pads.append(carb_pad(slot))
 	if pads.is_empty():
 		pads.append(carb_pad(GameState.SLOT_CARB))
-	var r := 0.8
+	var r := 0.72
 	if pads.size() == 2:
 		r = 0.45
 	elif pads.size() == 3:
@@ -404,7 +424,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		_cyl_z(rig, r + 0.02, r * 0.9, 0.04, at + Vector3(0.0, 0.0, h - 0.04), shell, 40)
 		_cyl_z(rig, r * 0.6, r * 0.5, 0.025, at + Vector3(0.0, 0.0, h - 0.005), shell, 40)
 		_cyl_z(rig, 0.02, 0.02, h + 0.02, at, steel, 8)
-	if pads.size() == 1 and r >= 0.8:
+	if pads.size() == 1:
 		var label := Label3D.new()
 		label.text = "%d V8" % GameState.engine_cid()
 		label.font_size = 64
@@ -412,7 +432,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		label.modulate = Color(0.85, 0.12, 0.08) if not chrome else Color(0.15, 0.15, 0.15)
 		label.outline_size = 0
 		# Lying on the lid, read from the front of the car.
-		label.transform = Transform3D(Basis(Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1)), pads[0] + Vector3(-0.5, 0.0, base + h + 0.025))
+		label.transform = Transform3D(Basis(Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1)), pads[0] + Vector3(-0.46, 0.0, base + h + 0.025))
 		rig.add_child(label)
 
 
@@ -437,7 +457,7 @@ func _build_wires(rig: Node3D) -> void:
 	var plugs := plug_spots()
 	var free := plugs.duplicate()
 	var towers: Array[Vector3] = []
-	for t in CAP_TOWERS:
+	for t in cap_towers():
 		towers.append(DISTRIBUTOR_BASE + t)
 	# Towers on the right go to the right bank, front ones to the front cylinders.
 	towers.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.y > b.y if signf(a.y) != signf(b.y) else a.x < b.x)
@@ -450,19 +470,19 @@ func _build_wires(rig: Node3D) -> void:
 		free.remove_at(best)
 		var side := signf(plug.origin.y)
 		var out := plug.origin + plug.basis.z * 0.25
-		var over := Vector3(plug.origin.x * 0.85 + tower.x * 0.15, side * 1.1, 1.62)
-		var down := Vector3(plug.origin.x, side * 1.72, 1.0)
-		var points := _bezier(tower, tower + Vector3(0.0, 0.0, 0.25), over, 8)
-		points.append_array(_bezier(over, Vector3(plug.origin.x, side * 1.75, 1.5), down, 8).slice(1))
+		var over := Vector3(plug.origin.x * 0.85 + tower.x * 0.15, side * WIRE_OVER.x, WIRE_OVER.y)
+		var down := Vector3(plug.origin.x, side * WIRE_DOWN.x, WIRE_DOWN.y)
+		var points := _bezier(tower, tower + Vector3(0.0, 0.0, 0.2), over, 8)
+		points.append_array(_bezier(over, Vector3(plug.origin.x, side * WIRE_BEND.x, WIRE_BEND.y), down, 8).slice(1))
 		points.append_array(_bezier(down, out + plug.basis.z * 0.25, out, 6).slice(1))
 		var wire := MeshInstance3D.new()
-		wire.mesh = sweep_mesh(points, 0.032, 8, false)
+		wire.mesh = sweep_mesh(points, 0.025, 8, false)
 		wire.material_override = rubber
 		rig.add_child(wire)
 		var b := MeshInstance3D.new()
 		var bm := CylinderMesh.new()
-		bm.top_radius = 0.05
-		bm.bottom_radius = 0.045
+		bm.top_radius = 0.04
+		bm.bottom_radius = 0.036
 		bm.height = 0.25
 		b.mesh = bm
 		b.material_override = boot
@@ -472,32 +492,47 @@ func _build_wires(rig: Node3D) -> void:
 
 static func _wire_cost(tower: Vector3, plug: Vector3) -> float:
 	var side_miss := 0.0 if signf(tower.y - DISTRIBUTOR_BASE.y) == signf(plug.y) else 2.0
-	return absf(plug.x - (tower.x - DISTRIBUTOR_BASE.x) * 6.0) + side_miss
+	return absf(plug.x - (tower.x - DISTRIBUTOR_BASE.x) * 9.0) + side_miss
+
+
+## Tops of the distributor cap's plug towers, from its base.
+static func cap_towers() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for k in 8:
+		var a := TAU * (float(k) + 0.5) / 8.0
+		out.append(Vector3(CAP_TOWER_R * cos(a), CAP_TOWER_R * sin(a), CAP_TOWER_TOP))
+	return out
 
 
 # --- Mesh helpers --------------------------------------------------------------------
 
 
-func _add_model(rig: Node3D, path: String) -> Node3D:
+## The fitted engine's model with only the nodes named by `prefixes` in it (`keep`), or
+## with those taken out.
+func _add_model_nodes(rig: Node3D, prefixes: Array[String], keep: bool) -> Node3D:
+	var path := str(GameState.get_equipped_engine().get("model", ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		path = _MODEL_DEFAULT
 	var packed := load(path) as PackedScene
 	if packed == null:
-		push_warning("Engine part model missing: %s" % path)
+		push_warning("Engine model missing: %s" % path)
 		return null
 	var model := packed.instantiate() as Node3D
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var named := false
+		for prefix in prefixes:
+			if str(node.name).begins_with(prefix):
+				named = true
+				break
+		if named != keep:
+			node.get_parent().remove_child(node)
+			node.free()
 	rig.add_child(model)
 	return model
 
 
-## Swaps every surface whose material is named `name` for `mat`.
-func _recolor(node: Node, name: String, mat: Material) -> void:
-	if node is MeshInstance3D:
-		var mi := node as MeshInstance3D
-		for i in mi.mesh.get_surface_count():
-			var m := mi.mesh.surface_get_material(i)
-			if m != null and m.resource_name == name:
-				mi.set_surface_override_material(i, mat)
-	for child in node.get_children():
-		_recolor(child, name, mat)
+func _paint() -> StandardMaterial3D:
+	return _mat("paint", PAINT.linear_to_srgb(), 0.65, 0.5)
 
 
 func _mat(key: String, color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
