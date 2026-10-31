@@ -63,7 +63,7 @@ func _start_playback() -> void:
 
 
 func _process(_delta: float) -> void:
-	if _blown:
+	if _blown or not playing:
 		return
 	_fill_buffer()
 

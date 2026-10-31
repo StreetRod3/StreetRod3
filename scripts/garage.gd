@@ -3,6 +3,7 @@ extends Node3D
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
+const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
 @onready var _car_pivot: Node3D = $CarPivot
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -87,9 +88,7 @@ var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
 var _creeper: StaticBody3D
-var _loss_root: Control
-var _loss_panel: PanelContainer
-var _loss_tail: Node2D
+var _loss_bubble: Control
 var _tooltip: Label
 
 const _TOOLTIPS := {
@@ -193,8 +192,7 @@ func _ready() -> void:
 	_build_loss_bubble()
 	_build_tooltip()
 	if GameState.is_ruined():
-		_loss_root.visible = true
-		_place_loss_bubble()
+		_loss_bubble.visible = true
 	_cam_distance_target = _cam_distance
 	_update_camera_transform()
 
@@ -226,94 +224,25 @@ func _align_wheels_to_floor() -> void:
 
 
 func _build_loss_bubble() -> void:
-	_loss_root = Control.new()
-	_loss_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_loss_root.visible = false
-	_loss_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_loss_root.gui_input.connect(_on_loss_input)
-	$GarageUI.add_child(_loss_root)
-	_loss_panel = PanelContainer.new()
-	_loss_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_loss_panel.gui_input.connect(_on_loss_input)
-	_loss_panel.add_theme_stylebox_override(&"panel", _loss_bubble_style())
-	_loss_root.add_child(_loss_panel)
-	var margin := MarginContainer.new()
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_theme_constant_override(&"margin_left", 16)
-	margin.add_theme_constant_override(&"margin_right", 16)
-	margin.add_theme_constant_override(&"margin_top", 12)
-	margin.add_theme_constant_override(&"margin_bottom", 12)
-	_loss_panel.add_child(margin)
-	var line := Label.new()
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.text = "You don't have neither car nor money. You lose!"
-	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line.custom_minimum_size = Vector2(320, 56)
-	line.add_theme_font_size_override(&"font_size", 22)
-	line.add_theme_color_override(&"font_color", Color(0.08, 0.06, 0.05))
-	margin.add_child(line)
-	_loss_tail = Node2D.new()
-	_loss_panel.add_child(_loss_tail)
-	var outline := Line2D.new()
-	outline.width = 5.0
-	outline.default_color = Color(0.08, 0.06, 0.05)
-	outline.joint_mode = Line2D.LINE_JOINT_ROUND
-	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
-	outline.points = PackedVector2Array([Vector2(-18, 0), Vector2(0, 24), Vector2(18, 0)])
-	_loss_tail.add_child(outline)
-	var fill := Polygon2D.new()
-	fill.color = Color(0.98, 0.97, 0.93)
-	fill.polygon = PackedVector2Array([Vector2(-14, 2), Vector2(0, 18), Vector2(14, 2)])
-	_loss_tail.add_child(fill)
-
-
-func _loss_bubble_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.98, 0.97, 0.93)
-	style.border_color = Color(0.08, 0.06, 0.05)
-	style.set_border_width_all(4)
-	style.set_corner_radius_all(18)
-	return style
-
-
-func _on_loss_input(event: InputEvent) -> void:
-	if not event is InputEventMouseButton:
-		return
-	var mb := event as InputEventMouseButton
-	if not mb.pressed:
-		return
-	get_viewport().set_input_as_handled()
-	_leave_after_loss()
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "You don't have neither car nor money. You lose!", Vector2(320, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _leave_after_loss)
+	_loss_bubble = bubble
 
 
 func _dismiss_loss_bubble() -> void:
-	if _loss_root != null:
-		_loss_root.visible = false
+	if _loss_bubble != null:
+		_loss_bubble.visible = false
 
 
 func _leave_after_loss() -> void:
 	GameState.current_scene_path = GameState.SCENE_MAIN_MENU
 	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
 
-
-func _place_loss_bubble() -> void:
-	if _loss_root == null or not _loss_root.visible:
-		return
-	var spot := _car_pivot.global_position + Vector3(0.0, 1.35, 0.0)
-	var screen := Vector2(get_viewport().get_visible_rect().size.x * 0.5, 180.0)
-	if not _camera.is_position_behind(spot):
-		screen = _camera.unproject_position(spot)
-	var bubble_size := _loss_panel.get_combined_minimum_size()
-	var vp := get_viewport().get_visible_rect().size
-	var tail_h := 26.0
-	var x := clampf(screen.x - bubble_size.x * 0.5, 16.0, maxf(16.0, vp.x - bubble_size.x - 16.0))
-	var y := clampf(screen.y - bubble_size.y - tail_h - 8.0, 16.0, maxf(16.0, vp.y - bubble_size.y - tail_h - 16.0))
-	_loss_panel.position = Vector2(x, y)
-	_loss_panel.size = bubble_size
-	var tail_x := clampf(screen.x - x, 28.0, maxf(28.0, bubble_size.x - 28.0))
-	_loss_tail.position = Vector2(tail_x, bubble_size.y - 4.0)
 
 func _process(_delta: float) -> void:
 	if not _departing and not _swapping_car:
@@ -329,7 +258,6 @@ func _process(_delta: float) -> void:
 		_cam_distance = lerpf(_cam_distance, _cam_distance_target, t)
 		_update_camera_transform()
 	_update_calendar_transform()
-	_place_loss_bubble()
 	_update_tooltip()
 
 
@@ -442,7 +370,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _departing:
 		get_viewport().set_input_as_handled()
 		return
-	if _loss_root != null and _loss_root.visible and event.is_action_pressed(&"ui_cancel"):
+	if _loss_bubble != null and _loss_bubble.visible and event.is_action_pressed(&"ui_cancel"):
 		_dismiss_loss_bubble()
 		get_viewport().set_input_as_handled()
 		return

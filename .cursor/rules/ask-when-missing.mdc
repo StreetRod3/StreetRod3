@@ -1,0 +1,19 @@
+---
+description: Stop and ask when a referenced input is missing
+alwaysApply: true
+---
+
+# Ask when something is missing
+
+If the request depends on something that is not in the message or the project, stop and ask for it before doing the work.
+
+This includes an attached image, file, link, name, or measurement the message refers to but does not include.
+
+```text
+User: Build the station from the attached reference image.
+No image is attached.
+
+Ask: The reference image isn’t attached. Send it and I’ll match the station to it.
+```
+
+A written description alone is not a substitute for a missing attachment. Wait for the missing piece, then continue.

@@ -1,17 +1,40 @@
 extends Node3D
 
-## Chris' Gas. The garage fuel can drives the car here. Grab a nozzle, then click the car.
+## Chris' Gas. The garage fuel can drives the car here. Grab a nozzle, fuel the car, put it back, and the car drives home.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
+const _PumpSound := preload("res://scripts/pump_sound.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
+const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
 const _PARK_X := -0.8
 const _APPROACH_X := -20.0
 const _EXIT_X := 20.0
 const _LANE_Z := 6.45
 const _CAR_YAW := PI * 0.5
+## How far in front of the camera the held rag floats, in meters.
+const _RAG_REACH := 1.8
+## Held rag is a small twisted cloth on the pointer, not the full ground rag.
+const _RAG_HELD_SCALE := 0.24
+## Nozzle on the pointer is half the size of the one on the pump.
+const _NOZZLE_HELD_SCALE := 0.5
+## After a pour, the lifted nozzle is 30% smaller than the in-hand size.
+const _NOZZLE_LIFTED_SCALE := _NOZZLE_HELD_SCALE * 0.7
+## Liters flowing into the tank each second the nozzle stays in the filler.
+const _POUR_L_PER_S := 4.0
+## Full service starts when the player has not begun fueling by this time.
+const _SERVICE_WAIT := 60.0
+const _RAG_MODEL := "res://assets/locations/gas-station/rag.glb"
+## Width of the rag on the ground, in meters.
+const _RAG_WIDTH := 0.32
+## Car files point the nose along local +Z. The glass is the forward edge of the roof.
 const _WHEEL_R := 0.27
+## Same roll note as the garage drive-in and drive-out.
+const _ROLL_RPM_IDLE := 700.0
+const _ROLL_RPM_PULL := 2600.0
+const _ROLL_VOL_NEAR := -4.0
+const _ROLL_VOL_FAR := -16.0
 const _WHEEL_NODES: Array[String] = [
 	"WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight",
 ]
@@ -37,6 +60,9 @@ const _TOOLTIPS := {
 	&"regular": "Regular",
 	&"super": "Super",
 	&"office": "Office",
+	&"rag": "Rag",
+	&"windshield": "Windshield",
+	&"sleeper": "Sleeping",
 }
 
 @onready var _camera: Camera3D = $Camera3D
@@ -46,6 +72,7 @@ var _nav = _MenuNav.new()
 var _world: Node3D
 var _car: Node3D
 var _engine: AudioStreamPlayer
+var _pump_sound: AudioStreamPlayer
 var _cash: Label
 var _tooltip: Label
 var _back: Button
@@ -53,6 +80,40 @@ var _shade: ColorRect
 var _open: Label3D
 var _filler_local := Vector3(0.7, 0.65, 1.2)
 var _held := ""
+## Nozzle is in the filler. The next click lifts it back onto the pointer.
+var _nozzle_seated := false
+## Nozzle is back on the pointer after fueling. The next click holsters it and the car leaves.
+var _nozzle_lifted := false
+## Fuel is flowing. Liters poured since the last whole-dollar charge.
+var _pouring := false
+var _pour_banked := 0.0
+var _rag: Node3D
+var _rag_mats: Array[StandardMaterial3D] = []
+var _rag_home := Vector3(-6.45, 0.14, 5.25)
+var _rag_held := false
+## Set once the sleeper has told the player off. The next click puts the rag down.
+var _rag_warned := false
+## Set after a wipe. The next click, including the windshield, puts the rag down.
+var _rag_wiped := false
+## Windshield wipe, in the car's space. Base is the cowl, top is the header.
+var _glass_base := Vector3.ZERO
+var _glass_top := Vector3.ZERO
+var _cursor_mode := ""
+var _sleeper: Node3D
+var _sleeper_top: Node3D
+var _sleeper_head: Node3D
+var _sleeper_thighs: Array[Node3D] = []
+var _sleeper_shins: Array[Node3D] = []
+var _sleeper_feet: Array[Node3D] = []
+var _sleeper_bubble: Control
+## Clock time when full service takes over. Negative until the car is parked.
+var _service_at := -1.0
+var _service_done := false
+## Dollars charged per liter for the pour that is running.
+var _pour_per_liter := 2.0
+var _service_pour := false
+var _bubble_until := 0.0
+var _hit_point := Vector3.ZERO
 var _busy := false
 var _time := 0.0
 var _status := ""
@@ -77,10 +138,14 @@ func _ready() -> void:
 	_camera.look_at(Vector3(1.15, 1.7, 0.6), Vector3.UP)
 	if GameState.has_engine():
 		var engine := _EngineSound.new() as AudioStreamPlayer
-		engine.volume_db = -12.0
+		engine.set(&"play_on_ready", false)
+		engine.volume_db = _ROLL_VOL_NEAR
 		_engine = engine
 		add_child(_engine)
-		_engine.call(&"set_state", 680.0, 0.0, false, false)
+	var pump := _PumpSound.new() as AudioStreamPlayer
+	pump.name = "PumpSound"
+	_pump_sound = pump
+	add_child(pump)
 	_world = Node3D.new()
 	_world.name = "Station"
 	add_child(_world)
@@ -94,6 +159,7 @@ func _ready() -> void:
 	_build_parked_cars()
 	_build_player_car()
 	_build_hud()
+	_build_sleeper_bubble()
 	_ensure_shade()
 	_shade.color = Color(0.0, 0.0, 0.0, 1.0)
 	call_deferred(&"_play_arrival")
@@ -101,6 +167,8 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	GameState.set_music_dimmed(false)
+	Input.set_custom_mouse_cursor(null)
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 
 func _process(delta: float) -> void:
@@ -108,9 +176,16 @@ func _process(delta: float) -> void:
 	if _open != null:
 		var pulse := 0.78 + sin(_time * 6.0) * 0.22
 		_open.modulate = Color(2.7 * pulse, 0.1 * pulse, 0.12 * pulse)
-	_aim_hoses()
+	_fly_nozzle()
+	_pour_fuel(delta)
+	_watch_service()
 	_aim_nozzles()
+	_aim_hoses()
+	_fly_rag()
 	_update_tooltip()
+	_update_cursor()
+	if _sleeper_bubble != null:
+		_sleeper_bubble.visible = _bubble_until > _time
 	if _status_until > 0.0 and _time >= _status_until:
 		_status = ""
 		_status_until = 0.0
@@ -119,6 +194,9 @@ func _process(delta: float) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel"):
 		_leave()
+		get_viewport().set_input_as_handled()
+		return
+	if _try_station_shortcut(event):
 		get_viewport().set_input_as_handled()
 		return
 	if _nav.handle_event(self, event):
@@ -142,12 +220,133 @@ func _play_arrival() -> void:
 	if not is_instance_valid(self):
 		return
 	_set_busy(false)
+	_service_at = _time + _SERVICE_WAIT
+
+
+func _watch_service() -> void:
+	if _service_done or _service_at < 0.0 or _busy or _pouring:
+		return
+	if _time < _service_at:
+		return
+	if GameState.fuel >= GameState.DEFAULT_TANK_L - 0.05:
+		_service_done = true
+		return
+	_full_service()
+
+
+func _full_service() -> void:
+	_service_done = true
+	_set_busy(true)
+	if not _held.is_empty():
+		var put_back := _held
+		_held = ""
+		_nozzle_seated = false
+		_nozzle_lifted = false
+		_end_pour("")
+		await _move_nozzle(put_back, _home_of(put_back))
+		if not is_instance_valid(self):
+			return
+	await _stand_attendant()
+	if not is_instance_valid(self):
+		return
+	var missing := GameState.DEFAULT_TANK_L - GameState.fuel
+	var full_price := int(ceil(maxf(missing, 0.0) * float(GameState.FUEL_PRICE_PER_L) * 2.0))
+	if missing <= 0.05:
+		_bubble_until = _time + 3.6
+		_set_busy(false)
+		return
+	if GameState.money < full_price:
+		_say_broke()
+	else:
+		_say_service()
+	if GameState.money <= 0:
+		_show_status("Not enough cash.")
+		_bubble_until = _time + 3.6
+		_set_busy(false)
+		return
+	var beside := _filler_global() + Vector3(0.0, 0.0, 1.15)
+	beside.y = _sleeper.global_position.y
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(_sleeper, "global_position", beside, 1.3)
+	await tw.finished
+	if not is_instance_valid(self) or _sleeper == null:
+		return
+	var aim := _filler_global()
+	aim.y = _sleeper.global_position.y
+	_sleeper.look_at(aim, Vector3.UP)
+	_sleeper.rotate_y(PI)
+	await _move_nozzle("regular", _filler_global())
+	if not is_instance_valid(self):
+		return
+	_pour_per_liter = float(GameState.FUEL_PRICE_PER_L) * 2.0
+	_service_pour = true
+	_pouring = true
+	_pour_banked = 0.0
+	_set_pump_audible(true)
+	while _pouring and is_instance_valid(self):
+		await get_tree().process_frame
+	if not is_instance_valid(self):
+		return
+	_service_pour = false
+	await _move_nozzle("regular", _home_of("regular"))
+	if not is_instance_valid(self):
+		return
+	_bubble_until = _time + 2.0
+	_set_busy(false)
+
+
+func _stand_attendant() -> void:
+	if _sleeper_top == null or _sleeper_head == null:
+		return
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_sleeper_head, "rotation:x", 0.0, 0.35)
+	tw.tween_property(_sleeper_top, "position:y", 0.22, 0.5)
+	for thigh in _sleeper_thighs:
+		tw.tween_property(thigh, "rotation:x", -PI * 0.5, 0.5)
+		tw.tween_property(thigh, "position:y", 0.62, 0.5)
+		tw.tween_property(thigh, "position:z", 0.02, 0.5)
+	for shin in _sleeper_shins:
+		tw.tween_property(shin, "position:y", 0.32, 0.5)
+		tw.tween_property(shin, "position:z", 0.02, 0.5)
+	for foot in _sleeper_feet:
+		tw.tween_property(foot, "position:y", 0.05, 0.5)
+		tw.tween_property(foot, "position:z", 0.06, 0.5)
+	await tw.finished
+
+
+func _say_service() -> void:
+	_say_sleeper("Yo, you need\nfull service,\ndummy!", Vector2(280, 110))
+
+
+func _say_broke() -> void:
+	_say_sleeper("Gas ain't free!", Vector2(240, 56))
+
+
+func _tank_open() -> bool:
+	return GameState.fuel < GameState.DEFAULT_TANK_L - 0.05 and GameState.money > 0
+
+
+func _say_sleeper(text: String, min_size: Vector2) -> void:
+	if _sleeper_bubble == null:
+		return
+	_sleeper_bubble.call("set_line", text, min_size, 26)
+	_sleeper_bubble.visible = true
+	_bubble_until = _time + 120.0
 
 
 func _leave() -> void:
 	if _busy:
 		return
+	_end_pour("")
 	_set_busy(true)
+	_nozzle_seated = false
+	_nozzle_lifted = false
+	if _rag_held and _rag != null:
+		_rag_held = false
+		_rag.visible = false
 	if not _held.is_empty():
 		var put_back := _held
 		_held = ""
@@ -167,20 +366,461 @@ func _leave() -> void:
 
 
 func _activate(kind: Variant) -> void:
-	if _busy or kind == null:
+	if _busy:
+		return
+	if _nozzle_lifted:
+		if _tank_open() and (kind == &"car" or kind == &"windshield"):
+			_nozzle_lifted = false
+			_set_busy(true)
+			await _fuel_with_held()
+			if is_instance_valid(self):
+				_set_busy(false)
+			return
+		_nozzle_lifted = false
+		_leave()
+		return
+	if _nozzle_seated:
+		_lift_nozzle_from_filler()
+		return
+	if _rag_held and (_rag_wiped or (_rag_warned and not _wipes_glass(kind))):
+		_set_busy(true)
+		await _return_rag()
+		if is_instance_valid(self):
+			_set_busy(false)
+		return
+	if kind == null:
+		return
+	if not _held.is_empty() and (kind == &"car" or kind == &"windshield"):
+		_set_busy(true)
+		await _fuel_with_held()
+		if is_instance_valid(self):
+			_set_busy(false)
+		return
+	if kind == &"rag" or kind == &"rag_home" or kind == &"windshield" or kind == &"sleeper":
+		await _activate_rag(kind)
+		return
+	if _rag_held and kind == &"car":
+		await _activate_rag(kind)
+		return
+	if _rag_held:
 		return
 	if kind == &"car" and _held.is_empty():
 		_leave()
 		return
-	if kind != &"regular" and kind != &"super" and kind != &"car":
+	if kind != &"regular" and kind != &"super":
 		return
 	_set_busy(true)
-	if kind == &"car":
-		await _fuel_with_held()
-	else:
-		await _toggle_nozzle(String(kind))
+	await _toggle_nozzle(String(kind))
 	if is_instance_valid(self):
 		_set_busy(false)
+
+
+func _activate_rag(kind: Variant) -> void:
+	if not _held.is_empty():
+		_show_status("Put the nozzle back first.")
+		return
+	if kind == &"rag_home":
+		if _rag_held:
+			_set_busy(true)
+			await _return_rag()
+			if is_instance_valid(self):
+				_set_busy(false)
+			return
+		_grab_rag()
+		return
+	if kind == &"rag":
+		if not _rag_held:
+			_grab_rag()
+		return
+	if kind == &"windshield" or (kind == &"car" and _aiming_at_glass()):
+		if not _rag_held and _held.is_empty():
+			_leave()
+		return
+	if not _rag_held:
+		return
+	if kind == &"sleeper":
+		_cover_face()
+		return
+	if kind == &"car":
+		_set_busy(true)
+		await _wipe_windshield()
+		if is_instance_valid(self):
+			_set_busy(false)
+
+
+func _grab_rag() -> void:
+	_rag_held = true
+	_rag_warned = false
+	_rag_wiped = false
+	if _rag != null:
+		_rag.visible = true
+		_set_rag_solid(false)
+	_set_rag_glow(true)
+	_fly_rag()
+
+
+func _return_rag() -> void:
+	if _rag == null:
+		_rag_held = false
+		return
+	_attach_rag(_world)
+	_rag.visible = true
+	_rag.scale = Vector3.ONE
+	_rag_held = false
+	_rag_warned = false
+	_rag_wiped = false
+	_set_rag_glow(false)
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(_rag, "position", _rag_home, 0.32)
+	tw.tween_property(_rag, "rotation", Vector3(0.0, 0.45, 0.0), 0.32)
+	await tw.finished
+	if not is_instance_valid(self):
+		return
+	_set_rag_solid(true)
+
+
+func _cover_face() -> void:
+	_rag_warned = true
+	_bubble_until = _time + 3.6
+	if _sleeper_bubble != null:
+		_sleeper_bubble.call("set_line", "Get out of\nmy face,\ndummy!", Vector2(240, 96), 26)
+		_sleeper_bubble.visible = true
+
+
+func _wipes_glass(kind: Variant) -> bool:
+	return kind == &"car" and not _aiming_at_glass()
+
+
+func _nozzle_pointer_scale() -> float:
+	return _NOZZLE_LIFTED_SCALE if _nozzle_lifted else _NOZZLE_HELD_SCALE
+
+
+## Held nozzle stays on the pointer until it is clicked into the filler.
+func _fly_nozzle() -> void:
+	if _held.is_empty() or _nozzle_seated or _busy or _camera == null:
+		return
+	var nozzle := _nozzle(_held)
+	if nozzle == null:
+		return
+	var from := _camera.project_ray_origin(get_viewport().get_mouse_position())
+	var aim := _camera.project_ray_normal(get_viewport().get_mouse_position())
+	nozzle.global_position = from + aim * _RAG_REACH
+	nozzle.scale = Vector3.ONE * _nozzle_pointer_scale()
+
+
+## Held rag stays on the pointer, in the world, instead of replacing the cursor.
+func _fly_rag() -> void:
+	if not _rag_held or _busy or _rag == null or _camera == null:
+		return
+	_place_rag_at(get_viewport().get_mouse_position())
+
+
+func _place_rag_at(mouse: Vector2) -> void:
+	if _rag == null or _camera == null:
+		return
+	var from := _camera.project_ray_origin(mouse)
+	var aim := _camera.project_ray_normal(mouse)
+	var at := from + aim * _RAG_REACH
+	var to_cam := -aim
+	var x := Vector3.UP.cross(to_cam)
+	if x.length_squared() < 0.0001:
+		x = Vector3.RIGHT
+	x = x.normalized()
+	var z := x.cross(to_cam).normalized()
+	var twist := Basis(x, to_cam, z).rotated(to_cam, 0.85).rotated(x, 0.65)
+	_rag.global_transform = Transform3D(twist.scaled(Vector3.ONE * _RAG_HELD_SCALE), at)
+
+
+func _wipe_windshield() -> void:
+	if _rag == null or _car == null:
+		_show_status("Nothing to wipe.")
+		return
+	_attach_rag(_world)
+	_rag.visible = true
+	_rag.scale = Vector3.ONE
+	_set_rag_solid(false)
+	_set_rag_glow(false)
+	var spot := _car.global_transform * _glass_base
+	var far := _car.global_transform * _glass_top
+	_lay_rag_on_glass(spot, far)
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	for i in 2:
+		tw.tween_property(_rag, "global_position", far, 0.16)
+		tw.tween_property(_rag, "global_position", spot, 0.16)
+	await tw.finished
+	if not is_instance_valid(self):
+		return
+	_set_rag_glow(true)
+	_rag_wiped = true
+	_show_status("Windshield wiped.")
+
+
+## The mesh nose is local +Z, opposite the way the car travels, so the glass is the
+## forward edge of the roof rather than the low end of the body.
+func _measure_windshield(car: Node3D) -> void:
+	var box := _local_aabb(car)
+	var side := _camera_side(car)
+	var verts := _body_samples(car)
+	if verts.is_empty() or box.size.y < 0.2:
+		_glass_base = _face_point(box, side, 0.62, 0.68)
+		_glass_top = _face_point(box, side, 0.54, 0.86)
+		return
+	var bins := 28
+	var z0 := box.position.z
+	var dz := box.size.z / float(bins)
+	var bin_y := PackedFloat32Array()
+	bin_y.resize(bins)
+	bin_y.fill(-INF)
+	var roof := -INF
+	for p in verts:
+		roof = maxf(roof, p.y)
+		var index := clampi(int((p.z - z0) / dz), 0, bins - 1)
+		bin_y[index] = maxf(bin_y[index], p.y)
+	var hood := -INF
+	for index in range(int(bins * 0.72), bins):
+		hood = maxf(hood, bin_y[index])
+	if hood < 0.0:
+		hood = roof * 0.7
+	var header_i := 0
+	for index in bins:
+		if bin_y[index] >= roof - 0.14:
+			header_i = index
+	var cowl_i := mini(bins - 1, header_i + 2)
+	for index in range(header_i, bins):
+		if bin_y[index] <= hood + 0.05:
+			cowl_i = index
+			break
+	var header_z := z0 + (float(header_i) + 0.5) * dz
+	var cowl_z := z0 + (float(cowl_i) + 0.5) * dz
+	var top_z := lerpf(header_z, cowl_z, 0.15)
+	var base_z := lerpf(header_z, cowl_z, 0.9)
+	_glass_top = _skin_at(verts, side, box, top_z, roof - 0.1)
+	_glass_base = _skin_at(verts, side, box, base_z, hood + 0.05)
+
+
+func _camera_side(car: Node3D) -> Vector3:
+	var cam := car.to_local(_camera.global_position)
+	cam.y = 0.0
+	if cam.length_squared() < 0.001:
+		return Vector3.LEFT
+	return cam.normalized()
+
+
+func _body_samples(car: Node3D) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	car.force_update_transform()
+	_collect_body_samples(car, car.global_transform.affine_inverse(), out)
+	return out
+
+
+func _collect_body_samples(node: Node, to_car: Transform3D, out: PackedVector3Array) -> void:
+	if node is MeshInstance3D and (node as MeshInstance3D).visible and (node as MeshInstance3D).mesh != null:
+		var mi := node as MeshInstance3D
+		var xf := to_car * mi.global_transform
+		for surface in mi.mesh.get_surface_count():
+			var raw: PackedVector3Array = mi.mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX]
+			var step := maxi(1, raw.size() / 5000)
+			for i in range(0, raw.size(), step):
+				out.append(xf * raw[i])
+	for child in node.get_children():
+		if child is StaticBody3D:
+			continue
+		_collect_body_samples(child, to_car, out)
+
+
+func _skin_at(verts: PackedVector3Array, side: Vector3, box: AABB, z: float, y: float) -> Vector3:
+	var best := _face_point(box, side, 0.0, 0.0)
+	best.y = y
+	best.z = z
+	var best_score := -INF
+	var found := false
+	for p in verts:
+		if absf(p.z - z) > 0.07 or absf(p.y - y) > 0.08:
+			continue
+		var score := side.dot(p)
+		if score > best_score:
+			best_score = score
+			best = p
+			found = true
+	if not found:
+		return best + side * 0.05
+	return best + side * 0.05
+
+
+func _face_point(box: AABB, side: Vector3, along: float, height: float) -> Vector3:
+	var point := Vector3(
+		box.get_center().x,
+		box.position.y + box.size.y * height,
+		box.position.z + box.size.z * along
+	)
+	if side.x < 0.0:
+		point.x = box.position.x
+	else:
+		point.x = box.position.x + box.size.x
+	return point + side * 0.05
+
+
+func _lay_rag_on_glass(spot: Vector3, far: Vector3) -> void:
+	var up := far - spot
+	if up.length_squared() < 0.0001:
+		_rag.global_position = spot
+		return
+	up = up.normalized()
+	var to_cam := _camera.global_position - spot
+	var axis := up.cross(to_cam)
+	if axis.length_squared() < 0.0001:
+		axis = Vector3.RIGHT
+	axis = axis.normalized()
+	var facing := axis.cross(up).normalized()
+	if facing.dot(to_cam) < 0.0:
+		facing = -facing
+		axis = -axis
+	_rag.global_transform = Transform3D(Basis(axis, up, facing), spot)
+
+
+func _aiming_at_glass() -> bool:
+	if _car == null:
+		return false
+	var box := _local_aabb(_car)
+	if box.size.length() < 0.2:
+		return false
+	var local := _car.to_local(_hit_point)
+	var front := box.position.z + box.size.z * 0.4
+	var mid_y := box.position.y + box.size.y * 0.5
+	return local.z <= front and local.y >= mid_y
+
+
+func _attach_rag(parent: Node3D) -> void:
+	if _rag == null or _rag.get_parent() == parent:
+		return
+	var at := _rag.global_position
+	var rot := _rag.global_rotation
+	_rag.reparent(parent)
+	_rag.global_position = at
+	_rag.global_rotation = rot
+
+
+func _set_rag_solid(on: bool) -> void:
+	if _rag == null:
+		return
+	var body := _rag.get_node_or_null(^"Pick") as CollisionObject3D
+	if body != null:
+		body.collision_layer = 1 if on else 0
+
+
+func _update_cursor() -> void:
+	var mode := "arrow"
+	if not _busy:
+		var kind: Variant = _kind_at(get_viewport().get_mouse_position())
+		if _nozzle_seated or _nozzle_lifted:
+			mode = "hand"
+		elif kind == &"rag" or kind == &"rag_home":
+			mode = "hand"
+		elif _rag_held and (kind == &"sleeper" or _wipes_glass(kind)):
+			mode = "hand"
+		elif _rag_held and (_rag_wiped or _rag_warned) and (kind == &"windshield" or kind == &"car"):
+			mode = "hand"
+		elif _held.is_empty() and (kind == &"regular" or kind == &"super"):
+			mode = "hand"
+		elif not _held.is_empty() and (kind == &"car" or kind == &"windshield"):
+			mode = "hand"
+	if mode == _cursor_mode:
+		return
+	_cursor_mode = mode
+	Input.set_custom_mouse_cursor(null)
+	var shape := Input.CURSOR_POINTING_HAND if mode == "hand" else Input.CURSOR_ARROW
+	Input.set_default_cursor_shape(shape)
+
+
+func _try_station_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed:
+		return false
+	match key.keycode:
+		KEY_P:
+			_shortcut_pump()
+		KEY_F:
+			_shortcut_fuel()
+		KEY_D:
+			_leave()
+		_:
+			return false
+	return true
+
+
+## P lifts the nozzle off the pump, or hangs the held nozzle back up.
+func _shortcut_pump() -> void:
+	if _busy or _rag_held:
+		return
+	if not _held.is_empty():
+		var put_back := _held
+		var was_pouring := _pouring
+		_end_pour("")
+		_status = ""
+		_status_until = 0.0
+		_held = ""
+		_nozzle_seated = false
+		_nozzle_lifted = false
+		if was_pouring and _tank_open():
+			_say_sleeper("It's not full, speedy!", Vector2(300, 56))
+			_bubble_until = _time + 3.6
+		_set_busy(true)
+		await _move_nozzle(put_back, _home_of(put_back))
+		if is_instance_valid(self):
+			_set_busy(false)
+		return
+	_set_busy(true)
+	await _toggle_nozzle("regular")
+	if is_instance_valid(self):
+		_set_busy(false)
+
+
+## F seats the nozzle and pours, or pulls it back onto the pointer.
+func _shortcut_fuel() -> void:
+	if _busy or _rag_held:
+		return
+	if _nozzle_seated or _pouring:
+		_lift_nozzle_from_filler()
+		return
+	if _held.is_empty():
+		if _car == null:
+			_show_status("No car to fuel.")
+			return
+		if GameState.fuel >= GameState.DEFAULT_TANK_L - 0.05:
+			_show_status("The tank is already full.")
+			return
+		if GameState.money <= 0:
+			_show_status("Not enough cash.")
+			_say_broke()
+			_bubble_until = _time + 3.6
+			return
+		_held = "regular"
+		_nozzle_seated = false
+		_nozzle_lifted = false
+	_nozzle_lifted = false
+	_set_busy(true)
+	await _fuel_with_held()
+	if is_instance_valid(self):
+		_set_busy(false)
+
+
+func _lift_nozzle_from_filler() -> void:
+	_end_pour("")
+	_status = ""
+	_status_until = 0.0
+	_nozzle_seated = false
+	_nozzle_lifted = true
+	_fly_nozzle()
+	if _tank_open():
+		_say_sleeper("It's not full, speedy!", Vector2(300, 56))
+		_bubble_until = _time + 3.6
 
 
 func _toggle_nozzle(id: String) -> void:
@@ -198,40 +838,105 @@ func _toggle_nozzle(id: String) -> void:
 	if _car == null:
 		_show_status("No car to fuel.")
 		return
-	await _move_nozzle(id, _hand_point())
-	if is_instance_valid(self):
-		_held = id
+	_held = id
+	_nozzle_seated = false
+	_nozzle_lifted = false
+	_fly_nozzle()
 
 
 func _fuel_with_held() -> void:
 	if _held.is_empty() or _car == null:
 		return
-	var price := GameState.refuel_price()
-	if price <= 0:
+	if GameState.fuel >= GameState.DEFAULT_TANK_L - 0.05:
 		_show_status("The tank is already full.")
 		return
-	if GameState.money < price:
+	if GameState.money <= 0:
 		_show_status("Not enough cash.")
+		_say_broke()
+		_bubble_until = _time + 3.6
 		return
 	var id := _held
 	await _move_nozzle(id, _filler_global())
 	if not is_instance_valid(self):
 		return
+	_nozzle_seated = true
+	_pour_per_liter = float(GameState.FUEL_PRICE_PER_L)
+	_service_pour = false
+	_service_done = true
+	_pouring = true
+	_pour_banked = 0.0
+	_set_pump_audible(true)
 	_show_status("Filling up...")
-	await _pause(0.65)
-	if not is_instance_valid(self):
+
+
+## Fuel runs in while the nozzle stays seated. Pulling it out stops the pour.
+func _pour_fuel(delta: float) -> void:
+	if not _pouring:
 		return
-	var err := GameState.refuel_tank()
-	_refresh_cash()
-	if err.is_empty():
-		_show_status("Tank is full.")
+	var room := GameState.DEFAULT_TANK_L - GameState.fuel
+	if room <= 0.05:
+		_end_pour("Tank is full.")
+		return
+	var step := minf(_POUR_L_PER_S * delta, room)
+	var price := _pour_per_liter
+	if price <= 0.0:
+		_end_pour("")
+		return
+	# Unpaid liters already in the tank still have to be covered by the cash left.
+	var affordable := float(GameState.money) / price - _pour_banked
+	step = minf(step, maxf(affordable, 0.0))
+	if step <= 0.0001:
+		_end_pour("Not enough cash.")
+		return
+	_pour_banked += step
+	GameState.set_fuel(GameState.fuel + step)
+	var owed := int(floor(_pour_banked * price))
+	if owed > 0:
+		var pay := mini(owed, GameState.money)
+		GameState.money -= pay
+		_pour_banked -= float(pay) / price
+	if _cash != null:
+		_cash.text = "Bankroll: $%d    Tank: %.1f / %.0f L" % [GameState.money, GameState.fuel, GameState.DEFAULT_TANK_L]
+	var filling := "Full service... %.1f L" if _service_pour else "Filling up... %.1f L"
+	_status = filling % GameState.fuel
+	_status_until = _time + 0.35
+	if GameState.fuel >= GameState.DEFAULT_TANK_L - 0.05:
+		_end_pour("Tank is full.")
+	elif GameState.money <= 0 and _pour_banked * price < 0.01:
+		_end_pour("Not enough cash.")
+
+
+func _end_pour(message: String) -> void:
+	var was_pouring := _pouring
+	_pouring = false
+	if was_pouring:
+		_set_pump_audible(false)
+	if was_pouring or _pour_banked > 0.0:
+		var price := _pour_per_liter
+		var owed := int(ceil(_pour_banked * price - 0.001))
+		if owed > 0 and GameState.money >= owed:
+			GameState.money -= owed
+		elif _pour_banked > 0.0:
+			GameState.set_fuel(GameState.fuel - _pour_banked)
+		_pour_banked = 0.0
+		GameState.commit_fuel()
+		_refresh_cash()
+	if was_pouring and not message.is_empty():
+		_show_status(message)
+		if message == "Not enough cash.":
+			_say_broke()
+			_bubble_until = _time + 3.6
+
+
+func _set_pump_audible(on: bool) -> void:
+	if _pump_sound == null:
+		return
+	if on == _pump_sound.playing:
+		return
+	if on:
+		_pump_sound.play()
 	else:
-		_show_status(err)
-	await _pause(0.35)
-	if not is_instance_valid(self):
-		return
-	_held = ""
-	await _move_nozzle(id, _home_of(id))
+		_pump_sound.stop()
 
 
 func _move_nozzle(id: String, target: Vector3) -> void:
@@ -260,20 +965,29 @@ func _roll(to_x: float, duration: float, ease_type: Tween.EaseType) -> void:
 	end.x = to_x
 	var forward := -_car.global_transform.basis.z
 	var travel := (end - start).dot(forward)
-	_set_engine(true)
+	var pulling_away := absf(end.x - _PARK_X) > absf(start.x - _PARK_X)
+	_start_roll_engine()
 	var tw := create_tween()
 	tw.set_trans(Tween.TRANS_QUAD).set_ease(ease_type)
-	tw.tween_method(_apply_roll.bind(start, end, wheels, bases, travel), 0.0, 1.0, duration)
+	tw.tween_method(_apply_roll.bind(start, end, wheels, bases, travel, pulling_away), 0.0, 1.0, duration)
 	await tw.finished
 	for i in wheels.size():
 		if is_instance_valid(wheels[i]):
 			wheels[i].basis = bases[i]
 	if is_instance_valid(_car):
 		_car.position = end
-	_set_engine(false)
+	_stop_roll_engine()
 
 
-func _apply_roll(t: float, start: Vector3, end: Vector3, wheels: Array[Node3D], bases: Array[Basis], travel: float) -> void:
+func _apply_roll(
+	t: float,
+	start: Vector3,
+	end: Vector3,
+	wheels: Array[Node3D],
+	bases: Array[Basis],
+	travel: float,
+	pulling_away: bool
+) -> void:
 	if _car == null:
 		return
 	_car.position = start.lerp(end, t)
@@ -283,18 +997,36 @@ func _apply_roll(t: float, start: Vector3, end: Vector3, wheels: Array[Node3D], 
 		if not is_instance_valid(wheel):
 			continue
 		wheel.basis = bases[i] * Basis(Vector3.UP, spin)
+	var span := maxf(absf(end.x - start.x), 0.001)
+	var away := clampf(absf(_car.position.x - _PARK_X) / span, 0.0, 1.0)
+	_update_roll_engine(t, pulling_away, away)
 
 
-func _set_engine(pulling: bool) -> void:
+func _start_roll_engine() -> void:
 	if _engine == null or not _engine.has_method(&"set_state") or not GameState.has_engine():
 		return
-	if pulling:
-		GameState.set_music_dimmed(true)
-		_engine.volume_db = -5.0
-		_engine.call(&"set_state", 2200.0, 0.65, false, false)
+	GameState.set_music_dimmed(true)
+	_engine.volume_db = _ROLL_VOL_NEAR
+	_engine.call(&"set_state", _ROLL_RPM_IDLE, 0.15, false)
+
+
+func _update_roll_engine(t: float, pulling_away: bool, away: float) -> void:
+	if _engine == null or not _engine.playing:
 		return
-	_engine.volume_db = -12.0
-	_engine.call(&"set_state", 680.0, 0.0, false, false)
+	var rpm := lerpf(_ROLL_RPM_IDLE, _ROLL_RPM_PULL, t)
+	var throttle := lerpf(0.3, 0.9, t)
+	if not pulling_away:
+		rpm = lerpf(_ROLL_RPM_PULL, _ROLL_RPM_IDLE, t)
+		throttle = lerpf(0.55, 0.0, t)
+	_engine.volume_db = lerpf(_ROLL_VOL_NEAR, _ROLL_VOL_FAR, away)
+	_engine.call(&"set_state", rpm, throttle, false)
+
+
+func _stop_roll_engine() -> void:
+	if _engine != null:
+		_engine.volume_db = -6.0
+		if _engine.playing:
+			_engine.stop()
 	GameState.set_music_dimmed(false)
 
 
@@ -342,10 +1074,6 @@ func _filler_global() -> Vector3:
 	return _car.global_transform * _filler_local
 
 
-func _hand_point() -> Vector3:
-	return _filler_global() + Vector3(-0.28, 0.08, 0.42)
-
-
 func _home_of(id: String) -> Vector3:
 	return _homes[id] as Vector3
 
@@ -376,6 +1104,8 @@ func _aim_nozzles() -> void:
 			nozzle.rotation = Vector3(1.05, 0.25, 0.1)
 		elif nozzle.global_position.distance_to(aim) > 0.2:
 			nozzle.look_at(aim, Vector3.UP)
+		var in_hand := String(id) == _held and not _nozzle_seated and not _busy
+		nozzle.scale = Vector3.ONE * (_nozzle_pointer_scale() if in_hand else 1.0)
 
 
 func _aim_segment(mesh: MeshInstance3D, a: Vector3, b: Vector3) -> void:
@@ -402,6 +1132,7 @@ func _kind_at(screen_pos: Vector2) -> Variant:
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if hit.is_empty():
 		return null
+	_hit_point = hit.get("position", Vector3.ZERO)
 	var node := hit.get("collider") as Node
 	while node != null:
 		if node.has_meta(&"gas_interact"):
@@ -426,18 +1157,48 @@ func _tooltip_text() -> String:
 	if hovered != null and hovered != _ui:
 		return ""
 	var kind: Variant = _kind_at(get_viewport().get_mouse_position())
+	if _nozzle_seated:
+		return "Take the nozzle"
+	if _nozzle_lifted:
+		if _tank_open() and (kind == &"car" or kind == &"windshield"):
+			return _fuel_tip()
+		return "Put the nozzle back"
+	if _rag_held and _rag_wiped:
+		return "Put the rag down"
+	if _rag_held and _rag_warned:
+		if _wipes_glass(kind):
+			return "Wipe the windshield"
+		return "Put the rag down"
 	if kind == null:
 		return ""
 	if kind == &"car":
+		if _rag_held and _aiming_at_glass():
+			return ""
+		if _rag_held:
+			return "Wipe the windshield"
 		if _held.is_empty():
 			return "Drive back"
-		var price := GameState.refuel_price()
-		if price <= 0:
-			return "Tank is full"
-		return "Fuel the car — $%d" % price
+		return _fuel_tip()
+	if kind == &"windshield" and not _held.is_empty() and not _rag_held:
+		return _fuel_tip()
+	if kind == &"rag_home" and _rag_held:
+		return "Put the rag back"
+	if kind == &"rag" or kind == &"rag_home":
+		return "Rag"
+	if kind == &"windshield" and _held.is_empty() and not _rag_held:
+		return "Drive back"
+	if kind == &"sleeper" and _rag_held:
+		return "Wave it in his face"
 	if kind == &"regular" or kind == &"super":
 		return _pump_tip(str(_TOOLTIPS.get(kind, "Fuel")), String(kind))
 	return str(_TOOLTIPS.get(kind, ""))
+
+
+func _fuel_tip() -> String:
+	var price := GameState.refuel_price()
+	if price <= 0:
+		return "Tank is full"
+	return "Fuel the car — $%d" % price
 
 
 func _pump_tip(title: String, id: String) -> String:
@@ -740,6 +1501,7 @@ func _build_pumps() -> void:
 	_pump(_PUMP_REGULAR, "REGULAR", "regular")
 	_pump(_PUMP_SUPER, "SUPER", "super")
 	_box(_world, Vector3(2.45, 0.08, 0.85), Vector3(-4.95, 0.08, 4.85), Color(0.58, 0.56, 0.52), 0.8)
+	_build_rag()
 
 
 func _pump(pos: Vector3, title: String, id: String) -> void:
@@ -783,6 +1545,74 @@ func _pump(pos: Vector3, title: String, id: String) -> void:
 	_outlets[id] = pump.to_global(Vector3(-0.02, 1.28, 0.18))
 
 
+func _build_rag() -> void:
+	var spot := _rag_home
+	_box(_world, Vector3(0.38, 0.012, 0.26), spot + Vector3(0.0, -0.02, 0.0), Color(0.28, 0.34, 0.36), 0.92)
+	_hit_box(_world, Vector3(0.46, 0.16, 0.34), spot, &"rag_home")
+	var rag := Node3D.new()
+	rag.name = "Rag"
+	rag.position = spot
+	rag.rotation = Vector3(0.0, 0.45, 0.0)
+	_world.add_child(rag)
+	var packed := load(_RAG_MODEL) as PackedScene
+	if packed == null:
+		push_error("Rag model failed to load: %s" % _RAG_MODEL)
+		_rag = rag
+		return
+	var model := packed.instantiate() as Node3D
+	model.name = "Cloth"
+	rag.add_child(model)
+	var bounds := _local_aabb(model)
+	var span := maxf(bounds.size.x, bounds.size.z)
+	if span > 0.001:
+		var fit := _RAG_WIDTH / span
+		model.scale = Vector3.ONE * fit
+		model.position = -bounds.get_center() * fit
+		model.force_update_transform()
+	_keep_rag_materials(model)
+	var fitted := _local_aabb(rag)
+	if fitted.size != Vector3.ZERO:
+		rag.position.y += -fitted.position.y
+		_rag_home = rag.position
+	var pick := StaticBody3D.new()
+	pick.name = "Pick"
+	pick.collision_mask = 0
+	pick.set_meta(&"gas_interact", &"rag")
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	var pick_size := fitted.size
+	if pick_size == Vector3.ZERO:
+		pick_size = Vector3(0.38, 0.12, 0.28)
+	box.size = pick_size
+	shape.shape = box
+	shape.position = fitted.get_center()
+	pick.add_child(shape)
+	rag.add_child(pick)
+	_rag = rag
+
+
+func _keep_rag_materials(node: Node) -> void:
+	if node is MeshInstance3D:
+		var mi := node as MeshInstance3D
+		var active := mi.get_active_material(0) as StandardMaterial3D
+		if active != null:
+			var lit := active.duplicate() as StandardMaterial3D
+			lit.emission_enabled = false
+			lit.emission = active.albedo_color
+			lit.emission_energy_multiplier = 0.0
+			mi.material_override = lit
+			_rag_mats.append(lit)
+	for child in node.get_children():
+		_keep_rag_materials(child)
+
+
+## The cloth leaves the pump lights while it flies, so it keeps its own color.
+func _set_rag_glow(on: bool) -> void:
+	for mat in _rag_mats:
+		mat.emission_enabled = on
+		mat.emission_energy_multiplier = 0.55 if on else 0.0
+
+
 func _build_street() -> void:
 	_sign()
 	_bench(Vector3(0.35, 0.0, 1.45))
@@ -791,6 +1621,7 @@ func _build_street() -> void:
 	_fence(Vector3(5.15, 0.0, 1.05))
 	_machine(Vector3(5.35, 0.0, 1.55))
 	_tree(Vector3(-8.9, 0.0, 1.1))
+	_sitter(Vector3(6.35, 0.1, 2.45))
 	for i in 7:
 		_bush(Vector3(-2.4 + float(i) * 1.45, 0.0, 9.35), 0.42)
 	_bush(Vector3(4.55, 0.0, 1.7), 0.36)
@@ -842,6 +1673,68 @@ func _machine(pos: Vector3) -> void:
 	var oval := _cylinder(_world, 0.16, 0.16, 0.04, pos + Vector3(0.0, 0.95, 0.22), Color(0.15, 0.4, 0.75), 0.3, 0.1, Color(0.2, 0.5, 1.0), 0.4)
 	oval.rotation.x = PI * 0.5
 	_box(_world, Vector3(0.28, 0.35, 0.03), pos + Vector3(0.0, 0.45, 0.22), Color(0.15, 0.16, 0.18), 0.5)
+
+
+func _sitter(pos: Vector3) -> void:
+	var root := Node3D.new()
+	root.name = "Sitter"
+	root.position = pos
+	_world.add_child(root)
+	var wood := Color(0.4, 0.24, 0.13)
+	var skin := Color(0.72, 0.52, 0.38)
+	var shirt := Color(0.16, 0.32, 0.55)
+	var pants := Color(0.2, 0.18, 0.16)
+	var shoes := Color(0.1, 0.08, 0.07)
+	for side in [-0.2, 0.2]:
+		for depth in [-0.16, 0.16]:
+			_box(root, Vector3(0.04, 0.46, 0.04), Vector3(side, 0.23, depth), wood, 0.72)
+	_box(root, Vector3(0.48, 0.045, 0.4), Vector3(0.0, 0.46, 0.0), wood, 0.68)
+	_box(root, Vector3(0.48, 0.42, 0.04), Vector3(0.0, 0.68, -0.18), wood, 0.68)
+	var person := Node3D.new()
+	person.name = "Person"
+	root.add_child(person)
+	_sleeper = person
+	var top := Node3D.new()
+	top.name = "Top"
+	person.add_child(top)
+	_sleeper_top = top
+	_box(top, Vector3(0.34, 0.14, 0.22), Vector3(0.0, 0.58, 0.0), pants, 0.75)
+	for side in [-0.09, 0.09]:
+		var thigh := _box(person, Vector3(0.12, 0.1, 0.28), Vector3(side, 0.56, 0.22), pants, 0.75)
+		var shin := _box(person, Vector3(0.1, 0.32, 0.1), Vector3(side, 0.28, 0.34), pants, 0.75)
+		var foot := _box(person, Vector3(0.11, 0.05, 0.16), Vector3(side, 0.08, 0.38), shoes, 0.6)
+		_sleeper_thighs.append(thigh)
+		_sleeper_shins.append(shin)
+		_sleeper_feet.append(foot)
+	_box(top, Vector3(0.34, 0.36, 0.18), Vector3(0.0, 0.84, -0.02), shirt, 0.65)
+	_box(top, Vector3(0.09, 0.26, 0.09), Vector3(-0.22, 0.78, 0.08), shirt, 0.65)
+	_box(top, Vector3(0.09, 0.26, 0.09), Vector3(0.22, 0.78, 0.08), shirt, 0.65)
+	_sphere(top, 0.045, Vector3(-0.22, 0.64, 0.12), skin, 0.55)
+	_sphere(top, 0.045, Vector3(0.22, 0.64, 0.12), skin, 0.55)
+	var head := Node3D.new()
+	head.name = "Head"
+	head.position = Vector3(0.0, 1.14, 0.0)
+	head.rotation.x = 0.55
+	top.add_child(head)
+	_sleeper_head = head
+	_sphere(head, 0.12, Vector3.ZERO, skin, 0.5)
+	_sphere(head, 0.11, Vector3(0.0, 0.08, -0.02), Color(0.14, 0.09, 0.07), 0.7)
+	_box(head, Vector3(0.2, 0.035, 0.18), Vector3(0.0, 0.1, 0.02), shirt, 0.5)
+	_box(head, Vector3(0.14, 0.03, 0.08), Vector3(0.0, 0.08, 0.14), shirt, 0.5)
+	_box(head, Vector3(0.055, 0.012, 0.012), Vector3(-0.04, 0.02, 0.11), Color(0.15, 0.1, 0.08), 0.4)
+	_box(head, Vector3(0.055, 0.012, 0.012), Vector3(0.04, 0.02, 0.11), Color(0.15, 0.1, 0.08), 0.4)
+	_hit_box(head, Vector3(0.32, 0.32, 0.32), Vector3(0.0, 0.02, 0.06), &"sleeper")
+
+
+func _build_sleeper_bubble() -> void:
+	if _sleeper_head == null:
+		return
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	_ui.add_child(bubble)
+	bubble.call("set_line", "Get out of\nmy face,\ndummy!", Vector2(240, 96), 26)
+	bubble.call("follow_node", _camera, _sleeper_head, Vector3(0.0, 0.28, 0.12))
+	_sleeper_bubble = bubble
 
 
 func _bench(pos: Vector3) -> void:
@@ -971,6 +1864,8 @@ func _build_player_car() -> void:
 	_seat_car(car)
 	_measure_filler(car)
 	_add_car_hit(car)
+	_add_windshield(car)
+	_measure_windshield(car)
 	car.position.x = _APPROACH_X
 	_car = car
 
@@ -987,6 +1882,18 @@ func _add_car_hit(car: Node3D) -> void:
 	shape.position = Vector3(0.0, 0.7, 0.15)
 	body.add_child(shape)
 	car.add_child(body)
+
+
+func _add_windshield(car: Node3D) -> void:
+	var box := _local_aabb(car)
+	if box.size.length() < 0.2:
+		return
+	var pos := Vector3(
+		box.position.x + box.size.x * 0.06,
+		box.position.y + box.size.y * 0.7,
+		box.position.z + box.size.z * 0.14
+	)
+	_hit_box(car, Vector3(0.5, 0.42, 0.72), pos, &"windshield")
 
 
 func _measure_filler(car: Node3D) -> void:
