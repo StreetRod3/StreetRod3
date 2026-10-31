@@ -2126,10 +2126,10 @@ func set_arcade_drive(enabled: bool) -> void:
 	save_settings()
 
 
-func set_music_dimmed(dimmed: bool) -> void:
+func set_music_dimmed(dimmed: bool, dimmed_db: float = -16.0) -> void:
 	if _music_player == null:
 		return
-	_music_player.volume_db = -16.0 if dimmed else 0.0
+	_music_player.volume_db = dimmed_db if dimmed else 0.0
 
 
 func update_music() -> void:

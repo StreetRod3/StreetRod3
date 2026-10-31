@@ -3,8 +3,10 @@ extends Node3D
 ## Setting the timing with a timing light, as in Street Rod 2. The engine idles; the
 ## light, clipped to the number one plug wire, flashes each time that plug fires, and
 ## the flash freezes the balancer with its mark against the timing tab. Advance and
-## Retard turn the distributor a step at a time. The engine idles fastest and smoothest
-## at the timing on the tune-up sticker; away from it the idle drops and the mark wanders.
+## Retard turn the distributor a step at a time. As in Street Rod 2, the mark has a
+## pointer to line up with (red, on the tab at the sticker's timing), and the idle is
+## smooth and fastest only there; away from it the idle drops, lopes and misses, and the
+## mark wanders from flash to flash.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineAssembly := preload("res://scripts/engine_assembly.gd")
@@ -15,7 +17,9 @@ const CRANK_Y := 0.55
 ## How long each flash lasts, in seconds.
 const FLASH_TIME := 0.03
 ## The mark wanders this many degrees of timing for each step off the sweet spot.
-const WANDER_PER_STEP := 0.45
+const WANDER_PER_STEP := 0.9
+## The mark glows this long after each flash, in seconds, as it hangs in your eye.
+const AFTERGLOW := 0.12
 
 const _CREAM := Color(0.95, 0.9, 0.78, 1)
 
@@ -25,6 +29,7 @@ const _CREAM := Color(0.95, 0.9, 0.78, 1)
 var _engine: Node3D
 var _light_gun: Node3D
 var _lens_mat: StandardMaterial3D
+var _mark_mats: Array[StandardMaterial3D] = []
 var _strobe: SpotLight3D
 var _env: Environment
 var _sound: AudioStreamPlayer
@@ -53,6 +58,8 @@ func _ready() -> void:
 	add_child(_engine)
 	_engine.build()
 	_place_camera()
+	_build_pointer()
+	_find_mark()
 	_build_light_gun()
 	_build_ui()
 	_build_sound()
@@ -69,7 +76,8 @@ func _process(delta: float) -> void:
 	if _engine == null or _engine.balancer == null:
 		return
 	var rpm: float = _EngineSound.tune_rpm(GameState.engine_tune, GameState.engine_sweet_tune())
-	# Number one fires every other turn of the crank.
+	# Number one fires every other turn of the crank. Each flash catches the mark at the
+	# timing, so it stands still there; the strobe is the only light that shows it.
 	var period := 120.0 / rpm
 	_since_flash += delta
 	if _since_flash >= period:
@@ -80,10 +88,11 @@ func _process(delta: float) -> void:
 		_engine.balancer.rotation.x = _EngineAssembly.mark_angle(float(GameState.timing_degrees()) + wander)
 	elif _flashing and _since_flash > FLASH_TIME:
 		_flashing = false
-	if not _flashing:
-		_engine.balancer.rotation.x = wrapf(_engine.balancer.rotation.x + rpm / 60.0 * TAU * delta, -PI, PI)
 	_strobe.light_energy = 5.0 if _flashing else 0.0
 	_lens_mat.emission_energy_multiplier = 6.0 if _flashing else 0.0
+	var glow := 3.0 * exp(-_since_flash / AFTERGLOW)
+	for mat in _mark_mats:
+		mat.emission_energy_multiplier = glow
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -122,13 +131,7 @@ func _refresh() -> void:
 	_retard_btn.disabled = tune <= GameState.ENGINE_TUNE_MIN
 	if _sound != null:
 		_sound.call(&"set_tune", tune, GameState.engine_sweet_tune())
-	var off := tune - GameState.engine_sweet_tune()
-	if off == 0:
-		_hint.text = "Right on the sticker. Listen to it idle."
-	elif absi(off) <= 1:
-		_hint.text = "Close. The idle is a little rough."
-	else:
-		_hint.text = "Turn the distributor until the mark sits where the sticker says."
+	_hint.text = "Line the mark up with the red pointer. It idles smooth when it's right."
 
 
 func _on_done_pressed() -> void:
@@ -195,10 +198,55 @@ func _tab_point() -> Vector3:
 func _place_camera() -> void:
 	var tab := _tab_point()
 	var crank: Vector3 = _engine.frame.global_transform * Vector3(_EngineAssembly.COVER_X - 0.2, 0.0, _EngineAssembly.CRANK_Z)
-	var look := crank.lerp(tab, 0.45)
+	var look := crank.lerp(tab, 0.85)
 	_camera.fov = 40.0
-	_camera.global_position = look + Vector3(-0.62, 0.14, 0.24)
+	_camera.global_position = look + Vector3(-0.3, 0.02, 0.09)
 	_camera.look_at(look, Vector3.UP)
+
+
+## The red pointer on the tab at the timing the sticker gives, past the ticks and the
+## numbers, lit so it shows between flashes: the line the mark is set against.
+func _build_pointer() -> void:
+	var red := StandardMaterial3D.new()
+	red.albedo_color = Color(0.9, 0.08, 0.05)
+	red.emission_enabled = true
+	red.emission = Color(1.0, 0.12, 0.06)
+	red.emission_energy_multiplier = 1.6
+	var a := _EngineAssembly.mark_angle(float(GameState.timing_degrees(GameState.engine_sweet_tune())))
+	var x := _EngineAssembly.COVER_X - 0.215
+	var pointer := Node3D.new()
+	pointer.name = "Pointer"
+	pointer.position = Vector3(x, 0.0, _EngineAssembly.CRANK_Z)
+	pointer.rotation.x = a
+	_engine.frame.add_child(pointer)
+	var r := _EngineAssembly.BALANCER_R
+	# A long bar from the rim out past the numbers, and a head on its end.
+	var bar := MeshInstance3D.new()
+	var bar_mesh := BoxMesh.new()
+	bar_mesh.size = Vector3(0.012, 0.022, 0.3)
+	bar.mesh = bar_mesh
+	bar.material_override = red
+	bar.position = Vector3(0.0, 0.0, r + 0.17)
+	pointer.add_child(bar)
+	var head := MeshInstance3D.new()
+	var head_mesh := PrismMesh.new()
+	head_mesh.size = Vector3(0.09, 0.08, 0.012)
+	head.mesh = head_mesh
+	head.material_override = red
+	head.rotation.y = PI * 0.5
+	head.rotation.z = PI
+	head.position = Vector3(0.0, 0.0, r + 0.35)
+	pointer.add_child(head)
+
+
+## The balancer's mark glows a moment after each flash.
+func _find_mark() -> void:
+	for mi in _engine.balancer.find_children("Mark*", "MeshInstance3D", true, false):
+		var mat := ((mi as MeshInstance3D).material_override as StandardMaterial3D).duplicate() as StandardMaterial3D
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 1.0, 0.92)
+		(mi as MeshInstance3D).material_override = mat
+		_mark_mats.append(mat)
 
 
 ## A timing light held up in the foreground, its lens on the tab: pistol grip, body,
@@ -233,9 +281,10 @@ func _build_light_gun() -> void:
 	]), 0.008, 6, false)
 	cord.material_override = black
 	_light_gun.add_child(cord)
-	# Held low and to the right of the view, aimed at the tab.
+	# Held off to the right of the tab and a little nearer, aimed in at it from the side
+	# so it does not cover the marks.
 	var cam := _camera.global_transform
-	_light_gun.global_position = cam.origin - cam.basis.z * 0.42 + cam.basis.x * 0.17 - cam.basis.y * 0.13
+	_light_gun.global_position = tab + cam.basis.x * 0.26 - cam.basis.y * 0.05 + cam.basis.z * 0.08
 	_light_gun.look_at(tab, Vector3.UP)
 	_strobe = SpotLight3D.new()
 	_strobe.light_color = Color(0.85, 0.92, 1.0)
@@ -268,7 +317,8 @@ func _build_sound() -> void:
 	_sound.name = "EngineSound"
 	_sound.set_script(_EngineSound)
 	add_child(_sound)
-	GameState.set_music_dimmed(true)
+	_sound.volume_db += 4.0
+	GameState.set_music_dimmed(true, -40.0)
 	# A short click from the distributor turning in its clamp.
 	_click = AudioStreamPlayer.new()
 	var samples := PackedByteArray()

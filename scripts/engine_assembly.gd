@@ -52,8 +52,8 @@ const PUMP_CENTER := Vector2(0.0, 0.32)
 const ALTERNATOR_CENTER := Vector2(0.95, 0.45)
 ## The timing tab: its 0 mark this far clockwise from the top as seen from the front,
 ## and each degree of timing drawn this many degrees of arc so the marks can be read.
-const TAB_ZERO_DEG := 110.0
-const TAB_ARC_PER_DEG := 2.5
+const TAB_ZERO_DEG := 165.0
+const TAB_ARC_PER_DEG := 3.0
 const TAB_BTDC_MAX := 20
 const TAB_ATDC_MAX := 4
 
@@ -232,8 +232,10 @@ func _build_engine(rig: Node3D) -> void:
 	_cyl_x(balancer, BALANCER_R - 0.08, 0.02, COVER_X - 0.18, steel, 40)
 	_cyl_x(balancer, 0.12, 0.14, COVER_X - 0.17, dark, 20)
 	# The mark: a white line on the face out to the rim, and on across the rim.
-	_box(balancer, Vector3(0.016, 0.03, 0.1), Vector3(COVER_X - 0.19, 0.0, BALANCER_R - 0.045), white)
-	_box(balancer, Vector3(0.16, 0.03, 0.01), Vector3(COVER_X - 0.09, 0.0, BALANCER_R + 0.002), white)
+	var mark_face := _box(balancer, Vector3(0.016, 0.045, 0.12), Vector3(COVER_X - 0.19, 0.0, BALANCER_R - 0.055), white)
+	mark_face.name = "MarkFace"
+	var mark_rim := _box(balancer, Vector3(0.16, 0.045, 0.012), Vector3(COVER_X - 0.09, 0.0, BALANCER_R + 0.003), white)
+	mark_rim.name = "MarkRim"
 	# Crank pulley out on the hub, in line with the belt.
 	_cyl_x(balancer, 0.3, 0.035, BELT_X + 0.04, steel, 36)
 	_cyl_x(balancer, 0.24, 0.02, BELT_X + 0.01, steel, 36)
