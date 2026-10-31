@@ -124,6 +124,17 @@ const HOOD_BOLT_COUNTS := {
 	SLOT_AIR_CLEANER: 1,
 }
 const HEAD_BOLTS := 2
+## Condition of a part, 0 to 1. Parts from the paper are new; parts that come with a car
+## start somewhere in the used range; everything on the car wears a little each race.
+const CONDITION_USED_MIN := 0.5
+const CONDITION_USED_MAX := 0.9
+const CONDITION_WEAR_MIN := 0.01
+const CONDITION_WEAR_MAX := 0.03
+const CONDITION_FLOOR := 0.05
+## A buyer offers between these fractions of the paper's price. Condition skews where in
+## the range: a new part draws high offers more often, a worn one low.
+const SELL_OFFER_MIN := 0.5
+const SELL_OFFER_MAX := 0.9
 ## Spark advance for each tune step: step 0 fires at top dead center.
 const TIMING_DEG_PER_STEP := 2
 ## Airflow an engine wants, in cfm per cubic inch. Carburetors well short of it starve
@@ -201,6 +212,12 @@ var owned_wheel_ids: Array[String] = ["wheel-c1"]
 var equipped_wheel_id: String = "wheel-c1"
 ## Paint, fuel, and mounted parts for each owned car. The fields above mirror the active car.
 var car_records: Dictionary = {}
+## Conditions of spares that are on no car, by `"kind:id"` (kinds as the garage's parts
+## list names them: engine, transmission, wheels, part). Each car record keeps its own
+## fitted parts' conditions under "conditions".
+var spare_conditions: Dictionary = {}
+## The last offer made for each spare, so the next one differs.
+var _last_offers: Dictionary = {}
 ## Parsed `PLAYER_CAR_FILE`. Empty sections mean the file failed to load.
 var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
@@ -696,6 +713,8 @@ func new_game() -> void:
 	equipped_engine_id = ""
 	equipped_wheel_id = ""
 	car_records.clear()
+	spare_conditions.clear()
+	_last_offers.clear()
 	current_car_id = _add_owned_car(DEFAULT_CAR_ID, car_color)
 	_install_car(current_car_id)
 	set_fuel(_starting_fuel())
@@ -780,6 +799,7 @@ func save_game(slot: int) -> bool:
 		"equipped_engine_id": equipped_engine_id,
 		"owned_wheel_ids": owned_wheel_ids,
 		"equipped_wheel_id": equipped_wheel_id,
+		"spare_conditions": spare_conditions,
 	}
 	var json := JSON.stringify(data)
 	var path := save_slot_path(slot)
@@ -846,6 +866,8 @@ func load_game(slot: int) -> bool:
 	equipped_engine_id = str(d.get("equipped_engine_id", equipped_engine_id))
 	owned_wheel_ids = _string_array(d.get("owned_wheel_ids", owned_wheel_ids))
 	equipped_wheel_id = str(d.get("equipped_wheel_id", equipped_wheel_id))
+	spare_conditions = _conditions_pool_from(d.get("spare_conditions", null))
+	_last_offers.clear()
 	if owned_gearbox_ids.is_empty():
 		owned_gearbox_ids = [DEFAULT_GEARBOX_ID]
 	if equipped_gearbox_id != NO_GEARBOX_ID:
@@ -1271,6 +1293,280 @@ func spare_count(part_id: String) -> int:
 	if bool(listing_by_id(PARTS, part_id).get("stock", false)):
 		return 0 if fitted > 0 else 1
 	return part_count(part_id) - fitted
+
+
+# --- Condition and selling --------------------------------------------------------
+
+
+## What is fitted to the active car, by mount: "engine", "transmission", "wheels",
+## "slot:<slot>" and "bolt:<part id>", each as [kind, id].
+func _active_mounts() -> Dictionary:
+	var out := {}
+	if has_engine():
+		out["engine"] = ["engine", equipped_engine_id]
+	if not equipped_gearbox_id.is_empty() and equipped_gearbox_id != NO_GEARBOX_ID:
+		out["transmission"] = ["transmission", equipped_gearbox_id]
+	if not equipped_wheel_id.is_empty():
+		out["wheels"] = ["wheels", equipped_wheel_id]
+	for slot in ALL_SLOTS:
+		var part_id := str(slot_part_ids.get(slot, NO_PART_ID))
+		if part_id != NO_PART_ID and not part_id.is_empty():
+			out["slot:" + slot] = ["part", part_id]
+	for part_id in equipped_part_ids:
+		out["bolt:" + part_id] = ["part", part_id]
+	return out
+
+
+## Brings a car record's conditions up to what is fitted now. What came off goes to the
+## spares pool with its wear; what went on comes out of the pool (its best copy), or is
+## new. A car with no conditions yet came used, so all it has is used.
+func _settle_conditions(rec: Dictionary) -> void:
+	var used := not rec.has("conditions")
+	var old: Dictionary = rec.get("conditions", {})
+	var mounts := _active_mounts()
+	var now := {}
+	for mount in old.keys():
+		var entry: Dictionary = old[mount]
+		var fitted: Variant = mounts.get(mount, null)
+		if fitted == null or str(fitted[1]) != str(entry.get("id", "")):
+			_push_spare_condition(str(entry.get("kind", "")), str(entry.get("id", "")), float(entry.get("c", 1.0)))
+	for mount in mounts.keys():
+		var kind := str(mounts[mount][0])
+		var id := str(mounts[mount][1])
+		var entry: Variant = old.get(mount, null)
+		if entry is Dictionary and str((entry as Dictionary).get("id", "")) == id:
+			now[mount] = entry
+			continue
+		var c := randf_range(CONDITION_USED_MIN, CONDITION_USED_MAX) if used else _pop_spare_condition(kind, id)
+		now[mount] = {"kind": kind, "id": id, "c": c}
+	rec["conditions"] = now
+
+
+func _condition_key(kind: String, id: String) -> String:
+	return "%s:%s" % [kind, id]
+
+
+func _push_spare_condition(kind: String, id: String, c: float) -> void:
+	if kind.is_empty() or id.is_empty():
+		return
+	var key := _condition_key(kind, id)
+	var pool: Array = spare_conditions.get(key, [])
+	pool.append(clampf(c, CONDITION_FLOOR, 1.0))
+	spare_conditions[key] = pool
+
+
+## The best spare copy's condition, taken out of the pool; new when there is none.
+func _pop_spare_condition(kind: String, id: String) -> float:
+	var key := _condition_key(kind, id)
+	var pool: Array = spare_conditions.get(key, [])
+	if pool.is_empty():
+		return 1.0
+	pool.sort()
+	var c := float(pool.pop_back())
+	spare_conditions[key] = pool
+	return c
+
+
+## Owned copies that are on no car.
+func free_spare_count(kind: String, id: String) -> int:
+	var owned := 0
+	var key := ""
+	match kind:
+		"part":
+			owned = owned_part_ids.count(id)
+		"engine":
+			owned = owned_engine_ids.count(id)
+			key = "engine_id"
+		"transmission":
+			owned = owned_gearbox_ids.count(id)
+			key = "gearbox_id"
+		"wheels":
+			owned = owned_wheel_ids.count(id)
+			key = "wheel_id"
+	var mounted := 0
+	for raw_id in car_records.keys():
+		var stored: Variant = car_records[raw_id]
+		if typeof(stored) != TYPE_DICTIONARY:
+			continue
+		var rec: Dictionary = stored
+		if kind == "part":
+			var slots: Variant = rec.get("slot_parts", {})
+			if typeof(slots) == TYPE_DICTIONARY:
+				mounted += (slots as Dictionary).values().count(id)
+			mounted += _string_array(rec.get("part_ids", [])).count(id)
+		elif str(rec.get(key, "")) == id:
+			mounted += 1
+	return maxi(owned - mounted, 0)
+
+
+## Keeps one condition in the pool for each spare that is on no car: dropping the most
+## worn when there are too many (sold, blown), adding new ones for parts just bought.
+## A stock part off the car keeps the one condition it came off with.
+func _trim_spare_conditions() -> void:
+	var lists := {"part": PARTS, "engine": ENGINES, "transmission": GEARBOXES, "wheels": WHEELS}
+	var kept := {}
+	for kind in lists.keys():
+		for item in lists[kind]:
+			var id := str(item.get("id", ""))
+			var key := _condition_key(kind, id)
+			var pool: Array = spare_conditions.get(key, [])
+			var target := free_spare_count(kind, id)
+			if kind == "part" and bool(item.get("stock", false)):
+				target = mini(pool.size(), 1)
+			pool.sort()
+			while pool.size() > target:
+				pool.pop_front()
+			while pool.size() < target:
+				pool.append(1.0)
+			if not pool.is_empty():
+				kept[key] = pool
+	spare_conditions = kept
+
+
+## Conditions of the spare copies on no car, best first.
+func spare_condition_list(kind: String, id: String) -> Array[float]:
+	var out: Array[float] = []
+	for c in spare_conditions.get(_condition_key(kind, id), []):
+		out.append(float(c))
+	out.sort()
+	out.reverse()
+	return out
+
+
+## Condition of what is fitted at `mount` on the active car (see `_active_mounts()`).
+func mount_condition(mount: String) -> float:
+	var rec: Variant = car_records.get(current_car_id, null)
+	if typeof(rec) != TYPE_DICTIONARY:
+		return 1.0
+	var conditions: Variant = (rec as Dictionary).get("conditions", {})
+	if typeof(conditions) != TYPE_DICTIONARY:
+		return 1.0
+	var entry: Variant = (conditions as Dictionary).get(mount, null)
+	return float((entry as Dictionary).get("c", 1.0)) if entry is Dictionary else 1.0
+
+
+## Everything on the active car wears a little in a race.
+func wear_parts_after_race() -> void:
+	_sync_record_from_active()
+	var rec: Dictionary = car_records.get(current_car_id, {})
+	var conditions: Dictionary = rec.get("conditions", {})
+	for mount in conditions.keys():
+		var entry: Dictionary = conditions[mount]
+		entry["c"] = maxf(float(entry.get("c", 1.0)) - randf_range(CONDITION_WEAR_MIN, CONDITION_WEAR_MAX), CONDITION_FLOOR)
+
+
+## The register entry for an id of a garage parts-list kind.
+func listing_for(kind: String, id: String) -> Dictionary:
+	match kind:
+		"engine":
+			return listing_by_id(ENGINES, id)
+		"transmission":
+			return listing_by_id(GEARBOXES, id)
+		"wheels":
+			return listing_by_id(WHEELS, id)
+	return listing_by_id(PARTS, id)
+
+
+## Why a spare cannot be sold, or "" when it can. Only copies on no car sell, and not
+## stock parts or what one of the player's cars came with.
+func sell_trouble(kind: String, id: String) -> String:
+	var item := listing_for(kind, id)
+	if item.is_empty():
+		return "Nobody knows what that is."
+	if bool(item.get("stock", false)) or int(item.get("price", 0)) <= 0:
+		return "Nobody pays for stock parts."
+	if kind != "part":
+		for car_id in owned_car_ids:
+			if _stock_part_id(car_id, kind) == id:
+				return "One of your cars came with it."
+	if free_spare_count(kind, id) <= 0:
+		return "It is on one of your cars."
+	return ""
+
+
+## A buyer's offer for the most worn spare copy, in dollars: between `SELL_OFFER_MIN`
+## and `SELL_OFFER_MAX` of the paper's price, likelier high the better its condition,
+## and never the same as the last offer for it.
+func sell_offer(kind: String, id: String) -> int:
+	var price := int(listing_for(kind, id).get("price", 0))
+	var list := spare_condition_list(kind, id)
+	var c := list[list.size() - 1] if not list.is_empty() else 1.0
+	var key := _condition_key(kind, id)
+	var last := int(_last_offers.get(key, -1))
+	var offer := last
+	for _try in 20:
+		var x := pow(randf(), lerpf(3.0, 0.4, c))
+		offer = roundi(float(price) * lerpf(SELL_OFFER_MIN, SELL_OFFER_MAX, x))
+		if offer != last:
+			break
+	_last_offers[key] = offer
+	return offer
+
+
+## Sells the most worn spare copy for `offer`.
+func sell_spare(kind: String, id: String, offer: int) -> String:
+	var err := sell_trouble(kind, id)
+	if not err.is_empty():
+		return err
+	match kind:
+		"part":
+			owned_part_ids.erase(id)
+		"engine":
+			owned_engine_ids.erase(id)
+		"transmission":
+			owned_gearbox_ids.erase(id)
+		"wheels":
+			owned_wheel_ids.erase(id)
+	var key := _condition_key(kind, id)
+	var pool: Array = spare_conditions.get(key, [])
+	if not pool.is_empty():
+		pool.sort()
+		pool.pop_front()
+		spare_conditions[key] = pool
+	_last_offers.erase(key)
+	money += maxi(offer, 0)
+	_sync_record_from_active()
+	return ""
+
+
+## Takes the condition of what another car had at `mount` into the spares pool, when a
+## part comes off that car to go on the active one.
+func _release_condition(rec: Dictionary, mount: String) -> void:
+	var conditions: Variant = rec.get("conditions", null)
+	if typeof(conditions) != TYPE_DICTIONARY or not (conditions as Dictionary).has(mount):
+		return
+	var entry: Dictionary = conditions[mount]
+	_push_spare_condition(str(entry.get("kind", "")), str(entry.get("id", "")), float(entry.get("c", 1.0)))
+	(conditions as Dictionary).erase(mount)
+
+
+func _mount_conditions_from(value: Variant) -> Dictionary:
+	var out := {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return out
+	for mount in (value as Dictionary).keys():
+		var entry: Variant = value[mount]
+		if typeof(entry) != TYPE_DICTIONARY:
+			continue
+		out[str(mount)] = {
+			"kind": str(entry.get("kind", "")),
+			"id": str(entry.get("id", "")),
+			"c": clampf(float(entry.get("c", 1.0)), CONDITION_FLOOR, 1.0),
+		}
+	return out
+
+
+func _conditions_pool_from(value: Variant) -> Dictionary:
+	var out := {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return out
+	for key in (value as Dictionary).keys():
+		var pool: Array = []
+		if typeof(value[key]) == TYPE_ARRAY:
+			for c in value[key]:
+				pool.append(clampf(float(c), CONDITION_FLOOR, 1.0))
+		out[str(key)] = pool
+	return out
 
 
 func equip_part(part_id: String) -> String:
@@ -1967,7 +2263,9 @@ func _sync_record_from_active() -> void:
 	rec["engine_bolts"] = engine_bolts.duplicate(true)
 	rec["plug_wires"] = plug_wires
 	rec["engine_tune"] = engine_tune
+	_settle_conditions(rec)
 	car_records[current_car_id] = rec
+	_trim_spare_conditions()
 
 
 func _apply_fields_from_record(instance_id: String) -> void:
@@ -2022,6 +2320,7 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if part_id == stock:
 			continue
 		rec[key] = stock
+		_release_condition(rec, slot)
 		if slot == "transmission":
 			rec["gearbox_bolts"] = _tight_bolts()
 		car_records[car_id] = rec
@@ -2043,10 +2342,12 @@ func _take_copies_from_other_cars(part_id: String) -> void:
 		for key in ALL_SLOTS:
 			if excess > 0 and str(slots[key]) == part_id:
 				slots[key] = STOCK_SLOT_PARTS[key]
+				_release_condition(rec, "slot:" + key)
 				excess -= 1
 		var kept: Array[String] = []
 		for item in _string_array(rec.get("part_ids", [])):
 			if excess > 0 and item == part_id:
+				_release_condition(rec, "bolt:" + item)
 				excess -= 1
 			else:
 				kept.append(item)
@@ -2095,6 +2396,8 @@ func _cars_for_save() -> Dictionary:
 			"plug_wires": bool(rec.get("plug_wires", true)),
 			"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
 		}
+		if rec.has("conditions"):
+			out[str(raw_id)]["conditions"] = _mount_conditions_from(rec["conditions"])
 	return out
 
 
@@ -2137,7 +2440,7 @@ func _load_saved_cars(d: Dictionary) -> void:
 
 
 func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
-	return {
+	var rec := {
 		"model_id": model_id,
 		"color": _color_from_save(row.get("color", null), car_color),
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
@@ -2151,6 +2454,9 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"plug_wires": bool(row.get("plug_wires", true)),
 		"engine_tune": clampi(int(row.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),
 	}
+	if row.has("conditions"):
+		rec["conditions"] = _mount_conditions_from(row["conditions"])
+	return rec
 
 
 func _note_instance_serial(instance_id: String) -> void:

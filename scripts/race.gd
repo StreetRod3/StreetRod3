@@ -316,6 +316,7 @@ func _finish_player() -> void:
 		return
 	_race_over = true
 	GameState.drift_engine_tune_after_race()
+	GameState.wear_parts_after_race()
 	_show_result(not _opponent_finished)
 
 

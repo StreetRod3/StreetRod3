@@ -59,6 +59,14 @@ var _parts_list: VBoxContainer
 var _parts_status: Label
 var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
+## The buyer's offer for a spare, over the parts board, and what it is for.
+var _offer_panel: Control
+var _offer_label: Label
+var _offer_accept: Button
+var _offer_reject: Button
+var _offer_kind: String = ""
+var _offer_id: String = ""
+var _offer_amount: int = 0
 var _lift_home: Transform3D
 var _lift_arm_home: Vector3
 var _bay_busy: bool = false
@@ -398,6 +406,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_sync_menu_nav()
 		get_viewport().set_input_as_handled()
 		return
+	if _offer_panel != null and _offer_panel.visible and event.is_action_pressed(&"ui_cancel"):
+		_on_offer_rejected()
+		get_viewport().set_input_as_handled()
+		return
 	if _parts_board != null and _parts_board.visible and event.is_action_pressed(&"ui_cancel"):
 		_hide_parts_board()
 		get_viewport().set_input_as_handled()
@@ -637,6 +649,8 @@ func _sync_menu_nav() -> void:
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
 		])
+	elif _offer_panel != null and _offer_panel.visible:
+		_nav.setup([_offer_accept, _offer_reject])
 	elif _parts_board != null and _parts_board.visible:
 		_nav.setup(_nav.collect_buttons(_parts_board))
 	elif _car_list != null and _car_list.visible:
@@ -997,10 +1011,10 @@ func _build_parts_board() -> void:
 	root.add_child(dim)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(420, 520)
-	panel.offset_left = -210
+	panel.custom_minimum_size = Vector2(580, 520)
+	panel.offset_left = -290
 	panel.offset_top = -260
-	panel.offset_right = 210
+	panel.offset_right = 290
 	panel.offset_bottom = 260
 	root.add_child(panel)
 	var margin := MarginContainer.new()
@@ -1030,8 +1044,85 @@ func _build_parts_board() -> void:
 	close.text = "Close"
 	close.pressed.connect(_hide_parts_board)
 	box.add_child(close)
+	_build_offer_panel(root)
 	$GarageUI.add_child(root)
 	_parts_board = root
+
+
+## A buyer's offer over the parts board: what they would pay, and take it or leave it.
+func _build_offer_panel(parent: Control) -> void:
+	var shade := ColorRect.new()
+	shade.color = Color(0.0, 0.0, 0.0, 0.45)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.visible = false
+	parent.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var panel := PanelContainer.new()
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 18)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	margin.add_child(box)
+	_offer_label = Label.new()
+	_offer_label.custom_minimum_size = Vector2(380, 0)
+	_offer_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_offer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_offer_label)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	box.add_child(row)
+	_offer_accept = Button.new()
+	_offer_accept.custom_minimum_size = Vector2(120, 0)
+	_offer_accept.pressed.connect(_on_offer_accepted)
+	row.add_child(_offer_accept)
+	_offer_reject = Button.new()
+	_offer_reject.text = "Reject"
+	_offer_reject.custom_minimum_size = Vector2(120, 0)
+	_offer_reject.pressed.connect(_on_offer_rejected)
+	row.add_child(_offer_reject)
+	_offer_panel = shade
+
+
+func _on_sell_part(kind: String, part_id: String) -> void:
+	var err := GameState.sell_trouble(kind, part_id)
+	if not err.is_empty():
+		_parts_status.text = err
+		return
+	var item := GameState.listing_for(kind, part_id)
+	var list := GameState.spare_condition_list(kind, part_id)
+	var condition := list[list.size() - 1] if not list.is_empty() else 1.0
+	_offer_kind = kind
+	_offer_id = part_id
+	_offer_amount = GameState.sell_offer(kind, part_id)
+	_offer_label.text = "A buyer looks over your %s (%d%%) and offers $%d.\nThe paper sells them new for $%d." % [
+		str(item.get("name", "part")), roundi(condition * 100.0), _offer_amount, int(item.get("price", 0))]
+	_offer_accept.text = "Accept $%d" % _offer_amount
+	_offer_panel.visible = true
+	_sync_menu_nav()
+	_offer_accept.grab_focus()
+
+
+func _on_offer_accepted() -> void:
+	var name := str(GameState.listing_for(_offer_kind, _offer_id).get("name", "part"))
+	var err := GameState.sell_spare(_offer_kind, _offer_id, _offer_amount)
+	_offer_panel.visible = false
+	_rebuild_parts_board()
+	_parts_status.text = err if not err.is_empty() else "Sold the %s for $%d." % [name, _offer_amount]
+	_refresh_hud()
+	_sync_menu_nav()
+
+
+func _on_offer_rejected() -> void:
+	_offer_panel.visible = false
+	_parts_status.text = "You turned down $%d. Sell again for another offer." % _offer_amount
+	_sync_menu_nav()
 
 
 func _show_parts_board() -> void:
@@ -1076,6 +1167,7 @@ func _show_wheel_board() -> void:
 
 
 func _hide_parts_board() -> void:
+	_offer_panel.visible = false
 	_parts_board.visible = false
 	_sync_menu_nav()
 
@@ -1099,18 +1191,18 @@ func _rebuild_parts_board() -> void:
 		GameState.get_effective_vmax_kmh(),
 	]
 	if not engine.is_empty():
-		_parts_list.add_child(_mounted_line("Engine", _parts_row_text(engine, "engine")))
+		_parts_list.add_child(_mounted_line("Engine", _parts_row_text(engine, "engine") + _condition_text("engine")))
 	if box.is_empty():
 		_parts_list.add_child(_mounted_line("Transmission", "none"))
 	elif not GameState.is_gearbox_bolted():
-		_parts_list.add_child(_mounted_line("Transmission", "%s  (bolts loose)" % _parts_row_text(box, "transmission")))
+		_parts_list.add_child(_mounted_line("Transmission", "%s%s  (bolts loose)" % [_parts_row_text(box, "transmission"), _condition_text("transmission")]))
 	else:
-		_parts_list.add_child(_mounted_line("Transmission", _parts_row_text(box, "transmission")))
+		_parts_list.add_child(_mounted_line("Transmission", _parts_row_text(box, "transmission") + _condition_text("transmission")))
 	if not wheel.is_empty():
-		_parts_list.add_child(_mounted_line("Wheels", _parts_row_text(wheel, "wheels")))
+		_parts_list.add_child(_mounted_line("Wheels", _parts_row_text(wheel, "wheels") + _condition_text("wheels")))
 	for slot in GameState.active_slots():
 		var fitted := GameState.slot_part(slot)
-		var detail := "none" if fitted.is_empty() else _parts_row_text(fitted, "part")
+		var detail := "none" if fitted.is_empty() else _parts_row_text(fitted, "part") + _condition_text("slot:" + slot)
 		if not fitted.is_empty() and GameState.is_hood_kind(GameState.spot_kind(slot)) and not GameState.is_hood_part_bolted(slot):
 			detail += "  (bolts loose)"
 		var label := str(_SLOT_NAMES[slot])
@@ -1121,7 +1213,7 @@ func _rebuild_parts_board() -> void:
 		var part: Dictionary = GameState.listing_by_id(GameState.PARTS, part_id)
 		if part.is_empty():
 			continue
-		_parts_list.add_child(_mounted_line("Bolt-on", _parts_row_text(part, "part")))
+		_parts_list.add_child(_mounted_line("Bolt-on", _parts_row_text(part, "part") + _condition_text("bolt:" + part_id)))
 
 
 func _rebuild_wheels_list() -> void:
@@ -1168,6 +1260,11 @@ func _rebuild_spares_list() -> void:
 		_parts_status.text = "The folder is empty. Parts you buy land here until you fit them."
 
 
+## A fitted part's condition, as it reads after its name.
+func _condition_text(mount: String) -> String:
+	return "  · %d%%" % roundi(GameState.mount_condition(mount) * 100.0)
+
+
 func _mounted_line(slot: String, detail: String) -> Label:
 	var label := Label.new()
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1186,11 +1283,26 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 	var row := HBoxContainer.new()
 	var label := Label.new()
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	label.text = _parts_row_text(item, kind)
 	row.add_child(label)
 	var btn := Button.new()
 	var owned := _parts_owned(kind, part_id)
 	var fitted := part_id == equipped_id or (kind == "part" and GameState.is_part_equipped(part_id))
+	if _parts_show_spares and owned and not fitted:
+		# Each loose copy's condition, and a buyer for the most worn one.
+		var conditions: Array[String] = []
+		for c in GameState.spare_condition_list(kind, part_id):
+			conditions.append("%d%%" % roundi(c * 100.0))
+		if not conditions.is_empty():
+			label.text += "  · " + ", ".join(conditions)
+		var trouble := GameState.sell_trouble(kind, part_id)
+		var sell := Button.new()
+		sell.text = "Sell"
+		sell.disabled = not trouble.is_empty()
+		sell.tooltip_text = trouble
+		sell.pressed.connect(_on_sell_part.bind(kind, part_id))
+		row.add_child(sell)
 	if fitted:
 		btn.text = "On the car"
 		btn.disabled = true

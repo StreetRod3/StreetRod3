@@ -91,7 +91,14 @@ flowchart LR
 - Race selection: `selected_race_type` (`drag` or `road`) and `selected_opponent_id`.
 - Derived stats: `refresh_car_stats()` rebuilds base vmax and horsepower from the current car plus owned parts. `get_effective_vmax_kmh()` then scales by the equipped gearbox `top_speed`.
 - Music: one `AudioStreamPlayer` on the autoload. Race uses `assets/music/race.mp3`; every other scene uses `assets/music/garage.mp3`.
+- Part condition and selling, below.
 - Save and settings (see [setup.md](setup.md)).
+
+#### Condition and selling
+
+Every engine, gearbox, set of wheels and part has a condition from 0 to 1. A car record keeps the condition of what is fitted to it under `conditions`, by mount (`engine`, `transmission`, `wheels`, `slot:<slot>`, `bolt:<id>`); `spare_conditions` keeps one for each owned copy that is on no car, by `kind:id`. `_settle_conditions()` runs on every `_sync_record_from_active()`: what came off a car goes into the spares pool with its wear, what went on takes the best spare copy's condition, or is new when there is none, and a car with no conditions yet (a new or older-save car) gets used ones between `CONDITION_USED_MIN` and `CONDITION_USED_MAX`. `_trim_spare_conditions()` then keeps the pool to the copies on no car (`free_spare_count()`): new parts from the paper come in at 1, and sold or blown ones drop out. Parts taken off another car to go on this one bring their condition with them (`_release_condition()`). A finished race wears everything on the car by `CONDITION_WEAR_MIN` to `CONDITION_WEAR_MAX` (`wear_parts_after_race()`). Condition only matters for selling for now.
+
+The garage's spare-parts list has a Sell button for copies on no car that are not stock parts or what one of the player's cars came with (`sell_trouble()`). `sell_offer()` offers between `SELL_OFFER_MIN` and `SELL_OFFER_MAX` of the paper's price for the most worn copy: the fraction is `lerp(min, max, randf() ^ lerp(3, 0.4, condition))`, so a part in good condition draws high offers more often, and an offer is never the same as the last one for that part. Accepting calls `sell_spare()`; rejecting leaves it for another offer.
 
 Scenes talk to each other only through `GameState` and scene changes. Race scripts duck-type neighbors with `has_method` (`is_race_started`, `get_race_track`, `sample_at`, `closest_sample`).
 
