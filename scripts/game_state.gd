@@ -492,7 +492,7 @@ func fit_hood_part(part_id: String, slot: String) -> String:
 		return "That carburetor does not fit this intake."
 	if not owns_part(part_id):
 		return "That part is not in spare parts."
-	if not bool(part.get("stock", false)) and spare_count(part_id) <= 0:
+	if spare_count(part_id) <= 0:
 		return "That part is already on the car."
 	slot_part_ids[slot] = part_id
 	engine_bolts[slot] = _loose_bolts(slot)
@@ -1269,9 +1269,7 @@ func buy_part(part_id: String) -> String:
 	if part.is_empty():
 		return "That part is not in the paper."
 	# Any number of a part can be bought, one for each car or each side of a dual
-	# exhaust. Stock parts never run out, so there is no buying more of those.
-	if bool(part.get("stock", false)) and owns_part(part_id):
-		return "Already in spare parts."
+	# exhaust, stock parts too: one sold has to be bought back.
 	var price := int(part.get("price", 0))
 	if money < price:
 		return "Not enough cash."
@@ -1290,8 +1288,6 @@ func spare_count(part_id: String) -> int:
 	if not owns_part(part_id):
 		return 0
 	var fitted := slot_part_ids.values().count(part_id) + equipped_part_ids.count(part_id)
-	if bool(listing_by_id(PARTS, part_id).get("stock", false)):
-		return 0 if fitted > 0 else 1
 	return part_count(part_id) - fitted
 
 
@@ -1367,6 +1363,26 @@ func _pop_spare_condition(kind: String, id: String) -> float:
 	return c
 
 
+## Every part fitted to a car is an owned copy: the stock parts a car comes with, and
+## those of saves from when stock parts did not run out.
+func _own_fitted_parts() -> void:
+	var fitted := {}
+	for stored in car_records.values():
+		if typeof(stored) != TYPE_DICTIONARY:
+			continue
+		var ids: Array[String] = _string_array((stored as Dictionary).get("part_ids", []))
+		var slots: Variant = (stored as Dictionary).get("slot_parts", {})
+		if typeof(slots) == TYPE_DICTIONARY:
+			for part_id in (slots as Dictionary).values():
+				ids.append(str(part_id))
+		for part_id in ids:
+			if part_id != NO_PART_ID and not part_id.is_empty():
+				fitted[part_id] = int(fitted.get(part_id, 0)) + 1
+	for part_id in fitted.keys():
+		while owned_part_ids.count(part_id) < int(fitted[part_id]):
+			owned_part_ids.append(part_id)
+
+
 ## Owned copies that are on no car.
 func free_spare_count(kind: String, id: String) -> int:
 	var owned := 0
@@ -1401,7 +1417,6 @@ func free_spare_count(kind: String, id: String) -> int:
 
 ## Keeps one condition in the pool for each spare that is on no car: dropping the most
 ## worn when there are too many (sold, blown), adding new ones for parts just bought.
-## A stock part off the car keeps the one condition it came off with.
 func _trim_spare_conditions() -> void:
 	var lists := {"part": PARTS, "engine": ENGINES, "transmission": GEARBOXES, "wheels": WHEELS}
 	var kept := {}
@@ -1411,8 +1426,6 @@ func _trim_spare_conditions() -> void:
 			var key := _condition_key(kind, id)
 			var pool: Array = spare_conditions.get(key, [])
 			var target := free_spare_count(kind, id)
-			if kind == "part" and bool(item.get("stock", false)):
-				target = mini(pool.size(), 1)
 			pool.sort()
 			while pool.size() > target:
 				pool.pop_front()
@@ -1467,18 +1480,18 @@ func listing_for(kind: String, id: String) -> Dictionary:
 	return listing_by_id(PARTS, id)
 
 
-## Why a spare cannot be sold, or "" when it can. Only copies on no car sell, and not
-## stock parts or what one of the player's cars came with.
+## Why a spare cannot be sold, or "" when it can. Only copies on no car sell, and not a
+## set of wheels one of the player's cars came with, since a car always stands on some.
 func sell_trouble(kind: String, id: String) -> String:
 	var item := listing_for(kind, id)
 	if item.is_empty():
 		return "Nobody knows what that is."
-	if bool(item.get("stock", false)) or int(item.get("price", 0)) <= 0:
-		return "Nobody pays for stock parts."
-	if kind != "part":
+	if int(item.get("price", 0)) <= 0:
+		return "Nobody would pay for that."
+	if kind == "wheels":
 		for car_id in owned_car_ids:
 			if _stock_part_id(car_id, kind) == id:
-				return "One of your cars came with it."
+				return "One of your cars came on these wheels."
 	if free_spare_count(kind, id) <= 0:
 		return "It is on one of your cars."
 	return ""
@@ -1722,7 +1735,7 @@ func spare_slot_parts(slot: String) -> Array[Dictionary]:
 		var part_id := str(part.get("id", ""))
 		if str(part.get("slot", "")) != kind or part_id == fitted or not owns_part(part_id):
 			continue
-		if bool(part.get("stock", false)) or spare_count(part_id) > 0:
+		if spare_count(part_id) > 0:
 			out.append(part)
 	return out
 
@@ -1777,7 +1790,7 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 	if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
 		return "Only a dual exhaust has a second muffler."
 	var part := listing_by_id(PARTS, part_id)
-	if not bool(part.get("stock", false)) and spare_count(part_id) <= 0:
+	if spare_count(part_id) <= 0:
 		return "That part is already on the car."
 	slot_part_ids[slot] = part_id
 	if slot == SLOT_EXHAUST and not bool(part.get("dual", false)):
@@ -2265,6 +2278,7 @@ func _sync_record_from_active() -> void:
 	rec["engine_tune"] = engine_tune
 	_settle_conditions(rec)
 	car_records[current_car_id] = rec
+	_own_fitted_parts()
 	_trim_spare_conditions()
 
 
@@ -2319,6 +2333,12 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		var stock := _stock_part_id(car_id, slot)
 		if part_id == stock:
 			continue
+		# That car gets its own engine or gearbox back if it is still owned; otherwise it
+		# goes without. Wheels always fall back to its own set.
+		if slot == "engine" and not owned_engine_ids.has(stock):
+			stock = NO_ENGINE_ID
+		elif slot == "transmission" and not owned_gearbox_ids.has(stock):
+			stock = NO_GEARBOX_ID
 		rec[key] = stock
 		_release_condition(rec, slot)
 		if slot == "transmission":
@@ -2326,11 +2346,10 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		car_records[car_id] = rec
 
 
-## Parts from the parts list come in copies. Stock ones never run out; others come off
-## the other cars only until no more copies are fitted than are owned.
+## Parts from the parts list come in copies, stock ones too, and come off the other cars
+## only until no more copies are fitted than are owned. A slot that can be empty is left
+## empty there; the exhaust manifolds and rear end fall back to stock.
 func _take_copies_from_other_cars(part_id: String) -> void:
-	if bool(listing_by_id(PARTS, part_id).get("stock", false)):
-		return
 	var excess := _copies_fitted(part_id) - part_count(part_id)
 	for raw_id in car_records.keys():
 		if excess <= 0:
@@ -2341,7 +2360,7 @@ func _take_copies_from_other_cars(part_id: String) -> void:
 		var slots := _slots_from(rec.get("slot_parts", null))
 		for key in ALL_SLOTS:
 			if excess > 0 and str(slots[key]) == part_id:
-				slots[key] = STOCK_SLOT_PARTS[key]
+				slots[key] = NO_PART_ID if REMOVABLE_SLOTS.has(key) else STOCK_SLOT_PARTS[key]
 				_release_condition(rec, "slot:" + key)
 				excess -= 1
 		var kept: Array[String] = []
