@@ -5,6 +5,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 
 const SCENE_MAIN_MENU := "res://scenes/main_menu.tscn"
 const SCENE_GARAGE := "res://scenes/garage.tscn"
+const SCENE_GAS_STATION := "res://scenes/gas_station.tscn"
 const SCENE_DRIVE_IN := "res://scenes/drive-in.tscn"
 const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
@@ -171,6 +172,7 @@ func _ready() -> void:
 	load_cars_register()
 	load_player_car()
 	if not car_records.has(current_car_id):
+		set_fuel(_starting_fuel())
 		_sync_record_from_active()
 	refresh_car_stats()
 
@@ -346,6 +348,8 @@ func new_game() -> void:
 	car_records.clear()
 	current_car_id = _add_owned_car(DEFAULT_CAR_ID, car_color)
 	_install_car(current_car_id)
+	set_fuel(_starting_fuel())
+	_sync_record_from_active()
 
 
 func has_save_file() -> bool:
@@ -1097,7 +1101,15 @@ func set_car_color(next: Color) -> void:
 
 func set_fuel(amount: float) -> void:
 	fuel = clampf(amount, 0.0, DEFAULT_TANK_L)
+
+
+func commit_fuel() -> void:
 	_sync_record_from_active()
+
+
+## A new car begins between 15 and 30 liters, not on a full tank.
+func _starting_fuel() -> float:
+	return randf_range(15.0, 30.0)
 
 
 func race_length_m(race_type: String = "") -> float:

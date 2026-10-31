@@ -3,6 +3,7 @@ extends Node3D
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _TunePreview := preload("res://scripts/engine_tune_preview.gd")
+const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
 @onready var _car_pivot: Node3D = $CarPivot
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -73,11 +74,6 @@ var _nav = _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
-var _fuel_panel: Control
-var _fuel_status: Label
-var _fuel_note: Label
-var _fuel_fill_btn: Button
-var _fuel_close_btn: Button
 var _tune_panel: Control
 var _tune_title: Label
 var _tune_engine: Label
@@ -92,9 +88,7 @@ var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
 var _creeper: StaticBody3D
-var _loss_root: Control
-var _loss_panel: PanelContainer
-var _loss_tail: Node2D
+var _loss_bubble: Control
 var _tooltip: Label
 
 const _TOOLTIPS := {
@@ -105,7 +99,7 @@ const _TOOLTIPS := {
 	&"radio": "Radio (M)",
 	&"doors": "Drive out (D)",
 	&"spray": "Paint job (P)",
-	&"fuel": "Fuel",
+	&"fuel": "Gas station",
 	&"hood": "Engine",
 	&"calendar": "Calendar (X)",
 	&"lift": "Wheels (L)",
@@ -174,7 +168,6 @@ func _ready() -> void:
 	$InteractDoors.set_meta(&"garage_interact", &"doors")
 	$InteractSprayPistol.set_meta(&"garage_interact", &"spray")
 	$InteractFuelCan.set_meta(&"garage_interact", &"fuel")
-	_build_fuel_panel()
 	_build_tune_panel()
 	_build_hood_target()
 	_build_under_car_target()
@@ -199,8 +192,7 @@ func _ready() -> void:
 	_build_loss_bubble()
 	_build_tooltip()
 	if GameState.is_ruined():
-		_loss_root.visible = true
-		_place_loss_bubble()
+		_loss_bubble.visible = true
 	_cam_distance_target = _cam_distance
 	_update_camera_transform()
 
@@ -232,94 +224,25 @@ func _align_wheels_to_floor() -> void:
 
 
 func _build_loss_bubble() -> void:
-	_loss_root = Control.new()
-	_loss_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_loss_root.visible = false
-	_loss_root.mouse_filter = Control.MOUSE_FILTER_STOP
-	_loss_root.gui_input.connect(_on_loss_input)
-	$GarageUI.add_child(_loss_root)
-	_loss_panel = PanelContainer.new()
-	_loss_panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	_loss_panel.gui_input.connect(_on_loss_input)
-	_loss_panel.add_theme_stylebox_override(&"panel", _loss_bubble_style())
-	_loss_root.add_child(_loss_panel)
-	var margin := MarginContainer.new()
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_theme_constant_override(&"margin_left", 16)
-	margin.add_theme_constant_override(&"margin_right", 16)
-	margin.add_theme_constant_override(&"margin_top", 12)
-	margin.add_theme_constant_override(&"margin_bottom", 12)
-	_loss_panel.add_child(margin)
-	var line := Label.new()
-	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	line.text = "You don't have neither car nor money. You lose!"
-	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	line.custom_minimum_size = Vector2(320, 56)
-	line.add_theme_font_size_override(&"font_size", 22)
-	line.add_theme_color_override(&"font_color", Color(0.08, 0.06, 0.05))
-	margin.add_child(line)
-	_loss_tail = Node2D.new()
-	_loss_panel.add_child(_loss_tail)
-	var outline := Line2D.new()
-	outline.width = 5.0
-	outline.default_color = Color(0.08, 0.06, 0.05)
-	outline.joint_mode = Line2D.LINE_JOINT_ROUND
-	outline.begin_cap_mode = Line2D.LINE_CAP_ROUND
-	outline.end_cap_mode = Line2D.LINE_CAP_ROUND
-	outline.points = PackedVector2Array([Vector2(-18, 0), Vector2(0, 24), Vector2(18, 0)])
-	_loss_tail.add_child(outline)
-	var fill := Polygon2D.new()
-	fill.color = Color(0.98, 0.97, 0.93)
-	fill.polygon = PackedVector2Array([Vector2(-14, 2), Vector2(0, 18), Vector2(14, 2)])
-	_loss_tail.add_child(fill)
-
-
-func _loss_bubble_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.98, 0.97, 0.93)
-	style.border_color = Color(0.08, 0.06, 0.05)
-	style.set_border_width_all(4)
-	style.set_corner_radius_all(18)
-	return style
-
-
-func _on_loss_input(event: InputEvent) -> void:
-	if not event is InputEventMouseButton:
-		return
-	var mb := event as InputEventMouseButton
-	if not mb.pressed:
-		return
-	get_viewport().set_input_as_handled()
-	_leave_after_loss()
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "You don't have neither car nor money. You lose!", Vector2(320, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _leave_after_loss)
+	_loss_bubble = bubble
 
 
 func _dismiss_loss_bubble() -> void:
-	if _loss_root != null:
-		_loss_root.visible = false
+	if _loss_bubble != null:
+		_loss_bubble.visible = false
 
 
 func _leave_after_loss() -> void:
 	GameState.current_scene_path = GameState.SCENE_MAIN_MENU
 	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
 
-
-func _place_loss_bubble() -> void:
-	if _loss_root == null or not _loss_root.visible:
-		return
-	var spot := _car_pivot.global_position + Vector3(0.0, 1.35, 0.0)
-	var screen := Vector2(get_viewport().get_visible_rect().size.x * 0.5, 180.0)
-	if not _camera.is_position_behind(spot):
-		screen = _camera.unproject_position(spot)
-	var bubble_size := _loss_panel.get_combined_minimum_size()
-	var vp := get_viewport().get_visible_rect().size
-	var tail_h := 26.0
-	var x := clampf(screen.x - bubble_size.x * 0.5, 16.0, maxf(16.0, vp.x - bubble_size.x - 16.0))
-	var y := clampf(screen.y - bubble_size.y - tail_h - 8.0, 16.0, maxf(16.0, vp.y - bubble_size.y - tail_h - 16.0))
-	_loss_panel.position = Vector2(x, y)
-	_loss_panel.size = bubble_size
-	var tail_x := clampf(screen.x - x, 28.0, maxf(28.0, bubble_size.x - 28.0))
-	_loss_tail.position = Vector2(tail_x, bubble_size.y - 4.0)
 
 func _process(_delta: float) -> void:
 	if not _departing and not _swapping_car:
@@ -335,7 +258,6 @@ func _process(_delta: float) -> void:
 		_cam_distance = lerpf(_cam_distance, _cam_distance_target, t)
 		_update_camera_transform()
 	_update_calendar_transform()
-	_place_loss_bubble()
 	_update_tooltip()
 
 
@@ -373,7 +295,7 @@ func _tooltip_text_at_mouse() -> String:
 	if not GameState.has_engine():
 		if kind == &"hood":
 			return _TOOLTIP_NO_ENGINE
-		if kind == &"doors":
+		if kind == &"doors" or kind == &"fuel":
 			return _TOOLTIP_DOORS_NO_ENGINE
 	if kind == &"doors" and not GameState.has_gearbox():
 		return _TOOLTIP_DOORS_NO_GEARBOX
@@ -448,7 +370,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _departing:
 		get_viewport().set_input_as_handled()
 		return
-	if _loss_root != null and _loss_root.visible and event.is_action_pressed(&"ui_cancel"):
+	if _loss_bubble != null and _loss_bubble.visible and event.is_action_pressed(&"ui_cancel"):
 		_dismiss_loss_bubble()
 		get_viewport().set_input_as_handled()
 		return
@@ -479,10 +401,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _car_list != null and _car_list.visible and event.is_action_pressed(&"ui_cancel"):
 		_hide_car_list()
-		get_viewport().set_input_as_handled()
-		return
-	if _fuel_panel != null and _fuel_panel.visible and event.is_action_pressed(&"ui_cancel"):
-		_hide_fuel_panel()
 		get_viewport().set_input_as_handled()
 		return
 	if _tune_panel != null and _tune_panel.visible and event.is_action_pressed(&"ui_cancel"):
@@ -688,8 +606,6 @@ func _hide_garage_overlays() -> void:
 		_parts_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
-	if _fuel_panel != null:
-		_fuel_panel.visible = false
 	_hide_tune_panel()
 	_sync_menu_nav()
 
@@ -725,8 +641,6 @@ func _sync_menu_nav() -> void:
 		])
 	elif _tune_panel != null and _tune_panel.visible:
 		_nav.setup([_tune_up, _tune_down, _tune_close])
-	elif _fuel_panel != null and _fuel_panel.visible:
-		_nav.setup([_fuel_fill_btn, _fuel_close_btn])
 	elif _parts_board != null and _parts_board.visible:
 		_nav.setup(_nav.collect_buttons(_parts_board))
 	elif _car_list != null and _car_list.visible:
@@ -807,11 +721,11 @@ func _handle_interact(kind: Variant) -> void:
 			if _clock_settings.visible:
 				_clock_music.set_pressed_no_signal(GameState.music_enabled)
 		&"doors":
-			_start_drive_out()
+			_start_drive_out(GameState.SCENE_DRIVE_IN)
 		&"spray":
 			_show_spray_picker()
 		&"fuel":
-			_show_fuel_panel()
+			_start_drive_out(GameState.SCENE_GAS_STATION)
 		&"hood":
 			if GameState.has_engine():
 				_show_tune_panel()
@@ -846,11 +760,11 @@ func _open_under_car() -> void:
 	get_tree().change_scene_to_file(GameState.SCENE_UNDER_CAR)
 
 
-func _start_drive_out() -> void:
+func _start_drive_out(destination: String) -> void:
 	if _departing or _bay_busy or not GameState.can_drive():
 		return
 	if _door_left == null or _door_right == null:
-		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
+		get_tree().change_scene_to_file(destination)
 		return
 	_departing = true
 	_orbiting = false
@@ -863,7 +777,7 @@ func _start_drive_out() -> void:
 	await _play_drive_out()
 	if not is_instance_valid(self):
 		return
-	get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
+	get_tree().change_scene_to_file(destination)
 
 
 func _snap_calendar_home() -> void:
@@ -1053,8 +967,6 @@ func _show_spray_picker() -> void:
 	_stats_panel.visible = false
 	if _car_list != null:
 		_car_list.visible = false
-	if _fuel_panel != null:
-		_fuel_panel.visible = false
 	_spray_color_picker.color = GameState.car_color
 	_spray_menu.visible = true
 	_sync_menu_nav()
@@ -1131,8 +1043,6 @@ func _show_parts_board() -> void:
 	_stats_panel.visible = false
 	if _car_list != null:
 		_car_list.visible = false
-	if _fuel_panel != null:
-		_fuel_panel.visible = false
 	_rebuild_parts_board()
 	_parts_board.visible = true
 	_sync_menu_nav()
@@ -1146,8 +1056,6 @@ func _show_spares_board() -> void:
 	_stats_panel.visible = false
 	if _car_list != null:
 		_car_list.visible = false
-	if _fuel_panel != null:
-		_fuel_panel.visible = false
 	_rebuild_parts_board()
 	_parts_board.visible = true
 	_sync_menu_nav()
@@ -1163,8 +1071,6 @@ func _show_wheel_board() -> void:
 	_stats_panel.visible = false
 	if _car_list != null:
 		_car_list.visible = false
-	if _fuel_panel != null:
-		_fuel_panel.visible = false
 	_rebuild_parts_board()
 	_parts_board.visible = true
 	_sync_menu_nav()
@@ -1431,96 +1337,6 @@ func _hide_car_list() -> void:
 		return
 	_car_list.visible = false
 	_sync_menu_nav()
-
-
-func _build_fuel_panel() -> void:
-	var root := Control.new()
-	root.name = "FuelPanel"
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.visible = false
-	root.mouse_filter = Control.MOUSE_FILTER_STOP
-	var dim := ColorRect.new()
-	dim.color = Color(0.05, 0.05, 0.06, 0.55)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	root.add_child(dim)
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.offset_left = -200.0
-	panel.offset_top = -90.0
-	panel.offset_right = 200.0
-	panel.offset_bottom = 90.0
-	root.add_child(panel)
-	var margin := MarginContainer.new()
-	margin.add_theme_constant_override(&"margin_left", 16)
-	margin.add_theme_constant_override(&"margin_right", 16)
-	margin.add_theme_constant_override(&"margin_top", 14)
-	margin.add_theme_constant_override(&"margin_bottom", 14)
-	panel.add_child(margin)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 10)
-	margin.add_child(box)
-	var title := Label.new()
-	title.text = "Fuel"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(title)
-	_fuel_status = Label.new()
-	_fuel_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(_fuel_status)
-	_fuel_note = Label.new()
-	_fuel_note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_fuel_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_fuel_note)
-	_fuel_fill_btn = Button.new()
-	_fuel_fill_btn.pressed.connect(_on_fuel_fill_pressed)
-	box.add_child(_fuel_fill_btn)
-	_fuel_close_btn = Button.new()
-	_fuel_close_btn.text = "Close"
-	_fuel_close_btn.pressed.connect(_hide_fuel_panel)
-	box.add_child(_fuel_close_btn)
-	$GarageUI.add_child(root)
-	_fuel_panel = root
-
-
-func _show_fuel_panel() -> void:
-	if _bay_busy or _fuel_panel == null:
-		return
-	_hide_garage_overlays()
-	_refresh_fuel_panel()
-	_fuel_panel.visible = true
-	_sync_menu_nav()
-
-
-func _hide_fuel_panel() -> void:
-	if _fuel_panel == null or not _fuel_panel.visible:
-		return
-	_fuel_panel.visible = false
-	_sync_menu_nav()
-
-
-func _refresh_fuel_panel() -> void:
-	_fuel_status.text = "Tank: %.0f / %.0f L" % [GameState.fuel, GameState.DEFAULT_TANK_L]
-	var price := GameState.refuel_price()
-	if price <= 0:
-		_fuel_fill_btn.text = "Tank is full"
-		_fuel_fill_btn.disabled = true
-		_fuel_note.text = ""
-		return
-	_fuel_fill_btn.text = "Fill up — $%d" % price
-	_fuel_fill_btn.disabled = GameState.money < price
-	if GameState.money < price:
-		_fuel_note.text = "Not enough cash."
-	else:
-		_fuel_note.text = ""
-
-
-func _on_fuel_fill_pressed() -> void:
-	var err := GameState.refuel_tank()
-	_refresh_fuel_panel()
-	if not err.is_empty() and err != "The tank is already full.":
-		_fuel_note.text = err
-	_refresh_hud()
-	if _fuel_panel != null and _fuel_panel.visible:
-		_sync_menu_nav()
 
 
 func _rebuild_car_list() -> void:
