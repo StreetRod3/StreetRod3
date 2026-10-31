@@ -65,9 +65,9 @@ const BOLT_NAMES := {
 	"engine": ["Right engine mount bolt", "Left engine mount bolt"],
 	"heads": ["Right head, front bolt", "Right head, rear bolt", "Left head, front bolt", "Left head, rear bolt"],
 	"intake": ["Front intake bolt", "Rear intake bolt"],
-	"carb": ["Carburetor nut"],
-	"carb_2": ["Carburetor nut"],
-	"carb_3": ["Carburetor nut"],
+	"carb": ["Front carburetor nut", "Rear carburetor nut"],
+	"carb_2": ["Front carburetor nut", "Rear carburetor nut"],
+	"carb_3": ["Front carburetor nut", "Rear carburetor nut"],
 	"distributor": ["Distributor hold-down bolt"],
 	"air_cleaner": ["Air cleaner wing nut"],
 }
@@ -228,9 +228,7 @@ func _on_bolt(key: String, index: int) -> void:
 		return
 	var turns: int = bolts[index]
 	var loosening: Array = _loosening[key]
-	var next := turns - 1
-	if turns == 0 or (not loosening[index] and turns < GameState.GEARBOX_BOLT_TIGHT):
-		next = turns + 1
+	var next := GameState.next_bolt_turns(turns, loosening[index])
 	loosening[index] = next < turns and next > 0
 	GameState.set_hood_bolt(key, index, next)
 	_busy = true
@@ -272,7 +270,7 @@ func _back_out(key: String, index: int) -> void:
 	_play(_sfx_tink)
 
 
-## Takes the bolt out of the tray and starts it a turn into its hole.
+## Takes the bolt out of the tray and runs it into its hole by hand.
 func _thread_in(key: String, index: int) -> void:
 	var move := create_tween()
 	move.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -282,7 +280,7 @@ func _thread_in(key: String, index: int) -> void:
 		return
 	_play(_sfx_ratchet)
 	var tw := create_tween()
-	tw.tween_method(_set_bolt_turns.bind(key, index), -1.5, 1.0, T_TURN * 1.4)
+	tw.tween_method(_set_bolt_turns.bind(key, index), -1.5, float(GameState.BOLT_THREADED), T_TURN * 1.8)
 	await tw.finished
 
 

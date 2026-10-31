@@ -182,9 +182,11 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 			out.append(Transform3D(Basis.IDENTITY, carb_pad(GameState.SLOT_CARB) + Vector3(0.0, 0.0, _cleaner_top())))
 		_:
 			if GameState.CARB_SLOTS.has(key):
+				# Two nuts on opposite corners of the base, front one first.
 				var four := int(GameState.slot_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
-				var nut := Vector3(-0.25, -0.2, 0.1) if four else Vector3(-0.2, -0.17, 0.07)
-				out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + nut))
+				var nut := Vector3(0.25, 0.2, 0.25) if four else Vector3(0.15, 0.21, 0.09)
+				for corner in [Vector3(-nut.x, -nut.y, nut.z), nut]:
+					out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + corner))
 	return out
 
 
@@ -411,8 +413,8 @@ func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
 	var zinc := _mat("carb", _ZINC, 0.85, 0.35)
 	var dark := _mat("black", _BLACK, 0.0, 0.6)
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
-	_box(rig, Vector3(0.44, 0.4, 0.03), pad + Vector3(0.0, 0.0, 0.015), dark)
-	_box(rig, Vector3(0.38, 0.34, 0.06), pad + Vector3(0.0, 0.0, 0.06), zinc)
+	_box(rig, Vector3(0.44, 0.52, 0.03), pad + Vector3(0.0, 0.0, 0.015), dark)
+	_box(rig, Vector3(0.38, 0.5, 0.06), pad + Vector3(0.0, 0.0, 0.06), zinc)
 	_box(rig, Vector3(0.3, 0.32, 0.2), pad + Vector3(0.0, 0.0, 0.19), zinc)
 	# Float bowl on the front, air horn on top with its two throats.
 	_box(rig, Vector3(0.12, 0.28, 0.2), pad + Vector3(-0.2, 0.0, 0.18), zinc)
@@ -420,7 +422,7 @@ func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
 	for y in [-0.075, 0.075]:
 		_cyl_z(rig, 0.055, 0.055, 0.005, pad + Vector3(0.0, y, 0.36), dark, 14)
 	# Throttle shaft and lever.
-	_cyl_x(rig, 0.018, 0.4, pad.x - 0.2, steel, 8, pad.y + 0.18, pad.z + 0.08)
+	_cyl_x(rig, 0.018, 0.4, pad.x - 0.2, steel, 8, pad.y + 0.17, pad.z + 0.21)
 
 
 # --- Distributor -----------------------------------------------------------------------

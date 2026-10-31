@@ -57,6 +57,9 @@ const NO_GEARBOX_ID := "none"
 const GEARBOX_BOLT_COUNT := 2
 ## Turns that seat a bellhousing bolt. Zero is out of its hole.
 const GEARBOX_BOLT_TIGHT := 3
+## A bolt started in its hole runs down this far by hand, a turn short of tight; a tight
+## bolt loosens back to one turn. Each way is two clicks (`next_bolt_turns()`).
+const BOLT_THREADED := 2
 ## Parts changed from the creeper. A car has one of each; parts name theirs in `slot`.
 const SLOT_MANIFOLD := "manifold"
 const SLOT_EXHAUST := "exhaust"
@@ -114,9 +117,9 @@ const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
 	SLOT_HEADS: 4,
 	SLOT_INTAKE: 2,
-	SLOT_CARB: 1,
-	SLOT_CARB_2: 1,
-	SLOT_CARB_3: 1,
+	SLOT_CARB: 2,
+	SLOT_CARB_2: 2,
+	SLOT_CARB_3: 2,
 	SLOT_DISTRIBUTOR: 1,
 	SLOT_AIR_CLEANER: 1,
 }
@@ -1309,6 +1312,18 @@ func spare_gearboxes() -> Array[Dictionary]:
 		if owns_gearbox(box_id) and box_id != equipped_gearbox_id:
 			out.append(box)
 	return out
+
+
+## Where a click takes a bolt at `turns`: one out of its hole threads in and runs down to
+## `BOLT_THREADED`, a loose one tightens a turn, a tight one loosens back to a turn, and
+## one that was being loosened comes out. `loosening` is whether the last click on it
+## loosened it.
+static func next_bolt_turns(turns: int, loosening: bool) -> int:
+	if turns <= 0:
+		return BOLT_THREADED
+	if loosening or turns >= GEARBOX_BOLT_TIGHT:
+		return 1 if turns > 1 else 0
+	return turns + 1
 
 
 ## Turns one bellhousing bolt to `turns` (0 takes it out, `GEARBOX_BOLT_TIGHT` seats it).

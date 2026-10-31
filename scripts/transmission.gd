@@ -206,9 +206,7 @@ func _on_bolt(index: int) -> void:
 	if _busy or index < 0 or index >= _bolts.size() or not GameState.has_gearbox():
 		return
 	var turns: int = GameState.gearbox_bolts[index]
-	var next := turns - 1
-	if turns == 0 or (not _loosening[index] and turns < GameState.GEARBOX_BOLT_TIGHT):
-		next = turns + 1
+	var next := GameState.next_bolt_turns(turns, _loosening[index])
 	_loosening[index] = next < turns and next > 0
 	GameState.set_gearbox_bolt(index, next)
 	_busy = true
@@ -260,7 +258,7 @@ func _back_out(index: int) -> void:
 	_play(_sfx_tink)
 
 
-## Picks the bolt up off the floor and starts it a turn into its hole.
+## Picks the bolt up off the floor and runs it into its hole by hand.
 func _thread_in(index: int) -> void:
 	var lift := create_tween()
 	lift.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
@@ -270,7 +268,7 @@ func _thread_in(index: int) -> void:
 		return
 	_play(_sfx_ratchet)
 	var tw := create_tween()
-	tw.tween_method(_set_bolt_turns.bind(index), -1.2, 1.0, T_TURN * 1.4)
+	tw.tween_method(_set_bolt_turns.bind(index), -1.2, float(GameState.BOLT_THREADED), T_TURN * 1.8)
 	await tw.finished
 
 
