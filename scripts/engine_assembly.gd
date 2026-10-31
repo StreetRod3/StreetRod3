@@ -38,8 +38,9 @@ const INTAKE_FLOOR := 0.9
 const INTAKE_WIDTH := 0.5
 ## Ends of the intake where it bolts down, one each side.
 const INTAKE_BOLTS: Array[Vector3] = [Vector3(-0.74, 0.2, 1.08), Vector3(0.74, -0.2, 1.08)]
-## Engine mounts on the front face of the block either side of the timing cover.
-const MOUNT_BOLTS: Array[Vector3] = [Vector3(-1.5, 0.48, -0.12), Vector3(-1.5, -0.48, -0.12)]
+## Engine mounts: an ear off each front corner of the block beside the timing cover, the
+## bolt standing up through it.
+const MOUNT_BOLTS: Array[Vector3] = [Vector3(-1.58, 0.53, 0.1), Vector3(-1.58, -0.53, 0.1)]
 ## The distributor's hold-down clamp bolt, on the boss behind it.
 const CLAMP_BOLT := Vector3(1.16, 0.0, 1.05)
 
@@ -154,7 +155,7 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 	match key:
 		GameState.HOOD_ENGINE:
 			for p in MOUNT_BOLTS:
-				out.append(Transform3D(_axis_basis(Vector3(-1.0, 0.0, 0.0)), p))
+				out.append(Transform3D(Basis.IDENTITY, p))
 		GameState.SLOT_INTAKE:
 			for p in INTAKE_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
@@ -217,6 +218,10 @@ func _build_engine(rig: Node3D) -> void:
 	var paint := _paint()
 	# The boss in the valley behind the intake that the distributor stands in.
 	_box(rig, Vector3(0.5, 0.2, DISTRIBUTOR_BASE.z - 0.7), Vector3((DISTRIBUTOR_BASE.x + CLAMP_BOLT.x) * 0.5, 0.0, (DISTRIBUTOR_BASE.z + 0.7) * 0.5), paint)
+	# Mount ears off the block's front corners, on rubber mounts below.
+	for p in MOUNT_BOLTS:
+		_box(rig, Vector3(0.18, 0.2, 0.06), Vector3(p.x + 0.02, p.y, p.z - 0.03), steel)
+		_box(rig, Vector3(0.14, 0.16, 0.12), Vector3(p.x, p.y, p.z - 0.12), rubber)
 	# Balancer: steel hub, rubber ring, steel rim with the mark across its face.
 	balancer = Node3D.new()
 	balancer.name = "Balancer"
@@ -242,7 +247,7 @@ func _build_engine(rig: Node3D) -> void:
 	_cyl_x(rig, 0.26, 0.48, -1.28, _mat("alternator", Color(0.62, 0.62, 0.6), 0.6, 0.45), 24, ALTERNATOR_CENTER.x, ALTERNATOR_CENTER.y)
 	_cyl_x(rig, 0.04, 0.2, -1.76, steel, 10, ALTERNATOR_CENTER.x, ALTERNATOR_CENTER.y)
 	_cyl_x(rig, 0.14, 0.08, BELT_X + 0.04, steel, 24, ALTERNATOR_CENTER.x, ALTERNATOR_CENTER.y)
-	_box(rig, Vector3(0.04, 0.5, 0.08), Vector3(-1.56, 0.62, 0.62), dark)
+	_box(rig, Vector3(0.04, 0.3, 0.08), Vector3(-1.56, 0.82, 0.62), dark)
 	# Fan belt around the three pulleys.
 	var hull := PackedVector2Array()
 	for c in [[Vector2(0.0, CRANK_Z), 0.3], [PUMP_CENTER, 0.3], [ALTERNATOR_CENTER, 0.14]]:

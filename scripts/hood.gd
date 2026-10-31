@@ -21,6 +21,11 @@ const BOLT_PITCH := 0.06
 const BOLT_SPIN := TAU * 0.6
 ## Hole hot spots, in meters.
 const SPOT_RADIUS := 0.035
+## A bolt under the pointer takes the click over its part's box this far behind the box's
+## face, in meters, since the box takes in the bolt's own hole.
+const BOLT_PICK_DEPTH := 0.1
+const _LAYER_PARTS := 1
+const _LAYER_BOLTS := 2
 ## A part lifts this far off, in engine units, before it is put on the shelf.
 const LIFT_PART := 4.0
 const LIFT_ENGINE := 10.0
@@ -335,6 +340,7 @@ func _build_bolts(key: String) -> void:
 		mats.append(mat)
 		loosening.append(false)
 		var body := StaticBody3D.new()
+		body.collision_layer = _LAYER_BOLTS
 		body.set_meta(&"hood_bolt", [key, i])
 		var shape := CollisionShape3D.new()
 		var sphere := SphereShape3D.new()
@@ -487,16 +493,17 @@ func _target_at(screen_pos: Vector2) -> Array:
 		return []
 	var from := _camera.project_ray_origin(screen_pos)
 	var to := from + _camera.project_ray_normal(screen_pos) * 20.0
-	var query := PhysicsRayQueryParameters3D.create(from, to)
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return []
-	var node := hit.get("collider") as Node
-	if node == null:
-		return []
-	if node.has_meta(&"hood_bolt"):
-		return node.get_meta(&"hood_bolt")
-	if node.has_meta(&"hood_part"):
+	var space := get_world_3d().direct_space_state
+	var bolt_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, _LAYER_BOLTS))
+	var part_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, _LAYER_PARTS))
+	if not bolt_hit.is_empty():
+		var bolt_near := from.distance_to(bolt_hit["position"])
+		if part_hit.is_empty() or bolt_near <= from.distance_to(part_hit["position"]) + BOLT_PICK_DEPTH:
+			var bolt := bolt_hit.get("collider") as Node
+			if bolt != null and bolt.has_meta(&"hood_bolt"):
+				return bolt.get_meta(&"hood_bolt")
+	var node: Node = part_hit.get("collider") as Node if not part_hit.is_empty() else null
+	if node != null and node.has_meta(&"hood_part"):
 		return [str(node.get_meta(&"hood_part")), -1]
 	return []
 
