@@ -1,6 +1,7 @@
 extends Control
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _SaveSlots := preload("res://scripts/save_slots.gd")
 
 var _nav = _MenuNav.new()
 
@@ -29,13 +30,34 @@ func _on_new_game_pressed() -> void:
 
 func _on_load_game_pressed() -> void:
 	if not GameState.has_save_file():
-		_set_status("No save file found.")
+		_set_status("No saved games yet.")
 		return
-	if GameState.load_game():
-		_set_status("Game loaded.")
+	_nav.clear()
+	var slots: Control = _SaveSlots.new()
+	slots.chosen.connect(_on_save_slot_chosen.bind(slots))
+	slots.closed.connect(_on_save_slots_closed.bind(slots))
+	add_child(slots)
+
+
+func _on_save_slot_chosen(slot: int, slots: Control) -> void:
+	slots.queue_free()
+	if GameState.load_game(slot):
 		GameState.go_to_saved_scene(get_tree())
 	else:
-		_set_status("Could not load save.")
+		_set_status("Could not load that save.")
+		_on_save_slots_closed(null)
+
+
+func _on_save_slots_closed(slots: Control) -> void:
+	if slots != null:
+		slots.queue_free()
+	_nav.setup([
+		$Margin/Row/Menu/NewGameButton,
+		$Margin/Row/Menu/LoadGameButton,
+		$Margin/Row/Menu/SettingsButton,
+		$Margin/Row/Menu/ExitButton,
+	])
+	_nav.select(1)
 
 
 func _on_settings_pressed() -> void:

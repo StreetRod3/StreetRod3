@@ -39,7 +39,7 @@ flowchart TD
 
 | Scene | Script | Role |
 | --- | --- | --- |
-| `scenes/main_menu.tscn` | `scripts/main_menu.gd` | New game, save, load, settings, quit |
+| `scenes/main_menu.tscn` | `scripts/main_menu.gd` | New game, load (from the save slot list), settings, quit |
 | `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle |
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
@@ -56,7 +56,7 @@ flowchart TD
 ```mermaid
 flowchart LR
   subgraph persist [Persistence]
-    save["user://savegame.json"]
+    save["user://saves/slot_N.json"]
     settings["user://settings.cfg"]
   end
 
@@ -101,7 +101,7 @@ Scenes talk to each other only through `GameState` and scene changes. Race scrip
 
 | Tag | Result |
 | --- | --- |
-| `clock` | Save, load, or return to the main menu |
+| `clock` | Save or load through the save slot list (`save_slots.gd`), or return to the main menu |
 | `chart` | Stats overlay |
 | `newspaper` | Open the classifieds |
 | `radio` | Toggle music |

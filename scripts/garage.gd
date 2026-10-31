@@ -3,6 +3,7 @@ extends Node3D
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
+const _SaveSlots := preload("res://scripts/save_slots.gd")
 
 @onready var _car_pivot: Node3D = $CarPivot
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -1557,17 +1558,40 @@ func _show_stats() -> void:
 
 
 func _on_clock_save_pressed() -> void:
-	GameState.current_scene_path = GameState.SCENE_GARAGE
-	if GameState.save_game():
-		pass
-	_clock_menu.visible = false
-	_sync_menu_nav()
+	_open_save_slots(true)
 
 
 func _on_clock_load_pressed() -> void:
-	if GameState.load_game():
-		GameState.go_to_saved_scene(get_tree())
+	_open_save_slots(false)
+
+
+## Puts the clock away and brings up the slot list for saving or loading.
+func _open_save_slots(saving: bool) -> void:
 	_clock_menu.visible = false
+	_nav.clear()
+	var slots: Control = _SaveSlots.new()
+	slots.saving = saving
+	slots.chosen.connect(_on_save_slot_chosen.bind(slots, saving))
+	slots.closed.connect(_on_save_slots_closed.bind(slots))
+	$GarageUI.add_child(slots)
+
+
+func _on_save_slot_chosen(slot: int, slots: Control, saving: bool) -> void:
+	slots.queue_free()
+	if saving:
+		GameState.current_scene_path = GameState.SCENE_GARAGE
+		GameState.save_game(slot)
+		_sync_menu_nav()
+		return
+	if GameState.load_game(slot):
+		GameState.go_to_saved_scene(get_tree())
+	else:
+		_sync_menu_nav()
+
+
+func _on_save_slots_closed(slots: Control) -> void:
+	slots.queue_free()
+	_clock_menu.visible = true
 	_sync_menu_nav()
 
 

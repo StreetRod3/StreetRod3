@@ -1,6 +1,10 @@
 extends Node
 
-const SAVE_PATH := "user://savegame.json"
+## Saves go in numbered slots, one file each. The single save from before slots
+## becomes slot 1 the first time the slots are looked at.
+const SAVE_DIR := "user://saves"
+const SAVE_SLOTS := 8
+const LEGACY_SAVE_PATH := "user://savegame.json"
 const SETTINGS_PATH := "user://settings.cfg"
 
 const SCENE_MAIN_MENU := "res://scenes/main_menu.tscn"
@@ -128,6 +132,12 @@ const PINK_KEPT := 2
 const PINK_LOST := 3
 
 ## Display name of the player's car.
+## Where the slots are kept, and the old single save to bring in. Test scripts point these
+## somewhere else so they never touch the player's saves.
+var save_dir: String = SAVE_DIR
+var legacy_save_path: String = LEGACY_SAVE_PATH
+## The slot this game was last saved to or loaded from, or 0 for a new game.
+var save_slot: int = 0
 var car_name: String = "Corvette 1956"
 ## Current paint color for the active car.
 var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
@@ -617,6 +627,7 @@ func get_stock_transmission() -> Dictionary:
 
 
 func new_game() -> void:
+	save_slot = 0
 	car_name = "Corvette 1956"
 	car_color = Color(0.78, 0.14, 0.14, 1.0)
 	fuel = DEFAULT_TANK_L
@@ -653,13 +664,60 @@ func new_game() -> void:
 	_sync_record_from_active()
 
 
-func has_save_file() -> bool:
-	return FileAccess.file_exists(SAVE_PATH)
+func save_slot_path(slot: int) -> String:
+	return "%s/slot_%d.json" % [save_dir, slot]
 
 
-func save_game() -> bool:
+func has_save_file(slot: int = 0) -> bool:
+	_bring_in_legacy_save()
+	if slot > 0:
+		return FileAccess.file_exists(save_slot_path(slot))
+	for i in range(1, SAVE_SLOTS + 1):
+		if FileAccess.file_exists(save_slot_path(i)):
+			return true
+	return false
+
+
+## What a slot's save list line shows: `car_name`, `money`, `cars` (how many owned) and
+## `saved_at` (a Unix time). Empty when the slot has no save.
+func save_slot_info(slot: int) -> Dictionary:
+	_bring_in_legacy_save()
+	var path := save_slot_path(slot)
+	if not FileAccess.file_exists(path):
+		return {}
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if typeof(parsed) != TYPE_DICTIONARY:
+		return {"car_name": "Unreadable save", "money": 0, "cars": 0, "saved_at": FileAccess.get_modified_time(path)}
+	var d: Dictionary = parsed
+	var owned: Variant = d.get("owned_car_ids", [])
+	return {
+		"car_name": str(d.get("car_name", "")),
+		"money": int(d.get("money", 0)),
+		"cars": owned.size() if typeof(owned) == TYPE_ARRAY else 0,
+		"saved_at": int(d.get("saved_at", FileAccess.get_modified_time(path))),
+	}
+
+
+## Moves the save from before slots into slot 1, if slot 1 is free.
+func _bring_in_legacy_save() -> void:
+	if legacy_save_path.is_empty() or not FileAccess.file_exists(legacy_save_path):
+		return
+	DirAccess.make_dir_recursive_absolute(save_dir)
+	if FileAccess.file_exists(save_slot_path(1)):
+		return
+	var err := DirAccess.rename_absolute(legacy_save_path, save_slot_path(1))
+	if err != OK:
+		push_warning("Could not move the old save into slot 1: %s" % error_string(err))
+
+
+func save_game(slot: int) -> bool:
+	if slot < 1 or slot > SAVE_SLOTS:
+		return false
+	_bring_in_legacy_save()
+	DirAccess.make_dir_recursive_absolute(save_dir)
 	var data := {
 		"version": 2,
+		"saved_at": int(Time.get_unix_time_from_system()),
 		"car_name": car_name,
 		"car_color": [car_color.r, car_color.g, car_color.b, car_color.a],
 		"fuel": fuel,
@@ -686,19 +744,21 @@ func save_game() -> bool:
 		"equipped_wheel_id": equipped_wheel_id,
 	}
 	var json := JSON.stringify(data)
-	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
+	var path := save_slot_path(slot)
+	var f := FileAccess.open(path, FileAccess.WRITE)
 	if f == null:
-		push_error("Could not write save: %s" % SAVE_PATH)
+		push_error("Could not write save: %s" % path)
 		return false
 	f.store_string(json)
 	f.close()
+	save_slot = slot
 	return true
 
 
-func load_game() -> bool:
-	if not has_save_file():
+func load_game(slot: int) -> bool:
+	if not has_save_file(slot):
 		return false
-	var f := FileAccess.open(SAVE_PATH, FileAccess.READ)
+	var f := FileAccess.open(save_slot_path(slot), FileAccess.READ)
 	if f == null:
 		return false
 	var text := f.get_as_text()
@@ -764,6 +824,7 @@ func load_game() -> bool:
 		current_car_id = ""
 		car_spec = {}
 		car_name = "No car"
+	save_slot = slot
 	return true
 
 
