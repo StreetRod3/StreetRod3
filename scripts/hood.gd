@@ -1,8 +1,8 @@
 extends Node3D
 
 ## Under the hood, looking down into the engine bay from in front of the car. The engine
-## is built up in layers as in Street Rod 2: the engine on its mounts, the intake on the
-## engine, the carburetors and the distributor in the intake, the air cleaner over the
+## is built up in layers as in Street Rod 2: the engine on its mounts, the cylinder heads
+## on the engine, the intake on the heads, the carburetors and the distributor in the intake, the air cleaner over the
 ## carburetors, and the plug wires from the distributor cap to the plugs. Each part is
 ## held by bolts: click a bolt hole to thread a bolt in, click the bolt again to tighten
 ## it, and click a tight bolt to back it out. With all of a part's bolts out and nothing
@@ -49,9 +49,10 @@ const CAM_DISTANCE_MAX := 2.6
 const ZOOM_STEP := 0.1
 
 ## Hood parts from the top down: the order they come off in.
-const TOP_DOWN: Array[String] = ["air_cleaner", "carb_3", "carb_2", "carb", "distributor", "intake", "engine"]
+const TOP_DOWN: Array[String] = ["air_cleaner", "carb_3", "carb_2", "carb", "distributor", "intake", "heads", "engine"]
 const PART_NAMES := {
 	"engine": "Engine",
+	"heads": "Cylinder heads",
 	"intake": "Intake manifold",
 	"carb": "Carburetor",
 	"carb_2": "Second carburetor",
@@ -62,6 +63,7 @@ const PART_NAMES := {
 }
 const BOLT_NAMES := {
 	"engine": ["Right engine mount bolt", "Left engine mount bolt"],
+	"heads": ["Right head, front bolt", "Right head, rear bolt", "Left head, front bolt", "Left head, rear bolt"],
 	"intake": ["Front intake bolt", "Rear intake bolt"],
 	"carb": ["Carburetor nut"],
 	"carb_2": ["Carburetor nut"],
@@ -82,7 +84,7 @@ var _bolts: Dictionary = {}
 var _bolt_mats: Dictionary = {}
 var _spots: Dictionary = {}
 var _loosening: Dictionary = {}
-## Click targets: the holes, and each part's bounds.
+## Click targets: the holes, and each part's bounds (a list of boxes per part).
 var _hole_bodies: Dictionary = {}
 var _part_bodies: Dictionary = {}
 ## What the mouse is over: [key, bolt index], [key, -1] for a part, or [].
@@ -302,7 +304,7 @@ func _tray_xform(key: String, index: int) -> Transform3D:
 	for k in TOP_DOWN:
 		if k == key:
 			break
-		slot += int(GameState.HOOD_BOLT_COUNTS.get(k, 0))
+		slot += GameState.hood_bolt_count(k)
 	slot += index
 	var basis := Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.RIGHT, PI * 0.5)
 	return Transform3D(basis.scaled(Vector3.ONE * _EngineAssembly.ENGINE_SCALE), TRAY + Vector3(TRAY_STEP * float(slot), 0.012, 0.0))
@@ -523,7 +525,7 @@ func _on_target(target: Array) -> void:
 func _part_hint(key: String) -> String:
 	var blocker := GameState.hood_part_blocker(key)
 	if blocker == "wires":
-		return "Pull the plug wires off before the distributor can come out."
+		return "Pull the plug wires off before the %s can come out." % str(PART_NAMES[key]).to_lower()
 	if not blocker.is_empty():
 		return "Take the %s off first." % str(PART_NAMES[blocker]).to_lower()
 	return "Back its bolts out and it lifts off."
@@ -558,6 +560,8 @@ func _target_text(target: Array) -> String:
 		return "%s — %s" % [PART_NAMES[key], _part_name(key)]
 	var turns: int = GameState.hood_bolts(key)[index]
 	var label := str(BOLT_NAMES[key][index])
+	if key == GameState.SLOT_HEADS and GameState.engine_head_count() == 1:
+		label = ["Head, front bolt", "Head, rear bolt"][index % 2]
 	if turns == 0:
 		return "%s — thread it in" % label
 	if _loosening[key][index] or turns >= GameState.GEARBOX_BOLT_TIGHT:
@@ -573,30 +577,38 @@ func _part_name(key: String) -> String:
 
 ## Click boxes around each part, from its meshes' bounds.
 func _refresh_part_bodies() -> void:
-	for body in _part_bodies.values():
-		(body as Node3D).queue_free()
+	for bodies in _part_bodies.values():
+		for body in bodies:
+			(body as Node3D).queue_free()
 	_part_bodies.clear()
 	for key in _engine.rigs.keys():
 		var rig: Node3D = _engine.rigs[key]
 		if not is_instance_valid(rig):
 			continue
-		var box := _world_bounds(rig)
-		if box.size == Vector3.ZERO:
-			continue
-		var body := StaticBody3D.new()
-		body.set_meta(&"hood_part", key)
-		var shape := CollisionShape3D.new()
-		var bshape := BoxShape3D.new()
-		bshape.size = box.size
-		shape.shape = bshape
-		body.add_child(shape)
-		add_child(body)
-		body.global_position = box.get_center()
-		_part_bodies[key] = body
+		# The heads are one part but a box each, so the one box does not take in the
+		# whole top of the engine between them.
+		var pieces: Array = rig.get_children() if key == GameState.SLOT_HEADS else [rig]
+		var bodies: Array[Node3D] = []
+		for piece in pieces:
+			var box := _world_bounds(piece)
+			if box.size == Vector3.ZERO:
+				continue
+			var body := StaticBody3D.new()
+			body.set_meta(&"hood_part", key)
+			var shape := CollisionShape3D.new()
+			var bshape := BoxShape3D.new()
+			bshape.size = box.size
+			shape.shape = bshape
+			body.add_child(shape)
+			add_child(body)
+			body.global_position = box.get_center()
+			bodies.append(body)
+		if not bodies.is_empty():
+			_part_bodies[key] = bodies
 	# Parts lower down are under the ones on top: keep only their hot spots' bodies on
 	# top by shrinking the engine's to its lower half, where nothing sits over it.
 	if _part_bodies.has(GameState.HOOD_ENGINE):
-		var body: StaticBody3D = _part_bodies[GameState.HOOD_ENGINE]
+		var body: StaticBody3D = _part_bodies[GameState.HOOD_ENGINE][0]
 		var shape := (body.get_child(0) as CollisionShape3D).shape as BoxShape3D
 		shape.size.y *= 0.5
 		body.global_position.y -= shape.size.y * 0.5
@@ -666,7 +678,7 @@ func _open_spots() -> Array[String]:
 	var out: Array[String] = []
 	if not GameState.has_engine():
 		return [GameState.HOOD_ENGINE]
-	for key in [GameState.SLOT_INTAKE, GameState.SLOT_CARB, GameState.SLOT_CARB_2, GameState.SLOT_CARB_3, GameState.SLOT_DISTRIBUTOR, GameState.SLOT_AIR_CLEANER]:
+	for key in GameState.HOOD_SLOTS:
 		if GameState.is_hood_part_fitted(key):
 			continue
 		if GameState.CARB_SLOTS.has(key) and not GameState.carb_slots().has(key) and key != GameState.SLOT_CARB:
@@ -742,7 +754,7 @@ func _refresh_ui() -> void:
 	else:
 		_engine_label.text = "No engine"
 	var lines: Array[String] = []
-	for key in ["engine", "intake", "carb", "carb_2", "carb_3", "distributor", "air_cleaner"]:
+	for key in ["engine", "heads", "intake", "carb", "carb_2", "carb_3", "distributor", "air_cleaner"]:
 		if not GameState.is_hood_part_fitted(key):
 			if key == GameState.HOOD_ENGINE or (GameState.has_engine() and (not GameState.CARB_SLOTS.has(key) or GameState.carb_slots().has(key))):
 				lines.append("%s: none" % PART_NAMES[key])

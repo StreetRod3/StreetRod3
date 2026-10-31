@@ -118,6 +118,9 @@
     }
   ],
   "parts": [
+    {"id": "heads-iron", "slot": "heads", "stock": true, "name": "Cast-iron heads", "price": 0, "hp": 0, "vmax": 0},
+    {"id": "heads-ported", "slot": "heads", "name": "Ported cast-iron heads", "price": 280, "hp": 18, "vmax": 2},
+    {"id": "heads-aluminum", "slot": "heads", "finish": "aluminum", "name": "Aluminum heads", "price": 650, "hp": 30, "vmax": 3},
     {"id": "intake-iron4", "slot": "intake", "stock": true, "style": "iron4", "carbs": 1, "barrels": 4, "name": "Cast-iron four-barrel intake", "price": 0, "hp": 0, "vmax": 0},
     {"id": "intake", "slot": "intake", "style": "highrise", "carbs": 1, "barrels": 4, "name": "Aluminum high-rise intake", "price": 320, "hp": 15, "vmax": 2},
     {"id": "intake-tripower", "slot": "intake", "style": "tripower", "carbs": 3, "barrels": 2, "name": "Tri-power intake", "price": 420, "hp": 22, "vmax": 3},

@@ -66,8 +66,10 @@ const SLOT_MUFFLER := "muffler"
 const SLOT_MUFFLER_LEFT := "muffler_left"
 const SLOT_DIFFERENTIAL := "differential"
 const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
-## Parts changed under the hood, from the bottom up: the intake on the engine, the
-## carburetors and the distributor in the intake, the air cleaner over the carburetors.
+## Parts changed under the hood, from the bottom up: the cylinder heads on the engine,
+## the intake on the heads, the carburetors and the distributor in the intake, the air
+## cleaner over the carburetors. The heads are one part however many the engine has.
+const SLOT_HEADS := "heads"
 const SLOT_INTAKE := "intake"
 const SLOT_CARB := "carb"
 ## The second and third carburetors of a dual-quad or tri-power intake. They take the
@@ -77,17 +79,17 @@ const SLOT_CARB_3 := "carb_3"
 const SLOT_DISTRIBUTOR := "distributor"
 const SLOT_AIR_CLEANER := "air_cleaner"
 const CARB_SLOTS: Array[String] = [SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3]
-const HOOD_SLOTS: Array[String] = [SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
+const HOOD_SLOTS: Array[String] = [SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
 const ALL_SLOTS: Array[String] = [
 	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL,
-	SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
+	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## Slot id for an empty slot. The exhaust, the mufflers, and everything under the hood
 ## can come off for good.
 const NO_PART_ID := "none"
 const REMOVABLE_SLOTS: Array[String] = [
 	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT,
-	SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
+	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## What every car rolls out of the factory with.
 const STOCK_SLOT_PARTS := {
@@ -96,6 +98,7 @@ const STOCK_SLOT_PARTS := {
 	SLOT_MUFFLER: "muffler-stock",
 	SLOT_MUFFLER_LEFT: NO_PART_ID,
 	SLOT_DIFFERENTIAL: "diff-308",
+	SLOT_HEADS: "heads-iron",
 	SLOT_INTAKE: "intake-iron4",
 	SLOT_CARB: "carb-4bbl-stock",
 	SLOT_CARB_2: NO_PART_ID,
@@ -106,9 +109,10 @@ const STOCK_SLOT_PARTS := {
 ## Key in `engine_bolts` for the engine's own mounts. The other keys are hood slots.
 const HOOD_ENGINE := "engine"
 ## Bolts holding each part under the hood. They turn like the bellhousing bolts, out
-## (0) to `GEARBOX_BOLT_TIGHT`.
+## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each (`hood_bolt_count()`).
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
+	SLOT_HEADS: 4,
 	SLOT_INTAKE: 2,
 	SLOT_CARB: 1,
 	SLOT_CARB_2: 1,
@@ -116,6 +120,7 @@ const HOOD_BOLT_COUNTS := {
 	SLOT_DISTRIBUTOR: 1,
 	SLOT_AIR_CLEANER: 1,
 }
+const HEAD_BOLTS := 2
 ## Spark advance for each tune step: step 0 fires at top dead center.
 const TIMING_DEG_PER_STEP := 2
 ## Airflow an engine wants, in cfm per cubic inch. Carburetors well short of it starve
@@ -310,6 +315,10 @@ func engine_trouble() -> String:
 		return "There is no engine."
 	if not is_hood_part_bolted(HOOD_ENGINE):
 		return "The engine mounts are loose."
+	if slot_part(SLOT_HEADS).is_empty():
+		return "There are no cylinder heads."
+	if not is_hood_part_bolted(SLOT_HEADS):
+		return "The cylinder heads are loose."
 	if slot_part(SLOT_INTAKE).is_empty():
 		return "There is no intake manifold."
 	if not is_hood_part_bolted(SLOT_INTAKE):
@@ -328,11 +337,25 @@ func engine_trouble() -> String:
 	return ""
 
 
+## How many cylinder heads the fitted engine has: two on a V engine, one on an inline.
+func engine_head_count(engine: Dictionary = {}) -> int:
+	var e := get_equipped_engine() if engine.is_empty() else engine
+	return clampi(int(e.get("heads", 2)), 1, 2)
+
+
+## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, and
+## `HOOD_BOLT_COUNTS` for the rest.
+func hood_bolt_count(key: String) -> int:
+	if key == SLOT_HEADS:
+		return HEAD_BOLTS * engine_head_count()
+	return int(HOOD_BOLT_COUNTS.get(key, 0))
+
+
 ## Turns on each bolt of a part under the hood (`HOOD_BOLT_COUNTS` key).
 func hood_bolts(key: String) -> Array[int]:
 	var out: Array[int] = []
 	var saved: Variant = engine_bolts.get(key, null)
-	for i in int(HOOD_BOLT_COUNTS.get(key, 0)):
+	for i in hood_bolt_count(key):
 		var turns := GEARBOX_BOLT_TIGHT
 		if typeof(saved) == TYPE_ARRAY and i < (saved as Array).size():
 			turns = clampi(int((saved as Array)[i]), 0, GEARBOX_BOLT_TIGHT)
@@ -382,8 +405,14 @@ func carb_slots() -> Array[String]:
 func hood_part_blocker(key: String) -> String:
 	match key:
 		HOOD_ENGINE:
+			if not slot_part(SLOT_HEADS).is_empty():
+				return SLOT_HEADS
+		SLOT_HEADS:
 			if not slot_part(SLOT_INTAKE).is_empty():
 				return SLOT_INTAKE
+			# The plugs are in the heads.
+			if plug_wires:
+				return "wires"
 		SLOT_INTAKE:
 			for slot in CARB_SLOTS:
 				if not slot_part(slot).is_empty():
@@ -407,6 +436,10 @@ func hood_spot_trouble(key: String) -> String:
 		return "Put an engine in first."
 	if not slot_part(key).is_empty():
 		return "Take the old one off first."
+	if key == SLOT_HEADS:
+		return ""
+	if slot_part(SLOT_HEADS).is_empty():
+		return "Put the cylinder heads on first."
 	if key == SLOT_INTAKE:
 		return ""
 	if slot_part(SLOT_INTAKE).is_empty():
@@ -482,7 +515,7 @@ func remove_hood_part(key: String) -> String:
 		plug_wires = false
 	else:
 		slot_part_ids[key] = NO_PART_ID
-		if key == SLOT_DISTRIBUTOR:
+		if key == SLOT_DISTRIBUTOR or key == SLOT_HEADS:
 			plug_wires = false
 	_sync_record_from_active()
 	refresh_car_stats()
@@ -491,6 +524,8 @@ func remove_hood_part(key: String) -> String:
 
 ## Hooks the plug wires up to the distributor cap, or pulls them off.
 func set_plug_wires(on: bool) -> String:
+	if on and slot_part(SLOT_HEADS).is_empty():
+		return "There are no heads for the plugs."
 	if on and slot_part(SLOT_DISTRIBUTOR).is_empty():
 		return "There is no distributor to run them to."
 	plug_wires = on
@@ -510,7 +545,7 @@ func spare_engines() -> Array[Dictionary]:
 
 func _loose_bolts(key: String) -> Array[int]:
 	var bolts: Array[int] = []
-	for i in int(HOOD_BOLT_COUNTS.get(key, 0)):
+	for i in hood_bolt_count(key):
 		bolts.append(1)
 	return bolts
 
@@ -1801,8 +1836,10 @@ func _slots_from(value: Variant) -> Dictionary:
 		slots[SLOT_MUFFLER] = NO_PART_ID
 	if not bool(exhaust.get("dual", false)):
 		slots[SLOT_MUFFLER_LEFT] = NO_PART_ID
-	# Carburetors, distributor, and air cleaner sit in the intake, and only as many
-	# carburetors as it has pads.
+	# The intake sits on the heads; carburetors, distributor, and air cleaner sit in the
+	# intake, and only as many carburetors as it has pads.
+	if str(slots[SLOT_HEADS]) == NO_PART_ID:
+		slots[SLOT_INTAKE] = NO_PART_ID
 	var intake := listing_by_id(PARTS, str(slots[SLOT_INTAKE]))
 	var pads := 0 if intake.is_empty() else clampi(int(intake.get("carbs", 1)), 1, CARB_SLOTS.size())
 	for i in CARB_SLOTS.size():

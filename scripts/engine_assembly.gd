@@ -41,6 +41,13 @@ const INTAKE_BOLTS: Array[Vector3] = [Vector3(-0.74, 0.2, 1.08), Vector3(0.74, -
 ## Engine mounts: an ear off each front corner of the block beside the timing cover, the
 ## bolt standing up through it.
 const MOUNT_BOLTS: Array[Vector3] = [Vector3(-1.58, 0.53, 0.1), Vector3(-1.58, -0.53, 0.1)]
+## Head bolts, front and back on each head's sloping inner top face, below the valve
+## cover, square to that face. The face runs from `HEAD_DECK_IN` (out from the middle,
+## height) up to `HEAD_DECK_OUT`. The right head (+Y) first.
+const HEAD_BOLT_X := 1.26
+const HEAD_BOLT_Y := 0.3
+const HEAD_DECK_IN := Vector2(0.09, 0.79)
+const HEAD_DECK_OUT := Vector2(0.59, 1.18)
 ## The distributor's hold-down clamp bolt, on the boss behind it.
 const CLAMP_BOLT := Vector3(1.16, 0.0, 1.05)
 
@@ -60,6 +67,7 @@ const TAB_ATDC_MAX := 4
 const _MODEL_DEFAULT := "res://assets/parts/engine-v8-283.glb"
 ## Nodes of an engine model by part. The long block is everything else, less the front
 ## drive the assembly builds itself.
+const _NODES_HEADS: Array[String] = ["cylinder_head", "valve_cover", "valve_bolt"]
 const _NODES_INTAKE: Array[String] = ["intake_manifold"]
 const _NODES_CARB: Array[String] = ["carburetor", "carb_throat"]
 const _NODES_DISTRIBUTOR: Array[String] = ["distributor"]
@@ -130,6 +138,8 @@ func rebuild(key: String) -> Node3D:
 	match key:
 		GameState.HOOD_ENGINE:
 			_build_engine(rig)
+		GameState.SLOT_HEADS:
+			_build_heads(rig, GameState.slot_part(key))
 		GameState.SLOT_INTAKE:
 			_build_intake(rig, GameState.slot_part(key))
 		GameState.SLOT_DISTRIBUTOR:
@@ -145,7 +155,7 @@ func rebuild(key: String) -> Node3D:
 
 func _present(key: String) -> bool:
 	if key == WIRES:
-		return GameState.has_engine() and GameState.plug_wires and not GameState.slot_part(GameState.SLOT_DISTRIBUTOR).is_empty()
+		return GameState.has_engine() and GameState.plug_wires and not GameState.slot_part(GameState.SLOT_DISTRIBUTOR).is_empty() and not GameState.slot_part(GameState.SLOT_HEADS).is_empty()
 	return GameState.is_hood_part_fitted(key)
 
 
@@ -156,6 +166,13 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in MOUNT_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
+		GameState.SLOT_HEADS:
+			var slope := HEAD_DECK_OUT - HEAD_DECK_IN
+			var z := HEAD_DECK_IN.y + slope.y * (HEAD_BOLT_Y - HEAD_DECK_IN.x) / slope.x
+			for side in head_sides():
+				var normal := Vector3(0.0, -slope.y * side, slope.x).normalized()
+				for x in [-HEAD_BOLT_X, HEAD_BOLT_X]:
+					out.append(Transform3D(_axis_basis(normal), Vector3(x, HEAD_BOLT_Y * side, z)))
 		GameState.SLOT_INTAKE:
 			for p in INTAKE_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
@@ -208,7 +225,7 @@ static func mark_angle(degrees: float) -> float:
 
 func _build_engine(rig: Node3D) -> void:
 	var leave: Array[String] = []
-	for nodes in [_NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
+	for nodes in [_NODES_HEADS, _NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
 		leave.append_array(nodes)
 	_add_model_nodes(rig, leave, false)
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
@@ -300,6 +317,36 @@ func _build_timing_tab(rig: Node3D) -> void:
 		seg.rotation.x = a
 	var foot := mark_angle(8.0)
 	_box(rig, Vector3(0.18, 0.06, 0.06), Vector3(x + 0.09, -(BALANCER_R + 0.12) * sin(foot), CRANK_Z + (BALANCER_R + 0.12) * cos(foot)), steel)
+
+
+# --- Heads -------------------------------------------------------------------------
+
+
+## The banks the engine has heads on, by side: +1 on the right, -1 on the left. One head
+## on an inline engine is the right-hand one.
+static func head_sides() -> Array[float]:
+	var sides: Array[float] = [1.0]
+	if GameState.engine_head_count() >= 2:
+		sides.append(-1.0)
+	return sides
+
+
+## Each head with its valve cover, in a node of its own (`Head_1`, `Head_-1`) so the
+## hood screen can tell them apart. Aluminum heads are left bare.
+func _build_heads(rig: Node3D, part: Dictionary) -> void:
+	var aluminum := str(part.get("finish", "")) == "aluminum"
+	for side in head_sides():
+		var bank := "%d" % int(side)
+		var head := Node3D.new()
+		head.name = "Head_%s" % bank
+		rig.add_child(head)
+		var nodes: Array[String] = ["cylinder_head_" + bank, "valve_cover_" + bank, "valve_bolt_%s_" % bank]
+		var model := _add_model_nodes(head, nodes, true)
+		if model == null or not aluminum:
+			continue
+		var casting := model.find_child("cylinder_head_" + bank, true, false) as MeshInstance3D
+		if casting != null:
+			casting.material_override = _mat("aluminum", _ALUMINUM, 0.75, 0.35)
 
 
 # --- Intake ------------------------------------------------------------------------
