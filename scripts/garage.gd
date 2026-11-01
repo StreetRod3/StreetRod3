@@ -85,6 +85,13 @@ var _nav = _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
+var _car_list_status: Label
+var _car_list_switch: Button
+var _car_list_sell: Button
+var _car_list_forget: Button
+var _car_list_group: ButtonGroup
+## The car the list is highlighting. A click only changes this; Switch it moves it into the bay.
+var _car_list_selected: String = ""
 ## The engine heard rolling out of and into the bay.
 var _engine_sound: AudioStreamPlayer
 var _hood: StaticBody3D
@@ -95,6 +102,8 @@ var _creeper: StaticBody3D
 var _loss_bubble: Control
 ## Shown when the player tries to leave and the engine will not run.
 var _stall_bubble: Control
+## Shown when Switch it is used on the car already in the bay.
+var _here_bubble: Control
 ## Shown once, on the garage visit straight after the last car is sold or lost.
 var _gone_bubble: Control
 var _tooltip: Label
@@ -114,7 +123,7 @@ const _TOOLTIPS := {
 	&"transmission": "Transmission (T)",
 	&"creeper": "Under the car (U)",
 }
-const _TOOLTIP_CARS := "Cars"
+const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
 const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
 const _TOOLTIP_DOORS_NO_RUN := "Won't start: %s"
@@ -207,6 +216,7 @@ func _ready() -> void:
 		_car_pivot.visible = false
 	_build_loss_bubble()
 	_build_stall_bubble()
+	_build_here_bubble()
 	_build_gone_bubble()
 	_build_tooltip()
 	if GameState.cars_just_gone:
@@ -278,6 +288,27 @@ func _show_stall_bubble() -> void:
 func _dismiss_stall_bubble() -> void:
 	if _stall_bubble != null:
 		_stall_bubble.visible = false
+
+
+func _build_here_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "Here it is!", Vector2(260, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_here_bubble)
+	_here_bubble = bubble
+
+
+func _show_here_bubble() -> void:
+	if _here_bubble != null:
+		_here_bubble.visible = true
+
+
+func _dismiss_here_bubble() -> void:
+	if _here_bubble != null:
+		_here_bubble.visible = false
 
 
 func _build_gone_bubble() -> void:
@@ -454,6 +485,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dismiss_stall_bubble()
 		get_viewport().set_input_as_handled()
 		return
+	if _here_bubble != null and _here_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_here_bubble()
+		get_viewport().set_input_as_handled()
+		return
 	if _bay_busy:
 		_handle_camera_only(event)
 		return
@@ -484,12 +520,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if _car_list != null and _car_list.visible and event.is_action_pressed(&"ui_cancel"):
-		_hide_car_list()
+		_on_car_list_forget()
 		get_viewport().set_input_as_handled()
 		return
 	if _calendar_inspecting and event.is_action_pressed(&"ui_cancel"):
 		_hang_calendar()
 		get_viewport().set_input_as_handled()
+		return
+
+	if _car_list != null and _car_list.visible and _try_car_list_shortcut(event):
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
 		return
 
 	if _nav.handle_event(self, event):
@@ -666,9 +708,24 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 			_handle_interact(&"transmission")
 		KEY_U:
 			_handle_interact(&"creeper")
+		KEY_C:
+			if not _car_management_available():
+				return false
+			_toggle_car_list()
 		_:
 			return false
 	_sync_menu_nav()
+	return true
+
+
+## The bay itself, or the car list already open over it. Other panels keep their own keys.
+func _car_management_available() -> bool:
+	if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or _calendar_inspecting:
+		return false
+	if _parts_board != null and _parts_board.visible:
+		return false
+	if _offer_panel != null and _offer_panel.visible:
+		return false
 	return true
 
 
@@ -686,6 +743,7 @@ func _hide_garage_overlays() -> void:
 		_parts_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
+	_dismiss_here_bubble()
 	_sync_menu_nav()
 
 
@@ -1493,25 +1551,83 @@ func _build_car_list() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 8)
 	root.add_child(box)
-	var title := Label.new()
-	title.text = "Cars in the garage"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	var title := _car_list_label("Cars in the garage")
+	title.custom_minimum_size = Vector2(400, 24)
 	box.add_child(title)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(400, 40)
+	scroll.custom_minimum_size = Vector2(400, 36)
 	box.add_child(scroll)
 	_car_list_rows = VBoxContainer.new()
 	_car_list_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_car_list_rows.add_theme_constant_override(&"separation", 6)
 	scroll.add_child(_car_list_rows)
-	_car_list_count = Label.new()
-	_car_list_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_car_list_count.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	_car_list_count = _car_list_label("")
+	_car_list_count.custom_minimum_size = Vector2(400, 22)
 	box.add_child(_car_list_count)
+	_car_list_status = _car_list_label("")
+	_car_list_status.custom_minimum_size = Vector2(400, 22)
+	box.add_child(_car_list_status)
+	_car_list_group = ButtonGroup.new()
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override(&"separation", 8)
+	_car_list_switch = _car_list_action("Switch it", _on_car_list_switch)
+	_car_list_sell = _car_list_action("Sell it", _on_car_list_sell)
+	_car_list_forget = _car_list_action("Forget it", _on_car_list_forget)
+	_mark_switch_button(_car_list_switch)
+	_car_list_switch.tooltip_text = "S or Enter"
+	_car_list_sell.tooltip_text = "L"
+	_car_list_forget.tooltip_text = "F or Esc"
+	actions.add_child(_car_list_switch)
+	actions.add_child(_car_list_sell)
+	actions.add_child(_car_list_forget)
+	box.add_child(actions)
 	$GarageUI.add_child(root)
 	_car_list = root
+
+
+func _car_list_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	return label
+
+
+func _car_list_action(text: String, callback: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(0, 36)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.pressed.connect(callback)
+	return btn
+
+
+## The red one: Enter runs it, and it stays marked when focus is on a car.
+func _mark_switch_button(btn: Button) -> void:
+	var ink := Color(0.98, 0.96, 0.9, 1)
+	btn.add_theme_stylebox_override(&"normal", _switch_button_style(Color(0.55, 0.12, 0.1, 1)))
+	btn.add_theme_stylebox_override(&"hover", _switch_button_style(Color(0.68, 0.18, 0.14, 1)))
+	btn.add_theme_stylebox_override(&"pressed", _switch_button_style(Color(0.4, 0.08, 0.07, 1)))
+	btn.add_theme_stylebox_override(&"focus", _switch_button_style(Color(0.68, 0.18, 0.14, 1)))
+	btn.add_theme_color_override(&"font_color", ink)
+	btn.add_theme_color_override(&"font_hover_color", ink)
+	btn.add_theme_color_override(&"font_pressed_color", ink)
+	btn.add_theme_color_override(&"font_focus_color", ink)
+	btn.add_theme_color_override(&"font_disabled_color", Color(0.98, 0.96, 0.9, 0.45))
+
+
+func _switch_button_style(bg: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = Color(0.95, 0.9, 0.78, 1)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(3)
+	style.content_margin_left = 6.0
+	style.content_margin_right = 6.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	return style
 
 
 func _toggle_car_list() -> void:
@@ -1524,12 +1640,15 @@ func _toggle_car_list() -> void:
 	_rebuild_car_list()
 	_car_list.visible = true
 	_sync_menu_nav()
+	if not _car_list_switch.disabled:
+		_car_list_switch.grab_focus()
 
 
 func _hide_car_list() -> void:
 	if _car_list == null or not _car_list.visible:
 		return
 	_car_list.visible = false
+	_dismiss_here_bubble()
 	_sync_menu_nav()
 
 
@@ -1537,32 +1656,172 @@ func _rebuild_car_list() -> void:
 	for child in _car_list_rows.get_children():
 		_car_list_rows.remove_child(child)
 		child.free()
-	for car_id in GameState.owned_car_ids:
-		var car_label := GameState.car_display_name(car_id)
-		var btn := Button.new()
-		var current := car_id == GameState.current_car_id
-		btn.text = car_label if not current else "%s    ·    in the bay" % car_label
-		btn.disabled = current
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if not current:
-			btn.pressed.connect(_on_car_list_pick.bind(car_id))
-		_car_list_rows.add_child(btn)
+	_ensure_car_list_selection()
+	for i in GameState.owned_car_ids.size():
+		_car_list_rows.add_child(_car_list_row(GameState.owned_car_ids[i], i))
 	_car_list_count.text = "%d of %d" % [GameState.owned_car_ids.size(), GameState.MAX_OWNED_CARS]
+	_car_list_status.text = ""
+	_refresh_car_list_actions()
 	var rows := mini(maxi(GameState.owned_car_ids.size(), 1), 8)
 	var scroll := _car_list_rows.get_parent() as Control
 	if scroll != null:
 		scroll.custom_minimum_size = Vector2(400, rows * 36)
+	# Margins, title, count, status line, one row of action buttons, and the gaps between them.
+	var chrome := 20.0 + 24.0 + 22.0 + 22.0 + 36.0 + 4.0 * 8.0
 	_car_list.offset_left = -220.0
 	_car_list.offset_right = 220.0
 	_car_list.offset_top = 48.0
-	_car_list.offset_bottom = 48.0 + 88.0 + float(rows * 36)
+	_car_list.offset_bottom = 48.0 + chrome + float(rows * 36)
 
 
-func _on_car_list_pick(car_id: String) -> void:
-	_hide_car_list()
+func _ensure_car_list_selection() -> void:
+	if GameState.owned_car_ids.has(_car_list_selected):
+		return
+	if GameState.owned_car_ids.has(GameState.current_car_id):
+		_car_list_selected = GameState.current_car_id
+		return
+	_car_list_selected = GameState.owned_car_ids[0] if not GameState.owned_car_ids.is_empty() else ""
+
+
+func _car_list_row(car_id: String, index: int) -> Button:
+	var btn := Button.new()
+	btn.toggle_mode = true
+	btn.button_group = _car_list_group
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 36)
+	var label := GameState.car_display_name(car_id)
+	if car_id == GameState.current_car_id:
+		label = "%s    ·    in the bay" % label
+	btn.text = "%d.  %s" % [index + 1, label]
+	btn.toggled.connect(_on_car_list_row_toggled.bind(car_id))
+	btn.set_pressed_no_signal(car_id == _car_list_selected)
+	return btn
+
+
+## S switches, L sells, F closes. 1–9 pick those cars, and 0 picks the 10th.
+func _try_car_list_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	if _gui_has_text_focus():
+		return false
+	var index := _car_list_number_index(key.keycode)
+	if index >= 0:
+		_select_car_list_index(index)
+		return true
+	match key.keycode:
+		KEY_S:
+			_on_car_list_switch()
+		KEY_L:
+			_on_car_list_sell()
+		KEY_F:
+			_on_car_list_forget()
+		_:
+			return false
+	return true
+
+
+func _car_list_number_index(code: Key) -> int:
+	match code:
+		KEY_1, KEY_KP_1:
+			return 0
+		KEY_2, KEY_KP_2:
+			return 1
+		KEY_3, KEY_KP_3:
+			return 2
+		KEY_4, KEY_KP_4:
+			return 3
+		KEY_5, KEY_KP_5:
+			return 4
+		KEY_6, KEY_KP_6:
+			return 5
+		KEY_7, KEY_KP_7:
+			return 6
+		KEY_8, KEY_KP_8:
+			return 7
+		KEY_9, KEY_KP_9:
+			return 8
+		KEY_0, KEY_KP_0:
+			return 9
+		_:
+			return -1
+
+
+func _select_car_list_index(index: int) -> void:
+	if index < 0 or index >= _car_list_rows.get_child_count():
+		return
+	var btn := _car_list_rows.get_child(index) as Button
+	if btn == null:
+		return
+	btn.button_pressed = true
+	btn.grab_focus()
+
+
+func _on_car_list_row_toggled(on: bool, car_id: String) -> void:
+	if not on:
+		return
+	_car_list_selected = car_id
+	_car_list_status.text = ""
+	_refresh_car_list_actions()
+
+
+func _refresh_car_list_actions() -> void:
+	var picked := GameState.owned_car_ids.has(_car_list_selected)
+	_car_list_switch.disabled = not picked
+	_car_list_sell.disabled = not picked
+
+
+func _on_car_list_switch() -> void:
+	var car_id := _car_list_selected
 	if _bay_busy or _departing or not GameState.owned_car_ids.has(car_id):
 		return
+	if car_id == GameState.current_car_id:
+		_hide_car_list()
+		_show_here_bubble()
+		return
+	_dismiss_here_bubble()
+	_hide_car_list()
 	_swap_car_in_bay(car_id)
+
+
+func _input(event: InputEvent) -> void:
+	if _car_list == null or not _car_list.visible or not _is_enter_key(event):
+		return
+	if _here_bubble != null and _here_bubble.visible:
+		get_viewport().set_input_as_handled()
+		return
+	if _bay_busy or _departing:
+		return
+	_on_car_list_switch()
+	get_viewport().set_input_as_handled()
+
+
+func _is_enter_key(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	return key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER
+
+
+## Selling the selected car is not wired yet.
+func _on_car_list_sell() -> void:
+	if not GameState.owned_car_ids.has(_car_list_selected):
+		_car_list_status.text = "Pick a car first."
+		return
+	_car_list_status.text = "Selling isn't set up yet."
+
+
+func _on_car_list_forget() -> void:
+	_hide_car_list()
 
 
 func _apply_active_car_visual() -> void:

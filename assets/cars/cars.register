@@ -3,7 +3,7 @@
     {
       "id": "sr1-corvette-1956",
       "name": "Corvette 1956",
-      "price": 0,
+      "price": 1350,
       "vmax": 220.0,
       "hp": 280.0,
       "color": [0.78, 0.14, 0.14, 1.0],
