@@ -15,6 +15,14 @@ const BUFFER_S := 0.12
 ## Idle rev on the tune screen. The sweet spot is the top of idle; each step away drops a semitone and a half.
 const TUNE_RPM_PEAK := 700.0
 const TUNE_SEMITONES_PER_STEP := 1.5
+## Off the sweet spot the idle lopes and misses, over SR2's two voices. The firing
+## (four a turn of the crank) lopes in and out at this much of its own rate per step
+## off, by this much of the motor's volume (about 6 dB); and each firing misses this
+## often per step, dropping the volume this much (about 16 dB) until the next one.
+const TUNE_BEAT_PER_STEP := 0.025
+const TUNE_LOPE_DEPTH := 16
+const TUNE_MISS_PER_STEP := 0.05
+const TUNE_MISS_DROP := 44
 ## SR2's rev counter idles at 1500 and redlines at 5700. Ours run from the car's
 ## idle to its redline, and are laid onto SR2's in a straight line.
 const SR2_IDLE := 1500
@@ -40,6 +48,10 @@ var _tuning: bool = false
 var _tune_step: int = 0
 var _voice_on: bool = false
 var _voice2_on: bool = false
+## Chip samples to the next firing, where the tune screen's lope and miss are set.
+var _fire_left: float = 0.0
+var _lope_phase: float = 0.0
+var _missing: bool = false
 var _dc_r: float = 1.0
 var _dc_in: float = 0.0
 var _dc_out: float = 0.0
@@ -153,18 +165,16 @@ func _fill_buffer() -> void:
 	if not _voice_on:
 		_motor_on(_VOICE)
 		_voice_on = true
+	var buf: PackedVector2Array
 	if _tuning:
 		if not _voice2_on:
 			_motor_on(_VOICE2)
 			_voice2_on = true
-		var t := _tune_step
-		var volume := 0x4a if t == 0 else 0x52
-		_motor_note(_VOICE, (((t + 0x10) * 2) & 0xff) << 8, volume)
-		_motor_note(_VOICE2, t * 0x300 + 0x2000, volume)
+		buf = _render_tune(frames)
 	else:
 		var rpm := sr2_rpm(_rpm)
 		_motor_note(_VOICE, motor_bend(rpm), motor_volume(rpm))
-	var buf: PackedVector2Array = _driver.chip.render(frames, GAIN)
+		buf = _driver.chip.render(frames, GAIN)
 	var r := _dc_r
 	var x1 := _dc_in
 	var y1 := _dc_out
@@ -176,3 +186,31 @@ func _fill_buffer() -> void:
 	_dc_in = x1
 	_dc_out = y1
 	_playback.push_buffer(buf)
+
+
+## The tune screen, a firing at a time: SR2's two voices at its tune volume, and off
+## the sweet spot that volume loped and, on a missed firing, dropped.
+func _render_tune(frames: int) -> PackedVector2Array:
+	var t := _tune_step
+	var off := absi(t)
+	var fire_hz := maxf(_rpm, 200.0) / 15.0
+	var lope_hz := fire_hz * TUNE_BEAT_PER_STEP * float(off)
+	var buf := PackedVector2Array()
+	var left := frames
+	while left > 0:
+		if _fire_left <= 0.0:
+			_fire_left += _Opl2.SAMPLE_RATE / fire_hz
+			_missing = off > 0 and randf() < TUNE_MISS_PER_STEP * float(off)
+			var volume := 0x4a if t == 0 else 0x52
+			if off > 0:
+				volume -= roundi(TUNE_LOPE_DEPTH * (0.5 - 0.5 * cos(_lope_phase * TAU)))
+			if _missing:
+				volume = maxi(volume - TUNE_MISS_DROP, 0)
+			_motor_note(_VOICE, (((t + 0x10) * 2) & 0xff) << 8, volume)
+			_motor_note(_VOICE2, t * 0x300 + 0x2000, volume)
+		var n := mini(left, ceili(_fire_left))
+		buf.append_array(_driver.chip.render(n, GAIN))
+		_fire_left -= n
+		left -= n
+		_lope_phase = fmod(_lope_phase + lope_hz * n / _Opl2.SAMPLE_RATE, 1.0)
+	return buf
