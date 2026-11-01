@@ -18,6 +18,10 @@ const _RED := Color(0.62, 0.08, 0.09)
 const _SKIN := Color(0.76, 0.58, 0.44)
 const _HAIR := Color(0.1, 0.07, 0.06)
 const _SHOE := Color(0.14, 0.11, 0.09)
+const _NO_ROOM_LINES: Array[String] = [
+	"You've got no room for all these cars!",
+	"Sell some cars first!",
+]
 
 const _BULB_COLORS: Array[Color] = [
 	Color(1.0, 0.16, 0.18),
@@ -771,7 +775,6 @@ func _build_speech_bubble() -> void:
 	var bubble := _SpeechBubble.instantiate()
 	bubble.visible = false
 	_ui.add_child(bubble)
-	bubble.call("set_line", "You're garage is full, sell some cars first!", Vector2(320, 56), 26)
 	bubble.call("grab_screen")
 	bubble.call("hold_when_behind", true)
 	bubble.connect("pressed", _dismiss_full_garage_line)
@@ -1332,8 +1335,13 @@ func _on_pink_slips_chosen() -> void:
 	_start_race(GameState.RACE_ROAD, 0, true)
 
 
+func _no_room_line() -> String:
+	return _NO_ROOM_LINES[randi() % _NO_ROOM_LINES.size()]
+
+
 func _show_full_garage_line() -> void:
 	_road_stake_root.visible = false
+	_speech.call("set_line", _no_room_line(), Vector2(560, 56), 26)
 	if _driver_seat != null and is_instance_valid(_driver_seat):
 		_speech.call("follow_node", _camera, _driver_seat, Vector3(0.0, 0.42, 0.0))
 	else:

@@ -2,10 +2,15 @@ extends Control
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CarVisual := preload("res://scenes/car_vehicle_visual.tscn")
+const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
 const SECTION_INDEX := "index"
 const SECTION_CARS := "cars"
 const SECTION_PARTS := "parts"
+const _NO_ROOM_LINES: Array[String] = [
+	"You've got no room for all these cars!",
+	"Sell some cars first!",
+]
 
 @onready var _cash: Label = %CashLabel
 @onready var _parts_list: VBoxContainer = %PartsList
@@ -27,6 +32,7 @@ var _section: String = SECTION_INDEX
 var _nav = _MenuNav.new()
 var _preview_car_id: String = ""
 var _preview_pivot: Node3D
+var _no_room: Control
 
 
 func _ready() -> void:
@@ -38,6 +44,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_preview_camera.look_at_from_position(Vector3(5.6, 2.1, 8.2), Vector3(0.0, 0.8, 0.0))
 	GameState.roll_newspaper_colors()
+	_build_no_room_bubble()
 	_show_section(SECTION_INDEX)
 	_refresh()
 
@@ -49,6 +56,11 @@ func _process(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _no_room != null and _no_room.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_no_room_line()
+		_mark_input_handled()
+		return
 	if event.is_action_pressed(&"ui_cancel"):
 		var viewport := get_viewport()
 		if viewport != null:
@@ -185,11 +197,10 @@ func _make_car_card(car: Dictionary) -> Control:
 	box.add_child(_heading(str(car.get("name", "Car"))))
 	box.add_child(_body("%.0f km/h   %.0f hp" % [float(car.get("vmax", 0.0)), float(car.get("hp", 0.0))]))
 	var btn := _ink_button()
+	btn.text = "Buy — $%d" % price
 	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
-		btn.text = "Garage is full"
-		btn.disabled = true
+		btn.pressed.connect(_on_buy_car.bind(car_id))
 	else:
-		btn.text = "Buy — $%d" % price
 		btn.disabled = GameState.money < price
 		btn.pressed.connect(_show_car_preview.bind(car_id))
 		btn.pressed.connect(_on_buy_car.bind(car_id))
@@ -369,6 +380,9 @@ func _on_buy_part(part_id: String) -> void:
 
 
 func _on_buy_car(car_id: String) -> void:
+	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
+		_show_no_room_line()
+		return
 	var err := GameState.buy_or_select_car(car_id)
 	if not err.is_empty():
 		_status.text = err
@@ -422,6 +436,30 @@ func _wire_menu() -> void:
 		items = _nav.collect_buttons(_parts_list)
 		items.append(_back_button)
 	_nav.setup(items)
+
+
+func _build_no_room_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	add_child(bubble)
+	bubble.call("grab_screen")
+	bubble.call("show_centered")
+	bubble.connect("pressed", _dismiss_no_room_line)
+	_no_room = bubble
+
+
+func _show_no_room_line() -> void:
+	if _no_room == null:
+		return
+	_no_room.call("set_line", _NO_ROOM_LINES[randi() % _NO_ROOM_LINES.size()], Vector2(560, 56), 26)
+	_no_room.move_to_front()
+	_no_room.visible = true
+	_no_room.call("place")
+
+
+func _dismiss_no_room_line() -> void:
+	if _no_room != null:
+		_no_room.visible = false
 
 
 func _on_back_pressed() -> void:

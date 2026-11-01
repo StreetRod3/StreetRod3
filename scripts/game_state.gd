@@ -178,6 +178,8 @@ var selected_race_type: String = RACE_DRAG
 var race_stake: int = 0
 ## Road race where the winner takes the loser's car.
 var race_pink_slips: bool = false
+## The next garage visit says the roster is empty. Not saved: only the trip straight back.
+var cars_just_gone: bool = false
 ## The next garage visit rolls the car in from outside. Set by the drive-in. Not saved.
 var drive_into_garage: bool = false
 ## The direct-speed driving model from before the tire simulation.
@@ -695,6 +697,7 @@ func new_game() -> void:
 	selected_race_type = RACE_DRAG
 	race_stake = 0
 	race_pink_slips = false
+	cars_just_gone = false
 	drive_into_garage = false
 	money = 2500
 	_next_car_serial = 1
@@ -848,6 +851,7 @@ func load_game(slot: int) -> bool:
 		selected_race_type = RACE_DRAG
 	race_stake = maxi(int(d.get("race_stake", 0)), 0)
 	race_pink_slips = bool(d.get("race_pink_slips", false))
+	cars_just_gone = false
 	drive_into_garage = false
 	money = int(d.get("money", money))
 	_next_car_serial = maxi(int(d.get("next_car_serial", 1)), 1)
@@ -1975,11 +1979,25 @@ func wreck_active_car() -> void:
 
 
 func _drop_active_car() -> void:
+	var before := owned_car_ids.size()
 	owned_car_ids.erase(current_car_id)
 	car_records.erase(current_car_id)
 	current_car_id = ""
 	car_spec = {}
 	car_name = "No car"
+	if before > 0 and owned_car_ids.is_empty():
+		cars_just_gone = true
+		var tree := get_tree()
+		var scene := tree.current_scene if tree != null else null
+		if scene != null and scene.has_method(&"announce_cars_gone"):
+			scene.call(&"announce_cars_gone")
+
+
+## The garage reads this once, on the visit straight after the last car left.
+func take_cars_just_gone() -> bool:
+	var show := cars_just_gone
+	cars_just_gone = false
+	return show
 
 
 ## Pulls the blown engine out of the active car. It is gone, not a spare; what was
