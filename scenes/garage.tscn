@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://crltef3jr3jdl" path="res://scripts/garage.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://bqj8k2m4n5p6r" path="res://scenes/car_vehicle_visual.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://b243jaowc1hjq" path="res://assets/icon.png" id="3"]
+[ext_resource type="PackedScene" uid="uid://ck08a73hu26r1" path="res://assets/locations/garage/us_jerry_can.glb" id="4"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.2, 0.25, 0.35, 1)
@@ -330,30 +331,8 @@ roughness = 0.4
 [sub_resource type="BoxShape3D" id="SprayShape"]
 size = Vector3(0.18, 0.38, 0.08)
 
-[sub_resource type="StandardMaterial3D" id="FuelCanMat"]
-albedo_color = Color(0.72, 0.12, 0.1, 1)
-metallic = 0.35
-roughness = 0.45
-
-[sub_resource type="BoxMesh" id="FuelCanBodyMesh"]
-material = SubResource("FuelCanMat")
-size = Vector3(0.22, 0.34, 0.14)
-
-[sub_resource type="StandardMaterial3D" id="FuelCanCapMat"]
-albedo_color = Color(0.15, 0.15, 0.16, 1)
-metallic = 0.6
-roughness = 0.35
-
-[sub_resource type="BoxMesh" id="FuelCanCapMesh"]
-material = SubResource("FuelCanCapMat")
-size = Vector3(0.08, 0.05, 0.08)
-
-[sub_resource type="BoxMesh" id="FuelCanHandleMesh"]
-material = SubResource("FuelCanCapMat")
-size = Vector3(0.03, 0.16, 0.03)
-
 [sub_resource type="BoxShape3D" id="FuelCanShape"]
-size = Vector3(0.36, 0.5, 0.28)
+size = Vector3(0.36, 0.528, 0.186)
 
 [sub_resource type="StandardMaterial3D" id="LiftMetalMat"]
 albedo_color = Color(0.18, 0.18, 0.2, 1)
@@ -770,22 +749,12 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.4793353, 0)
 shape = SubResource("SprayShape")
 
 [node name="InteractFuelCan" type="StaticBody3D" parent="." unique_id=1523101691]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3.675, 0.2, 9.187)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.910977, 0, 3.556568)
 
-[node name="Body" type="MeshInstance3D" parent="InteractFuelCan" unique_id=1374319387]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.7640233, -0.111427784, -5.630432)
-mesh = SubResource("FuelCanBodyMesh")
-
-[node name="Cap" type="MeshInstance3D" parent="InteractFuelCan" unique_id=1338908951]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8040233, 0.0785722, -5.630432)
-mesh = SubResource("FuelCanCapMesh")
-
-[node name="Handle" type="MeshInstance3D" parent="InteractFuelCan" unique_id=1993304849]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.6840234, -0.051427796, -5.630432)
-mesh = SubResource("FuelCanHandleMesh")
+[node name="Model" parent="InteractFuelCan" instance=ExtResource("4")]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractFuelCan" unique_id=135487322]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.7640233, -0.111427784, -5.630432)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.264, 0)
 shape = SubResource("FuelCanShape")
 
 [node name="InteractLift" type="StaticBody3D" parent="." unique_id=210050001]

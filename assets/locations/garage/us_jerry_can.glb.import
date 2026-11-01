@@ -3,12 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://injen6252nnj"
-valid=false
+uid="uid://ck08a73hu26r1"
+path="res://.godot/imported/us_jerry_can.glb-f7f4f5cd754c3b058b27219f10e3ae4a.scn"
 
 [deps]
 
 source_file="res://assets/locations/garage/us_jerry_can.glb"
+dest_files=["res://.godot/imported/us_jerry_can.glb-f7f4f5cd754c3b058b27219f10e3ae4a.scn"]
 
 [params]
 
