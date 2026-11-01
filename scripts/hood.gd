@@ -517,6 +517,11 @@ func _on_target(target: Array) -> void:
 	if key == _EngineAssembly.WIRES:
 		_on_wires_pressed()
 		return
+	# A part left free with its bolts out, as an older save can have it, lifts off when
+	# clicked.
+	if not _busy and GameState.hood_part_blocker(key).is_empty() and GameState.hood_bolts(key).max() <= 0:
+		await _settle_now()
+		return
 	_hint.text = _part_hint(key)
 
 
@@ -650,6 +655,21 @@ func _on_wires_pressed() -> void:
 	_engine.rebuild(_EngineAssembly.WIRES)
 	_refresh_part_bodies()
 	_hint.text = "Plug wires on." if GameState.plug_wires else "Plug wires off."
+	_refresh_ui()
+	# The wires held the distributor and heads down; with their bolts already out they
+	# come off now.
+	if not GameState.plug_wires:
+		await _settle_now()
+
+
+## Lifts off whatever is free to come off, keeping the screen busy while it goes.
+func _settle_now() -> void:
+	_busy = true
+	_refresh_ui()
+	await _settle()
+	if not is_instance_valid(self):
+		return
+	_busy = false
 	_refresh_ui()
 
 
