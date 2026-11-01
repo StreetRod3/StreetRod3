@@ -51,3 +51,5 @@ In the garage, T changes the tires and L opens spare parts. Pressing the same ke
 ## 2026-11-02
 
 The fuel can in the garage is the jerry can model. It stands on the floor where the old can stood, and clicking it still drives out to the gas station.
+
+Pressing Esc under the hood, on the transmission, under the car, or on the timing screen crashed the game. Esc now leaves those screens the same way Done does. While a parts list is open, Esc still closes the list and stays on the screen.
