@@ -60,8 +60,17 @@ var _parts_board: Control
 var _parts_title: Label
 var _parts_list: VBoxContainer
 var _parts_status: Label
+var _parts_close: Button
 var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
+var _spares_actions: HBoxContainer
+var _spares_sell: Button
+var _spares_forget: Button
+var _spares_group: ButtonGroup
+## The spare the list is highlighting. A click only changes this; Sell it offers it.
+var _spares_selected: int = -1
+var _spares_kind: String = ""
+var _spares_id: String = ""
 ## The buyer's offer for a spare, over the parts board, and what it is for.
 var _offer_panel: Control
 var _offer_label: Label
@@ -111,7 +120,7 @@ var _tooltip: Label
 const _TOOLTIPS := {
 	&"clock": "Menu (Q)",
 	&"chart": "Parts list",
-	&"spares": "Spare parts",
+	&"spares": "Spare parts (L)",
 	&"newspaper": "Newspaper (N)",
 	&"radio": "Radio (M)",
 	&"doors": "Drive out (D)",
@@ -119,8 +128,8 @@ const _TOOLTIPS := {
 	&"fuel": "Gas station",
 	&"hood": "Under the hood (H)",
 	&"calendar": "Calendar (X)",
-	&"lift": "Wheels (L)",
-	&"transmission": "Transmission (T)",
+	&"lift": "Wheels (T)",
+	&"transmission": "Transmission (A)",
 	&"creeper": "Under the car (U)",
 }
 const _TOOLTIP_CARS := "Cars (C)"
@@ -534,6 +543,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			viewport.set_input_as_handled()
 		return
 
+	if _spares_list_open() and _try_spares_shortcut(event):
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+
 	if _nav.handle_event(self, event):
 		var viewport := get_viewport()
 		if viewport != null:
@@ -697,14 +712,19 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_stats_panel.visible = false
 			else:
 				_show_stats()
-		KEY_L:
+		KEY_T:
 			if _parts_board != null and _parts_board.visible and _parts_show_wheels:
 				_hide_parts_board()
 			else:
 				_show_wheel_board()
+		KEY_L:
+			if _parts_board != null and _parts_board.visible and _parts_show_spares:
+				_hide_parts_board()
+			else:
+				_show_spares_board()
 		KEY_H:
 			_handle_interact(&"hood")
-		KEY_T:
+		KEY_A:
 			_handle_interact(&"transmission")
 		KEY_U:
 			_handle_interact(&"creeper")
@@ -1173,10 +1193,21 @@ func _build_parts_board() -> void:
 	_parts_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_parts_list.add_theme_constant_override("separation", 10)
 	scroll.add_child(_parts_list)
-	var close := Button.new()
-	close.text = "Close"
-	close.pressed.connect(_hide_parts_board)
-	box.add_child(close)
+	_spares_actions = HBoxContainer.new()
+	_spares_actions.add_theme_constant_override(&"separation", 8)
+	_spares_actions.visible = false
+	_spares_sell = _car_list_action("Sell it", _on_spares_sell)
+	_spares_forget = _car_list_action("Forget it", _on_spares_forget)
+	_mark_switch_button(_spares_sell)
+	_spares_sell.tooltip_text = "S or Enter"
+	_spares_forget.tooltip_text = "Esc"
+	_spares_actions.add_child(_spares_sell)
+	_spares_actions.add_child(_spares_forget)
+	box.add_child(_spares_actions)
+	_parts_close = Button.new()
+	_parts_close.text = "Close"
+	_parts_close.pressed.connect(_hide_parts_board)
+	box.add_child(_parts_close)
 	_build_offer_panel(root)
 	$GarageUI.add_child(root)
 	_parts_board = root
@@ -1250,12 +1281,14 @@ func _on_offer_accepted() -> void:
 	_parts_status.text = err if not err.is_empty() else "Sold the %s for $%d." % [name, _offer_amount]
 	_refresh_hud()
 	_sync_menu_nav()
+	_focus_spares_sell()
 
 
 func _on_offer_rejected() -> void:
 	_offer_panel.visible = false
 	_parts_status.text = "You turned down $%d. Sell again for another offer." % _offer_amount
 	_sync_menu_nav()
+	_focus_spares_sell()
 
 
 func _show_parts_board() -> void:
@@ -1282,6 +1315,7 @@ func _show_spares_board() -> void:
 	_rebuild_parts_board()
 	_parts_board.visible = true
 	_sync_menu_nav()
+	_focus_spares_sell()
 
 
 func _show_wheel_board() -> void:
@@ -1307,13 +1341,21 @@ func _hide_parts_board() -> void:
 
 func _rebuild_parts_board() -> void:
 	for child in _parts_list.get_children():
-		child.queue_free()
+		_parts_list.remove_child(child)
+		child.free()
+	var spares := false
 	if _parts_show_wheels:
 		_rebuild_wheels_list()
-		return
-	if _parts_show_spares:
+	elif _parts_show_spares:
 		_rebuild_spares_list()
-		return
+		spares = true
+	else:
+		_rebuild_fitted_list()
+	_parts_close.visible = not spares
+	_spares_actions.visible = spares
+
+
+func _rebuild_fitted_list() -> void:
 	_parts_title.text = "On the car"
 	var engine := GameState.get_equipped_engine()
 	var box: Dictionary = GameState.get_equipped_gearbox()
@@ -1368,20 +1410,143 @@ func _rebuild_wheels_list() -> void:
 func _rebuild_spares_list() -> void:
 	_parts_title.text = "Spare parts"
 	_parts_status.text = "Bought, not on any car."
-	var count := 0
-	var lists := [
-		[GameState.ENGINES, "engine", GameState.equipped_engine_id],
-		[GameState.GEARBOXES, "transmission", GameState.equipped_gearbox_id],
-		[GameState.WHEELS, "wheels", GameState.equipped_wheel_id],
-		[GameState.PARTS, "part", ""],
+	_spares_group = ButtonGroup.new()
+	var index := 0
+	var catalogs: Array = [
+		[GameState.ENGINES, "engine"],
+		[GameState.GEARBOXES, "transmission"],
+		[GameState.WHEELS, "wheels"],
+		[GameState.PARTS, "part"],
 	]
-	for list in lists:
-		for item in list[0]:
-			if GameState.free_spare_count(list[1], str(item.get("id", ""))) > 0:
-				_parts_list.add_child(_parts_row(item, list[1], list[2]))
-				count += 1
-	if count == 0:
+	for catalog in catalogs:
+		var kind := str(catalog[1])
+		for item in catalog[0]:
+			var part: Dictionary = item
+			if GameState.free_spare_count(kind, str(part.get("id", ""))) <= 0:
+				continue
+			_parts_list.add_child(_spare_row(part, kind, index))
+			index += 1
+	if index == 0:
 		_parts_status.text = "The folder is empty. Parts you buy land here until you fit them."
+		_spares_selected = -1
+		_spares_kind = ""
+		_spares_id = ""
+		_spares_sell.disabled = true
+		return
+	var pick := 0
+	for i in _parts_list.get_child_count():
+		var row := _parts_list.get_child(i) as Button
+		if row == null:
+			continue
+		if str(row.get_meta(&"spare_kind")) == _spares_kind and str(row.get_meta(&"spare_id")) == _spares_id:
+			pick = i
+			break
+	var chosen := _parts_list.get_child(pick) as Button
+	if chosen != null:
+		chosen.set_pressed_no_signal(true)
+	_remember_spare(pick)
+	_spares_sell.disabled = false
+
+
+func _spare_row(item: Dictionary, kind: String, index: int) -> Button:
+	var part_id := str(item.get("id", ""))
+	var btn := Button.new()
+	btn.toggle_mode = true
+	btn.button_group = _spares_group
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 36)
+	var label := _parts_row_text(item, kind)
+	var conditions: Array[String] = []
+	for c in GameState.spare_condition_list(kind, part_id):
+		conditions.append("%d%%" % roundi(c * 100.0))
+	if not conditions.is_empty():
+		label += "  · " + ", ".join(conditions)
+	btn.text = "%d.  %s" % [index + 1, label]
+	btn.set_meta(&"spare_kind", kind)
+	btn.set_meta(&"spare_id", part_id)
+	btn.toggled.connect(_on_spare_row_toggled.bind(index))
+	return btn
+
+
+func _on_spare_row_toggled(on: bool, index: int) -> void:
+	if not on:
+		return
+	_remember_spare(index)
+	_parts_status.text = "Bought, not on any car."
+
+
+func _remember_spare(index: int) -> void:
+	_spares_selected = index
+	var btn := _parts_list.get_child(index) as Button
+	if btn == null:
+		_spares_kind = ""
+		_spares_id = ""
+		return
+	_spares_kind = str(btn.get_meta(&"spare_kind"))
+	_spares_id = str(btn.get_meta(&"spare_id"))
+
+
+func _on_spares_sell() -> void:
+	if _spares_selected < 0 or _spares_selected >= _parts_list.get_child_count():
+		_parts_status.text = "Pick a part first."
+		return
+	var btn := _parts_list.get_child(_spares_selected) as Button
+	if btn == null:
+		return
+	_on_sell_part(str(btn.get_meta(&"spare_kind")), str(btn.get_meta(&"spare_id")))
+
+
+func _on_spares_forget() -> void:
+	_hide_parts_board()
+
+
+func _spares_list_open() -> bool:
+	if _parts_board == null or not _parts_board.visible or not _parts_show_spares:
+		return false
+	if _offer_panel != null and _offer_panel.visible:
+		return false
+	return true
+
+
+func _focus_spares_sell() -> void:
+	if not _spares_list_open():
+		return
+	if _spares_sell != null and not _spares_sell.disabled:
+		_spares_sell.grab_focus()
+	elif _spares_forget != null:
+		_spares_forget.grab_focus()
+
+
+## S sells. 1–9 pick those parts, and 0 picks the 10th.
+func _try_spares_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	if _gui_has_text_focus():
+		return false
+	var index := _car_list_number_index(key.keycode)
+	if index >= 0:
+		_select_spare_index(index)
+		return true
+	if key.keycode != KEY_S:
+		return false
+	_on_spares_sell()
+	return true
+
+
+func _select_spare_index(index: int) -> void:
+	if index < 0 or index >= _parts_list.get_child_count():
+		return
+	var btn := _parts_list.get_child(index) as Button
+	if btn == null:
+		return
+	btn.button_pressed = true
+	btn.grab_focus()
 
 
 ## A fitted part's condition, as it reads after its name.
@@ -1413,26 +1578,7 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 	var btn := Button.new()
 	var owned := _parts_owned(kind, part_id)
 	var fitted := part_id == equipped_id or (kind == "part" and GameState.is_part_equipped(part_id))
-	if _parts_show_spares:
-		# Each loose copy's condition, and a buyer for the most worn one.
-		var conditions: Array[String] = []
-		for c in GameState.spare_condition_list(kind, part_id):
-			conditions.append("%d%%" % roundi(c * 100.0))
-		if not conditions.is_empty():
-			label.text += "  · " + ", ".join(conditions)
-		var trouble := GameState.sell_trouble(kind, part_id)
-		var sell := Button.new()
-		sell.text = "Sell"
-		sell.disabled = not trouble.is_empty()
-		sell.tooltip_text = trouble
-		sell.pressed.connect(_on_sell_part.bind(kind, part_id))
-		row.add_child(sell)
-	if fitted and _parts_show_spares:
-		# A spare copy of what is on the car: there is nothing to swap it for.
-		btn.text = "Fit"
-		btn.disabled = true
-		btn.tooltip_text = "One like it is on the car."
-	elif fitted:
+	if fitted:
 		btn.text = "On the car"
 		btn.disabled = true
 	elif owned:
@@ -1790,15 +1936,20 @@ func _on_car_list_switch() -> void:
 
 
 func _input(event: InputEvent) -> void:
-	if _car_list == null or not _car_list.visible or not _is_enter_key(event):
+	if not _is_enter_key(event):
 		return
-	if _here_bubble != null and _here_bubble.visible:
+	if _car_list != null and _car_list.visible:
+		if _here_bubble != null and _here_bubble.visible:
+			get_viewport().set_input_as_handled()
+			return
+		if _bay_busy or _departing:
+			return
+		_on_car_list_switch()
 		get_viewport().set_input_as_handled()
 		return
-	if _bay_busy or _departing:
-		return
-	_on_car_list_switch()
-	get_viewport().set_input_as_handled()
+	if _spares_list_open():
+		_on_spares_sell()
+		get_viewport().set_input_as_handled()
 
 
 func _is_enter_key(event: InputEvent) -> bool:
