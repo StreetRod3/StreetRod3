@@ -195,7 +195,10 @@ func _handle_key(key: InputEventKey) -> void:
 			if _picker.visible:
 				_close_picker()
 			else:
+				# Mark the key first. Leaving drops this scene, and the viewport is gone after that.
+				get_viewport().set_input_as_handled()
 				_on_done_pressed()
+				return
 		KEY_P:
 			if not _picker.visible:
 				_on_parts_pressed()
@@ -204,7 +207,9 @@ func _handle_key(key: InputEventKey) -> void:
 				_on_wires_pressed()
 		KEY_T:
 			if not _picker.visible:
+				get_viewport().set_input_as_handled()
 				_on_tune_pressed()
+				return
 		_:
 			handled = false
 	if handled:
