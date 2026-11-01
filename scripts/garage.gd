@@ -30,6 +30,9 @@ const _SaveSlots := preload("res://scripts/save_slots.gd")
 @onready var _lift_arm: Node3D = $InteractLift/LiftArm
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
 @onready var _door_right: Node3D = $InteractDoors/DoorRight
+@onready var _clock_hour: Node3D = $InteractClock/Face/HourHand
+@onready var _clock_minute: Node3D = $InteractClock/Face/MinuteHand
+@onready var _clock_second: Node3D = $InteractClock/Face/SecondHand
 
 var _orbiting: bool = false
 var _yaw: float = -PI * 0.5
@@ -90,6 +93,10 @@ var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
 var _creeper: StaticBody3D
 var _loss_bubble: Control
+## Shown when the player tries to leave and the engine will not run.
+var _stall_bubble: Control
+## Shown once, on the garage visit straight after the last car is sold or lost.
+var _gone_bubble: Control
 var _tooltip: Label
 
 const _TOOLTIPS := {
@@ -199,8 +206,12 @@ func _ready() -> void:
 	else:
 		_car_pivot.visible = false
 	_build_loss_bubble()
+	_build_stall_bubble()
+	_build_gone_bubble()
 	_build_tooltip()
-	if GameState.is_ruined():
+	if GameState.cars_just_gone:
+		announce_cars_gone()
+	elif GameState.is_ruined():
 		_loss_bubble.visible = true
 	_cam_distance_target = _cam_distance
 	_update_camera_transform()
@@ -248,12 +259,60 @@ func _dismiss_loss_bubble() -> void:
 		_loss_bubble.visible = false
 
 
+func _build_stall_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "Your car's not running, speedy!", Vector2(520, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_stall_bubble)
+	_stall_bubble = bubble
+
+
+func _show_stall_bubble() -> void:
+	if _stall_bubble != null:
+		_stall_bubble.visible = true
+
+
+func _dismiss_stall_bubble() -> void:
+	if _stall_bubble != null:
+		_stall_bubble.visible = false
+
+
+func _build_gone_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "All cars gone!", Vector2(280, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_gone_bubble)
+	_gone_bubble = bubble
+
+
+## The last car was just sold or lost, and this is the garage they came back to.
+func announce_cars_gone() -> void:
+	if not GameState.take_cars_just_gone():
+		return
+	if _gone_bubble != null:
+		_gone_bubble.visible = true
+
+
+func _dismiss_gone_bubble() -> void:
+	if _gone_bubble != null:
+		_gone_bubble.visible = false
+	if GameState.is_ruined() and _loss_bubble != null:
+		_loss_bubble.visible = true
+
+
 func _leave_after_loss() -> void:
 	GameState.current_scene_path = GameState.SCENE_MAIN_MENU
 	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
 
 
 func _process(_delta: float) -> void:
+	_update_clock_hands()
 	if not _departing and not _swapping_car:
 		_camera_pivot.global_position = _car_pivot.global_position
 
@@ -383,6 +442,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _loss_bubble != null and _loss_bubble.visible and event.is_action_pressed(&"ui_cancel"):
 		_dismiss_loss_bubble()
+		get_viewport().set_input_as_handled()
+		return
+	if _gone_bubble != null and _gone_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_gone_bubble()
+		get_viewport().set_input_as_handled()
+		return
+	if _stall_bubble != null and _stall_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_stall_bubble()
 		get_viewport().set_input_as_handled()
 		return
 	if _bay_busy:
@@ -774,8 +843,14 @@ func _open_under_car() -> void:
 
 
 func _start_drive_out(destination: String) -> void:
-	if _departing or _bay_busy or not GameState.can_drive():
+	if _departing or _bay_busy:
 		return
+	if not GameState.engine_runs():
+		_show_stall_bubble()
+		return
+	if not GameState.can_drive():
+		return
+	_dismiss_stall_bubble()
 	if _door_left == null or _door_right == null:
 		get_tree().change_scene_to_file(destination)
 		return
@@ -1664,6 +1739,17 @@ func _show_stats() -> void:
 	_stats_label.text = t
 	_stats_panel.visible = true
 	_sync_menu_nav()
+
+
+## Clockwise on the dial is negative rotation about the face's Z axis.
+func _update_clock_hands() -> void:
+	var now := Time.get_time_dict_from_system()
+	var second := fposmod(Time.get_unix_time_from_system(), 60.0)
+	var minute := float(now.get("minute", 0)) + second / 60.0
+	var hour := fposmod(float(now.get("hour", 0)), 12.0) + minute / 60.0
+	_clock_hour.rotation.z = -hour * TAU / 12.0
+	_clock_minute.rotation.z = -minute * TAU / 60.0
+	_clock_second.rotation.z = -second * TAU / 60.0
 
 
 func _on_clock_save_pressed() -> void:

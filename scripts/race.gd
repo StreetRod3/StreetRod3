@@ -341,7 +341,7 @@ func _show_wreck() -> void:
 	GameState.race_pink_slips = false
 	var payout := GameState.apply_race_stake(false)
 	GameState.wreck_active_car()
-	_show_bubble("You wrecked the car!" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+	_show_bubble("Lucky you weren't killed, 'cause the car" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 
 
 func _show_result(player_won: bool) -> void:

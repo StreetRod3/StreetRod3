@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://crltef3jr3jdl" path="res://scripts/garage.gd" id="1"]
 [ext_resource type="PackedScene" uid="uid://bqj8k2m4n5p6r" path="res://scenes/car_vehicle_visual.tscn" id="2"]
+[ext_resource type="Texture2D" uid="uid://b243jaowc1hjq" path="res://assets/icon.png" id="3"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.2, 0.25, 0.35, 1)
@@ -36,11 +37,49 @@ height = 0.15
 radial_segments = 24
 
 [sub_resource type="StandardMaterial3D" id="ClockMat"]
-albedo_color = Color(0.9, 0.85, 0.65, 1)
+shading_mode = 0
+albedo_color = Color(1, 1, 1, 1)
 
 [sub_resource type="CylinderShape3D" id="ClockShape"]
 height = 0.2
 radius = 0.6
+
+[sub_resource type="QuadMesh" id="ClockFaceMesh"]
+size = Vector2(1.08, 1.08)
+orientation = 2
+
+[sub_resource type="StandardMaterial3D" id="ClockFaceMat"]
+transparency = 1
+shading_mode = 0
+albedo_texture = ExtResource("3")
+texture_filter = 1
+
+[sub_resource type="BoxMesh" id="ClockHourMesh"]
+size = Vector3(0.055, 0.32, 0.014)
+
+[sub_resource type="StandardMaterial3D" id="ClockHandMat"]
+shading_mode = 0
+albedo_color = Color(0.05, 0.045, 0.04, 1)
+
+[sub_resource type="BoxMesh" id="ClockMinuteMesh"]
+size = Vector3(0.034, 0.48, 0.012)
+
+[sub_resource type="BoxMesh" id="ClockSecondMesh"]
+size = Vector3(0.012, 0.54, 0.008)
+
+[sub_resource type="StandardMaterial3D" id="ClockSecondMat"]
+shading_mode = 0
+albedo_color = Color(0.75, 0.12, 0.1, 1)
+
+[sub_resource type="SphereMesh" id="ClockHubMesh"]
+radius = 0.042
+height = 0.084
+radial_segments = 16
+rings = 8
+
+[sub_resource type="StandardMaterial3D" id="ClockHubMat"]
+shading_mode = 0
+albedo_color = Color(0.72, 0.62, 0.4, 1)
 
 [sub_resource type="BoxMesh" id="DeskMesh"]
 size = Vector3(2.2, 0.9, 1.1)
@@ -396,6 +435,37 @@ surface_material_override/0 = SubResource("ClockMat")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractClock" unique_id=1350643422]
 transform = Transform3D(-4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0, 1, 0, 0, 0)
 shape = SubResource("ClockShape")
+
+[node name="Face" type="MeshInstance3D" parent="InteractClock"]
+transform = Transform3D(0, 0, -1, 0, 1, 0, 1, 0, 0, -0.086, 0, 0)
+mesh = SubResource("ClockFaceMesh")
+surface_material_override/0 = SubResource("ClockFaceMat")
+
+[node name="HourHand" type="Node3D" parent="InteractClock/Face"]
+
+[node name="Mesh" type="MeshInstance3D" parent="InteractClock/Face/HourHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.1, 0.012)
+mesh = SubResource("ClockHourMesh")
+surface_material_override/0 = SubResource("ClockHandMat")
+
+[node name="MinuteHand" type="Node3D" parent="InteractClock/Face"]
+
+[node name="Mesh" type="MeshInstance3D" parent="InteractClock/Face/MinuteHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.17, 0.022)
+mesh = SubResource("ClockMinuteMesh")
+surface_material_override/0 = SubResource("ClockHandMat")
+
+[node name="SecondHand" type="Node3D" parent="InteractClock/Face"]
+
+[node name="Mesh" type="MeshInstance3D" parent="InteractClock/Face/SecondHand"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.19, 0.032)
+mesh = SubResource("ClockSecondMesh")
+surface_material_override/0 = SubResource("ClockSecondMat")
+
+[node name="Hub" type="MeshInstance3D" parent="InteractClock/Face"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.044)
+mesh = SubResource("ClockHubMesh")
+surface_material_override/0 = SubResource("ClockHubMat")
 
 [node name="InteractDesk" type="StaticBody3D" parent="." unique_id=691586932]
 transform = Transform3D(0, 0, 1, 0, 1, 0, -1, 0, 0, 4.0, 0.45, 2.2)
