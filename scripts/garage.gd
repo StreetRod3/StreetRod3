@@ -1234,28 +1234,19 @@ func _rebuild_wheels_list() -> void:
 
 func _rebuild_spares_list() -> void:
 	_parts_title.text = "Spare parts"
-	_parts_status.text = "Bought, not on the car."
+	_parts_status.text = "Bought, not on any car."
 	var count := 0
-	for engine in GameState.ENGINES:
-		var engine_id := str(engine.get("id", ""))
-		if GameState.owns_engine(engine_id) and engine_id != GameState.equipped_engine_id:
-			_parts_list.add_child(_parts_row(engine, "engine", GameState.equipped_engine_id))
-			count += 1
-	for box in GameState.GEARBOXES:
-		var box_id := str(box.get("id", ""))
-		if GameState.owns_gearbox(box_id) and box_id != GameState.equipped_gearbox_id:
-			_parts_list.add_child(_parts_row(box, "transmission", GameState.equipped_gearbox_id))
-			count += 1
-	for wheel in GameState.WHEELS:
-		var wheel_id := str(wheel.get("id", ""))
-		if GameState.owns_wheel(wheel_id) and wheel_id != GameState.equipped_wheel_id:
-			_parts_list.add_child(_parts_row(wheel, "wheels", GameState.equipped_wheel_id))
-			count += 1
-	for part in GameState.PARTS:
-		var part_id := str(part.get("id", ""))
-		if GameState.spare_count(part_id) > 0:
-			_parts_list.add_child(_parts_row(part, "part", ""))
-			count += 1
+	var lists := [
+		[GameState.ENGINES, "engine", GameState.equipped_engine_id],
+		[GameState.GEARBOXES, "transmission", GameState.equipped_gearbox_id],
+		[GameState.WHEELS, "wheels", GameState.equipped_wheel_id],
+		[GameState.PARTS, "part", ""],
+	]
+	for list in lists:
+		for item in list[0]:
+			if GameState.free_spare_count(list[1], str(item.get("id", ""))) > 0:
+				_parts_list.add_child(_parts_row(item, list[1], list[2]))
+				count += 1
 	if count == 0:
 		_parts_status.text = "The folder is empty. Parts you buy land here until you fit them."
 
@@ -1289,7 +1280,7 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 	var btn := Button.new()
 	var owned := _parts_owned(kind, part_id)
 	var fitted := part_id == equipped_id or (kind == "part" and GameState.is_part_equipped(part_id))
-	if _parts_show_spares and owned and not fitted:
+	if _parts_show_spares:
 		# Each loose copy's condition, and a buyer for the most worn one.
 		var conditions: Array[String] = []
 		for c in GameState.spare_condition_list(kind, part_id):
@@ -1303,7 +1294,12 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 		sell.tooltip_text = trouble
 		sell.pressed.connect(_on_sell_part.bind(kind, part_id))
 		row.add_child(sell)
-	if fitted:
+	if fitted and _parts_show_spares:
+		# A spare copy of what is on the car: there is nothing to swap it for.
+		btn.text = "Fit"
+		btn.disabled = true
+		btn.tooltip_text = "One like it is on the car."
+	elif fitted:
 		btn.text = "On the car"
 		btn.disabled = true
 	elif owned:

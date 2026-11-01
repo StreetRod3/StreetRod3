@@ -493,7 +493,7 @@ func fit_hood_part(part_id: String, slot: String) -> String:
 	if not owns_part(part_id):
 		return "That part is not in spare parts."
 	if spare_count(part_id) <= 0:
-		return "That part is already on the car."
+		return "That part is on a car, not in spare parts."
 	slot_part_ids[slot] = part_id
 	engine_bolts[slot] = _loose_bolts(slot)
 	_take_mount_from_other_cars("slot", part_id)
@@ -508,7 +508,7 @@ func fit_engine(engine_id: String) -> String:
 		return "There is no car in the garage."
 	if has_engine():
 		return "Take the old engine out first."
-	if not owns_engine(engine_id) or listing_by_id(ENGINES, engine_id).is_empty():
+	if free_spare_count("engine", engine_id) <= 0 or listing_by_id(ENGINES, engine_id).is_empty():
 		return "That engine is not in spare parts."
 	equipped_engine_id = engine_id
 	engine_bolts = {HOOD_ENGINE: _loose_bolts(HOOD_ENGINE)}
@@ -553,12 +553,12 @@ func set_plug_wires(on: bool) -> String:
 	return ""
 
 
-## Spare engines: owned and not in the active car.
+## Spare engines: owned and in no car.
 func spare_engines() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for engine in ENGINES:
 		var engine_id := str(engine.get("id", ""))
-		if owns_engine(engine_id) and engine_id != equipped_engine_id:
+		if free_spare_count("engine", engine_id) > 0:
 			out.append(engine)
 	return out
 
@@ -1283,12 +1283,9 @@ func part_count(part_id: String) -> int:
 	return owned_part_ids.count(part_id)
 
 
-## Copies of a part that are owned but not on the active car.
+## Copies of a part that are owned and on no car.
 func spare_count(part_id: String) -> int:
-	if not owns_part(part_id):
-		return 0
-	var fitted := slot_part_ids.values().count(part_id) + equipped_part_ids.count(part_id)
-	return part_count(part_id) - fitted
+	return free_spare_count("part", part_id)
 
 
 # --- Condition and selling --------------------------------------------------------
@@ -1613,12 +1610,12 @@ func buy_gearbox(gearbox_id: String) -> String:
 	return ""
 
 
-## Owned gearboxes that are not in the active car, in register order.
+## Owned gearboxes that are in no car, in register order.
 func spare_gearboxes() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for box in GEARBOXES:
 		var box_id := str(box.get("id", ""))
-		if owns_gearbox(box_id) and box_id != equipped_gearbox_id:
+		if free_spare_count("transmission", box_id) > 0:
 			out.append(box)
 	return out
 
@@ -1662,7 +1659,7 @@ func fit_gearbox(gearbox_id: String) -> String:
 		return "There is no car in the garage."
 	if has_gearbox():
 		return "Take the old transmission out first."
-	if not owns_gearbox(gearbox_id) or listing_by_id(GEARBOXES, gearbox_id).is_empty():
+	if free_spare_count("transmission", gearbox_id) <= 0 or listing_by_id(GEARBOXES, gearbox_id).is_empty():
 		return "That gearbox is not in spare parts."
 	equipped_gearbox_id = gearbox_id
 	_take_mount_from_other_cars("transmission", gearbox_id)
@@ -1791,7 +1788,7 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 		return "Only a dual exhaust has a second muffler."
 	var part := listing_by_id(PARTS, part_id)
 	if spare_count(part_id) <= 0:
-		return "That part is already on the car."
+		return "That part is on a car, not in spare parts."
 	slot_part_ids[slot] = part_id
 	if slot == SLOT_EXHAUST and not bool(part.get("dual", false)):
 		slot_part_ids[SLOT_MUFFLER_LEFT] = NO_PART_ID
