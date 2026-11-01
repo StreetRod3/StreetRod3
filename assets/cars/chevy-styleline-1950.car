@@ -1,0 +1,50 @@
+{
+  "id": "chevy-styleline-1950",
+  "name": "Chevy Styleline 1950",
+  "model": {
+    "path": "res://assets/cars/chevy-styleline-1950.glb",
+    "position": [0.0, 0.24, 0.0],
+    "height": 1.46,
+    "ground_clearance": 0.24
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.72, 0.34, 1.848],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.72, 0.34, 1.848],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.745, 0.34, -1.073],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.745, 0.34, -1.073],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "v8-265",
+    "transmission": "gb_man3",
+    "wheels": "wheel-c1"
+  },
+  "driver": {
+    "position": [-0.4, 1.25, 0.2]
+  },
+  "chassis": {
+    "mass": 1430,
+    "wheelbase": 2.921,
+    "cg_height": 0.55,
+    "front_axle_fraction": 0.47,
+    "max_steer_deg": 30
+  }
+}

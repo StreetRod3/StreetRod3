@@ -48,6 +48,8 @@ The spare parts folder no longer puts Sell and Fit on each part. A click or a nu
 
 In the garage, T changes the tires and L opens spare parts. Pressing the same key again closes that list. A opens the transmission. Inside the car list, L still sells the highlighted car.
 
+The newspaper sells a 1950 Chevy Styleline for $900, a voxel model made in Goxel. It is built to the real car's size (5.02 m long, 1.46 m from the bottom of the body to the roof, 2.92 m wheelbase, about 1,430 kg) and comes with the 265 V8, the 3-speed manual, and the C1 steel wheels. The body takes the car's paint, while the chrome, glass, interior, and lights keep their own colors. The model has no wheels of its own, so it uses the game's wheels, with the rear ones tucked behind the fender skirts. Car files can now give the body a `ground_clearance` in the model block: when a scene snaps the car to the floor, the body's lowest point stays that far above it instead of resting on the floor. The other cars leave it out and sit as before.
+
 ## 2026-11-02
 
 The fuel can in the garage is the jerry can model. It stands on the floor where the old can stood, and clicking it still drives out to the gas station.

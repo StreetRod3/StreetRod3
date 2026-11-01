@@ -420,8 +420,15 @@ func align_wheels_to_floor(floor_mesh_instance: MeshInstance3D) -> void:
 	var wheel_names := ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]
 	for wname in wheel_names:
 		_snap_node_bottom_to_y(get_node_or_null(wname) as Node3D, floor_top_y)
-	_snap_node_bottom_to_y(get_node_or_null("CarBody") as Node3D, floor_top_y)
+	_snap_node_bottom_to_y(get_node_or_null("CarBody") as Node3D, floor_top_y + _ground_clearance())
 	fit_parent_collision()
+
+
+func _ground_clearance() -> float:
+	var model: Variant = _active_spec().get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return 0.0
+	return float((model as Dictionary).get("ground_clearance", 0.0))
 
 
 func _snap_node_bottom_to_y(node: Node3D, floor_top_y: float) -> void:
