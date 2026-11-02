@@ -29,3 +29,32 @@ To reproduce:
 4. The first car in the list is in the bay.
 
 Cause: `_load_saved_cars()` in `scripts/game_state.gd` sets `current_car_id` to `owned_car_ids[0]` when the saved id is not an owned car, and an empty id counts as not owned.
+
+## A car's stock parts are worth more than the car
+
+Stripping a car and selling its parts pays more than the car costs, so buying cars to strip them is a source of free money. The parts' prices are placeholders, which is where this comes from.
+
+| Car | Price in the paper | Its stock parts at the paper's prices | Those parts at the lowest offers (half price) |
+| --- | --- | --- | --- |
+| Corvette 1956 | $1350 | $2925 | $1462 |
+| Fairlane 500 | $1050 | $2225 | $1112 |
+| Ford Coupe 1932 | $1250 | $3085 | $1542 |
+| Corvette 1962 | $1500 | $2925 | $1462 |
+
+A buyer offers between half and nine tenths of a part's price. At the lowest offers that is already a profit on every car here but the 1962 Corvette, and offers lean higher the better a part's condition. The bare car can then be sold as well: a car is never worth less than a tenth of its price in the paper.
+
+Possible fix: set real part prices, so that the stock parts together come to less than the car.
+
+## A car lost at pink slips leaves its parts behind
+
+When a car is lost at pink slips, the winner drives off in it, but copies of its engine and parts stay behind as free spares. Losing a one-car garage this way leaves a spare engine, gearbox, wheels, and every other part.
+
+To reproduce:
+
+1. Race for pink slips and lose.
+2. Open the spare parts folder.
+3. The lost car's engine and parts are listed there.
+
+Cause: `_lose_raced_car()` in `scripts/game_state.gd` goes through `_drop_active_car()`, which removes the car but not the owned copies of what was on it.
+
+This one needs a decision. A wrecked car goes the same way on purpose, because a wreck gets stripped for parts, but that reason does not cover a car that was handed over whole. If the parts should go with the car, `sell_car()` already shows how to remove them and leave real spares alone.
