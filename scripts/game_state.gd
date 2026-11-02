@@ -1024,38 +1024,23 @@ func note_race_started() -> void:
 			_fit_rival_engine(opp)
 
 
-## Puts the engine the car came with into a rival's car, with stock parts on it. What was
-## not on the old engine stays as it is, and counts the way it does on the player's car.
+## Puts the engine the car came with into a rival's car. Everything else on the car stays
+## as it is, the parts that were on the blown engine going on this one.
 func _fit_rival_engine(opp: Dictionary) -> void:
 	var stock := _opponent_stock_build(str(opp.get("car_file", "")))
-	var hood := _rival_hood_parts({})
-	var hp := float(stock["hp"])
-	var vmax := float(stock["vmax"])
-	var accel := 1.0
-	var top_speed := 1.0
+	var hood := opponent_hood_parts(opp)
+	var slots := hood
 	var taken: Variant = opp.get("taken_car", null)
 	if typeof(taken) == TYPE_DICTIONARY:
-		var rec: Dictionary = taken
-		var slots: Dictionary = rec["slot_parts"]
-		slots.merge(hood, true)
-		slots[SLOT_MANIFOLD] = str(STOCK_SLOT_PARTS[SLOT_MANIFOLD])
-		rec["engine_id"] = str(stock["engine"])
-		rec["engine_bolts"] = {}
-		rec["plug_wires"] = true
-		var muffler_share := 0.5 if str(slots[SLOT_MUFFLER_LEFT]) != NO_PART_ID else 1.0
-		for slot in [SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT]:
-			var part := listing_by_id(PARTS, str(slots[slot]))
-			var share := 1.0 if slot == SLOT_EXHAUST else muffler_share
-			hp += float(part.get("hp", 0.0)) * share
-			vmax += float(part.get("vmax", 0.0)) * share
-		var diff := listing_by_id(PARTS, str(slots[SLOT_DIFFERENTIAL]))
-		accel = float(diff.get("accel", 1.0))
-		top_speed = float(diff.get("top_speed", 1.0))
+		(taken as Dictionary)["engine_id"] = str(stock["engine"])
+		slots = (taken as Dictionary)["slot_parts"]
+	var build := {"hp": float(stock["hp"]), "vmax": float(stock["vmax"])}
+	_add_rival_parts(build, slots)
+	var diff := listing_by_id(PARTS, str(slots.get(SLOT_DIFFERENTIAL, NO_PART_ID)))
 	opp["engine"] = str(stock["engine"])
-	opp["hood_parts"] = hood
-	opp["engine_hp"] = hp
-	opp["hp"] = hp * accel
-	opp["vmax"] = vmax * top_speed
+	opp["engine_hp"] = build["hp"]
+	opp["hp"] = float(build["hp"]) * float(diff.get("accel", 1.0))
+	opp["vmax"] = float(build["vmax"]) * float(diff.get("top_speed", 1.0))
 	opp.erase("engine_wait")
 
 
@@ -1140,17 +1125,32 @@ func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
 		build["hp"] = float(engine.get("hp", 280.0))
 		build["vmax"] = float(engine.get("vmax", 220.0))
 	var hood := _rival_hood_parts(row.get("parts", {}))
-	var carb_share := 1.0 / float(clampi(int(listing_by_id(PARTS, str(hood[SLOT_INTAKE])).get("carbs", 1)), 1, CARB_SLOTS.size()))
-	for slot in hood:
-		var part := listing_by_id(PARTS, str(hood[slot]))
-		var share := carb_share if CARB_SLOTS.has(slot) else 1.0
-		build["hp"] += float(part.get("hp", 0.0)) * share
-		build["vmax"] += float(part.get("vmax", 0.0)) * share
+	_add_rival_parts(build, hood)
 	build["engine_hp"] = build["hp"]
 	build["hood_parts"] = hood
 	opp.erase("taken_car")
 	build["gearbox"] = str(row.get("gearbox", build["gearbox"]))
 	opp.merge(build, true)
+
+
+## Adds what the parts in `slots` give to a rival's `build`. Each muffler of a dual exhaust
+## does half the work, and each carburetor of a multi-carb intake its share, as on the
+## player's car. Tires are counted in the race.
+func _add_rival_parts(build: Dictionary, slots: Dictionary) -> void:
+	var intake := listing_by_id(PARTS, str(slots.get(SLOT_INTAKE, NO_PART_ID)))
+	var carb_share := 1.0 / float(clampi(int(intake.get("carbs", 1)), 1, CARB_SLOTS.size()))
+	var muffler_share := 0.5 if str(slots.get(SLOT_MUFFLER_LEFT, NO_PART_ID)) != NO_PART_ID else 1.0
+	for slot in slots:
+		if slot == SLOT_TIRES:
+			continue
+		var part := listing_by_id(PARTS, str(slots[slot]))
+		var share := 1.0
+		if spot_kind(slot) == SLOT_CARB:
+			share = carb_share
+		elif spot_kind(slot) == SLOT_MUFFLER:
+			share = muffler_share
+		build["hp"] += float(part.get("hp", 0.0)) * share
+		build["vmax"] += float(part.get("vmax", 0.0)) * share
 
 
 ## A rival's own hood parts by slot: stock wherever `listed` names nothing.
@@ -1308,7 +1308,12 @@ func _load_saved_opponents(d: Dictionary) -> void:
 		opponents[i]["hood_parts"] = _rival_hood_parts(row.get("hood_parts", {}))
 		var taken: Variant = row.get("taken_car", null)
 		if typeof(taken) == TYPE_DICTIONARY:
-			opponents[i]["taken_car"] = _record_from_save(taken, str(row.get("car_id", "")))
+			# A player's car with no engine loads with its parts off. This one waits with them on.
+			var taken_row: Dictionary = (taken as Dictionary).duplicate()
+			taken_row.erase("engine_id")
+			var taken_rec := _record_from_save(taken_row, str(row.get("car_id", "")))
+			taken_rec["engine_id"] = str((taken as Dictionary).get("engine_id", NO_ENGINE_ID))
+			opponents[i]["taken_car"] = taken_rec
 		opponents[i]["vmax"] = float(saved_build.get("vmax", 220.0))
 		opponents[i]["gearbox"] = str(saved_build.get("gearbox", DEFAULT_GEARBOX_ID))
 		opponents[i]["engine"] = str(saved_build.get("engine", ""))
@@ -2524,15 +2529,17 @@ func take_cars_just_gone() -> bool:
 
 
 ## Pulls the blown engine out of the active car. It is gone, not a spare; what was
-## bolted to it or inside it goes to spare parts.
+## bolted to it or inside it goes to spare parts. On pink slips the car is about to be
+## lost, and those parts stay on it and go along.
 func remove_engine() -> void:
 	if not has_engine():
 		return
 	var blown := equipped_engine_id
 	equipped_engine_id = NO_ENGINE_ID
-	_clear_engine_parts(slot_part_ids)
-	engine_bolts.clear()
-	plug_wires = false
+	if not race_pink_slips:
+		_clear_engine_parts(slot_part_ids)
+		engine_bolts.clear()
+		plug_wires = false
 	_sync_record_from_active()
 	owned_engine_ids.erase(blown)
 	refresh_car_stats()
