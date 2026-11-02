@@ -70,8 +70,8 @@ const SLOT_MUFFLER := "muffler"
 ## `SLOT_MUFFLER`, which is the one muffler of a single exhaust.
 const SLOT_MUFFLER_LEFT := "muffler_left"
 const SLOT_DIFFERENTIAL := "differential"
-## The tires on the car's wheels, changed at the tire machine. Wheels can be bare, but a
-## car does not leave the garage on bare wheels.
+## The tires on the car's wheels. They are changed at the tire machine with the wheels off
+## the car. Wheels can be bare, but a car does not leave the garage on bare wheels.
 const SLOT_TIRES := "tires"
 const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
 ## Parts changed under the hood, from the bottom up: the camshaft in the block, the
@@ -2019,8 +2019,8 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 		return "Already on the car."
 	if kind == SLOT_MANIFOLD and not has_engine():
 		return "Put an engine in first."
-	if kind == SLOT_TIRES and not has_wheels():
-		return "Put wheels on first."
+	if kind == SLOT_TIRES:
+		return "Tires go on wheels at the tire machine."
 	if kind == SLOT_MUFFLER and slot_part(SLOT_EXHAUST).is_empty():
 		return "Put an exhaust on first."
 	if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
@@ -2042,6 +2042,8 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 func remove_slot_part(slot: String) -> String:
 	if not has_active_car():
 		return "There is no car in the garage."
+	if slot == SLOT_TIRES:
+		return "Tires come off wheels at the tire machine."
 	if not REMOVABLE_SLOTS.has(slot) or HOOD_SLOTS.has(slot):
 		return "That has to stay on the car."
 	if slot_part(slot).is_empty():
@@ -2153,6 +2155,12 @@ func shelved_wheels() -> Array[Dictionary]:
 ## them to come off the shelf.
 func shelved_wheel_tires_id(wheel_id: String) -> String:
 	return _next_spare_wheel_tires(wheel_id)
+
+
+## Whether the tires on a shelved set of wheels are worn enough to blow.
+func shelved_wheel_tires_worn(wheel_id: String) -> bool:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	return not sets.is_empty() and float(sets[sets.size() - 1].get("c", 1.0)) <= TIRE_BLOWOUT_CONDITION
 
 
 ## The tire machine on a shelved set of wheels: spare tires go on it, and any tires that

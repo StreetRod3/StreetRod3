@@ -66,8 +66,8 @@ var _parts_close: Button
 var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
 var _parts_show_tires: bool = false
-## What the tire machine is working on: `_TIRE_TARGET_CAR`, or a wheel id on the shelf.
-var _tire_target: String = _TIRE_TARGET_CAR
+## The wheels the tire machine is working on, or "" before they are picked.
+var _tire_target: String = ""
 var _spares_actions: HBoxContainer
 var _spares_sell: Button
 var _spares_forget: Button
@@ -206,12 +206,10 @@ const _TIRE_WAIT_Z := {
 	"WheelBackRight": 4.2,
 }
 const _TIRE_ROLL_SPEED := 3.0
-const _TIRE_TARGET_CAR := "car"
 ## The new set waits beside the machine, and the old set piles up on the other side.
 const _TIRE_STACK_NEW := Vector3(1.0, 0.0, 6.75)
 const _TIRE_STACK_OLD := Vector3(2.8, 0.0, 6.75)
 const _TIRE_THICK := 0.13
-const _T_TIRE_ON_TABLE := 0.45
 const _T_WRENCH := 0.5
 const _T_TIRE_MOVE := 0.55
 const _WHEEL_OUT_Z := -5.4
@@ -1428,13 +1426,14 @@ func _show_spares_board() -> void:
 	_focus_spares_sell()
 
 
-func _show_tire_board() -> void:
+## The tire machine's list, on the wheels named or else asking which.
+func _show_tire_board(wheel_id: String = "") -> void:
 	if _bay_busy:
 		return
 	_show_wheel_board()
 	_parts_show_wheels = false
 	_parts_show_tires = true
-	_tire_target = _TIRE_TARGET_CAR
+	_tire_target = wheel_id
 	_rebuild_parts_board()
 	_sync_menu_nav()
 
@@ -1515,72 +1514,64 @@ func _rebuild_fitted_list() -> void:
 		_parts_list.add_child(_mounted_line("Bolt-on", _parts_row_text(part, "part") + _condition_text("bolt:" + part_id)))
 
 
+## The tire machine works on wheels that are off the car: first pick the wheels, then the
+## tires. The wheels are spare parts the whole time.
 func _rebuild_tires_list() -> void:
-	_parts_title.text = "Tires"
-	var targets := _tire_targets()
-	if targets.is_empty():
-		_parts_status.text = "There are no wheels here to put tires on. Buy a set in the newspaper."
+	_parts_title.text = "Tire machine"
+	var shelved := GameState.shelved_wheels()
+	var chosen := false
+	for wheel in shelved:
+		if str(wheel.get("id", "")) == _tire_target:
+			chosen = true
+	if chosen:
+		_rebuild_tires_for_wheels()
 		return
-	if not targets.has(_tire_target):
-		_tire_target = targets[0]
-	var on_car := _tire_target == _TIRE_TARGET_CAR
-	if targets.size() > 1:
-		_parts_list.add_child(_action_row("Working on: %s" % _tire_target_name(), "Next set", _on_next_tire_target))
-	var fitted_id := str(GameState.slot_part(GameState.SLOT_TIRES).get("id", "")) if on_car else GameState.shelved_wheel_tires_id(_tire_target)
+	_tire_target = ""
+	for wheel in shelved:
+		_parts_list.add_child(_action_row(_parts_row_text(wheel, "wheels"), "Select", _on_tire_wheels_chosen.bind(str(wheel.get("id", "")))))
+	if not shelved.is_empty():
+		_parts_status.text = "Which wheels?"
+	elif GameState.has_wheels():
+		_parts_status.text = "The machine needs wheels that are off the car. Take them off first: click the jack or press W."
+	else:
+		_parts_status.text = "There are no wheels here. Buy a set in the newspaper."
+	if GameState.tires_worn_out():
+		_parts_status.text = "The tires on the car are worn out and will blow in the next race. " + _parts_status.text
+
+
+func _rebuild_tires_for_wheels() -> void:
+	var fitted_id := GameState.shelved_wheel_tires_id(_tire_target)
 	var spares := 0
 	for part in GameState.PARTS:
 		if str(part.get("slot", "")) != GameState.SLOT_TIRES:
 			continue
 		var part_id := str(part.get("id", ""))
 		if part_id == fitted_id:
-			_parts_list.add_child(_fixed_row("On the car" if on_car else "On these wheels", part))
+			_parts_list.add_child(_fixed_row("On these wheels", part))
 		elif GameState.spare_count(part_id) > 0:
 			spares += 1
 			_parts_list.add_child(_action_row(_parts_row_text(part, "part"), "Fit", _on_tires_fit.bind(part_id)))
-	_parts_status.text = "Pick a set and the machine changes the tires."
-	if on_car:
-		_parts_status.text = "Pick a set. The wheels come off and the machine changes the tires on them."
-	if spares == 0:
-		_parts_status.text = "No spare tires here. Buy a set in the newspaper."
-	if on_car and GameState.tires_worn_out():
-		_parts_status.text = "The tires on the car are worn out and will blow in the next race. " + _parts_status.text
 	if not fitted_id.is_empty():
 		_parts_list.add_child(_action_row("Take the tires off", "Remove", _on_tires_fit.bind("")))
-	else:
-		_parts_status.text = "These wheels have no tires. " + _parts_status.text
+	_parts_list.add_child(_action_row("Pick other wheels", "Back", _on_tire_wheels_chosen.bind("")))
+	var wheels_name := str(GameState.listing_by_id(GameState.WHEELS, _tire_target).get("name", "wheels"))
+	_parts_status.text = "%s: which tires?" % wheels_name if spares > 0 else "%s. No spare tires here: buy a set in the newspaper." % wheels_name
+	if fitted_id.is_empty():
+		_parts_status.text = "No tires on these. " + _parts_status.text
+	elif GameState.shelved_wheel_tires_worn(_tire_target):
+		_parts_status.text = "These tires are worn out and will blow in the next race. " + _parts_status.text
 
 
-## What the tire machine can work on: the wheels on the car, if any, and sets on the shelf.
-func _tire_targets() -> Array[String]:
-	var out: Array[String] = []
-	if GameState.has_wheels():
-		out.append(_TIRE_TARGET_CAR)
-	for wheel in GameState.shelved_wheels():
-		out.append(str(wheel.get("id", "")))
-	return out
-
-
-func _tire_target_name() -> String:
-	if _tire_target == _TIRE_TARGET_CAR:
-		return "the wheels on the car"
-	return "%s, off the car" % str(GameState.listing_by_id(GameState.WHEELS, _tire_target).get("name", "wheels"))
-
-
-func _on_next_tire_target() -> void:
-	var targets := _tire_targets()
-	_tire_target = targets[(targets.find(_tire_target) + 1) % targets.size()]
+func _on_tire_wheels_chosen(wheel_id: String) -> void:
+	_tire_target = wheel_id
 	_rebuild_parts_board()
 	_sync_menu_nav()
 
 
-## Fits a spare set, or with no id takes off the set that is on, on what the machine is
-## working on.
+## Fits a spare set of tires to the chosen wheels, or with no id takes off the set on them.
 func _on_tires_fit(tire_id: String) -> void:
 	_hide_parts_board()
-	if _tire_target == _TIRE_TARGET_CAR:
-		_start_tire_change(tire_id)
-	else:
-		_start_shelf_tire_change(_tire_target, tire_id)
+	_start_shelf_tire_change(_tire_target, tire_id)
 
 
 func _fixed_row(state: String, part: Dictionary) -> HBoxContainer:
@@ -1861,11 +1852,8 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 			err = GameState.buy_or_equip_wheel(part_id)
 		"part":
 			if GameState.part_slot(part_id) == GameState.SLOT_TIRES:
-				if not GameState.has_wheels():
-					_show_tire_board()
-					return
-				_hide_parts_board()
-				_start_tire_change(part_id)
+				# Tires go on wheels at the machine, not on the car.
+				_show_tire_board()
 				return
 			elif GameState.is_hood_kind(GameState.part_slot(part_id)):
 				# Intakes, carburetors, distributors, and air cleaners go on under the hood.
@@ -2852,78 +2840,6 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 	_refresh_hud()
 
 
-## Puts a spare set of tires on the wheels, or with no id takes the set that is on them off.
-func _start_tire_change(tire_id: String) -> void:
-	if _bay_busy:
-		return
-	if not GameState.has_wheels():
-		return
-	if tire_id.is_empty():
-		if not GameState.has_tires():
-			return
-	elif GameState.spare_count(tire_id) <= 0 or GameState.part_slot(tire_id) != GameState.SLOT_TIRES:
-		return
-	_bay_busy = true
-	_hide_garage_overlays()
-	await _run_tire_change(tire_id)
-	if not is_instance_valid(self):
-		return
-	_bay_busy = false
-
-
-## The car goes up, all four wheels roll over to the tire machine, it takes off what tires
-## are on each and puts on the new ones, if any, and they roll back. The part changes hands
-## once they are back on.
-func _run_tire_change(tire_id: String) -> void:
-	var car_start := _car_pivot.position
-	await _jack_up(car_start)
-	if not is_instance_valid(self):
-		return
-	var radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
-	var wheels: Array[Dictionary] = []
-	for wname in _WHEEL_NODES:
-		var mount := _car_pivot.get_node_or_null(wname) as Node3D
-		if mount != null:
-			if _car_pivot.has_method(&"apply_wheel_to_mount"):
-				_car_pivot.call(&"apply_wheel_to_mount", mount, GameState.get_equipped_wheel())
-			wheels.append(_take_wheel_off(mount, str(wname)))
-	var off: Array[Callable] = []
-	for wheel in wheels:
-		off.append(_roll_wheel_to_machine.bind(wheel, radius))
-	await _await_all(off)
-	if not is_instance_valid(self):
-		return
-	var had_tires := GameState.has_tires()
-	var pile_new: Array[MeshInstance3D] = []
-	for i in wheels.size() if not tire_id.is_empty() else 0:
-		pile_new.append(_tire_ring(radius, _TIRE_STACK_NEW + Vector3(0.0, _TIRE_THICK * (float(i) + 0.5), 0.0)))
-	var pile_old: Array[MeshInstance3D] = []
-	for i in wheels.size():
-		var fresh: MeshInstance3D = null if pile_new.is_empty() else pile_new[wheels.size() - 1 - i]
-		await _change_tire_on_machine(wheels[i], radius, had_tires, fresh, pile_old, i)
-		if not is_instance_valid(self):
-			return
-	var back: Array[Callable] = []
-	for wheel in wheels:
-		back.append(_roll_wheel_to_car.bind(wheel, radius))
-	await _await_all(back)
-	if not is_instance_valid(self):
-		return
-	for ring in pile_new + pile_old:
-		ring.queue_free()
-	await _jack_down(car_start)
-	if not is_instance_valid(self):
-		return
-	if tire_id.is_empty():
-		GameState.remove_slot_part(GameState.SLOT_TIRES)
-	else:
-		GameState.fit_slot_part(tire_id)
-	if _car_pivot.has_method(&"apply_equipped_wheels"):
-		_car_pivot.call(&"apply_equipped_wheels")
-	_align_wheels_to_floor()
-	_refresh_hud()
-
-
 func _on_wheels_off_pressed() -> void:
 	_hide_parts_board()
 	if _bay_busy or not GameState.has_wheels():
@@ -2936,8 +2852,8 @@ func _on_wheels_off_pressed() -> void:
 	_bay_busy = false
 
 
-## The car goes up and the wheels roll over to the tire machine, onto the shelf as far as the
-## game goes, and the car comes down with none.
+## The car goes up and the wheels, tires and all, roll away to spare parts, and the car comes
+## down with none.
 func _run_wheels_off() -> void:
 	var car_start := _car_pivot.position
 	await _jack_up(car_start)
@@ -2972,7 +2888,8 @@ func _run_wheels_off() -> void:
 	_refresh_hud()
 
 
-## The tire machine on a set of wheels already off the car: each wheel in turn, on the table.
+## The tire machine on the chosen wheels: each in turn on the table, the old tires coming off
+## and the new ones going on. It stays open on those wheels until the player leaves.
 func _start_shelf_tire_change(wheel_id: String, tire_id: String) -> void:
 	if _bay_busy:
 		return
@@ -2992,6 +2909,7 @@ func _start_shelf_tire_change(wheel_id: String, tire_id: String) -> void:
 		GameState.fit_tires_on_shelved_wheels(wheel_id, tire_id)
 	_refresh_hud()
 	_bay_busy = false
+	_show_tire_board(wheel_id)
 
 
 func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> void:
@@ -3085,61 +3003,10 @@ func _roll_wheel_to_machine(wheel: Dictionary, radius: float) -> void:
 	await _roll_wheel(wheel, wheel["spot"], radius)
 
 
-func _roll_wheel_to_car(wheel: Dictionary, radius: float) -> void:
-	var mount: Node3D = wheel["mount"]
-	await _roll_wheel(wheel, wheel["floor"], radius)
-	if not is_instance_valid(mount):
-		return
-	await _lift_to_axle(mount, wheel["axle"], wheel["mounted"], _T_RISE)
-	if not is_instance_valid(mount):
-		return
-	await _pause(float(wheel["turn"]) * _T_WRENCH)
-	if not is_instance_valid(mount):
-		return
-	_shop_sound("wrench")
-	remove_child(mount)
-	(wheel["parent"] as Node).add_child(mount)
-	mount.transform = wheel["home_local"]
-
-
 func _roll_wheel(wheel: Dictionary, to: Vector3, radius: float) -> void:
 	var mount: Node3D = wheel["mount"]
 	var duration := mount.global_position.distance_to(to) / _TIRE_ROLL_SPEED
 	wheel["facing"] = await _roll_node(mount, to, radius, duration, wheel["mounted"], wheel["facing"])
-
-
-## Lays one wheel on the turntable, lifts its old tire off onto the old pile if it has one,
-## lowers the new one on if there is one while the table turns, and stands the wheel back on
-## its spot.
-func _change_tire_on_machine(wheel: Dictionary, radius: float, has_old: bool, fresh: MeshInstance3D, pile_old: Array[MeshInstance3D], index: int) -> void:
-	var mount: Node3D = wheel["mount"]
-	var standing := mount.global_transform
-	var flat := Basis.IDENTITY.scaled(wheel["scale"])
-	var on_table := _TIRE_MACHINE_SPOT + Vector3(0.0, _TIRE_TABLE_Y + _TIRE_THICK * 0.5, 0.0)
-	await _tween_global_xform(mount, Transform3D(flat, on_table), _T_TIRE_ON_TABLE)
-	if not is_instance_valid(mount):
-		return
-	_shop_sound("thud")
-	_shop_sound("motor")
-	# Turns for as long as the tires are moving; it is stopped, not waited for.
-	var turn := create_tween().set_loops()
-	turn.tween_method(func(a: float) -> void: mount.global_basis = Basis(Vector3.UP, a) * flat, 0.0, TAU, _T_TIRE_MOVE * 2.0)
-	if has_old:
-		var old := _tire_ring(radius, on_table)
-		pile_old.append(old)
-		_shop_sound("bead_pop")
-		await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(index) + 0.5), 0.0))
-		if not is_instance_valid(mount):
-			return
-	if fresh != null:
-		await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
-		if not is_instance_valid(mount):
-			return
-		fresh.visible = false
-		_shop_sound("air")
-	turn.kill()
-	_shop_sound_stop("motor")
-	await _tween_global_xform(mount, standing, _T_TIRE_ON_TABLE)
 
 
 ## A tire swings up to `over`, then across and down to `to`.
