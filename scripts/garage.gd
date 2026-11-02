@@ -1356,8 +1356,15 @@ func _on_sell_part(kind: String, part_id: String) -> void:
 	_offer_kind = kind
 	_offer_id = part_id
 	_offer_amount = GameState.sell_offer(kind, part_id)
+	var new_price := int(item.get("price", 0))
+	var what := str(item.get("name", "part"))
+	if kind == "wheels":
+		var tires := GameState.tires_sold_with_wheels(part_id)
+		if not tires.is_empty():
+			new_price += int(tires.get("price", 0))
+			what += ", with %s on them," % str(tires.get("name", "tires"))
 	_offer_label.text = "A buyer looks over your %s (%d%%) and offers $%d.\nThe paper sells them new for $%d." % [
-		str(item.get("name", "part")), roundi(condition * 100.0), _offer_amount, int(item.get("price", 0))]
+		what, roundi(condition * 100.0), _offer_amount, new_price]
 	_offer_accept.text = "Accept $%d" % _offer_amount
 	_offer_panel.visible = true
 	_sync_menu_nav()
@@ -1538,7 +1545,7 @@ func _on_tires_off_pressed() -> void:
 
 func _rebuild_wheels_list() -> void:
 	_parts_title.text = "Wheels"
-	_parts_status.text = "Pick a set. The jack will change them one corner at a time. They go on without tires, and the old tires go to spare parts."
+	_parts_status.text = "Pick a set. The jack will change them one corner at a time. Each set keeps the tires on it."
 	var count := 0
 	for wheel in GameState.WHEELS:
 		var wheel_id := str(wheel.get("id", ""))
@@ -1749,7 +1756,7 @@ func _parts_row_text(item: Dictionary, kind: String) -> String:
 	if kind == "part":
 		return "%s  +%d hp" % [name, int(item.get("hp", 0))]
 	if kind == "wheels":
-		return "%s  %s" % [name, GameState.wheel_detail(item)]
+		return "%s  %s, %s" % [name, GameState.wheel_detail(item), GameState.wheel_tires_text(str(item.get("id", "")))]
 	return name
 
 

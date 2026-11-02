@@ -229,6 +229,12 @@ var car_records: Dictionary = {}
 ## list names them: engine, transmission, wheels, part). Each car record keeps its own
 ## fitted parts' conditions under "conditions".
 var spare_conditions: Dictionary = {}
+## Tires stay on their wheels until the tire machine takes them off. For each wheel id, the
+## tires on its spare sets as {"id", "c"}, one entry for each set that has any. Those tires
+## are owned but are not spare parts.
+var spare_wheel_tires: Dictionary = {}
+## The tires that came along on wheels just taken off another car.
+var _carried_tires: Dictionary = {}
 ## The last offer made for each spare, so the next one differs.
 var _last_offers: Dictionary = {}
 ## Parsed `PLAYER_CAR_FILE`. Empty sections mean the file failed to load.
@@ -749,6 +755,7 @@ func new_game() -> void:
 	equipped_wheel_id = ""
 	car_records.clear()
 	spare_conditions.clear()
+	spare_wheel_tires.clear()
 	_last_offers.clear()
 	current_car_id = _add_owned_car(DEFAULT_CAR_ID, car_color)
 	_install_car(current_car_id)
@@ -835,6 +842,7 @@ func save_game(slot: int) -> bool:
 		"owned_wheel_ids": owned_wheel_ids,
 		"equipped_wheel_id": equipped_wheel_id,
 		"spare_conditions": spare_conditions,
+		"spare_wheel_tires": spare_wheel_tires,
 	}
 	var json := JSON.stringify(data)
 	var path := save_slot_path(slot)
@@ -903,6 +911,7 @@ func load_game(slot: int) -> bool:
 	owned_wheel_ids = _string_array(d.get("owned_wheel_ids", owned_wheel_ids))
 	equipped_wheel_id = str(d.get("equipped_wheel_id", equipped_wheel_id))
 	spare_conditions = _conditions_pool_from(d.get("spare_conditions", null))
+	spare_wheel_tires = _spare_wheel_tires_from(d.get("spare_wheel_tires", null))
 	_last_offers.clear()
 	if owned_gearbox_ids.is_empty():
 		owned_gearbox_ids = [DEFAULT_GEARBOX_ID]
@@ -1583,6 +1592,11 @@ func free_spare_count(kind: String, id: String) -> int:
 			mounted += _string_array(rec.get("part_ids", [])).count(id)
 		elif str(rec.get(key, "")) == id:
 			mounted += 1
+	if kind == "part":
+		for sets in spare_wheel_tires.values():
+			for tires in sets:
+				if str(tires.get("id", "")) == id:
+					mounted += 1
 	return maxi(owned - mounted, 0)
 
 
@@ -1673,6 +1687,8 @@ func sell_trouble(kind: String, id: String) -> String:
 ## and never the same as the last offer for it.
 func sell_offer(kind: String, id: String) -> int:
 	var price := int(listing_for(kind, id).get("price", 0))
+	if kind == "wheels":
+		price += int(tires_sold_with_wheels(id).get("price", 0))
 	var list := spare_condition_list(kind, id)
 	var c := list[list.size() - 1] if not list.is_empty() else 1.0
 	var key := _condition_key(kind, id)
@@ -1692,6 +1708,8 @@ func sell_spare(kind: String, id: String, offer: int) -> String:
 	var err := sell_trouble(kind, id)
 	if not err.is_empty():
 		return err
+	if kind == "wheels" and not tires_sold_with_wheels(id).is_empty():
+		owned_part_ids.erase(str(_pop_spare_wheel_tires(id).get("id", "")))
 	_owned_list(kind).erase(id)
 	var key := _condition_key(kind, id)
 	var pool: Array = spare_conditions.get(key, [])
@@ -2009,6 +2027,79 @@ func buy_or_equip_wheel(wheel_id: String) -> String:
 	return _buy_or_equip(WHEELS, owned_wheel_ids, wheel_id, "wheel")
 
 
+## What the tires on a set of wheels are called, for the lists: the set on the car, or else
+## the next spare set of them to come off the shelf.
+func wheel_tires_text(wheel_id: String) -> String:
+	var tires := slot_part(SLOT_TIRES) if wheel_id == equipped_wheel_id else listing_by_id(PARTS, _next_spare_wheel_tires(wheel_id))
+	return "no tires" if tires.is_empty() else "on %s" % str(tires.get("name", "tires"))
+
+
+## The tires that go too when a spare set of these wheels is sold, or {}. A bare set goes
+## first if there is one.
+func tires_sold_with_wheels(wheel_id: String) -> Dictionary:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	if sets.is_empty() or free_spare_count("wheels", wheel_id) > sets.size():
+		return {}
+	return listing_by_id(PARTS, _next_spare_wheel_tires(wheel_id))
+
+
+func _next_spare_wheel_tires(wheel_id: String) -> String:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	return "" if sets.is_empty() else str(sets[sets.size() - 1].get("id", ""))
+
+
+func _pop_spare_wheel_tires(wheel_id: String) -> Dictionary:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	if sets.is_empty():
+		return {}
+	var tires: Dictionary = sets.pop_back()
+	if sets.is_empty():
+		spare_wheel_tires.erase(wheel_id)
+	return tires
+
+
+## Takes the tires off the active car with their condition: {"id", "c"}, or {} when the
+## wheels are bare.
+func _tires_off_active_car() -> Dictionary:
+	if not has_tires():
+		return {}
+	var tires := {"id": str(slot_part_ids[SLOT_TIRES]), "c": mount_condition("slot:" + SLOT_TIRES)}
+	slot_part_ids[SLOT_TIRES] = NO_PART_ID
+	var rec: Variant = car_records.get(current_car_id, null)
+	if typeof(rec) == TYPE_DICTIONARY and (rec as Dictionary).has("conditions"):
+		(rec["conditions"] as Dictionary).erase("slot:" + SLOT_TIRES)
+	return tires
+
+
+## Puts tires that came on a set of wheels on the active car, keeping their condition.
+func _tires_onto_active_car(tires: Dictionary) -> void:
+	if tires.is_empty():
+		return
+	var id := str(tires.get("id", ""))
+	slot_part_ids[SLOT_TIRES] = id
+	var rec: Variant = car_records.get(current_car_id, null)
+	if typeof(rec) == TYPE_DICTIONARY:
+		var conditions: Dictionary = (rec as Dictionary).get("conditions", {})
+		conditions["slot:" + SLOT_TIRES] = {"kind": "part", "id": id, "c": float(tires.get("c", 1.0))}
+		rec["conditions"] = conditions
+
+
+func _spare_wheel_tires_from(value: Variant) -> Dictionary:
+	var out := {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return out
+	for wheel_id in (value as Dictionary).keys():
+		if typeof(value[wheel_id]) != TYPE_ARRAY:
+			continue
+		var sets: Array = []
+		for tires in value[wheel_id]:
+			if typeof(tires) == TYPE_DICTIONARY and part_slot(str(tires.get("id", ""))) == SLOT_TIRES:
+				sets.append({"id": str(tires["id"]), "c": clampf(float(tires.get("c", 1.0)), CONDITION_FLOOR, 1.0)})
+		if not sets.is_empty():
+			out[str(wheel_id)] = sets
+	return out
+
+
 func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: String, label: String) -> String:
 	var part: Dictionary = listing_by_id(list, part_id)
 	if part.is_empty():
@@ -2027,11 +2118,18 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 		equipped_engine_id = part_id
 		_take_mount_from_other_cars("engine", part_id)
 	else:
-		# Tires do not move across by themselves: the old set goes to spare parts with the
-		# old wheels, and the new wheels go on bare.
+		# Tires stay on their wheels: the old tires go to the shelf on the old set, and the
+		# new set comes with whatever is on it, off the shelf or off another car.
+		var from_shelf := free_spare_count("wheels", part_id) > 0
+		var old_tires := _tires_off_active_car()
+		if not old_tires.is_empty():
+			var sets: Array = spare_wheel_tires.get(equipped_wheel_id, [])
+			sets.append(old_tires)
+			spare_wheel_tires[equipped_wheel_id] = sets
 		equipped_wheel_id = part_id
-		slot_part_ids[SLOT_TIRES] = NO_PART_ID
+		_carried_tires = {}
 		_take_mount_from_other_cars("wheels", part_id)
+		_tires_onto_active_car(_pop_spare_wheel_tires(part_id) if from_shelf else _carried_tires)
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -2229,6 +2327,21 @@ func _clear_record_engine_parts(rec: Dictionary) -> void:
 	for slot in ALL_SLOTS:
 		if str(slots[slot]) == NO_PART_ID:
 			_release_condition(rec, "slot:" + slot)
+
+
+## The tires off another car's record, when its wheels are taken: {"id", "c"} or {}.
+func _tires_off_record(rec: Dictionary) -> Dictionary:
+	var slots := _slots_from(rec.get("slot_parts", null))
+	var id := str(slots[SLOT_TIRES])
+	if id == NO_PART_ID:
+		return {}
+	var conditions: Dictionary = rec.get("conditions", {})
+	var entry: Variant = conditions.get("slot:" + SLOT_TIRES, null)
+	var c := float((entry as Dictionary).get("c", 1.0)) if entry is Dictionary else 1.0
+	conditions.erase("slot:" + SLOT_TIRES)
+	slots[SLOT_TIRES] = NO_PART_ID
+	rec["slot_parts"] = slots
+	return {"id": id, "c": c}
 
 
 ## Gives a rival the player's car, with its numbers in `build`.
@@ -2662,6 +2775,8 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		rec[key] = stock
 		excess -= 1
 		_release_condition(rec, slot)
+		if slot == "wheels":
+			_carried_tires = _tires_off_record(rec)
 		if slot == "engine" and stock == NO_ENGINE_ID:
 			_clear_record_engine_parts(rec)
 		if slot == "transmission":
