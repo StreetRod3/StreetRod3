@@ -236,7 +236,7 @@ var car_spec: Dictionary = {}
 var newspaper_colors: Dictionary = {}
 
 ## Driving presets assigned the first time a rival is called.
-## Scales are relative to the player's current effective vmax and 24 m/s² launch.
+## Scales are how much of their own car's top speed and launch the driver gets out of it.
 const _OPPONENT_PRESETS: Array[Dictionary] = [
 	{"accel_scale": 0.28, "vmax_scale": 0.86, "shift_time": 0.40},
 	{"accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
@@ -1015,7 +1015,21 @@ func _meet_opponent(opp_name: String) -> int:
 		"shift_time": float(preset.get("shift_time", 0.35)),
 		"tires": _random_opponent_tires(),
 	})
+	opponents[index].merge(_opponent_stock_build(str(car.get("car_file", ""))))
 	return index
+
+
+## A rival's power, top speed before gearing and tires, and gearbox: what their car came
+## with. Nothing about a rival's performance comes from the player's car.
+func _opponent_stock_build(car_file: String) -> Dictionary:
+	var spec := _CarFile.load_path(car_file)
+	var engine: Dictionary = spec.get("engine", {})
+	var gearbox: Dictionary = spec.get("transmission", {})
+	return {
+		"hp": float(engine.get("hp", 280.0)),
+		"vmax": float(engine.get("vmax", 220.0)),
+		"gearbox": str(gearbox.get("id", DEFAULT_GEARBOX_ID)),
+	}
 
 
 func _random_opponent_tires() -> String:
@@ -1096,6 +1110,9 @@ func _opponents_for_save() -> Array:
 			"vmax_scale": float(opp.get("vmax_scale", 0.9)),
 			"shift_time": float(opp.get("shift_time", 0.35)),
 			"tires": str(opp.get("tires", "")),
+			"hp": float(opp.get("hp", 280.0)),
+			"vmax": float(opp.get("vmax", 220.0)),
+			"gearbox": str(opp.get("gearbox", DEFAULT_GEARBOX_ID)),
 		})
 	return rows
 
@@ -1125,6 +1142,11 @@ func _load_saved_opponents(d: Dictionary) -> void:
 			"shift_time": float(row.get("shift_time", 0.35)),
 			"tires": str(row.get("tires", "")),
 		})
+		# Rivals in older saves went by the player's car, so they start on what theirs came with.
+		var saved_build := row if row.has("hp") else _opponent_stock_build(str(row.get("car_file", "")))
+		opponents[i]["hp"] = float(saved_build.get("hp", 280.0))
+		opponents[i]["vmax"] = float(saved_build.get("vmax", 220.0))
+		opponents[i]["gearbox"] = str(saved_build.get("gearbox", DEFAULT_GEARBOX_ID))
 		i += 1
 
 
@@ -1188,11 +1210,27 @@ func opponent_tire_grip(opp: Dictionary) -> float:
 	return _grip_of(opponent_tires(opp))
 
 
-## The player's top speed with the rival's tires in place of the player's, before the
-## rival's own `vmax_scale`.
+## A rival's car's top speed through its gearbox and on its tires, before the driver's
+## `vmax_scale`.
 func opponent_top_kmh(opp: Dictionary) -> float:
-	var tire_gain := float(opponent_tires(opp).get("vmax", 0.0)) - float(slot_part(SLOT_TIRES).get("vmax", 0.0))
-	return (vmax_kmh + tire_gain) * _top_speed_scale()
+	var top := float(opp.get("vmax", 220.0)) + float(opponent_tires(opp).get("vmax", 0.0))
+	return top * float(opponent_gearbox(opp).get("top_speed", 1.0))
+
+
+func opponent_power_hp(opp: Dictionary) -> float:
+	return float(opp.get("hp", 280.0))
+
+
+func opponent_gearbox(opp: Dictionary) -> Dictionary:
+	var box := listing_by_id(GEARBOXES, str(opp.get("gearbox", "")))
+	return listing_by_id(GEARBOXES, DEFAULT_GEARBOX_ID) if box.is_empty() else box
+
+
+## The chassis of a rival's car, from its car file.
+func opponent_chassis(opp: Dictionary) -> Dictionary:
+	var spec := _CarFile.load_path(str(opp.get("car_file", "")))
+	var chassis: Variant = spec.get("chassis", {})
+	return chassis if typeof(chassis) == TYPE_DICTIONARY else {}
 
 
 func _grip_of(tires: Dictionary) -> float:
@@ -1255,11 +1293,8 @@ func get_equipped_gearbox() -> Dictionary:
 
 
 func get_effective_vmax_kmh() -> float:
-	return vmax_kmh * _top_speed_scale()
-
-
-func _top_speed_scale() -> float:
-	return float(get_equipped_gearbox().get("top_speed", 1.0)) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0))
+	var top := float(get_equipped_gearbox().get("top_speed", 1.0))
+	return vmax_kmh * top * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0))
 
 
 ## Pull of the rear end against the stock gears. A shorter rear end pulls harder.
@@ -2079,7 +2114,14 @@ func _lose_raced_car() -> void:
 	_sync_record_from_active()
 	var lost_id := current_car_id
 	var model_id := car_model_id(lost_id)
-	_set_opponent_car(selected_opponent_id, model_id, car_color, str(slot_part(SLOT_TIRES).get("id", "")))
+	var tires := slot_part(SLOT_TIRES)
+	# The rival keeps the car as it stands now, its rear end built into the numbers.
+	var build := {
+		"hp": engine_power_hp * final_drive_accel(),
+		"vmax": (vmax_kmh - float(tires.get("vmax", 0.0))) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0)),
+		"gearbox": equipped_gearbox_id,
+	}
+	_set_opponent_car(selected_opponent_id, model_id, car_color, str(tires.get("id", "")), build)
 	_drop_active_car()
 	if not owned_car_ids.is_empty():
 		_install_car(owned_car_ids[0])
@@ -2153,7 +2195,8 @@ func _clear_record_engine_parts(rec: Dictionary) -> void:
 			_release_condition(rec, "slot:" + slot)
 
 
-func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String) -> void:
+## Gives a rival a car, on its stock build unless `build` is given.
+func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String, build: Dictionary = {}) -> void:
 	if index < 0 or index >= opponents.size():
 		return
 	var car := listing_by_id(USED_CARS, model_id)
@@ -2163,6 +2206,7 @@ func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String
 	opp["car_file"] = str(car.get("car_file", ""))
 	opp["color"] = paint
 	opp["tires"] = tires
+	opp.merge(_opponent_stock_build(opp["car_file"]) if build.is_empty() else build, true)
 
 
 func _replace_opponent_car(index: int) -> void:
