@@ -2120,6 +2120,71 @@ func _tires_onto_active_car(tires: Dictionary) -> void:
 		rec["conditions"] = conditions
 
 
+func _shelve_active_tires() -> void:
+	var tires := _tires_off_active_car()
+	if tires.is_empty():
+		return
+	var sets: Array = spare_wheel_tires.get(equipped_wheel_id, [])
+	sets.append(tires)
+	spare_wheel_tires[equipped_wheel_id] = sets
+
+
+## Takes the wheels off the active car onto the shelf, with their tires still on them.
+func remove_wheels() -> String:
+	if not has_wheels():
+		return "There are no wheels on the car."
+	_shelve_active_tires()
+	equipped_wheel_id = NO_WHEEL_ID
+	_sync_record_from_active()
+	refresh_car_stats()
+	return ""
+
+
+## Wheel sets on the shelf, in register order.
+func shelved_wheels() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for wheel in WHEELS:
+		if free_spare_count("wheels", str(wheel.get("id", ""))) > 0:
+			out.append(wheel)
+	return out
+
+
+## The id of the tires on a shelved set of wheels, or "" when it is bare: the next set of
+## them to come off the shelf.
+func shelved_wheel_tires_id(wheel_id: String) -> String:
+	return _next_spare_wheel_tires(wheel_id)
+
+
+## The tire machine on a shelved set of wheels: spare tires go on it, and any tires that
+## were on it go to spare parts.
+func fit_tires_on_shelved_wheels(wheel_id: String, tire_id: String) -> String:
+	if free_spare_count("wheels", wheel_id) <= 0:
+		return "Those wheels are not on the shelf."
+	if part_slot(tire_id) != SLOT_TIRES or spare_count(tire_id) <= 0:
+		return "Those tires are not in spare parts."
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	var bare_set := free_spare_count("wheels", wheel_id) > sets.size()
+	if not bare_set and shelved_wheel_tires_id(wheel_id) == tire_id:
+		return "Those tires are already on them."
+	if not bare_set:
+		remove_tires_from_shelved_wheels(wheel_id)
+	sets = spare_wheel_tires.get(wheel_id, [])
+	sets.append({"id": tire_id, "c": _pop_spare_condition("part", tire_id)})
+	spare_wheel_tires[wheel_id] = sets
+	_trim_spare_conditions()
+	return ""
+
+
+## The tire machine takes the tires off a shelved set of wheels into spare parts.
+func remove_tires_from_shelved_wheels(wheel_id: String) -> String:
+	var tires := _pop_spare_wheel_tires(wheel_id)
+	if tires.is_empty():
+		return "Those wheels have no tires on them."
+	_push_spare_condition("part", str(tires.get("id", "")), float(tires.get("c", 1.0)))
+	_trim_spare_conditions()
+	return ""
+
+
 func _spare_wheel_tires_from(value: Variant) -> Dictionary:
 	var out := {}
 	if typeof(value) != TYPE_DICTIONARY:
@@ -2157,11 +2222,7 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 		# Tires stay on their wheels: the old tires go to the shelf on the old set, and the
 		# new set comes with whatever is on it, off the shelf or off another car.
 		var from_shelf := free_spare_count("wheels", part_id) > 0
-		var old_tires := _tires_off_active_car()
-		if not old_tires.is_empty():
-			var sets: Array = spare_wheel_tires.get(equipped_wheel_id, [])
-			sets.append(old_tires)
-			spare_wheel_tires[equipped_wheel_id] = sets
+		_shelve_active_tires()
 		equipped_wheel_id = part_id
 		_carried_tires = {}
 		_take_mount_from_other_cars("wheels", part_id)
