@@ -3,6 +3,7 @@ extends Node3D
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
+const _CarSale := preload("res://scripts/car_sale.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
 
 @onready var _car_pivot: Node3D = $CarPivot
@@ -101,6 +102,21 @@ var _car_list_forget: Button
 var _car_list_group: ButtonGroup
 ## The car the list is highlighting. A click only changes this; Switch it moves it into the bay.
 var _car_list_selected: String = ""
+var _car_sale: RefCounted = null
+var _sale_car_id: String = ""
+var _sale_panel: Control
+var _sale_name: Label
+var _sale_line: Label
+var _sale_ask: HBoxContainer
+var _sale_entry: LineEdit
+var _sale_buttons: HBoxContainer
+var _sale_answers: HBoxContainer
+var _sale_offer: Button
+var _sale_never: Button
+var _sale_take: Button
+var _sale_refuse: Button
+var _say_bubble: Control
+var _say_after: Callable = Callable()
 ## The engine heard rolling out of and into the bay.
 var _engine_sound: AudioStreamPlayer
 var _hood: StaticBody3D
@@ -216,6 +232,7 @@ func _ready() -> void:
 	_calendar_hint.visible = false
 	_hud_top.gui_input.connect(_on_hud_car_stripe_input)
 	_build_car_list()
+	_build_sale_panel()
 	_refresh_hud()
 	if GameState.has_active_car():
 		_car_pivot.visible = true
@@ -226,6 +243,7 @@ func _ready() -> void:
 	_build_loss_bubble()
 	_build_stall_bubble()
 	_build_here_bubble()
+	_build_say_bubble()
 	_build_gone_bubble()
 	_build_tooltip()
 	if GameState.cars_just_gone:
@@ -308,6 +326,31 @@ func _build_here_bubble() -> void:
 	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
 	bubble.connect("pressed", _dismiss_here_bubble)
 	_here_bubble = bubble
+
+
+## A bubble over the bay for a line that changes. A click or a key takes it down and runs `after`.
+func _build_say_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_say_bubble)
+	_say_bubble = bubble
+
+
+func _say(line: String, after: Callable = Callable()) -> void:
+	_say_after = after
+	_say_bubble.call("set_line", line, Vector2(260, 56), 26)
+	_say_bubble.visible = true
+
+
+func _dismiss_say_bubble() -> void:
+	_say_bubble.visible = false
+	var after := _say_after
+	_say_after = Callable()
+	if after.is_valid():
+		after.call()
 
 
 func _show_here_bubble() -> void:
@@ -499,8 +542,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dismiss_here_bubble()
 		get_viewport().set_input_as_handled()
 		return
+	if _say_bubble != null and _say_bubble.visible:
+		get_viewport().set_input_as_handled()
+		return
 	if _bay_busy:
 		_handle_camera_only(event)
+		return
+	if _car_sale != null:
+		_nav.handle_event(self, event)
+		get_viewport().set_input_as_handled()
 		return
 	if _clock_menu.visible and event.is_action_pressed(&"ui_cancel"):
 		if _clock_settings.visible:
@@ -798,6 +848,8 @@ func _sync_menu_nav() -> void:
 		])
 	elif _offer_panel != null and _offer_panel.visible:
 		_nav.setup([_offer_accept, _offer_reject])
+	elif _sale_panel != null and _sale_panel.visible:
+		_nav.setup(_nav.collect_buttons(_sale_panel))
 	elif _parts_board != null and _parts_board.visible:
 		_nav.setup(_nav.collect_buttons(_parts_board))
 	elif _car_list != null and _car_list.visible:
@@ -1685,15 +1737,7 @@ func _build_car_list() -> void:
 	root.offset_top = 48.0
 	root.offset_right = 220.0
 	root.offset_bottom = 48.0
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.12, 0.09, 0.07, 0.96)
-	style.border_color = Color(0.55, 0.12, 0.1, 1.0)
-	style.set_border_width_all(2)
-	style.content_margin_left = 12.0
-	style.content_margin_right = 12.0
-	style.content_margin_top = 10.0
-	style.content_margin_bottom = 10.0
-	root.add_theme_stylebox_override(&"panel", style)
+	root.add_theme_stylebox_override(&"panel", _car_list_style())
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 8)
 	root.add_child(box)
@@ -1730,6 +1774,18 @@ func _build_car_list() -> void:
 	box.add_child(actions)
 	$GarageUI.add_child(root)
 	_car_list = root
+
+
+func _car_list_style() -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.09, 0.07, 0.96)
+	style.border_color = Color(0.55, 0.12, 0.1, 1.0)
+	style.set_border_width_all(2)
+	style.content_margin_left = 12.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 10.0
+	style.content_margin_bottom = 10.0
+	return style
 
 
 func _car_list_label(text: String) -> Label:
@@ -1782,6 +1838,9 @@ func _toggle_car_list() -> void:
 	if _car_list.visible:
 		_hide_car_list()
 		return
+	if GameState.owned_car_ids.is_empty():
+		_say("You've got no car, dummy!")
+		return
 	_hide_garage_overlays()
 	_rebuild_car_list()
 	_car_list.visible = true
@@ -1809,15 +1868,16 @@ func _rebuild_car_list() -> void:
 	_car_list_status.text = ""
 	_refresh_car_list_actions()
 	var rows := mini(maxi(GameState.owned_car_ids.size(), 1), 8)
+	var rows_height := float(rows * 36 + (rows - 1) * 6)
 	var scroll := _car_list_rows.get_parent() as Control
 	if scroll != null:
-		scroll.custom_minimum_size = Vector2(400, rows * 36)
+		scroll.custom_minimum_size = Vector2(400, rows_height)
 	# Margins, title, count, status line, one row of action buttons, and the gaps between them.
 	var chrome := 20.0 + 24.0 + 22.0 + 22.0 + 36.0 + 4.0 * 8.0
 	_car_list.offset_left = -220.0
 	_car_list.offset_right = 220.0
 	_car_list.offset_top = 48.0
-	_car_list.offset_bottom = 48.0 + chrome + float(rows * 36)
+	_car_list.offset_bottom = 48.0 + chrome + rows_height
 
 
 func _ensure_car_list_selection() -> void:
@@ -1936,6 +1996,11 @@ func _on_car_list_switch() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _try_say_bubble_key(event) or (_car_sale != null and _try_sale_key(event)):
+		get_viewport().set_input_as_handled()
+		return
+	if _say_bubble != null and _say_bubble.visible or _car_sale != null:
+		return
 	if not _is_enter_key(event):
 		return
 	if _car_list != null and _car_list.visible:
@@ -1965,14 +2030,238 @@ func _is_enter_key(event: InputEvent) -> bool:
 
 ## Selling the selected car is not wired yet.
 func _on_car_list_sell() -> void:
+	if _bay_busy or _departing:
+		return
 	if not GameState.owned_car_ids.has(_car_list_selected):
 		_car_list_status.text = "Pick a car first."
 		return
-	_car_list_status.text = "Selling isn't set up yet."
+	_sale_car_id = _car_list_selected
+	_car_sale = _CarSale.new(GameState.car_value(_sale_car_id))
+	_sale_name.text = GameState.car_display_name(_sale_car_id)
+	_sale_entry.text = ""
+	_car_list_status.text = ""
+	_show_sale_ask()
 
 
 func _on_car_list_forget() -> void:
 	_hide_car_list()
+
+
+func _build_sale_panel() -> void:
+	var shade := ColorRect.new()
+	shade.color = Color(0.0, 0.0, 0.0, 0.45)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.visible = false
+	$GarageUI.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override(&"panel", _car_list_style())
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 10)
+	panel.add_child(box)
+	_sale_name = _car_list_label("")
+	_sale_name.custom_minimum_size = Vector2(400, 24)
+	box.add_child(_sale_name)
+	_sale_line = _car_list_label("")
+	box.add_child(_sale_line)
+	_sale_ask = HBoxContainer.new()
+	_sale_ask.alignment = BoxContainer.ALIGNMENT_CENTER
+	_sale_ask.add_theme_constant_override(&"separation", 4)
+	_sale_ask.add_child(_car_list_label("I'll take $"))
+	_sale_entry = LineEdit.new()
+	_sale_entry.max_length = 5
+	_sale_entry.custom_minimum_size = Vector2(90, 0)
+	_sale_entry.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	_sale_entry.text_changed.connect(_on_sale_entry_changed)
+	_sale_ask.add_child(_sale_entry)
+	box.add_child(_sale_ask)
+	_sale_buttons = HBoxContainer.new()
+	_sale_buttons.add_theme_constant_override(&"separation", 8)
+	_sale_offer = _car_list_action("Offer", _on_sale_offer)
+	_sale_never = _car_list_action("Never mind", _close_car_sale)
+	_mark_switch_button(_sale_offer)
+	_sale_offer.tooltip_text = "O or Enter"
+	_sale_never.tooltip_text = "N or Esc"
+	_sale_buttons.add_child(_sale_offer)
+	_sale_buttons.add_child(_sale_never)
+	box.add_child(_sale_buttons)
+	_sale_answers = HBoxContainer.new()
+	_sale_answers.add_theme_constant_override(&"separation", 8)
+	_sale_take = _car_list_action("OK", _on_sale_answer.bind(true))
+	_sale_refuse = _car_list_action("No", _on_sale_answer.bind(false))
+	_mark_switch_button(_sale_take)
+	_sale_take.tooltip_text = "O or Enter"
+	_sale_refuse.tooltip_text = "N or Esc"
+	_sale_answers.add_child(_sale_take)
+	_sale_answers.add_child(_sale_refuse)
+	box.add_child(_sale_answers)
+	_sale_panel = shade
+
+
+## Digits only, as the price is read.
+func _on_sale_entry_changed(text: String) -> void:
+	var digits := ""
+	for ch in text:
+		if ch >= "0" and ch <= "9":
+			digits += ch
+	if digits != text:
+		_sale_entry.text = digits
+		_sale_entry.caret_column = digits.length()
+
+
+func _show_sale_ask() -> void:
+	_sale_line.visible = false
+	_sale_ask.visible = true
+	_sale_buttons.visible = true
+	_sale_answers.visible = false
+	_sale_panel.visible = true
+	_sync_menu_nav()
+	_sale_entry.grab_focus()
+	_sale_entry.edit()
+	_sale_entry.select_all()
+
+
+func _show_sale_counter(offer: int) -> void:
+	_sale_line.text = "How about $%d ?" % offer
+	_sale_line.visible = true
+	_sale_ask.visible = false
+	_sale_buttons.visible = false
+	_sale_answers.visible = true
+	_sale_panel.visible = true
+	_sync_menu_nav()
+	_sale_take.grab_focus()
+
+
+func _on_sale_offer() -> void:
+	var asked := _sale_entry.text.to_int()
+	if asked <= 0:
+		_sale_entry.grab_focus()
+		_sale_entry.edit()
+		return
+	_car_sale.give_price(asked)
+	_follow_sale()
+
+
+func _on_sale_answer(taken: bool) -> void:
+	_car_sale.answer_offer(taken)
+	_follow_sale()
+
+
+## On to whatever the buyer's last word calls for.
+func _follow_sale() -> void:
+	var after := _show_sale_ask
+	match _car_sale.step:
+		_CarSale.Step.OFFER:
+			_show_sale_counter(_car_sale.offer)
+			return
+		_CarSale.Step.SOLD:
+			after = _finish_car_sale
+		_CarSale.Step.NO_SALE:
+			after = _close_car_sale
+	if _car_sale.say.is_empty():
+		after.call()
+		return
+	_sale_panel.visible = false
+	_say(_car_sale.say, after)
+
+
+## Back to the car list, with or without a sale.
+func _close_car_sale() -> void:
+	_car_sale = null
+	_sale_panel.visible = false
+	_sync_menu_nav()
+	if _car_list.visible and not _car_list_switch.disabled:
+		_car_list_switch.grab_focus()
+
+
+func _finish_car_sale() -> void:
+	var car_id := _sale_car_id
+	var price: int = _car_sale.price
+	var sold := "Sold the %s for $%d." % [GameState.car_display_name(car_id), price]
+	_close_car_sale()
+	if car_id == GameState.current_car_id:
+		await _drive_sold_car_away(car_id, price)
+		if not is_instance_valid(self):
+			return
+	else:
+		GameState.sell_car(car_id, price)
+		_refresh_hud()
+	if GameState.owned_car_ids.is_empty():
+		_hide_car_list()
+		return
+	_rebuild_car_list()
+	_car_list_status.text = sold
+	_car_list.visible = true
+	_sync_menu_nav()
+	_car_list_switch.grab_focus()
+
+
+## The buyer drives the car off and the bay stays empty.
+func _drive_sold_car_away(car_id: String, price: int) -> void:
+	_bay_busy = true
+	_swapping_car = true
+	_orbiting = false
+	_hide_garage_overlays()
+	var bay := _car_pivot.position
+	await _swing_doors(_DOOR_SWING)
+	if not is_instance_valid(self):
+		return
+	await _pause(0.18)
+	if not is_instance_valid(self):
+		return
+	await _roll_car(bay, bay + Vector3(0.0, 0.0, -_EXIT_DISTANCE), Tween.EASE_IN)
+	if not is_instance_valid(self):
+		return
+	GameState.sell_car(car_id, price)
+	_car_pivot.position = bay
+	_apply_active_car_visual()
+	_refresh_hud()
+	_place_bay_targets()
+	await _swing_doors(0.0)
+	if not is_instance_valid(self):
+		return
+	_swapping_car = false
+	_bay_busy = false
+
+
+## A click's worth of keys for the bubble: Enter, Space, or Esc.
+func _try_say_bubble_key(event: InputEvent) -> bool:
+	if _say_bubble == null or not _say_bubble.visible or not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if _is_enter_key(event) or key.keycode == KEY_SPACE or event.is_action_pressed(&"ui_cancel"):
+		_dismiss_say_bubble()
+		return true
+	return false
+
+
+## Enter or O for the red button, Esc or N for the other. Digits go on to the price.
+func _try_sale_key(event: InputEvent) -> bool:
+	if not _sale_panel.visible or not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	var countering := _sale_answers.visible
+	if _is_enter_key(event) or key.keycode == KEY_O:
+		if countering:
+			_on_sale_answer(true)
+		else:
+			_on_sale_offer()
+		return true
+	if event.is_action_pressed(&"ui_cancel") or key.keycode == KEY_N:
+		if countering:
+			_on_sale_answer(false)
+		else:
+			_close_car_sale()
+		return true
+	return false
 
 
 func _apply_active_car_visual() -> void:

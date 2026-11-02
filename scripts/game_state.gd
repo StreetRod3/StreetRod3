@@ -1522,15 +1522,7 @@ func sell_spare(kind: String, id: String, offer: int) -> String:
 	var err := sell_trouble(kind, id)
 	if not err.is_empty():
 		return err
-	match kind:
-		"part":
-			owned_part_ids.erase(id)
-		"engine":
-			owned_engine_ids.erase(id)
-		"transmission":
-			owned_gearbox_ids.erase(id)
-		"wheels":
-			owned_wheel_ids.erase(id)
+	_erase_owned_copy(kind, id)
 	var key := _condition_key(kind, id)
 	var pool: Array = spare_conditions.get(key, [])
 	if not pool.is_empty():
@@ -1541,6 +1533,18 @@ func sell_spare(kind: String, id: String, offer: int) -> String:
 	money += maxi(offer, 0)
 	_sync_record_from_active()
 	return ""
+
+
+func _erase_owned_copy(kind: String, id: String) -> void:
+	match kind:
+		"part":
+			owned_part_ids.erase(id)
+		"engine":
+			owned_engine_ids.erase(id)
+		"transmission":
+			owned_gearbox_ids.erase(id)
+		"wheels":
+			owned_wheel_ids.erase(id)
 
 
 ## Takes the condition of what another car had at `mount` into the spares pool, when a
@@ -1986,11 +1990,15 @@ func _drop_active_car() -> void:
 	car_spec = {}
 	car_name = "No car"
 	if before > 0 and owned_car_ids.is_empty():
-		cars_just_gone = true
-		var tree := get_tree()
-		var scene := tree.current_scene if tree != null else null
-		if scene != null and scene.has_method(&"announce_cars_gone"):
-			scene.call(&"announce_cars_gone")
+		_note_cars_gone()
+
+
+func _note_cars_gone() -> void:
+	cars_just_gone = true
+	var tree := get_tree()
+	var scene := tree.current_scene if tree != null else null
+	if scene != null and scene.has_method(&"announce_cars_gone"):
+		scene.call(&"announce_cars_gone")
 
 
 ## The garage reads this once, on the visit straight after the last car left.
@@ -2096,6 +2104,89 @@ func buy_or_select_car(model_id: String) -> String:
 	current_car_id = _add_owned_car(model_id, newspaper_color(model_id))
 	_install_car(current_car_id)
 	return ""
+
+
+## What a car is worth, as in Street Rod 2: what the paper asks for it, plus the price of
+## each part put on it, less the price of each stock part no longer on it. Wear does not
+## come into it. A stripped car still has its body, so it never falls below a tenth of
+## the paper's price and there is always a price it sells at.
+func car_value(instance_id: String) -> int:
+	if instance_id == current_car_id:
+		_sync_record_from_active()
+	var stored: Variant = car_records.get(instance_id, null)
+	if typeof(stored) != TYPE_DICTIONARY:
+		return 0
+	var rec: Dictionary = stored
+	var model_id := str(rec.get("model_id", ""))
+	var listed := int(listing_by_id(USED_CARS, model_id).get("price", 0))
+	var value := listed + _mounts_price(_record_mounts(rec)) - _mounts_price(_stock_mounts(model_id))
+	return maxi(value, roundi(listed * 0.1))
+
+
+## Sells a car for `price`. What is on it goes with it. The bay stays empty if it was the
+## car in the bay, even if other cars are owned.
+func sell_car(instance_id: String, price: int) -> String:
+	if not owned_car_ids.has(instance_id):
+		return "That car isn't in the garage."
+	var active := instance_id == current_car_id
+	if active:
+		_sync_record_from_active()
+	var spares := {}
+	for mount in _record_mounts(car_records.get(instance_id, {})):
+		spares[mount] = free_spare_count(mount[0], mount[1])
+	money += maxi(price, 0)
+	if active:
+		_drop_active_car()
+	else:
+		owned_car_ids.erase(instance_id)
+		car_records.erase(instance_id)
+		if owned_car_ids.is_empty():
+			_note_cars_gone()
+	for mount in spares.keys():
+		while free_spare_count(mount[0], mount[1]) > int(spares[mount]):
+			_erase_owned_copy(mount[0], mount[1])
+	_trim_spare_conditions()
+	return ""
+
+
+## What is on a car record, as [kind, id] pairs, one for each copy.
+func _record_mounts(rec: Dictionary) -> Array:
+	var out: Array = []
+	var engine_id := str(rec.get("engine_id", NO_ENGINE_ID))
+	if not engine_id.is_empty() and engine_id != NO_ENGINE_ID:
+		out.append(["engine", engine_id])
+	var gearbox_id := str(rec.get("gearbox_id", NO_GEARBOX_ID))
+	if not gearbox_id.is_empty() and gearbox_id != NO_GEARBOX_ID:
+		out.append(["transmission", gearbox_id])
+	var wheel_id := str(rec.get("wheel_id", ""))
+	if not wheel_id.is_empty():
+		out.append(["wheels", wheel_id])
+	var slots: Variant = rec.get("slot_parts", {})
+	if typeof(slots) == TYPE_DICTIONARY:
+		for part_id in (slots as Dictionary).values():
+			if str(part_id) != NO_PART_ID and not str(part_id).is_empty():
+				out.append(["part", str(part_id)])
+	for part_id in _string_array(rec.get("part_ids", [])):
+		out.append(["part", part_id])
+	return out
+
+
+## What a model comes with, as [kind, id] pairs.
+func _stock_mounts(model_id: String) -> Array:
+	var gearbox_id := _stock_part_id(model_id, "transmission")
+	return _record_mounts({
+		"engine_id": _stock_part_id(model_id, "engine"),
+		"gearbox_id": gearbox_id if not gearbox_id.is_empty() else DEFAULT_GEARBOX_ID,
+		"wheel_id": _stock_part_id(model_id, "wheels"),
+		"slot_parts": STOCK_SLOT_PARTS,
+	})
+
+
+func _mounts_price(mounts: Array) -> int:
+	var total := 0
+	for mount in mounts:
+		total += int(listing_for(mount[0], mount[1]).get("price", 0))
+	return total
 
 
 func _add_owned_car(model_id: String, paint: Color) -> String:

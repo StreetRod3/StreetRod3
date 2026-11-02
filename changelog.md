@@ -48,6 +48,12 @@ The spare parts folder no longer puts Sell and Fit on each part. A click or a nu
 
 In the garage, T changes the tires and L opens spare parts. Pressing the same key again closes that list. A opens the transmission. Inside the car list, L still sells the highlighted car.
 
+The car's name in the garage now sits in a white box at the top of the screen, as in Street Rod 2, and only the box opens the car list. The list fits its rows without a scrollbar up to eight cars.
+
+Sell it now works, with Street Rod 2's haggling. You type a price into "I'll take $" and press Offer (O or Enter), or Never mind (N or Esc). The buyer has a figure in mind, 75 to 94 percent of what the car is worth, and a price at or under it sells. Over it, the buyer counters with "How about $…?" up to twice, and you can say OK or No and name another price; after the second counter the buyer takes anything within a tenth of it and otherwise says "No thanks!" More than the car is worth gets "No way!" and one more try before "Get lost!", and more than 115 percent gets "You must be kidding!" Under half its worth gets "You must be crazy. I'll take it!" A car is worth the paper's price, plus the price of each part put on it, less the price of each stock part no longer on it, and never less than a tenth of the paper's price. Wear does not change it.
+
+What is on a sold car goes with it, and spare parts stay as they were. A car sold from the bay drives off through the doors and leaves the bay empty, even with other cars in the garage, and the list comes back so another can be rolled in. Selling the last car says "All cars gone!", and opening the list with no cars says "You've got no car, dummy!"
+
 ## 2026-11-02
 
 The fuel can in the garage is the jerry can model. It stands on the floor where the old can stood, and clicking it still drives out to the gas station.
