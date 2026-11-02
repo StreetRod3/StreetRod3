@@ -9,7 +9,9 @@ const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
-const ARCADE_REF_ACCEL := 24.0
+## Pull at a preset `accel_scale` of 1 in the arcade drive. Set so the ladder of rivals
+## lines up with what the player's car can do there
+const ARCADE_REF_ACCEL := 46.0
 const ARCADE_RATIOS: Array[float] = [2.52, 1.52, 1.00]
 
 ## Opponent preset `accel_scale` that matches the player's drive force.

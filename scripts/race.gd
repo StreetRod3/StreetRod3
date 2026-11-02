@@ -346,6 +346,8 @@ func _show_wreck() -> void:
 
 func _show_result(player_won: bool) -> void:
 	_end_race_ui()
+	if player_won:
+		GameState.note_race_win()
 	var payout := GameState.apply_race_stake(player_won)
 	var pink := GameState.apply_pink_slips(player_won)
 	if player_won:

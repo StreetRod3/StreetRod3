@@ -238,8 +238,15 @@ func set_wheel_positions(local_positions: Array) -> void:
 	if local_positions.size() != 4:
 		return
 	var pts: Array[Vector3] = []
+	# Some car files mount a wheel by a point well above its axle. The hub has to be low
+	# enough for the suspension to find the road, or the tires never touch it.
+	var car := get_parent() as Node3D
+	var car_y := car.global_position.y if car != null else 0.0
 	for point in local_positions:
-		pts.append(point as Vector3)
+		var hub := point as Vector3
+		if hub.y + car_y > _MAX_RIDE_DROP_M:
+			hub.y = _DEFAULT_RIDE_DROP_M - car_y
+		pts.append(hub)
 	var front_z := (pts[0].z + pts[1].z) * 0.5
 	var rear_z := (pts[2].z + pts[3].z) * 0.5
 	var span := front_z - rear_z

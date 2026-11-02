@@ -235,18 +235,10 @@ var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
 var newspaper_colors: Dictionary = {}
 
-## Driving presets assigned the first time a rival is called.
-## Scales are how much of their own car's top speed and launch the driver gets out of it.
-const _OPPONENT_PRESETS: Array[Dictionary] = [
-	{"accel_scale": 0.28, "vmax_scale": 0.86, "shift_time": 0.40},
-	{"accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
-	{"accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.36},
-]
-## The tires a rival can run on, each with its odds. A rival keeps a set until their car
-## changes hands, and most run what the car came on.
-const _OPPONENT_TIRE_ODDS: Array[Array] = [["tires-bias", 50], ["tires-radial", 35], ["tires", 15]]
 ## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
+## What each new rival drives, in the order they are met.
+var _rival_ladder: Array[Dictionary] = []
 var _opponent_names: Array[String] = []
 ## Skin and head model from `OPPONENTS_PATH`, keyed by rival name.
 var _opponent_skins: Dictionary = {}
@@ -944,16 +936,20 @@ func _random_paint() -> Color:
 	return Color.from_hsv(randf(), randf_range(0.55, 0.95), randf_range(0.45, 0.92))
 
 
-## Picks a name at random. A rival who is not on the list yet gets a car assigned now.
+## Who turns up next. Once the newest rival has been beaten, the next call brings someone
+## new, the next step up `_rival_ladder`. Until then it is anybody already met.
 func call_random_opponent() -> int:
 	var names := _opponent_name_pool()
 	if names.is_empty():
 		return -1
-	var picked := names[randi() % names.size()]
-	var existing := _index_of_opponent(picked)
-	if existing >= 0:
-		return existing
-	return _meet_opponent(picked)
+	if opponents.is_empty() or bool(opponents.back().get("beaten", false)):
+		var unmet: Array[String] = []
+		for opp_name in names:
+			if _index_of_opponent(opp_name) < 0:
+				unmet.append(opp_name)
+		if not unmet.is_empty():
+			return _meet_opponent(unmet[randi() % unmet.size()])
+	return randi() % opponents.size()
 
 
 func selected_opponent() -> Dictionary:
@@ -997,30 +993,52 @@ func _index_of_opponent(opp_name: String) -> int:
 
 
 func _meet_opponent(opp_name: String) -> int:
-	var car := _random_opponent_car()
-	if car.is_empty():
-		push_warning("No cars available for opponent %s" % opp_name)
-		return -1
-	var preset: Dictionary = _OPPONENT_PRESETS[randi() % _OPPONENT_PRESETS.size()]
 	var index := opponents.size()
-	opponents.append({
-		"id": index,
-		"name": opp_name,
-		"car_id": str(car.get("id", "")),
-		"car_name": str(car.get("name", "Car")),
-		"car_file": str(car.get("car_file", "")),
-		"color": _random_paint(),
-		"accel_scale": float(preset.get("accel_scale", 0.3)),
-		"vmax_scale": float(preset.get("vmax_scale", 0.9)),
-		"shift_time": float(preset.get("shift_time", 0.35)),
-		"tires": _random_opponent_tires(),
-	})
-	opponents[index].merge(_opponent_stock_build(str(car.get("car_file", ""))))
+	opponents.append({"id": index, "name": opp_name, "tier": index, "beaten": false, "color": _random_paint()})
+	_apply_rival_build(opponents[index], _ladder_row(index))
 	return index
 
 
-## A rival's power, top speed before gearing and tires, and gearbox: what their car came
-## with. Nothing about a rival's performance comes from the player's car.
+func _ladder_row(tier: int) -> Dictionary:
+	_opponent_name_pool()
+	if _rival_ladder.is_empty():
+		return {}
+	return _rival_ladder[clampi(tier, 0, _rival_ladder.size() - 1)]
+
+
+## The rival's car and everything about how it goes, from a row of the ladder. A rival's
+## performance comes from here, never from the player's car.
+func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
+	var car := listing_by_id(USED_CARS, str(row.get("car", "")))
+	if car.is_empty() and not USED_CARS.is_empty():
+		car = USED_CARS[0]
+	opp["car_id"] = str(car.get("id", ""))
+	opp["car_name"] = str(car.get("name", "Car"))
+	opp["car_file"] = str(car.get("car_file", ""))
+	opp["tires"] = str(row.get("tires", STOCK_SLOT_PARTS[SLOT_TIRES]))
+	opp["accel_scale"] = float(row.get("accel_scale", 0.3))
+	opp["vmax_scale"] = float(row.get("vmax_scale", 0.9))
+	opp["shift_time"] = float(row.get("shift_time", 0.35))
+	var build := _opponent_stock_build(opp["car_file"])
+	var engine := listing_by_id(ENGINES, str(row.get("engine", build["engine"])))
+	if not engine.is_empty():
+		build["engine"] = str(engine.get("id", ""))
+		build["hp"] = float(engine.get("hp", 280.0))
+		build["vmax"] = float(engine.get("vmax", 220.0))
+	build["hp"] += float(row.get("bonus_hp", 0.0))
+	build["vmax"] += float(row.get("bonus_vmax", 0.0))
+	build["gearbox"] = str(row.get("gearbox", build["gearbox"]))
+	opp.merge(build, true)
+
+
+## Marks the selected rival as beaten, which brings the next one along.
+func note_race_win() -> void:
+	var opp := selected_opponent()
+	if not opp.is_empty():
+		opp["beaten"] = true
+
+
+## What a car came with: its power, top speed before gearing and tires, engine, and gearbox.
 func _opponent_stock_build(car_file: String) -> Dictionary:
 	var spec := _CarFile.load_path(car_file)
 	var engine: Dictionary = spec.get("engine", {})
@@ -1028,26 +1046,9 @@ func _opponent_stock_build(car_file: String) -> Dictionary:
 	return {
 		"hp": float(engine.get("hp", 280.0)),
 		"vmax": float(engine.get("vmax", 220.0)),
+		"engine": str(engine.get("id", "")),
 		"gearbox": str(gearbox.get("id", DEFAULT_GEARBOX_ID)),
 	}
-
-
-func _random_opponent_tires() -> String:
-	var total := 0
-	for row in _OPPONENT_TIRE_ODDS:
-		total += int(row[1])
-	var pick := randi() % total
-	for row in _OPPONENT_TIRE_ODDS:
-		pick -= int(row[1])
-		if pick < 0:
-			return str(row[0])
-	return str(STOCK_SLOT_PARTS[SLOT_TIRES])
-
-
-func _random_opponent_car() -> Dictionary:
-	if USED_CARS.is_empty():
-		return {}
-	return USED_CARS[randi() % USED_CARS.size()]
 
 
 func _load_opponent_names() -> Array[String]:
@@ -1072,6 +1073,7 @@ func _load_opponent_names() -> Array[String]:
 		return names
 	_opponent_skins.clear()
 	_opponent_heads.clear()
+	_rival_ladder = _dict_list(root.get("ladder", []))
 	for item in listed:
 		var name := ""
 		var skin := Color(0.76, 0.58, 0.44)
@@ -1112,7 +1114,10 @@ func _opponents_for_save() -> Array:
 			"tires": str(opp.get("tires", "")),
 			"hp": float(opp.get("hp", 280.0)),
 			"vmax": float(opp.get("vmax", 220.0)),
+			"engine": str(opp.get("engine", "")),
 			"gearbox": str(opp.get("gearbox", DEFAULT_GEARBOX_ID)),
+			"tier": int(opp.get("tier", 0)),
+			"beaten": bool(opp.get("beaten", false)),
 		})
 	return rows
 
@@ -1141,12 +1146,15 @@ func _load_saved_opponents(d: Dictionary) -> void:
 			"vmax_scale": float(row.get("vmax_scale", 0.9)),
 			"shift_time": float(row.get("shift_time", 0.35)),
 			"tires": str(row.get("tires", "")),
+			"tier": int(row.get("tier", i)),
+			"beaten": bool(row.get("beaten", false)),
 		})
 		# Rivals in older saves went by the player's car, so they start on what theirs came with.
 		var saved_build := row if row.has("hp") else _opponent_stock_build(str(row.get("car_file", "")))
 		opponents[i]["hp"] = float(saved_build.get("hp", 280.0))
 		opponents[i]["vmax"] = float(saved_build.get("vmax", 220.0))
 		opponents[i]["gearbox"] = str(saved_build.get("gearbox", DEFAULT_GEARBOX_ID))
+		opponents[i]["engine"] = str(saved_build.get("engine", ""))
 		i += 1
 
 
@@ -2102,7 +2110,7 @@ func _take_opponent_car() -> bool:
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
-	var won_id := _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")))
+	var won_id := _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")))
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
 	return true
@@ -2114,11 +2122,12 @@ func _lose_raced_car() -> void:
 	_sync_record_from_active()
 	var lost_id := current_car_id
 	var model_id := car_model_id(lost_id)
-	var tires := slot_part(SLOT_TIRES)
 	# The rival keeps the car as it stands now, its rear end built into the numbers.
+	var tires := slot_part(SLOT_TIRES)
 	var build := {
 		"hp": engine_power_hp * final_drive_accel(),
 		"vmax": (vmax_kmh - float(tires.get("vmax", 0.0))) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0)),
+		"engine": equipped_engine_id,
 		"gearbox": equipped_gearbox_id,
 	}
 	_set_opponent_car(selected_opponent_id, model_id, car_color, str(tires.get("id", "")), build)
@@ -2195,8 +2204,8 @@ func _clear_record_engine_parts(rec: Dictionary) -> void:
 			_release_condition(rec, "slot:" + slot)
 
 
-## Gives a rival a car, on its stock build unless `build` is given.
-func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String, build: Dictionary = {}) -> void:
+## Gives a rival the player's car, with its numbers in `build`.
+func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String, build: Dictionary) -> void:
 	if index < 0 or index >= opponents.size():
 		return
 	var car := listing_by_id(USED_CARS, model_id)
@@ -2206,14 +2215,15 @@ func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String
 	opp["car_file"] = str(car.get("car_file", ""))
 	opp["color"] = paint
 	opp["tires"] = tires
-	opp.merge(_opponent_stock_build(opp["car_file"]) if build.is_empty() else build, true)
+	opp.merge(build, true)
 
 
 func _replace_opponent_car(index: int) -> void:
-	if USED_CARS.is_empty():
+	var opp := opponent_at(index)
+	if opp.is_empty():
 		return
-	var picked: Dictionary = USED_CARS[randi() % USED_CARS.size()]
-	_set_opponent_car(index, str(picked.get("id", "")), _random_paint(), _random_opponent_tires())
+	_apply_rival_build(opp, _ladder_row(int(opp.get("tier", index))))
+	opp["color"] = _random_paint()
 
 
 func consume_race_fuel(race_type: String = "") -> void:
@@ -2351,8 +2361,8 @@ func _mounts_price(mounts: Array) -> int:
 
 
 ## A new car brings its own copy of everything on it, so spares stay spares.
-## A new car in the garage, on the tires named or else its stock set.
-func _add_owned_car(model_id: String, paint: Color, tires: String = "") -> String:
+## A new car in the garage, as it came unless a tire set, engine, or gearbox is named.
+func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "") -> String:
 	_own_fitted_parts()
 	var instance_id := "car-%d" % _next_car_serial
 	_next_car_serial += 1
@@ -2360,6 +2370,10 @@ func _add_owned_car(model_id: String, paint: Color, tires: String = "") -> Strin
 	var rec := _make_car_record(model_id, paint)
 	if not tires.is_empty():
 		rec["slot_parts"][SLOT_TIRES] = tires
+	if not listing_by_id(ENGINES, engine).is_empty():
+		rec["engine_id"] = engine
+	if not listing_by_id(GEARBOXES, gearbox).is_empty():
+		rec["gearbox_id"] = gearbox
 	car_records[instance_id] = rec
 	for mount in _record_mounts(rec):
 		_owned_list(mount[0]).append(mount[1])
