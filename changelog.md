@@ -54,6 +54,8 @@ Sell it now works, with Street Rod 2's haggling. You type a price into "I'll tak
 
 What is on a sold car goes with it, and spare parts stay as they were. A car sold from the bay drives off through the doors and leaves the bay empty, even with other cars in the garage, and the list comes back so another can be rolled in. Selling the last car says "All cars gone!", and opening the list with no cars says "You've got no car, dummy!"
 
+Every car now owns its own copy of what is on it, engines, gearboxes, and wheels as well as parts. Before, buying or winning a car with the same stock part as a spare used up the spare, and two cars with the same engine shared one copy, so pulling that engine off one of them lost it instead of putting it in spare parts. A spare keeps its wear when another car comes in, fitting a spare no longer takes the same part off another car, and a blown engine is always gone. Older saves get the missing copies when they load; a spare already lost does not come back.
+
 ## 2026-11-02
 
 The fuel can in the garage is the jerry can model. It stands on the floor where the old can stood, and clicking it still drives out to the gas station.
