@@ -5,6 +5,7 @@ extends CharacterBody3D
 
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
+const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
@@ -62,9 +63,9 @@ func _ready() -> void:
 	_apply_opponent_look(opp)
 	_drive_scale = float(opp.get("accel_scale", PRESET_ACCEL_REF)) / PRESET_ACCEL_REF
 	_shift_time = float(opp.get("shift_time", 0.35))
-	var player_vmax: float = GameState.get_effective_vmax_kmh() / 3.6
-	_max_mps = player_vmax * float(opp.get("vmax_scale", 0.90))
-	_arcade_accel = ARCADE_REF_ACCEL * float(opp.get("accel_scale", 0.30)) * (GameState.engine_power_hp / 280.0)
+	var top_mps: float = GameState.opponent_top_kmh(opp) / 3.6
+	_max_mps = top_mps * float(opp.get("vmax_scale", 0.90))
+	_arcade_accel = ARCADE_REF_ACCEL * float(opp.get("accel_scale", 0.30)) * (GameState.engine_power_hp / 280.0) * _ArcadeDrive.grip_accel_scale(GameState.opponent_tire_grip(opp))
 	_lane_x = global_position.x
 	_apply_car_spec()
 	_layout_wheels()
@@ -264,7 +265,7 @@ func _apply_car_spec() -> void:
 	var spec: Variant = GameState.car_spec.get("chassis", {})
 	if typeof(spec) == TYPE_DICTIONARY:
 		chassis = spec
-	var grip_rating := GameState.tire_grip()
+	var grip_rating := GameState.opponent_tire_grip(GameState.selected_opponent())
 	_dynamics.apply_setup(chassis, grip_rating)
 
 

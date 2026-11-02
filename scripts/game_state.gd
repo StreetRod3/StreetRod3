@@ -242,6 +242,9 @@ const _OPPONENT_PRESETS: Array[Dictionary] = [
 	{"accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
 	{"accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.36},
 ]
+## The tires a rival can run on, each with its odds. A rival keeps a set until their car
+## changes hands, and most run what the car came on.
+const _OPPONENT_TIRE_ODDS: Array[Array] = [["tires-bias", 50], ["tires-radial", 35], ["tires", 15]]
 ## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
 var _opponent_names: Array[String] = []
@@ -1010,8 +1013,21 @@ func _meet_opponent(opp_name: String) -> int:
 		"accel_scale": float(preset.get("accel_scale", 0.3)),
 		"vmax_scale": float(preset.get("vmax_scale", 0.9)),
 		"shift_time": float(preset.get("shift_time", 0.35)),
+		"tires": _random_opponent_tires(),
 	})
 	return index
+
+
+func _random_opponent_tires() -> String:
+	var total := 0
+	for row in _OPPONENT_TIRE_ODDS:
+		total += int(row[1])
+	var pick := randi() % total
+	for row in _OPPONENT_TIRE_ODDS:
+		pick -= int(row[1])
+		if pick < 0:
+			return str(row[0])
+	return str(STOCK_SLOT_PARTS[SLOT_TIRES])
 
 
 func _random_opponent_car() -> Dictionary:
@@ -1079,6 +1095,7 @@ func _opponents_for_save() -> Array:
 			"accel_scale": float(opp.get("accel_scale", 0.3)),
 			"vmax_scale": float(opp.get("vmax_scale", 0.9)),
 			"shift_time": float(opp.get("shift_time", 0.35)),
+			"tires": str(opp.get("tires", "")),
 		})
 	return rows
 
@@ -1106,6 +1123,7 @@ func _load_saved_opponents(d: Dictionary) -> void:
 			"accel_scale": float(row.get("accel_scale", 0.3)),
 			"vmax_scale": float(row.get("vmax_scale", 0.9)),
 			"shift_time": float(row.get("shift_time", 0.35)),
+			"tires": str(row.get("tires", "")),
 		})
 		i += 1
 
@@ -1155,7 +1173,30 @@ func get_equipped_engine() -> Dictionary:
 
 ## How well the active car's tires hold the road, from 1 to 5.
 func tire_grip() -> float:
-	return clampf(float(slot_part(SLOT_TIRES).get("grip", 3.0)), 1.0, 5.0)
+	return _grip_of(slot_part(SLOT_TIRES))
+
+
+## The tires on a rival's car. A rival from an older save is on the stock set.
+func opponent_tires(opp: Dictionary) -> Dictionary:
+	var tires := listing_by_id(PARTS, str(opp.get("tires", "")))
+	if str(tires.get("slot", "")) != SLOT_TIRES:
+		return listing_by_id(PARTS, str(STOCK_SLOT_PARTS[SLOT_TIRES]))
+	return tires
+
+
+func opponent_tire_grip(opp: Dictionary) -> float:
+	return _grip_of(opponent_tires(opp))
+
+
+## The player's top speed with the rival's tires in place of the player's, before the
+## rival's own `vmax_scale`.
+func opponent_top_kmh(opp: Dictionary) -> float:
+	var tire_gain := float(opponent_tires(opp).get("vmax", 0.0)) - float(slot_part(SLOT_TIRES).get("vmax", 0.0))
+	return (vmax_kmh + tire_gain) * _top_speed_scale()
+
+
+func _grip_of(tires: Dictionary) -> float:
+	return clampf(float(tires.get("grip", 3.0)), 1.0, 5.0)
 
 
 ## How much heavier the active car's wheels make it than the set it came on, in kg as they
@@ -1214,8 +1255,11 @@ func get_equipped_gearbox() -> Dictionary:
 
 
 func get_effective_vmax_kmh() -> float:
-	var top := float(get_equipped_gearbox().get("top_speed", 1.0))
-	return vmax_kmh * top * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0))
+	return vmax_kmh * _top_speed_scale()
+
+
+func _top_speed_scale() -> float:
+	return float(get_equipped_gearbox().get("top_speed", 1.0)) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0))
 
 
 ## Pull of the rear end against the stock gears. A shorter rear end pulls harder.
@@ -2023,7 +2067,7 @@ func _take_opponent_car() -> bool:
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
-	var won_id := _add_owned_car(model_id, paint)
+	var won_id := _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")))
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
 	return true
@@ -2035,7 +2079,7 @@ func _lose_raced_car() -> void:
 	_sync_record_from_active()
 	var lost_id := current_car_id
 	var model_id := car_model_id(lost_id)
-	_set_opponent_car(selected_opponent_id, model_id, car_color)
+	_set_opponent_car(selected_opponent_id, model_id, car_color, str(slot_part(SLOT_TIRES).get("id", "")))
 	_drop_active_car()
 	if not owned_car_ids.is_empty():
 		_install_car(owned_car_ids[0])
@@ -2109,7 +2153,7 @@ func _clear_record_engine_parts(rec: Dictionary) -> void:
 			_release_condition(rec, "slot:" + slot)
 
 
-func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
+func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String) -> void:
 	if index < 0 or index >= opponents.size():
 		return
 	var car := listing_by_id(USED_CARS, model_id)
@@ -2118,13 +2162,14 @@ func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
 	opp["car_name"] = str(car.get("name", "Car"))
 	opp["car_file"] = str(car.get("car_file", ""))
 	opp["color"] = paint
+	opp["tires"] = tires
 
 
 func _replace_opponent_car(index: int) -> void:
 	if USED_CARS.is_empty():
 		return
 	var picked: Dictionary = USED_CARS[randi() % USED_CARS.size()]
-	_set_opponent_car(index, str(picked.get("id", "")), _random_paint())
+	_set_opponent_car(index, str(picked.get("id", "")), _random_paint(), _random_opponent_tires())
 
 
 func consume_race_fuel(race_type: String = "") -> void:
@@ -2262,12 +2307,15 @@ func _mounts_price(mounts: Array) -> int:
 
 
 ## A new car brings its own copy of everything on it, so spares stay spares.
-func _add_owned_car(model_id: String, paint: Color) -> String:
+## A new car in the garage, on the tires named or else its stock set.
+func _add_owned_car(model_id: String, paint: Color, tires: String = "") -> String:
 	_own_fitted_parts()
 	var instance_id := "car-%d" % _next_car_serial
 	_next_car_serial += 1
 	owned_car_ids.append(instance_id)
 	var rec := _make_car_record(model_id, paint)
+	if not tires.is_empty():
+		rec["slot_parts"][SLOT_TIRES] = tires
 	car_records[instance_id] = rec
 	for mount in _record_mounts(rec):
 		_owned_list(mount[0]).append(mount[1])
