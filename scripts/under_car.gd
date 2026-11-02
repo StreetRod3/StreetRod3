@@ -461,6 +461,9 @@ func _refresh_ui() -> void:
 	if _busy:
 		return
 	var tip := "Click a part to change it. The wheel zooms; right-drag tilts the view."
+	if GameState.has_engine() and GameState.slot_part(GameState.SLOT_MANIFOLD).is_empty():
+		_hint.text = "The engine has no exhaust manifolds and won't run without them. " + tip
+		return
 	if GameState.slot_part(GameState.SLOT_EXHAUST).is_empty():
 		_hint.text = "The headers are open with no exhaust on. " + tip
 		return
@@ -820,8 +823,6 @@ func _zone(slot: String, size: Vector3, pos: Vector3) -> void:
 func _rebuild_rig(slot: String) -> Node3D:
 	var part := GameState.slot_part(slot)
 	if part.is_empty():
-		return null
-	if slot == GameState.SLOT_MANIFOLD and not GameState.has_engine():
 		return null
 	var rig := Node3D.new()
 	rig.name = "Rig_%s" % slot

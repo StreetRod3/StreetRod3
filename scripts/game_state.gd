@@ -94,6 +94,8 @@ const REMOVABLE_SLOTS: Array[String] = [
 	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT,
 	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
+## Bolt-ons inside the engine, which come out of the car with it.
+const ENGINE_BOLT_ONS: Array[String] = ["cam"]
 ## What every car rolls out of the factory with.
 const STOCK_SLOT_PARTS := {
 	SLOT_MANIFOLD: "manifold-iron",
@@ -357,6 +359,8 @@ func engine_trouble() -> String:
 		return "The distributor is loose."
 	if not plug_wires:
 		return "The plug wires are off."
+	if slot_part(SLOT_MANIFOLD).is_empty():
+		return "There are no exhaust manifolds."
 	return ""
 
 
@@ -523,7 +527,8 @@ func fit_engine(engine_id: String) -> String:
 
 
 ## Lifts a part out from under the hood into spare parts: an engine, or a hood slot's
-## part. Its bolts must be out and nothing may be on top of it.
+## part. Its bolts must be out and nothing may be on top of it. The exhaust manifolds and
+## what is inside the engine go to spare parts with the engine.
 func remove_hood_part(key: String) -> String:
 	if not is_hood_part_fitted(key):
 		return "There is nothing there to take off."
@@ -535,6 +540,7 @@ func remove_hood_part(key: String) -> String:
 	engine_bolts.erase(key)
 	if key == HOOD_ENGINE:
 		equipped_engine_id = NO_ENGINE_ID
+		_clear_engine_parts(slot_part_ids, equipped_part_ids)
 		plug_wires = false
 	else:
 		slot_part_ids[key] = NO_PART_ID
@@ -1589,6 +1595,8 @@ func equip_part(part_id: String) -> String:
 		return fit_slot_part(part_id)
 	if is_part_equipped(part_id):
 		return "Already on the car."
+	if ENGINE_BOLT_ONS.has(part_id) and not has_engine():
+		return "Put an engine in first."
 	if spare_count(part_id) <= 0:
 		return "That part is not in spare parts."
 	equipped_part_ids.append(part_id)
@@ -1708,12 +1716,16 @@ func muffler_slots() -> Array[String]:
 
 
 ## Slots in use on the active car. The left muffler is there only behind a dual exhaust,
-## the hood slots only with an engine in, and only as many carburetors as the intake takes.
+## the manifolds and hood slots only with an engine in, and only as many carburetors as
+## the intake takes.
 func active_slots() -> Array[String]:
 	var out: Array[String] = []
 	for slot in UNDER_CAR_SLOTS:
-		if slot != SLOT_MUFFLER_LEFT or has_dual_exhaust():
-			out.append(slot)
+		if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
+			continue
+		if slot == SLOT_MANIFOLD and not has_engine():
+			continue
+		out.append(slot)
 	if not has_engine():
 		return out
 	var carbs := carb_slots()
@@ -1787,6 +1799,8 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 		return "That part is not in spare parts."
 	if str(slot_part_ids.get(slot, NO_PART_ID)) == part_id:
 		return "Already on the car."
+	if kind == SLOT_MANIFOLD and not has_engine():
+		return "Put an engine in first."
 	if kind == SLOT_MUFFLER and slot_part(SLOT_EXHAUST).is_empty():
 		return "Put an exhaust on first."
 	if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
@@ -2006,13 +2020,13 @@ func take_cars_just_gone() -> bool:
 
 
 ## Pulls the blown engine out of the active car. It is gone, not a spare; what was
-## bolted on top of it goes to spare parts.
+## bolted to it or inside it goes to spare parts.
 func remove_engine() -> void:
 	if not has_engine():
 		return
 	var blown := equipped_engine_id
 	equipped_engine_id = NO_ENGINE_ID
-	_clear_hood_slots(slot_part_ids)
+	_clear_engine_parts(slot_part_ids, equipped_part_ids)
 	engine_bolts.clear()
 	plug_wires = false
 	_sync_record_from_active()
@@ -2020,9 +2034,31 @@ func remove_engine() -> void:
 	refresh_car_stats()
 
 
-func _clear_hood_slots(slots: Dictionary) -> void:
+## Takes off everything that needs an engine. Owned copies off a car are spare parts.
+func _clear_engine_parts(slots: Dictionary, bolt_ons: Array[String]) -> void:
+	slots[SLOT_MANIFOLD] = NO_PART_ID
 	for slot in HOOD_SLOTS:
 		slots[slot] = NO_PART_ID
+	for part_id in ENGINE_BOLT_ONS:
+		while bolt_ons.has(part_id):
+			bolt_ons.erase(part_id)
+
+
+## `_clear_engine_parts()` for a car that is not in the bay, with the conditions of what
+## came off passed on to the spares.
+func _clear_record_engine_parts(rec: Dictionary) -> void:
+	var slots := _slots_from(rec.get("slot_parts", null))
+	var bolt_ons := _string_array(rec.get("part_ids", []))
+	_clear_engine_parts(slots, bolt_ons)
+	rec["slot_parts"] = slots
+	rec["part_ids"] = bolt_ons
+	rec["engine_bolts"] = {}
+	rec["plug_wires"] = false
+	for slot in ALL_SLOTS:
+		if str(slots[slot]) == NO_PART_ID:
+			_release_condition(rec, "slot:" + slot)
+	for part_id in ENGINE_BOLT_ONS:
+		_release_condition(rec, "bolt:" + part_id)
 
 
 func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
@@ -2249,7 +2285,8 @@ func _slots_from(value: Variant) -> Dictionary:
 		var saved: Dictionary = value
 		for slot in ALL_SLOTS:
 			var part_id := str(saved.get(slot, ""))
-			if part_id == NO_PART_ID and REMOVABLE_SLOTS.has(slot):
+			# The manifolds are off a car with no engine, or one just put in.
+			if part_id == NO_PART_ID and (REMOVABLE_SLOTS.has(slot) or slot == SLOT_MANIFOLD):
 				slots[slot] = part_id
 			elif str(listing_by_id(PARTS, part_id).get("slot", "")) == spot_kind(slot):
 				slots[slot] = part_id
@@ -2270,6 +2307,10 @@ func _slots_from(value: Variant) -> Dictionary:
 	if intake.is_empty():
 		slots[SLOT_DISTRIBUTOR] = NO_PART_ID
 		slots[SLOT_AIR_CLEANER] = NO_PART_ID
+	# The air cleaner sits on the carburetors, so it needs all of them.
+	for i in pads:
+		if str(slots[CARB_SLOTS[i]]) == NO_PART_ID:
+			slots[SLOT_AIR_CLEANER] = NO_PART_ID
 	return slots
 
 
@@ -2392,7 +2433,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	_settle_slot_parts()
 	slot_part_ids = _slots_from(slot_part_ids)
 	if equipped_engine_id == NO_ENGINE_ID:
-		_clear_hood_slots(slot_part_ids)
+		_clear_engine_parts(slot_part_ids, equipped_part_ids)
 	engine_bolts = _hood_bolts_from(rec.get("engine_bolts", null))
 	plug_wires = bool(rec.get("plug_wires", true))
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
@@ -2440,6 +2481,8 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		rec[key] = stock
 		excess -= 1
 		_release_condition(rec, slot)
+		if slot == "engine" and stock == NO_ENGINE_ID:
+			_clear_record_engine_parts(rec)
 		if slot == "transmission":
 			rec["gearbox_bolts"] = _tight_bolts()
 		car_records[car_id] = rec
@@ -2574,6 +2617,8 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 	}
 	if row.has("conditions"):
 		rec["conditions"] = _mount_conditions_from(row["conditions"])
+	if rec["engine_id"] == NO_ENGINE_ID:
+		_clear_record_engine_parts(rec)
 	return rec
 
 
