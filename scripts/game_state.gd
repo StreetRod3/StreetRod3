@@ -201,6 +201,14 @@ var cars_just_gone: bool = false
 ## The next garage visit rolls the car in from outside. Set by the drive-in, the gas
 ## station, and a car just bought from the paper. Not saved.
 var drive_into_garage: bool = false
+## A rival's engine on the hood screen. Empty when the bay is the player's car.
+## Not saved. Keys: engine_id, car_name, color.
+var hood_peek: Dictionary = {}
+## Rival left waiting at the drive-in while the player looks under the hood. -1 if none.
+## Not saved.
+var drive_in_rival_index: int = -1
+## The player already closed one look under this rival's hood. Not saved.
+var drive_in_hood_seen: bool = false
 ## The direct-speed driving model from before the tire simulation.
 var arcade_drive: bool = true
 
@@ -744,6 +752,9 @@ func new_game() -> void:
 	race_pink_slips = false
 	cars_just_gone = false
 	drive_into_garage = false
+	hood_peek.clear()
+	drive_in_rival_index = -1
+	drive_in_hood_seen = false
 	money = 2500
 	_next_car_serial = 1
 	owned_car_ids.clear()
@@ -900,6 +911,9 @@ func load_game(slot: int) -> bool:
 	race_pink_slips = bool(d.get("race_pink_slips", false))
 	cars_just_gone = false
 	drive_into_garage = false
+	hood_peek.clear()
+	drive_in_rival_index = -1
+	drive_in_hood_seen = false
 	money = int(d.get("money", money))
 	_next_car_serial = maxi(int(d.get("next_car_serial", 1)), 1)
 	current_car_id = _migrate_car_id(str(d.get("current_car_id", current_car_id)))

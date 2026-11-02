@@ -3,6 +3,7 @@ extends Node3D
 ## Night drive-in. Click the man, pick a rival, and their car drives in from the left.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _CarFile := preload("res://scripts/car_file.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 ## Upright height of the rival's head, in meters.
@@ -49,6 +50,9 @@ const _RIVAL_STILL := 0
 const _RIVAL_ARRIVE := 1
 const _RIVAL_WAIT := 2
 const _RIVAL_LEAVE := 3
+const _LINE_NONE := 0
+const _LINE_GARAGE := 1
+const _LINE_CHICKEN := 2
 
 const _PARKED: Array[Dictionary] = [
 	{"file": "res://assets/cars/sr1-corvette-1956.car", "paint": Color(0.72, 0.08, 0.08), "x": -7.2, "yaw": PI},
@@ -89,12 +93,18 @@ var _road_stake_high: Button
 var _road_stake_pink: Button
 var _road_stake_back: Button
 var _speech: Control
+var _speech_line: int = _LINE_NONE
 var _driver_seat: Node3D
 var _fuel_root: Control
 var _fuel_message: Label
 var _fuel_back: Button
 var _neon: Label3D
 var _rival: StaticBody3D
+var _rival_car: Node3D
+var _rival_caption: String = ""
+## Hood of the rival's car, in that car's local space. Same slice the garage uses.
+var _hood_box: AABB
+var _hood_ready: bool = false
 var _rival_phase: int = _RIVAL_STILL
 var _rival_engaged: bool = false
 var _rival_from_x: float = 0.0
@@ -139,6 +149,7 @@ func _ready() -> void:
 	_build_road_stake_popup()
 	_build_speech_bubble()
 	_build_fuel_monitor()
+	_resume_parked_rival()
 	_sync_nav()
 
 
@@ -777,7 +788,7 @@ func _build_speech_bubble() -> void:
 	_ui.add_child(bubble)
 	bubble.call("grab_screen")
 	bubble.call("hold_when_behind", true)
-	bubble.connect("pressed", _dismiss_full_garage_line)
+	bubble.connect("pressed", _on_speech_pressed)
 	_speech = bubble
 
 
@@ -969,8 +980,19 @@ func _advance_auto_call(delta: float) -> void:
 	_on_opponent_chosen(index)
 
 
-func _present_rival() -> void:
-	_clear_rival()
+func _resume_parked_rival() -> void:
+	var index := GameState.drive_in_rival_index
+	if index < 0 or index >= GameState.opponents.size():
+		_forget_drive_in_visit()
+		return
+	_chosen_index = index
+	_present_rival(true)
+	if _rival != null and GameState.drive_in_hood_seen:
+		_rival_engaged = true
+
+
+func _present_rival(parked: bool = false) -> void:
+	_drop_rival()
 	if _chosen_index < 0 or _chosen_index >= GameState.opponents.size():
 		return
 	var opp: Dictionary = GameState.opponents[_chosen_index]
@@ -1014,8 +1036,16 @@ func _present_rival() -> void:
 	root.mouse_exited.connect(_on_rival_hover.bind(false))
 	_rival = root
 	_collect_rival_wheels(car)
+	_measure_hood(car)
 	_start_rival_entrance()
-	_hover_prompt.text = "%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))]
+	if not parked:
+		GameState.drive_in_hood_seen = false
+	GameState.drive_in_rival_index = _chosen_index
+	if parked:
+		_rival.position.x = _rival_to_x
+		_begin_rival_wait()
+	_rival_caption = "%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))]
+	_hover_prompt.text = _rival_caption
 	_hover_prompt.visible = true
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
@@ -1131,19 +1161,33 @@ func _screen_dx_per_world_x(world: Vector3) -> float:
 
 
 func _clear_rival() -> void:
+	_drop_rival()
+	_forget_drive_in_visit()
+
+
+func _drop_rival() -> void:
 	if _rival != null and is_instance_valid(_rival):
 		_rival.input_ray_pickable = false
 		_rival.queue_free()
 	_rival = null
+	_rival_car = null
+	_hood_ready = false
 	_driver_seat = null
 	_rival_phase = _RIVAL_STILL
 	_rival_engaged = false
 	_rival_wheels.clear()
+	_speech_line = _LINE_NONE
 	if _speech != null:
 		_speech.visible = false
 	if _hover_prompt != null:
 		_hover_prompt.text = "Look for opponent"
 		_hover_prompt.visible = false
+
+
+func _forget_drive_in_visit() -> void:
+	GameState.drive_in_rival_index = -1
+	GameState.drive_in_hood_seen = false
+	GameState.hood_peek.clear()
 
 
 func _seat_driver(car: Node3D, skin: Color, head_path: String) -> void:
@@ -1242,13 +1286,21 @@ func _side_fits(box: AABB) -> bool:
 	return true
 
 
-func _on_rival_input(_camera: Node, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape: int) -> void:
+func _on_rival_input(camera: Node, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape: int) -> void:
+	if event is InputEventMouseMotion:
+		_update_rival_prompt(camera, (event as InputEventMouseMotion).position)
+		return
 	if _popup_open() or _rival_phase == _RIVAL_LEAVE:
 		return
 	if not event is InputEventMouseButton:
 		return
 	var mb := event as InputEventMouseButton
 	if mb.button_index != MOUSE_BUTTON_LEFT or not mb.pressed:
+		return
+	if _pointer_on_hood(camera, mb.position):
+		# Opening the hood leaves this scene, and the viewport is gone after that.
+		get_viewport().set_input_as_handled()
+		_on_hood_pressed()
 		return
 	_rival_engaged = true
 	_race_root.visible = true
@@ -1341,7 +1393,158 @@ func _no_room_line() -> String:
 	return _NO_ROOM_LINES[randi() % _NO_ROOM_LINES.size()]
 
 
+func _on_hood_pressed() -> void:
+	if GameState.drive_in_hood_seen:
+		_call_chicken()
+		return
+	_open_hood_peek()
+
+
+func _open_hood_peek() -> void:
+	if _chosen_index < 0 or _chosen_index >= GameState.opponents.size():
+		return
+	var opp: Dictionary = GameState.opponents[_chosen_index]
+	var spec: Dictionary = _CarFile.load_path(str(opp.get("car_file", "")))
+	var errors: Variant = spec.get("errors", [])
+	if typeof(errors) == TYPE_ARRAY and not (errors as Array).is_empty():
+		return
+	var engine: Variant = spec.get("engine", {})
+	if typeof(engine) != TYPE_DICTIONARY:
+		return
+	var engine_id := str((engine as Dictionary).get("id", ""))
+	if engine_id.is_empty():
+		return
+	GameState.drive_in_rival_index = _chosen_index
+	GameState.drive_in_hood_seen = true
+	GameState.hood_peek = {
+		"engine_id": engine_id,
+		"car_name": str(opp.get("car_name", "Car")),
+		"color": _opponent_color(opp),
+	}
+	GameState.current_scene_path = GameState.SCENE_HOOD
+	# This click is still on the rival car. Changing scenes now frees that car
+	# before the click returns, and the game halts.
+	get_tree().change_scene_to_file.call_deferred(GameState.SCENE_HOOD)
+
+
+func _call_chicken() -> void:
+	_rival_engaged = true
+	_show_chicken_line()
+	_begin_rival_leave()
+
+
+func _show_chicken_line() -> void:
+	_speech_line = _LINE_CHICKEN
+	_speech.call("set_line", "Chicken!", Vector2(240, 64), 32)
+	if _driver_seat != null and is_instance_valid(_driver_seat):
+		_speech.call("follow_node", _camera, _driver_seat, Vector3(0.0, 0.42, 0.0))
+	else:
+		_speech.call("show_centered")
+	_speech.visible = true
+	_speech.call("place")
+	_sync_nav()
+
+
+func _measure_hood(car: Node3D) -> void:
+	_rival_car = car
+	_hood_ready = false
+	if _apply_hood_box(car):
+		return
+	var body := car.get_node_or_null("CarBody")
+	if body != null and body.has_signal(&"stl_loaded"):
+		body.connect(&"stl_loaded", _on_rival_body_loaded.bind(car))
+
+
+func _on_rival_body_loaded(_loaded: Variant, car: Node3D) -> void:
+	if _rival_car != car or not is_instance_valid(car):
+		return
+	_apply_hood_box(car)
+
+
+func _apply_hood_box(car: Node3D) -> bool:
+	var body := car.get_node_or_null("CarBody") as Node3D
+	if body == null:
+		return false
+	var box := _aabb_in(body, car)
+	if box.size.y < 0.2 or box.size.z < 0.4:
+		return false
+	var origin := box.position
+	var size := box.size
+	var hood_min := origin + Vector3(size.x * 0.18, size.y * 0.42, size.z * 0.55)
+	var hood_size := Vector3(size.x * 0.64, size.y * 0.26, size.z * 0.38)
+	_hood_box = AABB(hood_min, hood_size)
+	_hood_ready = true
+	return true
+
+
+func _aabb_in(node: Node, space: Node3D) -> AABB:
+	var box := AABB()
+	var started := false
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		var mi := node as MeshInstance3D
+		var xf := space.global_transform.affine_inverse() * mi.global_transform
+		box = _aabb_corners(xf, mi.mesh.get_aabb())
+		started = true
+	for child in node.get_children():
+		var child_box := _aabb_in(child, space)
+		if child_box.size == Vector3.ZERO:
+			continue
+		if not started:
+			box = child_box
+			started = true
+		else:
+			box = box.merge(child_box)
+	return box
+
+
+func _pointer_on_hood(camera: Node, screen: Vector2) -> bool:
+	if not _hood_ready or _rival_car == null or not is_instance_valid(_rival_car):
+		return false
+	var cam := camera as Camera3D
+	if cam == null:
+		return false
+	var from := cam.project_ray_origin(screen)
+	var dir := cam.project_ray_normal(screen)
+	var inv := _rival_car.global_transform.affine_inverse()
+	return _ray_hits_aabb(_hood_box, inv * from, inv.basis * dir)
+
+
+func _ray_hits_aabb(box: AABB, origin: Vector3, dir: Vector3) -> bool:
+	var tmin := 0.0
+	var tmax := 40.0
+	var bmin := box.position
+	var bmax := box.position + box.size
+	for axis in 3:
+		var o := origin[axis]
+		var d := dir[axis]
+		var mn := bmin[axis]
+		var mx := bmax[axis]
+		if absf(d) < 0.00001:
+			if o < mn or o > mx:
+				return false
+			continue
+		var t1 := (mn - o) / d
+		var t2 := (mx - o) / d
+		if t1 > t2:
+			var swap := t1
+			t1 = t2
+			t2 = swap
+		tmin = maxf(tmin, t1)
+		tmax = minf(tmax, t2)
+		if tmin > tmax:
+			return false
+	return tmax >= 0.0
+
+
+func _update_rival_prompt(camera: Node, screen: Vector2) -> void:
+	if _rival == null or _popup_open() or _rival_phase == _RIVAL_LEAVE or _hover_prompt == null:
+		return
+	_hover_prompt.text = "Under the hood" if _pointer_on_hood(camera, screen) else _rival_caption
+	_hover_prompt.visible = true
+
+
 func _show_full_garage_line() -> void:
+	_speech_line = _LINE_GARAGE
 	_road_stake_root.visible = false
 	_speech.call("set_line", _no_room_line(), Vector2(560, 56), 26)
 	if _driver_seat != null and is_instance_valid(_driver_seat):
@@ -1353,8 +1556,18 @@ func _show_full_garage_line() -> void:
 	_sync_nav()
 
 
+func _on_speech_pressed() -> void:
+	if _speech_line == _LINE_CHICKEN:
+		_speech.visible = false
+		_speech_line = _LINE_NONE
+		_sync_nav()
+		return
+	_dismiss_full_garage_line()
+
+
 func _dismiss_full_garage_line() -> void:
 	_speech.visible = false
+	_speech_line = _LINE_NONE
 	_road_stake_root.visible = true
 	_sync_nav()
 
@@ -1366,6 +1579,7 @@ func _on_road_stake_back() -> void:
 
 
 func _start_race(race_type: String, stake: int, pink_slips: bool = false) -> void:
+	_forget_drive_in_visit()
 	GameState.selected_opponent_id = _chosen_index
 	GameState.selected_race_type = race_type
 	GameState.race_stake = stake
@@ -1410,7 +1624,7 @@ func _on_cancel() -> void:
 		_on_stake_back()
 		return
 	if _speech.visible:
-		_dismiss_full_garage_line()
+		_on_speech_pressed()
 		return
 	if _road_stake_root.visible:
 		_on_road_stake_back()
@@ -1455,6 +1669,7 @@ func _sync_nav() -> void:
 
 
 func _on_back_pressed() -> void:
+	_forget_drive_in_visit()
 	GameState.drive_into_garage = true
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
