@@ -2,6 +2,7 @@ extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
+const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _CarSale := preload("res://scripts/car_sale.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
@@ -128,6 +129,8 @@ var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
 var _creeper: StaticBody3D
 var _tire_machine: StaticBody3D
+## Players for the jack, wheels, and tire machine, by sound name.
+var _shop_players: Dictionary = {}
 var _loss_bubble: Control
 ## Shown when the player tries to leave and the engine will not run.
 var _stall_bubble: Control
@@ -209,6 +212,7 @@ const _TIRE_STACK_NEW := Vector3(1.0, 0.0, 6.75)
 const _TIRE_STACK_OLD := Vector3(2.8, 0.0, 6.75)
 const _TIRE_THICK := 0.13
 const _T_TIRE_ON_TABLE := 0.45
+const _T_WRENCH := 0.5
 const _T_TIRE_MOVE := 0.55
 const _WHEEL_OUT_Z := -5.4
 const _T_JACK := 1.8
@@ -2784,12 +2788,29 @@ func _start_wheel_change(wheel_id: String) -> void:
 	_bay_busy = false
 
 
+func _shop_sound(sound_name: String) -> void:
+	if not _shop_players.has(sound_name):
+		var player := AudioStreamPlayer.new()
+		player.stream = _ShopSounds.stream(sound_name)
+		player.volume_db = -6.0
+		player.max_polyphony = 4
+		add_child(player)
+		_shop_players[sound_name] = player
+	(_shop_players[sound_name] as AudioStreamPlayer).play()
+
+
+func _shop_sound_stop(sound_name: String) -> void:
+	if _shop_players.has(sound_name):
+		(_shop_players[sound_name] as AudioStreamPlayer).stop()
+
+
 ## The jack rolls in and raises the car.
 func _jack_up(car_start: Vector3) -> void:
 	var work := Vector3(-2.15, _lift_home.origin.y, 0.12)
 	await _tween_global_pos(_lift, work, _T_JACK)
 	if not is_instance_valid(self):
 		return
+	_shop_sound("jack_pump")
 	var lift_to := car_start + Vector3(0.0, _LIFT_HEIGHT, 0.0)
 	var arm_to := _lift_arm_home + Vector3(0.0, _LIFT_HEIGHT, 0.0)
 	await _tween_together(_car_pivot, lift_to, _lift_arm, arm_to, _T_LIFT)
@@ -2800,6 +2821,7 @@ func _jack_up(car_start: Vector3) -> void:
 
 ## The jack lets the car down and rolls home.
 func _jack_down(car_start: Vector3) -> void:
+	_shop_sound("jack_release")
 	await _tween_together(_car_pivot, car_start, _lift_arm, _lift_arm_home, _T_LIFT)
 	if not is_instance_valid(self):
 		return
@@ -2985,10 +3007,12 @@ func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> v
 	add_child(rim)
 	rim.global_position = on_table
 	var rings: Array[MeshInstance3D] = []
+	_shop_sound("motor")
 	for i in _WHEEL_NODES.size():
 		if has_old:
 			var old := _tire_ring(radius, on_table)
 			rings.append(old)
+			_shop_sound("bead_pop")
 			await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(i) + 0.5), 0.0))
 			if not is_instance_valid(self):
 				return
@@ -2999,6 +3023,8 @@ func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> v
 			if not is_instance_valid(self):
 				return
 			fresh.visible = false
+			_shop_sound("air")
+	_shop_sound_stop("motor")
 	for ring in rings:
 		ring.queue_free()
 	rim.queue_free()
@@ -3038,14 +3064,24 @@ func _take_wheel_off(mount: Node3D, wname: String) -> Dictionary:
 		"spot": Vector3(axle.x, floor_pos.y, float(_TIRE_WAIT_Z[wname])),
 		"scale": mount.scale,
 		"facing": world_xf.basis.orthonormalized(),
+		"turn": _WHEEL_NODES.find(wname),
 	}
 
 
 func _roll_wheel_to_machine(wheel: Dictionary, radius: float) -> void:
 	var mount: Node3D = wheel["mount"]
+	# One corner after another, so the wrench is heard on each.
+	await _pause(float(wheel["turn"]) * _T_WRENCH)
+	if not is_instance_valid(mount):
+		return
+	_shop_sound("wrench")
+	await _pause(_T_WRENCH)
+	if not is_instance_valid(mount):
+		return
 	await _tween_global_pos(mount, wheel["floor"], _T_DROP)
 	if not is_instance_valid(mount):
 		return
+	_shop_sound("thud")
 	await _roll_wheel(wheel, wheel["spot"], radius)
 
 
@@ -3057,6 +3093,10 @@ func _roll_wheel_to_car(wheel: Dictionary, radius: float) -> void:
 	await _lift_to_axle(mount, wheel["axle"], wheel["mounted"], _T_RISE)
 	if not is_instance_valid(mount):
 		return
+	await _pause(float(wheel["turn"]) * _T_WRENCH)
+	if not is_instance_valid(mount):
+		return
+	_shop_sound("wrench")
 	remove_child(mount)
 	(wheel["parent"] as Node).add_child(mount)
 	mount.transform = wheel["home_local"]
@@ -3079,12 +3119,15 @@ func _change_tire_on_machine(wheel: Dictionary, radius: float, has_old: bool, fr
 	await _tween_global_xform(mount, Transform3D(flat, on_table), _T_TIRE_ON_TABLE)
 	if not is_instance_valid(mount):
 		return
+	_shop_sound("thud")
+	_shop_sound("motor")
 	# Turns for as long as the tires are moving; it is stopped, not waited for.
 	var turn := create_tween().set_loops()
 	turn.tween_method(func(a: float) -> void: mount.global_basis = Basis(Vector3.UP, a) * flat, 0.0, TAU, _T_TIRE_MOVE * 2.0)
 	if has_old:
 		var old := _tire_ring(radius, on_table)
 		pile_old.append(old)
+		_shop_sound("bead_pop")
 		await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(index) + 0.5), 0.0))
 		if not is_instance_valid(mount):
 			return
@@ -3093,7 +3136,9 @@ func _change_tire_on_machine(wheel: Dictionary, radius: float, has_old: bool, fr
 		if not is_instance_valid(mount):
 			return
 		fresh.visible = false
+		_shop_sound("air")
 	turn.kill()
+	_shop_sound_stop("motor")
 	await _tween_global_xform(mount, standing, _T_TIRE_ON_TABLE)
 
 
@@ -3131,9 +3176,14 @@ func _swap_one_wheel(mount: Node3D, wheel: Dictionary, radius: float) -> void:
 	parent.remove_child(mount)
 	add_child(mount)
 	mount.global_transform = world_xf
+	_shop_sound("wrench")
+	await _pause(_T_WRENCH)
+	if not is_instance_valid(mount):
+		return
 	await _tween_global_pos(mount, floor_pos, _T_DROP)
 	if not is_instance_valid(mount):
 		return
+	_shop_sound("thud")
 	await _pause(_T_PAUSE)
 	var facing := world_xf.basis.orthonormalized()
 	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
@@ -3157,6 +3207,7 @@ func _swap_one_wheel(mount: Node3D, wheel: Dictionary, radius: float) -> void:
 	await _lift_to_axle(mount, axle, world_xf.basis, _T_RISE)
 	if not is_instance_valid(mount):
 		return
+	_shop_sound("wrench")
 	remove_child(mount)
 	parent.add_child(mount)
 	mount.transform = home_local

@@ -1,5 +1,6 @@
 extends Node3D
 
+const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
@@ -341,6 +342,10 @@ func _show_engine_blown() -> void:
 func _show_tire_blowout() -> void:
 	_race_over = true
 	_end_race_ui()
+	var bang := AudioStreamPlayer.new()
+	bang.stream = _ShopSounds.stream("blowout")
+	add_child(bang)
+	bang.play()
 	GameState.blow_tires()
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew a tire!\nThat set of tires is finished."
