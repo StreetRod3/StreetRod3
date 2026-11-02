@@ -202,7 +202,7 @@ var cars_just_gone: bool = false
 ## station, and a car just bought from the paper. Not saved.
 var drive_into_garage: bool = false
 ## A rival's engine on the hood screen. Empty when the bay is the player's car.
-## Not saved. Keys: engine_id, car_name, color.
+## Not saved. Keys: engine_id, hp, parts (hood slot to part id), car_name, color.
 var hood_peek: Dictionary = {}
 ## Rival left waiting at the drive-in while the player looks under the hood. -1 if none.
 ## Not saved.
@@ -1075,10 +1075,37 @@ func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
 		build["engine"] = str(engine.get("id", ""))
 		build["hp"] = float(engine.get("hp", 280.0))
 		build["vmax"] = float(engine.get("vmax", 220.0))
-	build["hp"] += float(row.get("bonus_hp", 0.0))
-	build["vmax"] += float(row.get("bonus_vmax", 0.0))
+	var hood := _rival_hood_parts(row.get("parts", {}))
+	var carb_share := 1.0 / float(clampi(int(listing_by_id(PARTS, str(hood[SLOT_INTAKE])).get("carbs", 1)), 1, CARB_SLOTS.size()))
+	for slot in hood:
+		var part := listing_by_id(PARTS, str(hood[slot]))
+		var share := carb_share if CARB_SLOTS.has(slot) else 1.0
+		build["hp"] += float(part.get("hp", 0.0)) * share
+		build["vmax"] += float(part.get("vmax", 0.0)) * share
+	build["engine_hp"] = build["hp"]
+	build["hood_parts"] = hood
+	opp.erase("taken_car")
 	build["gearbox"] = str(row.get("gearbox", build["gearbox"]))
 	opp.merge(build, true)
+
+
+## A rival's own hood parts by slot: stock wherever `listed` names nothing.
+func _rival_hood_parts(listed: Variant) -> Dictionary:
+	var hood := {}
+	for slot in HOOD_SLOTS:
+		hood[slot] = str(STOCK_SLOT_PARTS[slot])
+	if typeof(listed) != TYPE_DICTIONARY:
+		return hood
+	for slot in hood.keys():
+		var part_id := str((listed as Dictionary).get(slot, hood[slot]))
+		if part_id == NO_PART_ID or not listing_by_id(PARTS, part_id).is_empty():
+			hood[slot] = part_id
+	return hood
+
+
+## What is under a rival's hood, slot to part id.
+func opponent_hood_parts(opp: Dictionary) -> Dictionary:
+	return _rival_hood_parts(opp.get("hood_parts", {}))
 
 
 ## Marks the selected rival as beaten, which brings the next one along.
@@ -1167,12 +1194,17 @@ func _opponents_for_save() -> Array:
 			"shift_time": float(opp.get("shift_time", 0.35)),
 			"tires": str(opp.get("tires", "")),
 			"hp": float(opp.get("hp", 280.0)),
+			"engine_hp": float(opp.get("engine_hp", opp.get("hp", 280.0))),
+			"hood_parts": opponent_hood_parts(opp),
 			"vmax": float(opp.get("vmax", 220.0)),
 			"engine": str(opp.get("engine", "")),
 			"gearbox": str(opp.get("gearbox", DEFAULT_GEARBOX_ID)),
 			"tier": int(opp.get("tier", 0)),
 			"beaten": bool(opp.get("beaten", false)),
 		})
+		var taken: Variant = opp.get("taken_car", null)
+		if typeof(taken) == TYPE_DICTIONARY:
+			rows.back()["taken_car"] = _record_to_save(taken, str(opp.get("car_id", "")))
 	return rows
 
 
@@ -1206,6 +1238,11 @@ func _load_saved_opponents(d: Dictionary) -> void:
 		# Rivals in older saves went by the player's car, so they start on what theirs came with.
 		var saved_build := row if row.has("hp") else _opponent_stock_build(str(row.get("car_file", "")))
 		opponents[i]["hp"] = float(saved_build.get("hp", 280.0))
+		opponents[i]["engine_hp"] = float(saved_build.get("engine_hp", opponents[i]["hp"]))
+		opponents[i]["hood_parts"] = _rival_hood_parts(row.get("hood_parts", {}))
+		var taken: Variant = row.get("taken_car", null)
+		if typeof(taken) == TYPE_DICTIONARY:
+			opponents[i]["taken_car"] = _record_from_save(taken, str(row.get("car_id", "")))
 		opponents[i]["vmax"] = float(saved_build.get("vmax", 220.0))
 		opponents[i]["gearbox"] = str(saved_build.get("gearbox", DEFAULT_GEARBOX_ID))
 		opponents[i]["engine"] = str(saved_build.get("engine", ""))
@@ -2338,7 +2375,13 @@ func _take_opponent_car() -> bool:
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
-	var won_id := _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")))
+	# A car they took from the player comes back as it left, and any other as they built it.
+	var taken: Variant = opp.get("taken_car", null)
+	var won_id := ""
+	if typeof(taken) == TYPE_DICTIONARY:
+		won_id = _add_owned_record((taken as Dictionary).duplicate(true))
+	else:
+		won_id = _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), opponent_hood_parts(opp))
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
 	return true
@@ -2352,8 +2395,19 @@ func _lose_raced_car() -> void:
 	var model_id := car_model_id(lost_id)
 	# The rival keeps the car as it stands now, its rear end built into the numbers.
 	var tires := slot_part(SLOT_TIRES)
+	var hood := {}
+	for slot in HOOD_SLOTS:
+		hood[slot] = str(slot_part_ids.get(slot, NO_PART_ID))
+	var taken: Dictionary = (car_records[lost_id] as Dictionary).duplicate(true)
+	taken["fuel"] = DEFAULT_TANK_L
+	# Tires that blew in this race are replaced, the same as `opponent_tires()` reads them.
+	if str(taken["slot_parts"][SLOT_TIRES]) == NO_PART_ID:
+		taken["slot_parts"][SLOT_TIRES] = str(STOCK_SLOT_PARTS[SLOT_TIRES])
 	var build := {
 		"hp": engine_power_hp * final_drive_accel(),
+		"engine_hp": engine_power_hp,
+		"hood_parts": hood,
+		"taken_car": taken,
 		"vmax": (vmax_kmh - float(tires.get("vmax", 0.0))) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0)),
 		"engine": equipped_engine_id,
 		"gearbox": equipped_gearbox_id,
@@ -2594,18 +2648,24 @@ func _mounts_price(mounts: Array) -> int:
 
 ## A new car brings its own copy of everything on it, so spares stay spares.
 ## A new car in the garage, as it came unless a tire set, engine, or gearbox is named.
-func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "") -> String:
-	_own_fitted_parts()
-	var instance_id := "car-%d" % _next_car_serial
-	_next_car_serial += 1
-	owned_car_ids.append(instance_id)
+func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "", hood: Dictionary = {}) -> String:
 	var rec := _make_car_record(model_id, paint)
 	if not tires.is_empty():
 		rec["slot_parts"][SLOT_TIRES] = tires
+	rec["slot_parts"].merge(hood, true)
 	if not listing_by_id(ENGINES, engine).is_empty():
 		rec["engine_id"] = engine
 	if not listing_by_id(GEARBOXES, gearbox).is_empty():
 		rec["gearbox_id"] = gearbox
+	return _add_owned_record(rec)
+
+
+## Adds a car as `rec` has it. Everything on it is owned from now on.
+func _add_owned_record(rec: Dictionary) -> String:
+	_own_fitted_parts()
+	var instance_id := "car-%d" % _next_car_serial
+	_next_car_serial += 1
+	owned_car_ids.append(instance_id)
 	car_records[instance_id] = rec
 	for mount in _record_mounts(rec):
 		_owned_list(mount[0]).append(mount[1])
@@ -2832,28 +2892,32 @@ func _cars_for_save() -> Dictionary:
 		var stored: Variant = car_records[raw_id]
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
-		var rec: Dictionary = stored
-		var paint: Color = car_color
-		var stored_paint: Variant = rec.get("color", null)
-		if stored_paint is Color:
-			paint = stored_paint
-		out[str(raw_id)] = {
-			"model_id": str(rec.get("model_id", car_model_id(str(raw_id)))),
-			"color": [paint.r, paint.g, paint.b, paint.a],
-			"fuel": float(rec.get("fuel", fuel)),
-			"engine_id": str(rec.get("engine_id", "")),
-			"gearbox_id": str(rec.get("gearbox_id", "")),
-			"gearbox_bolts": _bolts_from(rec.get("gearbox_bolts", null)),
-			"wheel_id": str(rec.get("wheel_id", "")),
-			"part_ids": _string_array(rec.get("part_ids", [])),
-			"slot_parts": _slots_from(rec.get("slot_parts", null)),
-			"engine_bolts": _hood_bolts_from(rec.get("engine_bolts", null)),
-			"plug_wires": bool(rec.get("plug_wires", true)),
-			"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
-		}
-		if rec.has("conditions"):
-			out[str(raw_id)]["conditions"] = _mount_conditions_from(rec["conditions"])
+		out[str(raw_id)] = _record_to_save(stored, car_model_id(str(raw_id)))
 	return out
+
+
+func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
+	var paint: Color = car_color
+	var stored_paint: Variant = rec.get("color", null)
+	if stored_paint is Color:
+		paint = stored_paint
+	var row := {
+		"model_id": str(rec.get("model_id", model_id)),
+		"color": [paint.r, paint.g, paint.b, paint.a],
+		"fuel": float(rec.get("fuel", fuel)),
+		"engine_id": str(rec.get("engine_id", "")),
+		"gearbox_id": str(rec.get("gearbox_id", "")),
+		"gearbox_bolts": _bolts_from(rec.get("gearbox_bolts", null)),
+		"wheel_id": str(rec.get("wheel_id", "")),
+		"part_ids": _string_array(rec.get("part_ids", [])),
+		"slot_parts": _slots_from(rec.get("slot_parts", null)),
+		"engine_bolts": _hood_bolts_from(rec.get("engine_bolts", null)),
+		"plug_wires": bool(rec.get("plug_wires", true)),
+		"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
+	}
+	if rec.has("conditions"):
+		row["conditions"] = _mount_conditions_from(rec["conditions"])
+	return row
 
 
 func _load_saved_cars(d: Dictionary) -> void:

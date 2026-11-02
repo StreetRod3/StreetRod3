@@ -202,7 +202,7 @@ func rebuild(key: String) -> Node3D:
 		GameState.HOOD_ENGINE:
 			_build_engine(rig)
 		GameState.SLOT_CAM:
-			_build_cam(rig, GameState.slot_part(key))
+			_build_cam(rig, _view_part(key))
 		GameState.SLOT_HEADS:
 			_build_heads(rig, _view_part(key))
 		GameState.SLOT_INTAKE:

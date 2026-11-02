@@ -122,6 +122,7 @@ var _peek: bool = false
 var _peek_name: String = ""
 var _peek_color: Color = Color.WHITE
 var _peek_engine: Dictionary = {}
+var _peek_hp: float = 0.0
 var _peek_slots: Dictionary = {}
 
 
@@ -161,9 +162,11 @@ func _read_peek() -> void:
 	var paint: Variant = GameState.hood_peek.get("color", null)
 	_peek_color = paint if paint is Color else Color(0.8, 0.1, 0.1)
 	_peek_engine = GameState.listing_by_id(GameState.ENGINES, str(GameState.hood_peek.get("engine_id", "")))
+	_peek_hp = float(GameState.hood_peek.get("hp", 0.0))
 	_peek_slots.clear()
+	var parts: Dictionary = GameState.hood_peek.get("parts", {})
 	for key in GameState.HOOD_SLOTS:
-		var part_id := str(GameState.STOCK_SLOT_PARTS.get(key, GameState.NO_PART_ID))
+		var part_id := str(parts.get(key, GameState.NO_PART_ID))
 		if part_id == GameState.NO_PART_ID:
 			continue
 		var part := GameState.listing_by_id(GameState.PARTS, part_id)
@@ -866,14 +869,16 @@ func _refresh_ui() -> void:
 
 
 func _refresh_peek_ui() -> void:
-	_engine_label.text = "%s · %.0f hp" % [str(_peek_engine.get("name", "Engine")), float(_peek_engine.get("hp", 0.0))]
-	var lines: Array[String] = ["Engine: %s (tight)" % str(_peek_engine.get("name", "Engine"))]
-	for key in ["heads", "intake", "carb", "distributor", "air_cleaner"]:
+	var has_engine := not _peek_engine.is_empty()
+	_engine_label.text = "%s · %.0f hp" % [str(_peek_engine.get("name", "Engine")), _peek_hp] if has_engine else "No engine"
+	var lines: Array[String] = ["Engine: %s (tight)" % str(_peek_engine.get("name", "Engine")) if has_engine else "Engine: none"]
+	for key in GameState.HOOD_SLOTS:
 		var part: Variant = _peek_slots.get(key, {})
 		if not part is Dictionary or (part as Dictionary).is_empty():
 			continue
 		lines.append("%s: %s (tight)" % [PART_NAMES[key], str((part as Dictionary).get("name", "none"))])
-	lines.append("Plug wires: on")
+	if has_engine:
+		lines.append("Plug wires: on")
 	_parts_label.text = "\n".join(lines)
 	_hint.text = "Close the hood when you've seen enough."
 	_parts_btn.visible = false

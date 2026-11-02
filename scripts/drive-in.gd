@@ -3,7 +3,6 @@ extends Node3D
 ## Night drive-in. Click the man, pick a rival, and their car drives in from the left.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
-const _CarFile := preload("res://scripts/car_file.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 ## Upright height of the rival's head, in meters.
@@ -1404,20 +1403,15 @@ func _open_hood_peek() -> void:
 	if _chosen_index < 0 or _chosen_index >= GameState.opponents.size():
 		return
 	var opp: Dictionary = GameState.opponents[_chosen_index]
-	var spec: Dictionary = _CarFile.load_path(str(opp.get("car_file", "")))
-	var errors: Variant = spec.get("errors", [])
-	if typeof(errors) == TYPE_ARRAY and not (errors as Array).is_empty():
-		return
-	var engine: Variant = spec.get("engine", {})
-	if typeof(engine) != TYPE_DICTIONARY:
-		return
-	var engine_id := str((engine as Dictionary).get("id", ""))
+	var engine_id := str(opp.get("engine", ""))
 	if engine_id.is_empty():
 		return
 	GameState.drive_in_rival_index = _chosen_index
 	GameState.drive_in_hood_seen = true
 	GameState.hood_peek = {
 		"engine_id": engine_id,
+		"hp": float(opp.get("engine_hp", opp.get("hp", 0.0))),
+		"parts": GameState.opponent_hood_parts(opp),
 		"car_name": str(opp.get("car_name", "Car")),
 		"color": _opponent_color(opp),
 	}

@@ -14,7 +14,7 @@
     {"car": "sr1-corvette-1956", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.9, "shift_time": 0.34},
     {"car": "corvette-1962", "engine": "v8-327", "gearbox": "gb_man4", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.92, "shift_time": 0.28},
     {"car": "ford-coupe-1932", "engine": "v8-327", "gearbox": "gb_man4", "tires": "tires-radial", "accel_scale": 0.32, "vmax_scale": 0.93, "shift_time": 0.26},
-    {"car": "corvette-1962", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "bonus_hp": 30, "bonus_vmax": 8, "accel_scale": 0.33, "vmax_scale": 0.94, "shift_time": 0.22},
-    {"car": "ford-coupe-1932", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "bonus_hp": 60, "bonus_vmax": 15, "accel_scale": 0.34, "vmax_scale": 0.95, "shift_time": 0.18}
+    {"car": "corvette-1962", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "parts": {"cam": "cam"}, "accel_scale": 0.33, "vmax_scale": 0.94, "shift_time": 0.22},
+    {"car": "ford-coupe-1932", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "parts": {"cam": "cam", "carb": "carb", "distributor": "dist-dualpoint"}, "accel_scale": 0.34, "vmax_scale": 0.95, "shift_time": 0.18}
   ]
 }
