@@ -115,19 +115,33 @@ var _sfx_clunk: AudioStreamPlayer
 var _sfx_tink: AudioStreamPlayer
 var _sfx_snap: AudioStreamPlayer
 
+## A look under a rival's hood at the drive-in. Nothing here can be unbolted.
+var _peek: bool = false
+var _peek_name: String = ""
+var _peek_color: Color = Color.WHITE
+var _peek_engine: Dictionary = {}
+var _peek_slots: Dictionary = {}
+
 
 func _ready() -> void:
-	GameState.current_scene_path = GameState.SCENE_GARAGE
+	_peek = not GameState.hood_peek.is_empty()
+	if _peek:
+		_read_peek()
+		GameState.current_scene_path = GameState.SCENE_DRIVE_IN
+	else:
+		GameState.current_scene_path = GameState.SCENE_GARAGE
+		if not GameState.has_active_car():
+			get_tree().change_scene_to_file.call_deferred(GameState.SCENE_GARAGE)
+			return
 	GameState.update_music()
-	if not GameState.has_active_car():
-		get_tree().change_scene_to_file.call_deferred(GameState.SCENE_GARAGE)
-		return
 	_build_world()
 	_build_bay()
 	_engine = _EngineAssembly.new()
 	_engine.name = "Engine"
 	_engine.position = Vector3(0.0, CRANK_Y - _EngineAssembly.CRANK_Z * _EngineAssembly.ENGINE_SCALE, 0.0)
 	add_child(_engine)
+	if _peek:
+		_engine.show_spec(_peek_engine, _peek_slots)
 	_engine.build()
 	for key in TOP_DOWN:
 		_build_bolts(key)
@@ -136,11 +150,27 @@ func _ready() -> void:
 	_update_camera()
 	_refresh_ui()
 	# Bodies are placed once the meshes have their world transforms.
-	_refresh_part_bodies.call_deferred()
+	if not _peek:
+		_refresh_part_bodies.call_deferred()
+
+
+func _read_peek() -> void:
+	_peek_name = str(GameState.hood_peek.get("car_name", "Car"))
+	var paint: Variant = GameState.hood_peek.get("color", null)
+	_peek_color = paint if paint is Color else Color(0.8, 0.1, 0.1)
+	_peek_engine = GameState.listing_by_id(GameState.ENGINES, str(GameState.hood_peek.get("engine_id", "")))
+	_peek_slots.clear()
+	for key in GameState.HOOD_SLOTS:
+		var part_id := str(GameState.STOCK_SLOT_PARTS.get(key, GameState.NO_PART_ID))
+		if part_id == GameState.NO_PART_ID:
+			continue
+		var part := GameState.listing_by_id(GameState.PARTS, part_id)
+		if not part.is_empty():
+			_peek_slots[key] = part
 
 
 func _process(_delta: float) -> void:
-	if _picker != null:
+	if _picker != null and not _peek:
 		_update_hover()
 
 
@@ -162,7 +192,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_camera()
 			get_viewport().set_input_as_handled()
 			return
-		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed and not _picker.visible:
+		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed and not _picker.visible and not _peek:
 			var target := _target_at(mb.position)
 			if not target.is_empty():
 				get_viewport().set_input_as_handled()
@@ -200,13 +230,13 @@ func _handle_key(key: InputEventKey) -> void:
 				_on_done_pressed()
 				return
 		KEY_P:
-			if not _picker.visible:
+			if not _peek and not _picker.visible:
 				_on_parts_pressed()
 		KEY_W:
-			if not _picker.visible:
+			if not _peek and not _picker.visible:
 				_on_wires_pressed()
 		KEY_T:
-			if not _picker.visible:
+			if not _peek and not _picker.visible:
 				get_viewport().set_input_as_handled()
 				_on_tune_pressed()
 				return
@@ -323,14 +353,14 @@ func _build_bolts(key: String) -> void:
 	_bolt_mats.erase(key)
 	_spots.erase(key)
 	_hole_bodies.erase(key)
-	if not GameState.is_hood_part_fitted(key):
+	if not _part_on(key):
 		return
 	var spots: Array[Transform3D] = _engine.bolt_spots(key)
 	var bolts: Array[Node3D] = []
 	var mats: Array[StandardMaterial3D] = []
 	var bodies: Array[Node3D] = []
 	var loosening: Array[bool] = []
-	var turns := GameState.hood_bolts(key)
+	var turns := _bolt_turns(key)
 	_spots[key] = spots
 	for i in spots.size():
 		var mat := StandardMaterial3D.new()
@@ -693,7 +723,30 @@ func _on_done_pressed() -> void:
 	if _busy:
 		return
 	_nav.clear()
+	if _peek:
+		GameState.hood_peek.clear()
+		GameState.current_scene_path = GameState.SCENE_DRIVE_IN
+		get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
+		return
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+
+
+func _part_on(key: String) -> bool:
+	if not _peek:
+		return GameState.is_hood_part_fitted(key)
+	if key == GameState.HOOD_ENGINE:
+		return not _peek_engine.is_empty()
+	var part: Variant = _peek_slots.get(key, {})
+	return part is Dictionary and not (part as Dictionary).is_empty()
+
+
+func _bolt_turns(key: String) -> Array[int]:
+	if not _peek:
+		return GameState.hood_bolts(key)
+	var turns: Array[int] = []
+	for _i in GameState.hood_bolt_count(key):
+		turns.append(GameState.GEARBOX_BOLT_TIGHT)
+	return turns
 
 
 ## Empty spots the spare parts could go into now.
@@ -764,6 +817,9 @@ func _close_picker() -> void:
 
 
 func _sync_nav() -> void:
+	if _peek:
+		_nav.setup([_done_btn])
+		return
 	if _picker.visible:
 		_nav.setup(_nav.collect_buttons(_picker))
 	else:
@@ -771,6 +827,9 @@ func _sync_nav() -> void:
 
 
 func _refresh_ui() -> void:
+	if _peek:
+		_refresh_peek_ui()
+		return
 	if GameState.has_engine():
 		var engine := GameState.get_equipped_engine()
 		_engine_label.text = "%s · %.0f hp" % [str(engine.get("name", "Engine")), GameState.engine_power_hp]
@@ -799,6 +858,24 @@ func _refresh_ui() -> void:
 		_hint.text = "Ready to run. Tune sets the timing." if trouble.is_empty() else trouble
 
 
+func _refresh_peek_ui() -> void:
+	_engine_label.text = "%s · %.0f hp" % [str(_peek_engine.get("name", "Engine")), float(_peek_engine.get("hp", 0.0))]
+	var lines: Array[String] = ["Engine: %s (tight)" % str(_peek_engine.get("name", "Engine"))]
+	for key in ["heads", "intake", "carb", "distributor", "air_cleaner"]:
+		var part: Variant = _peek_slots.get(key, {})
+		if not part is Dictionary or (part as Dictionary).is_empty():
+			continue
+		lines.append("%s: %s (tight)" % [PART_NAMES[key], str((part as Dictionary).get("name", "none"))])
+	lines.append("Plug wires: on")
+	_parts_label.text = "\n".join(lines)
+	_hint.text = "Close the hood when you've seen enough."
+	_parts_btn.visible = false
+	_wires_btn.visible = false
+	_tune_btn.visible = false
+	_done_btn.text = "Close"
+	_done_btn.disabled = false
+
+
 func _bolt_state(key: String) -> String:
 	var bolts := GameState.hood_bolts(key)
 	if bolts.min() >= GameState.GEARBOX_BOLT_TIGHT:
@@ -817,7 +894,8 @@ func _build_ui() -> void:
 	var info := VBoxContainer.new()
 	info.add_theme_constant_override(&"separation", 4)
 	header.add_child(info)
-	info.add_child(_ui_label("Under the hood — %s" % GameState.car_name, 22))
+	var title_name := _peek_name if _peek else GameState.car_name
+	info.add_child(_ui_label("Under the hood — %s" % title_name, 22))
 	_engine_label = _ui_label("", 17)
 	info.add_child(_engine_label)
 	_parts_label = _ui_label("", 15)
@@ -980,7 +1058,7 @@ static func _shop_reflections(env: Environment) -> void:
 func _build_bay() -> void:
 	var concrete := _mat(Color(0.32, 0.31, 0.3), 0.0, 0.9)
 	var under := _mat(Color(0.08, 0.075, 0.07), 0.2, 0.8)
-	var paint := _mat(GameState.car_color, 0.3, 0.4)
+	var paint := _mat(_body_color(), 0.3, 0.4)
 	var frame := _mat(Color(0.1, 0.1, 0.1), 0.4, 0.6)
 	var core := _mat(Color(0.12, 0.12, 0.11), 0.5, 0.7)
 	var tray := _mat(Color(0.6, 0.6, 0.62), 0.8, 0.3)
@@ -1023,6 +1101,12 @@ func _build_bay() -> void:
 	hood.add_child(lining)
 	# Parts tray on the left fender for the bolts that are out.
 	_box(Vector3(TRAY_STEP * 9.5, 0.012, 0.09), TRAY + Vector3(TRAY_STEP * 4.0, 0.0, 0.0), tray)
+
+
+func _body_color() -> Color:
+	if _peek:
+		return _peek_color
+	return GameState.car_color
 
 
 func _box(size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
