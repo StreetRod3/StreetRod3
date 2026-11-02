@@ -165,7 +165,7 @@ func _make_part_card(part: Dictionary) -> Control:
 func _make_gearbox_card(box: Dictionary) -> Control:
 	var gearbox_id := str(box.get("id", ""))
 	var equipped := GameState.equipped_gearbox_id == gearbox_id
-	var owned := GameState.owns_gearbox(gearbox_id)
+	var owned := GameState.free_spare_count("transmission", gearbox_id) > 0
 	var price := int(box.get("price", 0))
 	var gears: Variant = box.get("ratios", [])
 	var gear_count := 0
@@ -326,7 +326,7 @@ func _body(text: String) -> Label:
 
 
 func _make_engine_card(engine: Dictionary) -> Control:
-	return _make_swap_card(engine, GameState.equipped_engine_id, GameState.owns_engine(str(engine.get("id", ""))), "%.0f hp" % float(engine.get("hp", 0.0)), _on_buy_engine)
+	return _make_swap_card(engine, GameState.equipped_engine_id, GameState.free_spare_count("engine", str(engine.get("id", ""))) > 0, "%.0f hp" % float(engine.get("hp", 0.0)), _on_buy_engine)
 
 
 func _make_wheel_card(wheel: Dictionary) -> Control:

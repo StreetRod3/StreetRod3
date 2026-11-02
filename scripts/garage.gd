@@ -1831,7 +1831,7 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 	var err := ""
 	match kind:
 		"engine":
-			if GameState.owns_engine(part_id):
+			if GameState.free_spare_count("engine", part_id) > 0:
 				# Engines go in from under the hood, mounts and all.
 				_hide_parts_board()
 				_open_hood()
