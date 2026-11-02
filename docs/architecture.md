@@ -161,6 +161,12 @@ The slots are the exhaust manifolds, the exhaust, the muffler, a left muffler, a
 
 The calendar page is built at runtime from the system date (`Label3D` grid).
 
+### Tires
+
+Tires are parts in the slot `GameState.SLOT_TIRES` (`slot_parts`, saved per car), not listed in `UNDER_CAR_SLOTS`. A part's `grip`, from 1 to 5, is what the race cars use (`tire_grip()`); wheels no longer have a grip and only change the look. A car always has a set: the slot cannot be empty, and a save that names none gets the stock `tires-bias`. The old slicks bolt-on is the `tires` part now, and `_settle_slot_parts()` and `_move_record_bolt_ons_to_slots()` move it into the slot on older saves, with its condition.
+
+The tire machine is a prop in `garage.gd` (`_build_tire_machine()`), behind the car and clear of the way out through the doors. Clicking it or pressing T lists the tires, and picking a spare runs `_run_tire_change()`: the jack raises the car as for a wheel change, the four wheels roll over together to a row in front of the machine, each in turn is laid on the turntable while `_tire_ring()` meshes show the old tire going to one pile and the new one coming from another, and they roll back and go on. The part changes hands at the end with `fit_slot_part()`, so the old set goes to spare parts with its condition. Wheel models carry their own tire, so a car's tires do not look different yet, and changing wheels moves the tires across to the new set. The three cars with their wheels in the body model (`overlay: false`) show loose copies rolling to the machine while the body's own stay drawn. The jack still opens the wheel list; its key is W now.
+
 ### Race
 
 `race.gd` runs a three-phase start light (red, red+orange, green). Cars stay stopped until green. The HUD shows speed, gear, distance, time, and opponent name. `rpm_meter.gd` draws the tachometer. `race_touch_controls.gd` shows a wheel, pedals, and shift paddles on mobile, web-mobile, or viewports 900 px wide or narrower.

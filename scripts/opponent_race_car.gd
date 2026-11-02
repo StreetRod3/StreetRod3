@@ -264,8 +264,7 @@ func _apply_car_spec() -> void:
 	var spec: Variant = GameState.car_spec.get("chassis", {})
 	if typeof(spec) == TYPE_DICTIONARY:
 		chassis = spec
-	var wheel: Dictionary = GameState.get_equipped_wheel()
-	var grip_rating := clampf(float(wheel.get("grip", 3.0)), 1.0, 5.0)
+	var grip_rating := GameState.tire_grip()
 	_dynamics.apply_setup(chassis, grip_rating)
 
 

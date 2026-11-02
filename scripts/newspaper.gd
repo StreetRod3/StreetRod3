@@ -111,6 +111,10 @@ func _rebuild_parts() -> void:
 	_parts_list.add_child(_heading("WHEELS"))
 	for wheel in GameState.WHEELS:
 		_parts_list.add_child(_make_wheel_card(wheel))
+	_parts_list.add_child(_heading("TIRES"))
+	for part in GameState.PARTS:
+		if str(part.get("slot", "")) == GameState.SLOT_TIRES:
+			_parts_list.add_child(_make_part_card(part))
 	_parts_list.add_child(_heading("ENGINE & CHASSIS"))
 	for part in GameState.PARTS:
 		if not str(part.get("slot", "")).is_empty():
@@ -124,7 +128,7 @@ func _rebuild_parts() -> void:
 	_parts_list.add_child(_heading("UNDER THE CAR"))
 	for part in GameState.PARTS:
 		var slot := str(part.get("slot", ""))
-		if slot.is_empty() or GameState.is_hood_kind(slot):
+		if slot.is_empty() or slot == GameState.SLOT_TIRES or GameState.is_hood_kind(slot):
 			continue
 		_parts_list.add_child(_make_part_card(part))
 
@@ -323,7 +327,7 @@ func _make_engine_card(engine: Dictionary) -> Control:
 
 
 func _make_wheel_card(wheel: Dictionary) -> Control:
-	return _make_swap_card(wheel, GameState.equipped_wheel_id, GameState.owns_wheel(str(wheel.get("id", ""))), "Grip %d" % int(wheel.get("grip", 3)), _on_buy_wheel)
+	return _make_swap_card(wheel, GameState.equipped_wheel_id, GameState.owns_wheel(str(wheel.get("id", ""))), "Set of four", _on_buy_wheel)
 
 
 func _make_swap_card(part: Dictionary, equipped_id: String, owned: bool, detail: String, handler: Callable) -> Control:

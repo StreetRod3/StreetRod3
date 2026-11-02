@@ -64,6 +64,7 @@ var _parts_status: Label
 var _parts_close: Button
 var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
+var _parts_show_tires: bool = false
 var _spares_actions: HBoxContainer
 var _spares_sell: Button
 var _spares_forget: Button
@@ -124,6 +125,7 @@ var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
 var _creeper: StaticBody3D
+var _tire_machine: StaticBody3D
 var _loss_bubble: Control
 ## Shown when the player tries to leave and the engine will not run.
 var _stall_bubble: Control
@@ -144,7 +146,8 @@ const _TOOLTIPS := {
 	&"fuel": "Gas station",
 	&"hood": "Under the hood (H)",
 	&"calendar": "Calendar (X)",
-	&"lift": "Wheels (T)",
+	&"lift": "Wheels (W)",
+	&"tire_machine": "Tire machine (T)",
 	&"transmission": "Transmission (A)",
 	&"creeper": "Under the car (U)",
 }
@@ -160,6 +163,7 @@ const _SLOT_NAMES := {
 	"muffler": "Muffler",
 	"muffler_left": "Left muffler",
 	"differential": "Rear end",
+	"tires": "Tires",
 	"heads": "Cylinder heads",
 	"intake": "Intake manifold",
 	"carb": "Carburetor",
@@ -182,6 +186,28 @@ const _WHEEL_NODES: Array[String] = [
 ]
 const _LIFT_HEIGHT := 0.42
 const _WHEEL_SIDE_M := 2.6
+## The tire machine stands behind the car, clear of the way out through the doors. Wheels
+## wait in a row in front of it, each on its own spot along `_TIRE_ROW_Z`, and get there
+## down the lanes either side of the car; those from the far side cross behind it.
+const _TIRE_MACHINE_SPOT := Vector3(-1.25, 0.0, -3.2)
+const _TIRE_TABLE_Y := 0.66
+const _TIRE_ROW_Z := -2.6
+const _TIRE_ROW_X := {
+	"WheelFrontLeft": -2.6,
+	"WheelBackLeft": -2.3,
+	"WheelFrontRight": -1.7,
+	"WheelBackRight": -2.0,
+}
+const _TIRE_LANE_NEAR_X := -3.0
+const _TIRE_LANE_FAR_X := 2.0
+const _TIRE_CROSS_Z := -3.7
+const _TIRE_ROLL_SPEED := 3.0
+## The new set waits beside the machine, and the old set piles up on the other side.
+const _TIRE_STACK_NEW := Vector3(-0.65, 0.0, -3.2)
+const _TIRE_STACK_OLD := Vector3(-0.65, 0.0, -2.62)
+const _TIRE_THICK := 0.13
+const _T_TIRE_ON_TABLE := 0.45
+const _T_TIRE_MOVE := 0.55
 const _WHEEL_OUT_Z := -5.4
 const _T_JACK := 1.8
 const _T_LIFT := 1.5
@@ -225,6 +251,7 @@ func _ready() -> void:
 	_build_hood_target()
 	_build_under_car_target()
 	_build_creeper()
+	_build_tire_machine()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
 	_lift_arm_home = _lift_arm.position
@@ -766,6 +793,11 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 			else:
 				_show_stats()
 		KEY_T:
+			if _parts_board != null and _parts_board.visible and _parts_show_tires:
+				_hide_parts_board()
+			else:
+				_handle_interact(&"tire_machine")
+		KEY_W:
 			if _parts_board != null and _parts_board.visible and _parts_show_wheels:
 				_hide_parts_board()
 			else:
@@ -946,6 +978,8 @@ func _handle_interact(kind: Variant) -> void:
 			_bring_calendar_forward()
 		&"lift":
 			_show_wheel_board()
+		&"tire_machine":
+			_show_tire_board()
 		&"transmission":
 			_open_transmission()
 		&"creeper":
@@ -954,7 +988,7 @@ func _handle_interact(kind: Variant) -> void:
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"transmission", &"creeper":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper":
 			return true
 	return false
 
@@ -1351,6 +1385,7 @@ func _on_offer_rejected() -> void:
 func _show_parts_board() -> void:
 	_parts_show_spares = false
 	_parts_show_wheels = false
+	_parts_show_tires = false
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
@@ -1364,6 +1399,7 @@ func _show_parts_board() -> void:
 func _show_spares_board() -> void:
 	_parts_show_spares = true
 	_parts_show_wheels = false
+	_parts_show_tires = false
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
@@ -1375,10 +1411,21 @@ func _show_spares_board() -> void:
 	_focus_spares_sell()
 
 
+func _show_tire_board() -> void:
+	if _bay_busy:
+		return
+	_show_wheel_board()
+	_parts_show_wheels = false
+	_parts_show_tires = true
+	_rebuild_parts_board()
+	_sync_menu_nav()
+
+
 func _show_wheel_board() -> void:
 	if _bay_busy:
 		return
 	_parts_show_spares = false
+	_parts_show_tires = false
 	_parts_show_wheels = true
 	_clock_menu.visible = false
 	_spray_menu.visible = false
@@ -1401,7 +1448,9 @@ func _rebuild_parts_board() -> void:
 		_parts_list.remove_child(child)
 		child.free()
 	var spares := false
-	if _parts_show_wheels:
+	if _parts_show_tires:
+		_rebuild_tires_list()
+	elif _parts_show_wheels:
 		_rebuild_wheels_list()
 	elif _parts_show_spares:
 		_rebuild_spares_list()
@@ -1446,6 +1495,14 @@ func _rebuild_fitted_list() -> void:
 		if part.is_empty():
 			continue
 		_parts_list.add_child(_mounted_line("Bolt-on", _parts_row_text(part, "part") + _condition_text("bolt:" + part_id)))
+
+
+func _rebuild_tires_list() -> void:
+	_parts_title.text = "Tires"
+	_parts_status.text = "Pick a set. The wheels come off and the machine changes the tires on them."
+	for part in GameState.PARTS:
+		if str(part.get("slot", "")) == GameState.SLOT_TIRES:
+			_parts_list.add_child(_parts_row(part, "part", ""))
 
 
 func _rebuild_wheels_list() -> void:
@@ -1634,6 +1691,9 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 	row.add_child(label)
 	var btn := Button.new()
 	var owned := _parts_owned(kind, part_id)
+	# A set on another car is no use here: the row buys another.
+	if kind == "part" and GameState.part_slot(part_id) == GameState.SLOT_TIRES:
+		owned = GameState.spare_count(part_id) > 0
 	var fitted := part_id == equipped_id or (kind == "part" and GameState.is_part_equipped(part_id))
 	if fitted:
 		btn.text = "On the car"
@@ -1698,17 +1758,24 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 				return
 			err = GameState.buy_or_equip_wheel(part_id)
 		"part":
-			if GameState.is_hood_kind(GameState.part_slot(part_id)):
+			if GameState.part_slot(part_id) == GameState.SLOT_TIRES:
+				if GameState.spare_count(part_id) > 0:
+					_hide_parts_board()
+					_start_tire_change(part_id)
+					return
+				err = GameState.buy_part(part_id)
+			elif GameState.is_hood_kind(GameState.part_slot(part_id)):
 				# Intakes, carburetors, distributors, and air cleaners go on under the hood.
 				_hide_parts_board()
 				_open_hood()
 				return
-			if not GameState.part_slot(part_id).is_empty():
+			elif not GameState.part_slot(part_id).is_empty():
 				# Manifolds, mufflers, and rear ends go on from the creeper.
 				_hide_parts_board()
 				_open_under_car()
 				return
-			err = GameState.equip_part(part_id)
+			else:
+				err = GameState.equip_part(part_id)
 	if not err.is_empty():
 		_parts_status.text = err
 	_rebuild_parts_board()
@@ -2369,6 +2436,47 @@ func _build_creeper() -> void:
 	_creeper.set_meta(&"garage_interact", &"creeper")
 
 
+## A tire machine behind the car: a cabinet with a turntable on top, the column and its
+## swing arm over the table, and the pedals at its foot.
+func _build_tire_machine() -> void:
+	_tire_machine = StaticBody3D.new()
+	_tire_machine.name = "InteractTireMachine"
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.8, 1.5, 0.75)
+	col.shape = shape
+	col.position = Vector3(0.0, 0.75, 0.0)
+	_tire_machine.add_child(col)
+	var cabinet := _prop_mat(Color(0.12, 0.26, 0.42), 0.3, 0.5)
+	var steel := _prop_mat(Color(0.6, 0.6, 0.62), 0.8, 0.3)
+	var dark := _prop_mat(Color(0.08, 0.08, 0.08), 0.4, 0.6)
+	_prop_box(_tire_machine, Vector3(0.72, 0.56, 0.62), Vector3(0.0, 0.28, 0.0), cabinet)
+	_prop_box(_tire_machine, Vector3(0.76, 0.03, 0.66), Vector3(0.0, 0.575, 0.0), dark)
+	_prop_cyl(_tire_machine, 0.26, 0.05, Vector3(0.0, 0.615, 0.0), steel)
+	_prop_cyl(_tire_machine, 0.03, 0.14, Vector3(0.0, 0.66, 0.0), steel)
+	_prop_box(_tire_machine, Vector3(0.1, 0.88, 0.12), Vector3(0.33, 1.02, 0.0), cabinet)
+	_prop_box(_tire_machine, Vector3(0.42, 0.07, 0.07), Vector3(0.15, 1.3, 0.0), dark)
+	_prop_box(_tire_machine, Vector3(0.05, 0.3, 0.05), Vector3(-0.03, 1.15, 0.0), steel)
+	_prop_box(_tire_machine, Vector3(0.09, 0.04, 0.09), Vector3(-0.03, 0.99, 0.0), dark)
+	for cz in [-0.14, 0.0, 0.14]:
+		_prop_box(_tire_machine, Vector3(0.16, 0.025, 0.08), Vector3(-0.42, 0.04, cz), steel)
+	_tire_machine.position = _TIRE_MACHINE_SPOT
+	add_child(_tire_machine)
+	_tire_machine.set_meta(&"garage_interact", &"tire_machine")
+
+
+func _prop_cyl(parent: Node3D, radius: float, height: float, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = height
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+
+
 func _prop_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
 	var mi := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
@@ -2575,8 +2683,8 @@ func _start_wheel_change(wheel_id: String) -> void:
 	_bay_busy = false
 
 
-func _run_wheel_change(wheel: Dictionary) -> void:
-	var car_start := _car_pivot.position
+## The jack rolls in and raises the car.
+func _jack_up(car_start: Vector3) -> void:
 	var work := Vector3(-2.15, _lift_home.origin.y, 0.12)
 	await _tween_global_pos(_lift, work, _T_JACK)
 	if not is_instance_valid(self):
@@ -2587,6 +2695,21 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 	if not is_instance_valid(self):
 		return
 	await _pause(_T_PAUSE)
+
+
+## The jack lets the car down and rolls home.
+func _jack_down(car_start: Vector3) -> void:
+	await _tween_together(_car_pivot, car_start, _lift_arm, _lift_arm_home, _T_LIFT)
+	if not is_instance_valid(self):
+		return
+	await _tween_global_xform(_lift, _lift_home, _T_JACK)
+
+
+func _run_wheel_change(wheel: Dictionary) -> void:
+	var car_start := _car_pivot.position
+	await _jack_up(car_start)
+	if not is_instance_valid(self):
+		return
 	var radius := maxf(float(wheel.get("height", 0.5)) * 0.5, 0.18)
 	for wname in _WHEEL_NODES:
 		var mount := _car_pivot.get_node_or_null(wname) as Node3D
@@ -2596,10 +2719,7 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 		if not is_instance_valid(self):
 			return
 		await _pause(_T_PAUSE)
-	await _tween_together(_car_pivot, car_start, _lift_arm, _lift_arm_home, _T_LIFT)
-	if not is_instance_valid(self):
-		return
-	await _tween_global_xform(_lift, _lift_home, _T_JACK)
+	await _jack_down(car_start)
 	if not is_instance_valid(self):
 		return
 	var err := GameState.buy_or_equip_wheel(str(wheel.get("id", "")))
@@ -2607,6 +2727,194 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 		_car_pivot.call(&"apply_equipped_wheels")
 	_align_wheels_to_floor()
 	_refresh_hud()
+
+
+func _start_tire_change(tire_id: String) -> void:
+	if _bay_busy or GameState.spare_count(tire_id) <= 0 or GameState.part_slot(tire_id) != GameState.SLOT_TIRES:
+		return
+	_bay_busy = true
+	_hide_garage_overlays()
+	await _run_tire_change(tire_id)
+	if not is_instance_valid(self):
+		return
+	_bay_busy = false
+
+
+## The car goes up, all four wheels roll over to the tire machine, it changes the tires on
+## each in turn, and they roll back. The part changes hands once they are back on.
+func _run_tire_change(tire_id: String) -> void:
+	var car_start := _car_pivot.position
+	await _jack_up(car_start)
+	if not is_instance_valid(self):
+		return
+	var radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
+	var wheels: Array[Dictionary] = []
+	for wname in _WHEEL_NODES:
+		var mount := _car_pivot.get_node_or_null(wname) as Node3D
+		if mount != null:
+			if _car_pivot.has_method(&"apply_wheel_to_mount"):
+				_car_pivot.call(&"apply_wheel_to_mount", mount, GameState.get_equipped_wheel())
+			wheels.append(_take_wheel_off(mount, str(wname)))
+	var off: Array[Callable] = []
+	for wheel in wheels:
+		off.append(_roll_wheel_to_machine.bind(wheel, radius))
+	await _await_all(off)
+	if not is_instance_valid(self):
+		return
+	var pile_new: Array[MeshInstance3D] = []
+	for i in wheels.size():
+		pile_new.append(_tire_ring(radius, _TIRE_STACK_NEW + Vector3(0.0, _TIRE_THICK * (float(i) + 0.5), 0.0)))
+	var pile_old: Array[MeshInstance3D] = []
+	for i in wheels.size():
+		await _change_tire_on_machine(wheels[i], radius, pile_new[wheels.size() - 1 - i], pile_old, i)
+		if not is_instance_valid(self):
+			return
+	var back: Array[Callable] = []
+	for wheel in wheels:
+		back.append(_roll_wheel_to_car.bind(wheel, radius))
+	await _await_all(back)
+	if not is_instance_valid(self):
+		return
+	for ring in pile_new + pile_old:
+		ring.queue_free()
+	await _jack_down(car_start)
+	if not is_instance_valid(self):
+		return
+	GameState.fit_slot_part(tire_id)
+	if _car_pivot.has_method(&"apply_equipped_wheels"):
+		_car_pivot.call(&"apply_equipped_wheels")
+	_align_wheels_to_floor()
+	_refresh_hud()
+
+
+## Runs the coroutines side by side and waits for them all.
+func _await_all(jobs: Array[Callable]) -> void:
+	var left := [jobs.size()]
+	for job in jobs:
+		_finish_job(job, left)
+	while left[0] > 0 and is_instance_valid(self):
+		await get_tree().process_frame
+
+
+func _finish_job(job: Callable, left: Array) -> void:
+	await job.call()
+	left[0] -= 1
+
+
+## Takes a wheel off its hub into the garage and says where it has been and is going.
+func _take_wheel_off(mount: Node3D, wname: String) -> Dictionary:
+	var world_xf := mount.global_transform
+	var axle := world_xf.origin
+	var floor_y := axle.y - _LIFT_HEIGHT
+	var parent := mount.get_parent()
+	var home_local := mount.transform
+	parent.remove_child(mount)
+	add_child(mount)
+	mount.global_transform = world_xf
+	var spot := Vector3(float(_TIRE_ROW_X[wname]), floor_y, _TIRE_ROW_Z)
+	var path: Array[Vector3] = []
+	if axle.x < 0.0:
+		path.append(Vector3(_TIRE_LANE_NEAR_X, floor_y, axle.z))
+		path.append(Vector3(_TIRE_LANE_NEAR_X, floor_y, _TIRE_ROW_Z))
+	else:
+		path.append(Vector3(_TIRE_LANE_FAR_X, floor_y, axle.z))
+		path.append(Vector3(_TIRE_LANE_FAR_X, floor_y, _TIRE_CROSS_Z))
+		path.append(Vector3(spot.x, floor_y, _TIRE_CROSS_Z))
+	path.append(spot)
+	return {
+		"mount": mount,
+		"parent": parent,
+		"home_local": home_local,
+		"mounted": world_xf.basis,
+		"axle": axle,
+		"floor": Vector3(axle.x, floor_y, axle.z),
+		"path": path,
+		"spot": spot,
+		"scale": mount.scale,
+		"facing": world_xf.basis.orthonormalized(),
+	}
+
+
+func _roll_wheel_to_machine(wheel: Dictionary, radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	await _tween_global_pos(mount, wheel["floor"], _T_DROP)
+	if not is_instance_valid(mount):
+		return
+	await _roll_along(wheel, wheel["path"], radius)
+
+
+func _roll_wheel_to_car(wheel: Dictionary, radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	var path: Array[Vector3] = wheel["path"].duplicate()
+	path.reverse()
+	path.remove_at(0)
+	path.append(wheel["floor"])
+	await _roll_along(wheel, path, radius)
+	if not is_instance_valid(mount):
+		return
+	await _lift_to_axle(mount, wheel["axle"], wheel["mounted"], _T_RISE)
+	if not is_instance_valid(mount):
+		return
+	remove_child(mount)
+	(wheel["parent"] as Node).add_child(mount)
+	mount.transform = wheel["home_local"]
+
+
+func _roll_along(wheel: Dictionary, path: Array[Vector3], radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	for to in path:
+		var duration := mount.global_position.distance_to(to) / _TIRE_ROLL_SPEED
+		wheel["facing"] = await _roll_node(mount, to, radius, duration, wheel["mounted"], wheel["facing"])
+		if not is_instance_valid(mount):
+			return
+
+
+## Lays one wheel on the turntable, lifts its old tire off onto the old pile, lowers the
+## new one on while the table turns, and stands the wheel back on its spot.
+func _change_tire_on_machine(wheel: Dictionary, radius: float, fresh: MeshInstance3D, pile_old: Array[MeshInstance3D], index: int) -> void:
+	var mount: Node3D = wheel["mount"]
+	var standing := mount.global_transform
+	var flat := Basis.IDENTITY.scaled(wheel["scale"])
+	var on_table := _TIRE_MACHINE_SPOT + Vector3(0.0, _TIRE_TABLE_Y + _TIRE_THICK * 0.5, 0.0)
+	await _tween_global_xform(mount, Transform3D(flat, on_table), _T_TIRE_ON_TABLE)
+	if not is_instance_valid(mount):
+		return
+	# Turns for as long as the tires are moving; it is stopped, not waited for.
+	var turn := create_tween().set_loops()
+	turn.tween_method(func(a: float) -> void: mount.global_basis = Basis(Vector3.UP, a) * flat, 0.0, TAU, _T_TIRE_MOVE * 2.0)
+	var old := _tire_ring(radius, on_table)
+	pile_old.append(old)
+	await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(index) + 0.5), 0.0))
+	if not is_instance_valid(mount):
+		return
+	await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
+	if not is_instance_valid(mount):
+		return
+	fresh.visible = false
+	turn.kill()
+	await _tween_global_xform(mount, standing, _T_TIRE_ON_TABLE)
+
+
+## A tire swings up to `over`, then across and down to `to`.
+func _move_tire(tire: Node3D, over: Vector3, to: Vector3) -> void:
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(tire, "global_position", over, _T_TIRE_MOVE)
+	tw.tween_property(tire, "global_position", to, _T_TIRE_MOVE)
+	await tw.finished
+
+
+## A tire on its own, lying flat, drawn around a wheel of this radius.
+func _tire_ring(radius: float, at: Vector3) -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = radius * 0.62
+	mesh.outer_radius = radius * 1.08
+	ring.mesh = mesh
+	ring.material_override = _prop_mat(Color(0.04, 0.04, 0.04), 0.0, 0.9)
+	add_child(ring)
+	ring.global_position = at
+	return ring
 
 
 func _swap_one_wheel(mount: Node3D, wheel: Dictionary, radius: float) -> void:

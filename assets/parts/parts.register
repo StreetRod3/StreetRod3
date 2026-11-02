@@ -95,8 +95,7 @@
       "price": 300,
       "path": "res://assets/parts/wheel-premium.glb",
       "scale": 1.35,
-      "height": 0.5,
-      "grip": 5
+      "height": 0.5
     },
     {
       "id": "wheel-c1",
@@ -104,8 +103,7 @@
       "price": 200,
       "path": "res://assets/parts/wheel-c1.glb",
       "scale": 1.35,
-      "height": 0.5,
-      "grip": 3
+      "height": 0.5
     },
     {
       "id": "wheel-std",
@@ -113,8 +111,7 @@
       "price": 120,
       "path": "res://assets/parts/wheel-standard.stl",
       "scale": 1.35,
-      "height": 0.5,
-      "grip": 1
+      "height": 0.5
     }
   ],
   "parts": [
@@ -135,7 +132,9 @@
     {"id": "air-cleaner-stock", "slot": "air_cleaner", "stock": true, "style": "stock", "name": "Stock air cleaner", "price": 25, "hp": 0, "vmax": 0},
     {"id": "air-cleaner-chrome", "slot": "air_cleaner", "style": "chrome", "name": "Chrome open-element air cleaner", "price": 60, "hp": 4, "vmax": 1},
     {"id": "cam", "name": "Racing camshaft", "price": 520, "hp": 30, "vmax": 6},
-    {"id": "tires", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8},
+    {"id": "tires-bias", "slot": "tires", "stock": true, "style": "bias", "name": "Bias-ply tires", "price": 160, "hp": 0, "vmax": 0, "grip": 3},
+    {"id": "tires-radial", "slot": "tires", "style": "radial", "name": "Radial tires", "price": 220, "hp": 0, "vmax": 4, "grip": 4},
+    {"id": "tires", "slot": "tires", "style": "slick", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8, "grip": 5},
     {"id": "manifold-iron", "slot": "manifold", "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 90, "hp": 0, "vmax": 0},
     {"id": "exhaust", "slot": "manifold", "style": "shorty", "name": "Tube headers", "price": 380, "hp": 18, "vmax": 5},
     {"id": "headers-long", "slot": "manifold", "style": "long-tube", "name": "Long-tube headers, ceramic coated", "price": 690, "hp": 28, "vmax": 7},

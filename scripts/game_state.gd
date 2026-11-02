@@ -68,6 +68,8 @@ const SLOT_MUFFLER := "muffler"
 ## `SLOT_MUFFLER`, which is the one muffler of a single exhaust.
 const SLOT_MUFFLER_LEFT := "muffler_left"
 const SLOT_DIFFERENTIAL := "differential"
+## The tires on the car's wheels, changed at the tire machine. A car always has a set.
+const SLOT_TIRES := "tires"
 const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
 ## Parts changed under the hood, from the bottom up: the cylinder heads on the engine,
 ## the intake on the heads, the carburetors and the distributor in the intake, the air
@@ -84,7 +86,7 @@ const SLOT_AIR_CLEANER := "air_cleaner"
 const CARB_SLOTS: Array[String] = [SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3]
 const HOOD_SLOTS: Array[String] = [SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
 const ALL_SLOTS: Array[String] = [
-	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL,
+	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_TIRES,
 	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## Slot id for an empty slot. The exhaust, the mufflers, and everything under the hood
@@ -103,6 +105,7 @@ const STOCK_SLOT_PARTS := {
 	SLOT_MUFFLER: "muffler-stock",
 	SLOT_MUFFLER_LEFT: NO_PART_ID,
 	SLOT_DIFFERENTIAL: "diff-308",
+	SLOT_TIRES: "tires-bias",
 	SLOT_HEADS: "heads-iron",
 	SLOT_INTAKE: "intake-iron4",
 	SLOT_CARB: "carb-4bbl-stock",
@@ -1136,6 +1139,11 @@ func get_equipped_engine() -> Dictionary:
 	return engine
 
 
+## How well the active car's tires hold the road, from 1 to 5.
+func tire_grip() -> float:
+	return clampf(float(slot_part(SLOT_TIRES).get("grip", 3.0)), 1.0, 5.0)
+
+
 func get_equipped_wheel() -> Dictionary:
 	var wheel: Dictionary = listing_by_id(WHEELS, equipped_wheel_id)
 	if wheel.is_empty():
@@ -1726,6 +1734,7 @@ func active_slots() -> Array[String]:
 		if slot == SLOT_MANIFOLD and not has_engine():
 			continue
 		out.append(slot)
+	out.append(SLOT_TIRES)
 	if not has_engine():
 		return out
 	var carbs := carb_slots()
@@ -1761,7 +1770,7 @@ func part_detail(part: Dictionary) -> String:
 			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
 			roundi(float(part.get("top_speed", 1.0)) * 100.0),
 		]
-	var bits: Array[String] = ["+%d hp" % int(part.get("hp", 0))]
+	var bits: Array[String] = ["Grip %d" % int(part.get("grip", 0)) if part.has("grip") else "+%d hp" % int(part.get("hp", 0))]
 	var vmax := int(part.get("vmax", 0))
 	if vmax != 0:
 		bits.append("%+d km/h" % vmax)
@@ -2617,9 +2626,29 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 	}
 	if row.has("conditions"):
 		rec["conditions"] = _mount_conditions_from(row["conditions"])
+	_move_record_bolt_ons_to_slots(rec)
 	if rec["engine_id"] == NO_ENGINE_ID:
 		_clear_record_engine_parts(rec)
 	return rec
+
+
+## Older saves keep some parts that now have a slot with the bolt-ons (see
+## `_settle_slot_parts()`, the same for the car in the bay). The stock part in that slot
+## is only a stand-in and is not owned yet.
+func _move_record_bolt_ons_to_slots(rec: Dictionary) -> void:
+	var slots: Dictionary = rec["slot_parts"]
+	var conditions: Dictionary = rec.get("conditions", {})
+	var kept: Array[String] = []
+	for part_id in _string_array(rec.get("part_ids", [])):
+		var slot := part_slot(part_id)
+		if slot.is_empty():
+			kept.append(part_id)
+			continue
+		slots[slot] = part_id
+		if conditions.has("bolt:" + part_id):
+			conditions["slot:" + slot] = conditions["bolt:" + part_id]
+			conditions.erase("bolt:" + part_id)
+	rec["part_ids"] = kept
 
 
 func _note_instance_serial(instance_id: String) -> void:
