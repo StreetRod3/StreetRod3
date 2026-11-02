@@ -2927,8 +2927,9 @@ func _run_wheels_off() -> void:
 	_refresh_hud()
 
 
-## The tire machine on the chosen wheels: each in turn on the table, the old tires coming off
-## and the new ones going on. It stays open on those wheels until the player leaves.
+## The tire machine on the chosen wheels: one wheel on the table stands for the set, its old
+## tire coming off and the new one going on. It stays open on those wheels until the player
+## leaves.
 func _start_shelf_tire_change(wheel_id: String, tire_id: String) -> void:
 	if _bay_busy:
 		return
@@ -2965,22 +2966,21 @@ func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> v
 	rim.global_position = on_table
 	var rings: Array[MeshInstance3D] = []
 	_shop_sound("motor")
-	for i in _WHEEL_NODES.size():
-		if has_old:
-			var old := _tire_ring(radius, on_table)
-			rings.append(old)
-			_shop_sound("bead_pop")
-			await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(i) + 0.5), 0.0))
-			if not is_instance_valid(self):
-				return
-		if has_new:
-			var fresh := _tire_ring(radius, _TIRE_STACK_NEW + Vector3(0.0, _TIRE_THICK * 0.5, 0.0))
-			rings.append(fresh)
-			await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
-			if not is_instance_valid(self):
-				return
-			fresh.visible = false
-			_shop_sound("air")
+	if has_old:
+		var old := _tire_ring(radius, on_table)
+		rings.append(old)
+		_shop_sound("bead_pop")
+		await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * 0.5, 0.0))
+		if not is_instance_valid(self):
+			return
+	if has_new:
+		var fresh := _tire_ring(radius, _TIRE_STACK_NEW + Vector3(0.0, _TIRE_THICK * 0.5, 0.0))
+		rings.append(fresh)
+		await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
+		if not is_instance_valid(self):
+			return
+		fresh.visible = false
+		_shop_sound("air")
 	_shop_sound_stop("motor")
 	for ring in rings:
 		ring.queue_free()
