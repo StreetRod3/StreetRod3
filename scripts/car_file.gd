@@ -7,6 +7,9 @@ extends RefCounted
 ##
 ## `driver.position` is the driver's head in car space, same axes as wheel
 ## mounts: +X right, +Y up, +Z forward.
+##
+## `model.ground_clearance` is how far the body's lowest point sits above the
+## floor when it is snapped there, for bodies without wheels of their own.
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 
@@ -70,6 +73,7 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		"position": _vec3(body.get("position", [0.0, 0.55, 0.0])),
 		"rotation": _vec3(body.get("rotation", [0.0, 0.0, 0.0])),
 		"height": float(body.get("height", 5.0)),
+		"ground_clearance": float(body.get("ground_clearance", 0.0)),
 	}
 
 

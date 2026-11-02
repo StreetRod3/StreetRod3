@@ -10,6 +10,15 @@
       "car_file": "res://assets/cars/sr1-corvette-1956.car"
     },
     {
+      "id": "chevy-styleline-1950",
+      "name": "Chevy Styleline 1950",
+      "price": 900,
+      "vmax": 185.0,
+      "hp": 230.0,
+      "color": [0.33, 0.28, 0.87, 1.0],
+      "car_file": "res://assets/cars/chevy-styleline-1950.car"
+    },
+    {
       "id": "fairlane-1957",
       "name": "Fairlane 500",
       "price": 1050,
