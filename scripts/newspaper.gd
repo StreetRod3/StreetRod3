@@ -81,7 +81,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if code == KEY_U or code == KEY_C:
 		_show_section(SECTION_CARS)
 		_mark_input_handled()
-	elif code == KEY_P:
+	elif code == KEY_P or code == KEY_A:
 		_show_section(SECTION_PARTS)
 		_mark_input_handled()
 
@@ -388,6 +388,7 @@ func _on_buy_car(car_id: String) -> void:
 		_status.text = err
 		_refresh()
 		return
+	GameState.drive_into_garage = true
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 

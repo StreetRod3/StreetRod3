@@ -858,7 +858,11 @@ text = "Save game"
 
 [node name="LoadBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=1416030417]
 layout_mode = 2
-text = "Load game"
+text = "Old game"
+
+[node name="NewBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=1416030418]
+layout_mode = 2
+text = "New game"
 
 [node name="SettingsBtn" type="Button" parent="GarageUI/ClockMenu/Panel/Margin/VBox" unique_id=210070010]
 layout_mode = 2
@@ -1136,6 +1140,7 @@ vertical_alignment = 1
 
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn" to="." method="_on_clock_save_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/LoadBtn" to="." method="_on_clock_load_pressed"]
+[connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/NewBtn" to="." method="_on_clock_new_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/SettingsBtn" to="." method="_on_clock_settings_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/QuitBtn" to="." method="_on_clock_quit_menu_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/CloseBtn" to="." method="_on_clock_close_pressed"]

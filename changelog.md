@@ -65,3 +65,9 @@ Known bugs that are not fixed yet are now listed in `docs/bugs.md`.
 The fuel can in the garage is the jerry can model. It stands on the floor where the old can stood, and clicking it still drives out to the gas station.
 
 Pressing Esc under the hood, on the transmission, under the car, or on the timing screen crashed the game. Esc now leaves those screens the same way Done does. While a parts list is open, Esc still closes the list and stays on the screen.
+
+In the newspaper, A opens the parts ads as well as P. U and C still both open the used cars.
+
+Buying a car from the newspaper brings it into the garage the same way a car comes back from the gas station or the drive-in: the doors are open, it rolls in from outside, and the doors close behind it. Folding the paper without buying still returns to the car already parked.
+
+The garage clock menu now reads Save game, Old game, New game, then Settings, Quit, and Close. Old game is the old Load game entry and still opens the save slots. New game starts over the same way as New Game on the main menu, with the starting car and cash, and leaves the saved slots where they are. Save game is the red default button, the same way Sell it is in spare parts: it stays red when another entry is highlighted, and Enter opens the save slots from anywhere in that menu. On the Settings page, Enter still works on the control you are on. The main menu's Load Game button now says Old Game and still opens the save slots.
