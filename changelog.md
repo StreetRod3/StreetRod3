@@ -93,3 +93,5 @@ The jack, the wheels, and the tire machine have sounds, all built in code: the j
 Changing wheels is much quicker. Each wheel used to make a long trip toward the doors and back, one at a time, for close to a minute in all. Now all four move together on a short route, and the jack is faster too.
 
 The tire machine shows the change on one wheel instead of repeating it four times.
+
+The wheels a car came on can be sold now, like anything else in spare parts, and once sold they stay sold.

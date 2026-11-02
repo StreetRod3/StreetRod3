@@ -13,9 +13,9 @@ To reproduce:
 3. Switch to another car, then switch back.
 4. The stock engine is in spare parts again and can be sold again.
 
-Cause: `_ensure_stock_fitment()` in `scripts/game_state.gd` adds the car's stock engine to `owned_engine_ids` whenever no copy is owned, even if the car has a different engine fitted. It does the same for stock wheels, but those are protected because `sell_trouble()` refuses to sell a set of wheels one of your cars came on.
+Cause: `_ensure_stock_fitment()` in `scripts/game_state.gd` adds the car's stock engine to `owned_engine_ids` whenever no copy is owned, even if the car has a different engine fitted.
 
-Possible fix: remove those two appends. `_own_fitted_parts()` now makes sure everything fitted to a car is owned, so they may no longer be needed. This has not been tested.
+Possible fix: remove that append, as was done for stock wheels. `_own_fitted_parts()` now makes sure everything fitted to a car is owned, so they may no longer be needed. This has not been tested.
 
 ## An empty bay is not kept when a game is loaded
 

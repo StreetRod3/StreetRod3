@@ -712,11 +712,9 @@ func _ensure_stock_fitment() -> void:
 			owned_engine_ids.append(engine_id)
 		if equipped_engine_id.is_empty() or listing_by_id(ENGINES, equipped_engine_id).is_empty():
 			equipped_engine_id = engine_id
-	if equipped_wheel_id != NO_WHEEL_ID:
-		if not wheel_id.is_empty() and not owned_wheel_ids.has(wheel_id):
-			owned_wheel_ids.append(wheel_id)
-		if equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty():
-			equipped_wheel_id = wheel_id
+	# Wheels sold stay sold: whatever is fitted is owned already (`_own_fitted_parts()`).
+	if equipped_wheel_id != NO_WHEEL_ID and (equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty()):
+		equipped_wheel_id = wheel_id
 
 
 func get_stock_engine() -> Dictionary:
@@ -1699,18 +1697,13 @@ func listing_for(kind: String, id: String) -> Dictionary:
 	return listing_by_id(PARTS, id)
 
 
-## Why a spare cannot be sold, or "" when it can. Only copies on no car sell, and not a
-## set of wheels one of the player's cars came with, since a car always stands on some.
+## Why a spare cannot be sold, or "" when it can. Only copies on no car sell.
 func sell_trouble(kind: String, id: String) -> String:
 	var item := listing_for(kind, id)
 	if item.is_empty():
 		return "Nobody knows what that is."
 	if int(item.get("price", 0)) <= 0:
 		return "Nobody would pay for that."
-	if kind == "wheels":
-		for car_id in owned_car_ids:
-			if _stock_part_id(car_id, kind) == id:
-				return "One of your cars came on these wheels."
 	if free_spare_count(kind, id) <= 0:
 		return "It is on one of your cars."
 	return ""
