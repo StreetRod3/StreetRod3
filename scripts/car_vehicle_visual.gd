@@ -226,6 +226,9 @@ func apply_equipped_wheels() -> void:
 	if not _overlay_wheels_enabled():
 		_set_overlay_wheels_visible(false)
 		return
+	if GameState.equipped_wheel_id == GameState.NO_WHEEL_ID:
+		_set_overlay_wheels_visible(false)
+		return
 	apply_wheel_set(GameState.get_equipped_wheel())
 
 

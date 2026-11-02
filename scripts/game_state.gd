@@ -53,6 +53,8 @@ const ROAD_STAKE_HIGH := 100
 const NO_ENGINE_ID := "none"
 ## Gearbox id for a car whose transmission was taken out. The gearbox goes to spare parts.
 const NO_GEARBOX_ID := "none"
+## A car whose wheels have been taken for another car. It stays put until it gets some.
+const NO_WHEEL_ID := "none"
 ## Bellhousing bolts holding the gearbox to the engine.
 const GEARBOX_BOLT_COUNT := 2
 ## Turns that seat a bellhousing bolt. Zero is out of its hole.
@@ -348,7 +350,11 @@ func is_gearbox_bolted() -> bool:
 
 ## The car can leave the garage under its own power.
 func can_drive() -> bool:
-	return engine_runs() and is_gearbox_bolted() and has_tires()
+	return engine_runs() and is_gearbox_bolted() and has_wheels() and has_tires()
+
+
+func has_wheels() -> bool:
+	return has_active_car() and equipped_wheel_id != NO_WHEEL_ID
 
 
 func has_tires() -> bool:
@@ -706,10 +712,11 @@ func _ensure_stock_fitment() -> void:
 			owned_engine_ids.append(engine_id)
 		if equipped_engine_id.is_empty() or listing_by_id(ENGINES, equipped_engine_id).is_empty():
 			equipped_engine_id = engine_id
-	if not wheel_id.is_empty() and not owned_wheel_ids.has(wheel_id):
-		owned_wheel_ids.append(wheel_id)
-	if equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty():
-		equipped_wheel_id = wheel_id
+	if equipped_wheel_id != NO_WHEEL_ID:
+		if not wheel_id.is_empty() and not owned_wheel_ids.has(wheel_id):
+			owned_wheel_ids.append(wheel_id)
+		if equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty():
+			equipped_wheel_id = wheel_id
 
 
 func get_stock_engine() -> Dictionary:
@@ -1514,7 +1521,7 @@ func _active_mounts() -> Dictionary:
 		out["engine"] = ["engine", equipped_engine_id]
 	if not equipped_gearbox_id.is_empty() and equipped_gearbox_id != NO_GEARBOX_ID:
 		out["transmission"] = ["transmission", equipped_gearbox_id]
-	if not equipped_wheel_id.is_empty():
+	if not equipped_wheel_id.is_empty() and equipped_wheel_id != NO_WHEEL_ID:
 		out["wheels"] = ["wheels", equipped_wheel_id]
 	for slot in ALL_SLOTS:
 		var part_id := str(slot_part_ids.get(slot, NO_PART_ID))
@@ -2012,6 +2019,8 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 		return "Already on the car."
 	if kind == SLOT_MANIFOLD and not has_engine():
 		return "Put an engine in first."
+	if kind == SLOT_TIRES and not has_wheels():
+		return "Put wheels on first."
 	if kind == SLOT_MUFFLER and slot_part(SLOT_EXHAUST).is_empty():
 		return "Put an exhaust on first."
 	if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
@@ -2497,7 +2506,7 @@ func _record_mounts(rec: Dictionary) -> Array:
 	if not gearbox_id.is_empty() and gearbox_id != NO_GEARBOX_ID:
 		out.append(["transmission", gearbox_id])
 	var wheel_id := str(rec.get("wheel_id", ""))
-	if not wheel_id.is_empty():
+	if not wheel_id.is_empty() and wheel_id != NO_WHEEL_ID:
 		out.append(["wheels", wheel_id])
 	var slots: Variant = rec.get("slot_parts", {})
 	if typeof(slots) == TYPE_DICTIONARY:
@@ -2791,14 +2800,16 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if str(rec.get(key, "")) != part_id:
 			continue
 		var stock := _stock_part_id(car_id, slot)
-		if part_id == stock:
+		if part_id == stock and slot != "wheels":
 			continue
 		# That car gets its own engine or gearbox back if it is still owned; otherwise it
-		# goes without. Wheels always fall back to its own set.
+		# goes without. Wheels leave it with none, its tires going with them.
 		if slot == "engine" and not owned_engine_ids.has(stock):
 			stock = NO_ENGINE_ID
 		elif slot == "transmission" and not owned_gearbox_ids.has(stock):
 			stock = NO_GEARBOX_ID
+		elif slot == "wheels":
+			stock = NO_WHEEL_ID
 		rec[key] = stock
 		excess -= 1
 		_release_condition(rec, slot)

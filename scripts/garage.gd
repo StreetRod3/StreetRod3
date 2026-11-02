@@ -158,6 +158,7 @@ const _TOOLTIP_DOORS_NO_RUN := "Won't start: %s"
 const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
 const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
 const _TOOLTIP_DOORS_NO_TIRES := "Needs tires to drive out"
+const _TOOLTIP_DOORS_NO_WHEELS := "Needs wheels to drive out"
 const _SLOT_NAMES := {
 	"manifold": "Exhaust manifolds",
 	"exhaust": "Exhaust",
@@ -482,6 +483,8 @@ func _tooltip_text_at_mouse() -> String:
 		return _TOOLTIP_DOORS_NO_GEARBOX
 	if kind == &"doors" and not GameState.is_gearbox_bolted():
 		return _TOOLTIP_DOORS_LOOSE
+	if (kind == &"doors" or kind == &"fuel") and not GameState.has_wheels():
+		return _TOOLTIP_DOORS_NO_WHEELS
 	if (kind == &"doors" or kind == &"fuel") and not GameState.has_tires():
 		return _TOOLTIP_DOORS_NO_TIRES
 	return str(_TOOLTIPS.get(kind, ""))
@@ -1506,6 +1509,9 @@ func _rebuild_fitted_list() -> void:
 
 func _rebuild_tires_list() -> void:
 	_parts_title.text = "Tires"
+	if not GameState.has_wheels():
+		_parts_status.text = "This car has no wheels to put tires on."
+		return
 	_parts_status.text = "Pick a set. The wheels come off and the machine changes the tires on them."
 	var spares := 0
 	for part in GameState.PARTS:
@@ -1555,6 +1561,8 @@ func _rebuild_wheels_list() -> void:
 			continue
 		_parts_list.add_child(_parts_row(wheel, "wheels", GameState.equipped_wheel_id))
 		count += 1
+	if not GameState.has_wheels():
+		_parts_status.text = "This car has no wheels and can't move until it gets some. Pick a set."
 	if count == 0:
 		_parts_status.text = "No wheels on the shelf. Buy a set in the newspaper."
 	elif count == 1 and GameState.owns_wheel(GameState.equipped_wheel_id):
@@ -2771,6 +2779,8 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 ## Puts a spare set of tires on the wheels, or with no id takes the set that is on them off.
 func _start_tire_change(tire_id: String) -> void:
 	if _bay_busy:
+		return
+	if not GameState.has_wheels():
 		return
 	if tire_id.is_empty():
 		if not GameState.has_tires():
