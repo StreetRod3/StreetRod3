@@ -15,9 +15,9 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="Street Rod 3"
-config/icon="res://assets/icon.png"
 run/main_scene="res://scenes/main_menu.tscn"
 config/features=PackedStringArray("4.6")
+config/icon="res://assets/icon.png"
 
 [autoload]
 
@@ -27,3 +27,7 @@ GameState="*res://scripts/game_state.gd"
 
 window/size/viewport_width=1280
 window/size/viewport_height=720
+
+[rendering]
+
+textures/vram_compression/import_etc2_astc=true

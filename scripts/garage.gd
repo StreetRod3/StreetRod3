@@ -2,7 +2,9 @@ extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
+const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
+const _CarSale := preload("res://scripts/car_sale.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
 
 @onready var _car_pivot: Node3D = $CarPivot
@@ -30,6 +32,9 @@ const _SaveSlots := preload("res://scripts/save_slots.gd")
 @onready var _lift_arm: Node3D = $InteractLift/LiftArm
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
 @onready var _door_right: Node3D = $InteractDoors/DoorRight
+@onready var _clock_hour: Node3D = $InteractClock/Face/HourHand
+@onready var _clock_minute: Node3D = $InteractClock/Face/MinuteHand
+@onready var _clock_second: Node3D = $InteractClock/Face/SecondHand
 
 var _orbiting: bool = false
 var _yaw: float = -PI * 0.5
@@ -57,8 +62,20 @@ var _parts_board: Control
 var _parts_title: Label
 var _parts_list: VBoxContainer
 var _parts_status: Label
+var _parts_close: Button
 var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
+var _parts_show_tires: bool = false
+## The wheels the tire machine is working on, or "" before they are picked.
+var _tire_target: String = ""
+var _spares_actions: HBoxContainer
+var _spares_sell: Button
+var _spares_forget: Button
+var _spares_group: ButtonGroup
+## The spare the list is highlighting. A click only changes this; Sell it offers it.
+var _spares_selected: int = -1
+var _spares_kind: String = ""
+var _spares_id: String = ""
 ## The buyer's offer for a spare, over the parts board, and what it is for.
 var _offer_panel: Control
 var _offer_label: Label
@@ -82,6 +99,28 @@ var _nav = _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
+var _car_list_status: Label
+var _car_list_switch: Button
+var _car_list_sell: Button
+var _car_list_forget: Button
+var _car_list_group: ButtonGroup
+## The car the list is highlighting. A click only changes this; Switch it moves it into the bay.
+var _car_list_selected: String = ""
+var _car_sale: RefCounted = null
+var _sale_car_id: String = ""
+var _sale_panel: Control
+var _sale_name: Label
+var _sale_line: Label
+var _sale_ask: HBoxContainer
+var _sale_entry: LineEdit
+var _sale_buttons: HBoxContainer
+var _sale_answers: HBoxContainer
+var _sale_offer: Button
+var _sale_never: Button
+var _sale_take: Button
+var _sale_refuse: Button
+var _say_bubble: Control
+var _say_after: Callable = Callable()
 ## The engine heard rolling out of and into the bay.
 var _engine_sound: AudioStreamPlayer
 var _hood: StaticBody3D
@@ -89,13 +128,22 @@ var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
 var _creeper: StaticBody3D
+var _tire_machine: StaticBody3D
+## Players for the jack, wheels, and tire machine, by sound name.
+var _shop_players: Dictionary = {}
 var _loss_bubble: Control
+## Shown when the player tries to leave and the engine will not run.
+var _stall_bubble: Control
+## Shown when Switch it is used on the car already in the bay.
+var _here_bubble: Control
+## Shown once, on the garage visit straight after the last car is sold or lost.
+var _gone_bubble: Control
 var _tooltip: Label
 
 const _TOOLTIPS := {
 	&"clock": "Menu (Q)",
 	&"chart": "Parts list",
-	&"spares": "Spare parts",
+	&"spares": "Spare parts (L)",
 	&"newspaper": "Newspaper (N)",
 	&"radio": "Radio (M)",
 	&"doors": "Drive out (D)",
@@ -103,22 +151,27 @@ const _TOOLTIPS := {
 	&"fuel": "Gas station",
 	&"hood": "Under the hood (H)",
 	&"calendar": "Calendar (X)",
-	&"lift": "Wheels (L)",
-	&"transmission": "Transmission (T)",
+	&"lift": "Wheels (W)",
+	&"tire_machine": "Tire machine (T)",
+	&"transmission": "Transmission (A)",
 	&"creeper": "Under the car (U)",
 }
-const _TOOLTIP_CARS := "Cars"
+const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
 const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
 const _TOOLTIP_DOORS_NO_RUN := "Won't start: %s"
 const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
 const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
+const _TOOLTIP_DOORS_NO_TIRES := "Needs tires to drive out"
+const _TOOLTIP_DOORS_NO_WHEELS := "Needs wheels to drive out"
 const _SLOT_NAMES := {
 	"manifold": "Exhaust manifolds",
 	"exhaust": "Exhaust",
 	"muffler": "Muffler",
 	"muffler_left": "Left muffler",
 	"differential": "Rear end",
+	"tires": "Tires",
+	"cam": "Camshaft",
 	"heads": "Cylinder heads",
 	"intake": "Intake manifold",
 	"carb": "Carburetor",
@@ -140,14 +193,30 @@ const _WHEEL_NODES: Array[String] = [
 	"WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight",
 ]
 const _LIFT_HEIGHT := 0.42
-const _WHEEL_SIDE_M := 2.6
-const _WHEEL_OUT_Z := -5.4
-const _T_JACK := 1.8
-const _T_LIFT := 1.5
-const _T_DROP := 0.9
-const _T_ROLL_SIDE := 1.6
-const _T_ROLL_LONG := 2.2
-const _T_RISE := 0.85
+## The tire machine stands against the front wall, ahead of the car. With the car up on
+## the jack, the wheels roll straight ahead under it along their own tracks and wait in
+## front of the machine, the front pair nearer it.
+const _TIRE_MACHINE_SPOT := Vector3(1.9, 0.0, 6.7)
+const _TIRE_TABLE_Y := 0.66
+const _TIRE_WAIT_Z := {
+	"WheelFrontLeft": 5.0,
+	"WheelFrontRight": 5.0,
+	"WheelBackLeft": 4.2,
+	"WheelBackRight": 4.2,
+}
+const _TIRE_ROLL_SPEED := 5.0
+## The new set waits beside the machine, and the old set piles up on the other side.
+const _TIRE_STACK_NEW := Vector3(1.0, 0.0, 6.75)
+const _TIRE_STACK_OLD := Vector3(2.8, 0.0, 6.75)
+const _TIRE_THICK := 0.13
+## Wheels start this far apart, so that the wrench is heard on each.
+const _T_WRENCH_GAP := 0.3
+const _T_WRENCH := 0.4
+const _T_TIRE_MOVE := 0.55
+const _T_JACK := 0.9
+const _T_LIFT := 1.0
+const _T_DROP := 0.4
+const _T_RISE := 0.4
 const _T_PAUSE := 0.28
 const _T_DOOR_OPEN := 1.25
 const _DOOR_SWING := 1.92
@@ -165,6 +234,9 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	_stats_label = _stats_panel.get_node("Panel/Margin/VBox/StatsText") as Label
 	_reset_clock_menu_page()
+	var save_btn := $GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn as Button
+	_mark_switch_button(save_btn)
+	save_btn.tooltip_text = "Enter"
 	_clock_menu.visible = false
 	_stats_panel.visible = false
 	_spray_menu.visible = false
@@ -181,6 +253,7 @@ func _ready() -> void:
 	_build_hood_target()
 	_build_under_car_target()
 	_build_creeper()
+	_build_tire_machine()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
 	_lift_arm_home = _lift_arm.position
@@ -191,6 +264,7 @@ func _ready() -> void:
 	_calendar_hint.visible = false
 	_hud_top.gui_input.connect(_on_hud_car_stripe_input)
 	_build_car_list()
+	_build_sale_panel()
 	_refresh_hud()
 	if GameState.has_active_car():
 		_car_pivot.visible = true
@@ -199,8 +273,14 @@ func _ready() -> void:
 	else:
 		_car_pivot.visible = false
 	_build_loss_bubble()
+	_build_stall_bubble()
+	_build_here_bubble()
+	_build_say_bubble()
+	_build_gone_bubble()
 	_build_tooltip()
-	if GameState.is_ruined():
+	if GameState.cars_just_gone:
+		announce_cars_gone()
+	elif GameState.is_ruined():
 		_loss_bubble.visible = true
 	_cam_distance_target = _cam_distance
 	_update_camera_transform()
@@ -248,12 +328,106 @@ func _dismiss_loss_bubble() -> void:
 		_loss_bubble.visible = false
 
 
+func _build_stall_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "Your car's not running, speedy!", Vector2(520, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_stall_bubble)
+	_stall_bubble = bubble
+
+
+func _show_stall_bubble() -> void:
+	if _stall_bubble != null:
+		_stall_bubble.visible = true
+
+
+func _dismiss_stall_bubble() -> void:
+	if _stall_bubble != null:
+		_stall_bubble.visible = false
+
+
+func _build_here_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "Here it is!", Vector2(260, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_here_bubble)
+	_here_bubble = bubble
+
+
+## A bubble over the bay for a line that changes. A click or a key takes it down and runs `after`.
+func _build_say_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_say_bubble)
+	_say_bubble = bubble
+
+
+func _say(line: String, after: Callable = Callable()) -> void:
+	_say_after = after
+	_say_bubble.call("set_line", line, Vector2(260, 56), 26)
+	_say_bubble.visible = true
+
+
+func _dismiss_say_bubble() -> void:
+	_say_bubble.visible = false
+	var after := _say_after
+	_say_after = Callable()
+	if after.is_valid():
+		after.call()
+
+
+func _show_here_bubble() -> void:
+	if _here_bubble != null:
+		_here_bubble.visible = true
+
+
+func _dismiss_here_bubble() -> void:
+	if _here_bubble != null:
+		_here_bubble.visible = false
+
+
+func _build_gone_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "All cars gone!", Vector2(280, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _car_pivot, Vector3(0.0, 1.35, 0.0))
+	bubble.connect("pressed", _dismiss_gone_bubble)
+	_gone_bubble = bubble
+
+
+## The last car was just sold or lost, and this is the garage they came back to.
+func announce_cars_gone() -> void:
+	if not GameState.take_cars_just_gone():
+		return
+	if _gone_bubble != null:
+		_gone_bubble.visible = true
+
+
+func _dismiss_gone_bubble() -> void:
+	if _gone_bubble != null:
+		_gone_bubble.visible = false
+	if GameState.is_ruined() and _loss_bubble != null:
+		_loss_bubble.visible = true
+
+
 func _leave_after_loss() -> void:
 	GameState.current_scene_path = GameState.SCENE_MAIN_MENU
 	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
 
 
 func _process(_delta: float) -> void:
+	_update_clock_hands()
 	if not _departing and not _swapping_car:
 		_camera_pivot.global_position = _car_pivot.global_position
 
@@ -312,6 +486,10 @@ func _tooltip_text_at_mouse() -> String:
 		return _TOOLTIP_DOORS_NO_GEARBOX
 	if kind == &"doors" and not GameState.is_gearbox_bolted():
 		return _TOOLTIP_DOORS_LOOSE
+	if (kind == &"doors" or kind == &"fuel") and not GameState.has_wheels():
+		return _TOOLTIP_DOORS_NO_WHEELS
+	if (kind == &"doors" or kind == &"fuel") and not GameState.has_tires():
+		return _TOOLTIP_DOORS_NO_TIRES
 	return str(_TOOLTIPS.get(kind, ""))
 
 
@@ -385,8 +563,30 @@ func _unhandled_input(event: InputEvent) -> void:
 		_dismiss_loss_bubble()
 		get_viewport().set_input_as_handled()
 		return
+	if _gone_bubble != null and _gone_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_gone_bubble()
+		get_viewport().set_input_as_handled()
+		return
+	if _stall_bubble != null and _stall_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_stall_bubble()
+		get_viewport().set_input_as_handled()
+		return
+	if _here_bubble != null and _here_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_here_bubble()
+		get_viewport().set_input_as_handled()
+		return
+	if _say_bubble != null and _say_bubble.visible:
+		get_viewport().set_input_as_handled()
+		return
 	if _bay_busy:
 		_handle_camera_only(event)
+		return
+	if _car_sale != null:
+		_nav.handle_event(self, event)
+		get_viewport().set_input_as_handled()
 		return
 	if _clock_menu.visible and event.is_action_pressed(&"ui_cancel"):
 		if _clock_settings.visible:
@@ -415,12 +615,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if _car_list != null and _car_list.visible and event.is_action_pressed(&"ui_cancel"):
-		_hide_car_list()
+		_on_car_list_forget()
 		get_viewport().set_input_as_handled()
 		return
 	if _calendar_inspecting and event.is_action_pressed(&"ui_cancel"):
 		_hang_calendar()
 		get_viewport().set_input_as_handled()
+		return
+
+	if _car_list != null and _car_list.visible and _try_car_list_shortcut(event):
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+
+	if _spares_list_open() and _try_spares_shortcut(event):
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
 		return
 
 	if _nav.handle_event(self, event):
@@ -586,20 +798,45 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_stats_panel.visible = false
 			else:
 				_show_stats()
-		KEY_L:
+		KEY_T:
+			if _parts_board != null and _parts_board.visible and _parts_show_tires:
+				_hide_parts_board()
+			else:
+				_handle_interact(&"tire_machine")
+		KEY_W:
 			if _parts_board != null and _parts_board.visible and _parts_show_wheels:
 				_hide_parts_board()
 			else:
 				_show_wheel_board()
+		KEY_L:
+			if _parts_board != null and _parts_board.visible and _parts_show_spares:
+				_hide_parts_board()
+			else:
+				_show_spares_board()
 		KEY_H:
 			_handle_interact(&"hood")
-		KEY_T:
+		KEY_A:
 			_handle_interact(&"transmission")
 		KEY_U:
 			_handle_interact(&"creeper")
+		KEY_C:
+			if not _car_management_available():
+				return false
+			_toggle_car_list()
 		_:
 			return false
 	_sync_menu_nav()
+	return true
+
+
+## The bay itself, or the car list already open over it. Other panels keep their own keys.
+func _car_management_available() -> bool:
+	if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or _calendar_inspecting:
+		return false
+	if _parts_board != null and _parts_board.visible:
+		return false
+	if _offer_panel != null and _offer_panel.visible:
+		return false
 	return true
 
 
@@ -617,6 +854,7 @@ func _hide_garage_overlays() -> void:
 		_parts_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
+	_dismiss_here_bubble()
 	_sync_menu_nav()
 
 
@@ -638,10 +876,12 @@ func _sync_menu_nav() -> void:
 		_nav.setup([
 			$GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/LoadBtn,
+			$GarageUI/ClockMenu/Panel/Margin/VBox/NewBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/SettingsBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/QuitBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/CloseBtn,
 		])
+		_nav.select(0)
 	elif _stats_panel.visible:
 		_nav.setup([$GarageUI/StatsPanel/Panel/Margin/VBox/StatsClose])
 	elif _spray_menu.visible:
@@ -651,6 +891,8 @@ func _sync_menu_nav() -> void:
 		])
 	elif _offer_panel != null and _offer_panel.visible:
 		_nav.setup([_offer_accept, _offer_reject])
+	elif _sale_panel != null and _sale_panel.visible:
+		_nav.setup(_nav.collect_buttons(_sale_panel))
 	elif _parts_board != null and _parts_board.visible:
 		_nav.setup(_nav.collect_buttons(_parts_board))
 	elif _car_list != null and _car_list.visible:
@@ -742,6 +984,8 @@ func _handle_interact(kind: Variant) -> void:
 			_bring_calendar_forward()
 		&"lift":
 			_show_wheel_board()
+		&"tire_machine":
+			_show_tire_board()
 		&"transmission":
 			_open_transmission()
 		&"creeper":
@@ -750,7 +994,7 @@ func _handle_interact(kind: Variant) -> void:
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"transmission", &"creeper":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper":
 			return true
 	return false
 
@@ -764,6 +1008,7 @@ func _open_transmission() -> void:
 func _open_hood() -> void:
 	if _bay_busy or _departing or not GameState.has_active_car():
 		return
+	GameState.hood_peek.clear()
 	get_tree().change_scene_to_file(GameState.SCENE_HOOD)
 
 
@@ -774,8 +1019,14 @@ func _open_under_car() -> void:
 
 
 func _start_drive_out(destination: String) -> void:
-	if _departing or _bay_busy or not GameState.can_drive():
+	if _departing or _bay_busy:
 		return
+	if not GameState.engine_runs():
+		_show_stall_bubble()
+		return
+	if not GameState.can_drive():
+		return
+	_dismiss_stall_bubble()
 	if _door_left == null or _door_right == null:
 		get_tree().change_scene_to_file(destination)
 		return
@@ -1040,10 +1291,21 @@ func _build_parts_board() -> void:
 	_parts_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_parts_list.add_theme_constant_override("separation", 10)
 	scroll.add_child(_parts_list)
-	var close := Button.new()
-	close.text = "Close"
-	close.pressed.connect(_hide_parts_board)
-	box.add_child(close)
+	_spares_actions = HBoxContainer.new()
+	_spares_actions.add_theme_constant_override(&"separation", 8)
+	_spares_actions.visible = false
+	_spares_sell = _car_list_action("Sell it", _on_spares_sell)
+	_spares_forget = _car_list_action("Forget it", _on_spares_forget)
+	_mark_switch_button(_spares_sell)
+	_spares_sell.tooltip_text = "S or Enter"
+	_spares_forget.tooltip_text = "Esc"
+	_spares_actions.add_child(_spares_sell)
+	_spares_actions.add_child(_spares_forget)
+	box.add_child(_spares_actions)
+	_parts_close = Button.new()
+	_parts_close.text = "Close"
+	_parts_close.pressed.connect(_hide_parts_board)
+	box.add_child(_parts_close)
 	_build_offer_panel(root)
 	$GarageUI.add_child(root)
 	_parts_board = root
@@ -1101,8 +1363,15 @@ func _on_sell_part(kind: String, part_id: String) -> void:
 	_offer_kind = kind
 	_offer_id = part_id
 	_offer_amount = GameState.sell_offer(kind, part_id)
+	var new_price := int(item.get("price", 0))
+	var what := str(item.get("name", "part"))
+	if kind == "wheels":
+		var tires := GameState.tires_sold_with_wheels(part_id)
+		if not tires.is_empty():
+			new_price += int(tires.get("price", 0))
+			what += ", with %s on them," % str(tires.get("name", "tires"))
 	_offer_label.text = "A buyer looks over your %s (%d%%) and offers $%d.\nThe paper sells them new for $%d." % [
-		str(item.get("name", "part")), roundi(condition * 100.0), _offer_amount, int(item.get("price", 0))]
+		what, roundi(condition * 100.0), _offer_amount, new_price]
 	_offer_accept.text = "Accept $%d" % _offer_amount
 	_offer_panel.visible = true
 	_sync_menu_nav()
@@ -1117,17 +1386,20 @@ func _on_offer_accepted() -> void:
 	_parts_status.text = err if not err.is_empty() else "Sold the %s for $%d." % [name, _offer_amount]
 	_refresh_hud()
 	_sync_menu_nav()
+	_focus_spares_sell()
 
 
 func _on_offer_rejected() -> void:
 	_offer_panel.visible = false
 	_parts_status.text = "You turned down $%d. Sell again for another offer." % _offer_amount
 	_sync_menu_nav()
+	_focus_spares_sell()
 
 
 func _show_parts_board() -> void:
 	_parts_show_spares = false
 	_parts_show_wheels = false
+	_parts_show_tires = false
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
@@ -1141,6 +1413,7 @@ func _show_parts_board() -> void:
 func _show_spares_board() -> void:
 	_parts_show_spares = true
 	_parts_show_wheels = false
+	_parts_show_tires = false
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
@@ -1149,12 +1422,26 @@ func _show_spares_board() -> void:
 	_rebuild_parts_board()
 	_parts_board.visible = true
 	_sync_menu_nav()
+	_focus_spares_sell()
+
+
+## The tire machine's list, on the wheels named or else asking which.
+func _show_tire_board(wheel_id: String = "") -> void:
+	if _bay_busy:
+		return
+	_show_wheel_board()
+	_parts_show_wheels = false
+	_parts_show_tires = true
+	_tire_target = wheel_id
+	_rebuild_parts_board()
+	_sync_menu_nav()
 
 
 func _show_wheel_board() -> void:
 	if _bay_busy:
 		return
 	_parts_show_spares = false
+	_parts_show_tires = false
 	_parts_show_wheels = true
 	_clock_menu.visible = false
 	_spray_menu.visible = false
@@ -1174,13 +1461,23 @@ func _hide_parts_board() -> void:
 
 func _rebuild_parts_board() -> void:
 	for child in _parts_list.get_children():
-		child.queue_free()
-	if _parts_show_wheels:
+		_parts_list.remove_child(child)
+		child.free()
+	var spares := false
+	if _parts_show_tires:
+		_rebuild_tires_list()
+	elif _parts_show_wheels:
 		_rebuild_wheels_list()
-		return
-	if _parts_show_spares:
+	elif _parts_show_spares:
 		_rebuild_spares_list()
-		return
+		spares = true
+	else:
+		_rebuild_fitted_list()
+	_parts_close.visible = not spares
+	_spares_actions.visible = spares
+
+
+func _rebuild_fitted_list() -> void:
 	_parts_title.text = "On the car"
 	var engine := GameState.get_equipped_engine()
 	var box: Dictionary = GameState.get_equipped_gearbox()
@@ -1216,48 +1513,247 @@ func _rebuild_parts_board() -> void:
 		_parts_list.add_child(_mounted_line("Bolt-on", _parts_row_text(part, "part") + _condition_text("bolt:" + part_id)))
 
 
+## The tire machine works on wheels that are off the car: first pick the wheels, then the
+## tires. The wheels are spare parts the whole time.
+func _rebuild_tires_list() -> void:
+	_parts_title.text = "Tire machine"
+	var shelved := GameState.shelved_wheels()
+	var chosen := false
+	for wheel in shelved:
+		if str(wheel.get("id", "")) == _tire_target:
+			chosen = true
+	if chosen:
+		_rebuild_tires_for_wheels()
+		return
+	_tire_target = ""
+	for wheel in shelved:
+		_parts_list.add_child(_action_row(_parts_row_text(wheel, "wheels"), "Select", _on_tire_wheels_chosen.bind(str(wheel.get("id", "")))))
+	if not shelved.is_empty():
+		_parts_status.text = "Which wheels?"
+	elif GameState.has_wheels():
+		_parts_status.text = "The machine needs wheels that are off the car. Take them off first: click the jack or press W."
+	else:
+		_parts_status.text = "There are no wheels here. Buy a set in the newspaper."
+	if GameState.tires_worn_out():
+		_parts_status.text = "The tires on the car are worn out and will blow in the next race. " + _parts_status.text
+
+
+func _rebuild_tires_for_wheels() -> void:
+	var fitted_id := GameState.shelved_wheel_tires_id(_tire_target)
+	var spares := 0
+	for part in GameState.PARTS:
+		if str(part.get("slot", "")) != GameState.SLOT_TIRES:
+			continue
+		var part_id := str(part.get("id", ""))
+		if part_id == fitted_id:
+			_parts_list.add_child(_fixed_row("On these wheels", part))
+		elif GameState.spare_count(part_id) > 0:
+			spares += 1
+			_parts_list.add_child(_action_row(_parts_row_text(part, "part"), "Fit", _on_tires_fit.bind(part_id)))
+	if not fitted_id.is_empty():
+		_parts_list.add_child(_action_row("Take the tires off", "Remove", _on_tires_fit.bind("")))
+	_parts_list.add_child(_action_row("Pick other wheels", "Back", _on_tire_wheels_chosen.bind("")))
+	var wheels_name := str(GameState.listing_by_id(GameState.WHEELS, _tire_target).get("name", "wheels"))
+	_parts_status.text = "%s: which tires?" % wheels_name if spares > 0 else "%s. No spare tires here: buy a set in the newspaper." % wheels_name
+	if fitted_id.is_empty():
+		_parts_status.text = "No tires on these. " + _parts_status.text
+	elif GameState.shelved_wheel_tires_worn(_tire_target):
+		_parts_status.text = "These tires are worn out and will blow in the next race. " + _parts_status.text
+
+
+func _on_tire_wheels_chosen(wheel_id: String) -> void:
+	_tire_target = wheel_id
+	_rebuild_parts_board()
+	_sync_menu_nav()
+
+
+## Fits a spare set of tires to the chosen wheels, or with no id takes off the set on them.
+func _on_tires_fit(tire_id: String) -> void:
+	_hide_parts_board()
+	_start_shelf_tire_change(_tire_target, tire_id)
+
+
+func _fixed_row(state: String, part: Dictionary) -> HBoxContainer:
+	var row := _action_row(_parts_row_text(part, "part"), state, Callable())
+	(row.get_child(1) as Button).disabled = true
+	return row
+
+
+func _action_row(text: String, action: String, handler: Callable) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.text = text
+	row.add_child(label)
+	var btn := Button.new()
+	btn.text = action
+	if handler.is_valid():
+		btn.pressed.connect(handler)
+	row.add_child(btn)
+	return row
+
+
 func _rebuild_wheels_list() -> void:
 	_parts_title.text = "Wheels"
-	_parts_status.text = "Pick a set. The jack will change them one corner at a time."
+	_parts_status.text = "Pick a set. The jack will change them one corner at a time. Each set keeps the tires on it."
 	var count := 0
 	for wheel in GameState.WHEELS:
 		var wheel_id := str(wheel.get("id", ""))
-		if not GameState.owns_wheel(wheel_id):
+		if wheel_id != GameState.equipped_wheel_id and GameState.free_spare_count("wheels", wheel_id) <= 0:
 			continue
 		_parts_list.add_child(_parts_row(wheel, "wheels", GameState.equipped_wheel_id))
 		count += 1
+	if GameState.has_wheels():
+		_parts_list.add_child(_action_row("Take the wheels off", "Remove", _on_wheels_off_pressed))
+	else:
+		_parts_status.text = "This car has no wheels and can't move until it gets some. Pick a set."
 	if count == 0:
 		_parts_status.text = "No wheels on the shelf. Buy a set in the newspaper."
-	elif count == 1 and GameState.owns_wheel(GameState.equipped_wheel_id):
+	elif count == 1 and GameState.has_wheels():
 		_parts_status.text = "Only the wheels on the car are here. Buy another set in the newspaper."
 
 
 func _rebuild_spares_list() -> void:
 	_parts_title.text = "Spare parts"
-	_parts_status.text = "Bought, not on the car."
-	var count := 0
-	for engine in GameState.ENGINES:
-		var engine_id := str(engine.get("id", ""))
-		if GameState.owns_engine(engine_id) and engine_id != GameState.equipped_engine_id:
-			_parts_list.add_child(_parts_row(engine, "engine", GameState.equipped_engine_id))
-			count += 1
-	for box in GameState.GEARBOXES:
-		var box_id := str(box.get("id", ""))
-		if GameState.owns_gearbox(box_id) and box_id != GameState.equipped_gearbox_id:
-			_parts_list.add_child(_parts_row(box, "transmission", GameState.equipped_gearbox_id))
-			count += 1
-	for wheel in GameState.WHEELS:
-		var wheel_id := str(wheel.get("id", ""))
-		if GameState.owns_wheel(wheel_id) and wheel_id != GameState.equipped_wheel_id:
-			_parts_list.add_child(_parts_row(wheel, "wheels", GameState.equipped_wheel_id))
-			count += 1
-	for part in GameState.PARTS:
-		var part_id := str(part.get("id", ""))
-		if GameState.spare_count(part_id) > 0:
-			_parts_list.add_child(_parts_row(part, "part", ""))
-			count += 1
-	if count == 0:
+	_parts_status.text = "Bought, not on any car."
+	_spares_group = ButtonGroup.new()
+	var index := 0
+	var catalogs: Array = [
+		[GameState.ENGINES, "engine"],
+		[GameState.GEARBOXES, "transmission"],
+		[GameState.WHEELS, "wheels"],
+		[GameState.PARTS, "part"],
+	]
+	for catalog in catalogs:
+		var kind := str(catalog[1])
+		for item in catalog[0]:
+			var part: Dictionary = item
+			if GameState.free_spare_count(kind, str(part.get("id", ""))) <= 0:
+				continue
+			_parts_list.add_child(_spare_row(part, kind, index))
+			index += 1
+	if index == 0:
 		_parts_status.text = "The folder is empty. Parts you buy land here until you fit them."
+		_spares_selected = -1
+		_spares_kind = ""
+		_spares_id = ""
+		_spares_sell.disabled = true
+		return
+	var pick := 0
+	for i in _parts_list.get_child_count():
+		var row := _parts_list.get_child(i) as Button
+		if row == null:
+			continue
+		if str(row.get_meta(&"spare_kind")) == _spares_kind and str(row.get_meta(&"spare_id")) == _spares_id:
+			pick = i
+			break
+	var chosen := _parts_list.get_child(pick) as Button
+	if chosen != null:
+		chosen.set_pressed_no_signal(true)
+	_remember_spare(pick)
+	_spares_sell.disabled = false
+
+
+func _spare_row(item: Dictionary, kind: String, index: int) -> Button:
+	var part_id := str(item.get("id", ""))
+	var btn := Button.new()
+	btn.toggle_mode = true
+	btn.button_group = _spares_group
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 36)
+	var label := _parts_row_text(item, kind)
+	var conditions: Array[String] = []
+	for c in GameState.spare_condition_list(kind, part_id):
+		conditions.append("%d%%" % roundi(c * 100.0))
+	if not conditions.is_empty():
+		label += "  · " + ", ".join(conditions)
+	btn.text = "%d.  %s" % [index + 1, label]
+	btn.set_meta(&"spare_kind", kind)
+	btn.set_meta(&"spare_id", part_id)
+	btn.toggled.connect(_on_spare_row_toggled.bind(index))
+	return btn
+
+
+func _on_spare_row_toggled(on: bool, index: int) -> void:
+	if not on:
+		return
+	_remember_spare(index)
+	_parts_status.text = "Bought, not on any car."
+
+
+func _remember_spare(index: int) -> void:
+	_spares_selected = index
+	var btn := _parts_list.get_child(index) as Button
+	if btn == null:
+		_spares_kind = ""
+		_spares_id = ""
+		return
+	_spares_kind = str(btn.get_meta(&"spare_kind"))
+	_spares_id = str(btn.get_meta(&"spare_id"))
+
+
+func _on_spares_sell() -> void:
+	if _spares_selected < 0 or _spares_selected >= _parts_list.get_child_count():
+		_parts_status.text = "Pick a part first."
+		return
+	var btn := _parts_list.get_child(_spares_selected) as Button
+	if btn == null:
+		return
+	_on_sell_part(str(btn.get_meta(&"spare_kind")), str(btn.get_meta(&"spare_id")))
+
+
+func _on_spares_forget() -> void:
+	_hide_parts_board()
+
+
+func _spares_list_open() -> bool:
+	if _parts_board == null or not _parts_board.visible or not _parts_show_spares:
+		return false
+	if _offer_panel != null and _offer_panel.visible:
+		return false
+	return true
+
+
+func _focus_spares_sell() -> void:
+	if not _spares_list_open():
+		return
+	if _spares_sell != null and not _spares_sell.disabled:
+		_spares_sell.grab_focus()
+	elif _spares_forget != null:
+		_spares_forget.grab_focus()
+
+
+## S sells. 1–9 pick those parts, and 0 picks the 10th.
+func _try_spares_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	if _gui_has_text_focus():
+		return false
+	var index := _car_list_number_index(key.keycode)
+	if index >= 0:
+		_select_spare_index(index)
+		return true
+	if key.keycode != KEY_S:
+		return false
+	_on_spares_sell()
+	return true
+
+
+func _select_spare_index(index: int) -> void:
+	if index < 0 or index >= _parts_list.get_child_count():
+		return
+	var btn := _parts_list.get_child(index) as Button
+	if btn == null:
+		return
+	btn.button_pressed = true
+	btn.grab_focus()
 
 
 ## A fitted part's condition, as it reads after its name.
@@ -1289,20 +1785,6 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 	var btn := Button.new()
 	var owned := _parts_owned(kind, part_id)
 	var fitted := part_id == equipped_id or (kind == "part" and GameState.is_part_equipped(part_id))
-	if _parts_show_spares and owned and not fitted:
-		# Each loose copy's condition, and a buyer for the most worn one.
-		var conditions: Array[String] = []
-		for c in GameState.spare_condition_list(kind, part_id):
-			conditions.append("%d%%" % roundi(c * 100.0))
-		if not conditions.is_empty():
-			label.text += "  · " + ", ".join(conditions)
-		var trouble := GameState.sell_trouble(kind, part_id)
-		var sell := Button.new()
-		sell.text = "Sell"
-		sell.disabled = not trouble.is_empty()
-		sell.tooltip_text = trouble
-		sell.pressed.connect(_on_sell_part.bind(kind, part_id))
-		row.add_child(sell)
 	if fitted:
 		btn.text = "On the car"
 		btn.disabled = true
@@ -1328,6 +1810,8 @@ func _parts_row_text(item: Dictionary, kind: String) -> String:
 		return "%s  %s" % [name, GameState.part_detail(item)]
 	if kind == "part":
 		return "%s  +%d hp" % [name, int(item.get("hp", 0))]
+	if kind == "wheels":
+		return "%s  %s, %s" % [name, GameState.wheel_detail(item), GameState.wheel_tires_text(str(item.get("id", "")))]
 	return name
 
 
@@ -1348,7 +1832,7 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 	var err := ""
 	match kind:
 		"engine":
-			if GameState.owns_engine(part_id):
+			if GameState.free_spare_count("engine", part_id) > 0:
 				# Engines go in from under the hood, mounts and all.
 				_hide_parts_board()
 				_open_hood()
@@ -1360,23 +1844,28 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 			_open_transmission()
 			return
 		"wheels":
-			if GameState.owns_wheel(part_id) and part_id != GameState.equipped_wheel_id:
+			if GameState.free_spare_count("wheels", part_id) > 0 and part_id != GameState.equipped_wheel_id:
 				_hide_parts_board()
 				_start_wheel_change(part_id)
 				return
 			err = GameState.buy_or_equip_wheel(part_id)
 		"part":
-			if GameState.is_hood_kind(GameState.part_slot(part_id)):
+			if GameState.part_slot(part_id) == GameState.SLOT_TIRES:
+				# Tires go on wheels at the machine, not on the car.
+				_show_tire_board()
+				return
+			elif GameState.is_hood_kind(GameState.part_slot(part_id)):
 				# Intakes, carburetors, distributors, and air cleaners go on under the hood.
 				_hide_parts_board()
 				_open_hood()
 				return
-			if not GameState.part_slot(part_id).is_empty():
+			elif not GameState.part_slot(part_id).is_empty():
 				# Manifolds, mufflers, and rear ends go on from the creeper.
 				_hide_parts_board()
 				_open_under_car()
 				return
-			err = GameState.equip_part(part_id)
+			else:
+				err = GameState.equip_part(part_id)
 	if not err.is_empty():
 		_parts_status.text = err
 	_rebuild_parts_board()
@@ -1410,6 +1899,46 @@ func _build_car_list() -> void:
 	root.offset_top = 48.0
 	root.offset_right = 220.0
 	root.offset_bottom = 48.0
+	root.add_theme_stylebox_override(&"panel", _car_list_style())
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 8)
+	root.add_child(box)
+	var title := _car_list_label("Cars in the garage")
+	title.custom_minimum_size = Vector2(400, 24)
+	box.add_child(title)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(400, 36)
+	box.add_child(scroll)
+	_car_list_rows = VBoxContainer.new()
+	_car_list_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_car_list_rows.add_theme_constant_override(&"separation", 6)
+	scroll.add_child(_car_list_rows)
+	_car_list_count = _car_list_label("")
+	_car_list_count.custom_minimum_size = Vector2(400, 22)
+	box.add_child(_car_list_count)
+	_car_list_status = _car_list_label("")
+	_car_list_status.custom_minimum_size = Vector2(400, 22)
+	box.add_child(_car_list_status)
+	_car_list_group = ButtonGroup.new()
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override(&"separation", 8)
+	_car_list_switch = _car_list_action("Switch it", _on_car_list_switch)
+	_car_list_sell = _car_list_action("Sell it", _on_car_list_sell)
+	_car_list_forget = _car_list_action("Forget it", _on_car_list_forget)
+	_mark_switch_button(_car_list_switch)
+	_car_list_switch.tooltip_text = "S or Enter"
+	_car_list_sell.tooltip_text = "L"
+	_car_list_forget.tooltip_text = "F or Esc"
+	actions.add_child(_car_list_switch)
+	actions.add_child(_car_list_sell)
+	actions.add_child(_car_list_forget)
+	box.add_child(actions)
+	$GarageUI.add_child(root)
+	_car_list = root
+
+
+func _car_list_style() -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.12, 0.09, 0.07, 0.96)
 	style.border_color = Color(0.55, 0.12, 0.1, 1.0)
@@ -1418,29 +1947,51 @@ func _build_car_list() -> void:
 	style.content_margin_right = 12.0
 	style.content_margin_top = 10.0
 	style.content_margin_bottom = 10.0
-	root.add_theme_stylebox_override(&"panel", style)
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override(&"separation", 8)
-	root.add_child(box)
-	var title := Label.new()
-	title.text = "Cars in the garage"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
-	box.add_child(title)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(400, 40)
-	box.add_child(scroll)
-	_car_list_rows = VBoxContainer.new()
-	_car_list_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_car_list_rows.add_theme_constant_override(&"separation", 6)
-	scroll.add_child(_car_list_rows)
-	_car_list_count = Label.new()
-	_car_list_count.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_car_list_count.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
-	box.add_child(_car_list_count)
-	$GarageUI.add_child(root)
-	_car_list = root
+	return style
+
+
+func _car_list_label(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
+	return label
+
+
+func _car_list_action(text: String, callback: Callable) -> Button:
+	var btn := Button.new()
+	btn.text = text
+	btn.custom_minimum_size = Vector2(0, 36)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.pressed.connect(callback)
+	return btn
+
+
+## The red one: Enter runs it, and it stays marked when focus is on a car.
+func _mark_switch_button(btn: Button) -> void:
+	var ink := Color(0.98, 0.96, 0.9, 1)
+	btn.add_theme_stylebox_override(&"normal", _switch_button_style(Color(0.55, 0.12, 0.1, 1)))
+	btn.add_theme_stylebox_override(&"hover", _switch_button_style(Color(0.68, 0.18, 0.14, 1)))
+	btn.add_theme_stylebox_override(&"pressed", _switch_button_style(Color(0.4, 0.08, 0.07, 1)))
+	btn.add_theme_stylebox_override(&"focus", _switch_button_style(Color(0.68, 0.18, 0.14, 1)))
+	btn.add_theme_color_override(&"font_color", ink)
+	btn.add_theme_color_override(&"font_hover_color", ink)
+	btn.add_theme_color_override(&"font_pressed_color", ink)
+	btn.add_theme_color_override(&"font_focus_color", ink)
+	btn.add_theme_color_override(&"font_disabled_color", Color(0.98, 0.96, 0.9, 0.45))
+
+
+func _switch_button_style(bg: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = bg
+	style.border_color = Color(0.95, 0.9, 0.78, 1)
+	style.set_border_width_all(2)
+	style.set_corner_radius_all(3)
+	style.content_margin_left = 6.0
+	style.content_margin_right = 6.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	return style
 
 
 func _toggle_car_list() -> void:
@@ -1449,16 +2000,22 @@ func _toggle_car_list() -> void:
 	if _car_list.visible:
 		_hide_car_list()
 		return
+	if GameState.owned_car_ids.is_empty():
+		_say("You've got no car, dummy!")
+		return
 	_hide_garage_overlays()
 	_rebuild_car_list()
 	_car_list.visible = true
 	_sync_menu_nav()
+	if not _car_list_switch.disabled:
+		_car_list_switch.grab_focus()
 
 
 func _hide_car_list() -> void:
 	if _car_list == null or not _car_list.visible:
 		return
 	_car_list.visible = false
+	_dismiss_here_bubble()
 	_sync_menu_nav()
 
 
@@ -1466,32 +2023,414 @@ func _rebuild_car_list() -> void:
 	for child in _car_list_rows.get_children():
 		_car_list_rows.remove_child(child)
 		child.free()
-	for car_id in GameState.owned_car_ids:
-		var car_label := GameState.car_display_name(car_id)
-		var btn := Button.new()
-		var current := car_id == GameState.current_car_id
-		btn.text = car_label if not current else "%s    ·    in the bay" % car_label
-		btn.disabled = current
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if not current:
-			btn.pressed.connect(_on_car_list_pick.bind(car_id))
-		_car_list_rows.add_child(btn)
+	_ensure_car_list_selection()
+	for i in GameState.owned_car_ids.size():
+		_car_list_rows.add_child(_car_list_row(GameState.owned_car_ids[i], i))
 	_car_list_count.text = "%d of %d" % [GameState.owned_car_ids.size(), GameState.MAX_OWNED_CARS]
+	_car_list_status.text = ""
+	_refresh_car_list_actions()
 	var rows := mini(maxi(GameState.owned_car_ids.size(), 1), 8)
+	var rows_height := float(rows * 36 + (rows - 1) * 6)
 	var scroll := _car_list_rows.get_parent() as Control
 	if scroll != null:
-		scroll.custom_minimum_size = Vector2(400, rows * 36)
+		scroll.custom_minimum_size = Vector2(400, rows_height)
+	# Margins, title, count, status line, one row of action buttons, and the gaps between them.
+	var chrome := 20.0 + 24.0 + 22.0 + 22.0 + 36.0 + 4.0 * 8.0
 	_car_list.offset_left = -220.0
 	_car_list.offset_right = 220.0
 	_car_list.offset_top = 48.0
-	_car_list.offset_bottom = 48.0 + 88.0 + float(rows * 36)
+	_car_list.offset_bottom = 48.0 + chrome + rows_height
 
 
-func _on_car_list_pick(car_id: String) -> void:
-	_hide_car_list()
+func _ensure_car_list_selection() -> void:
+	if GameState.owned_car_ids.has(_car_list_selected):
+		return
+	if GameState.owned_car_ids.has(GameState.current_car_id):
+		_car_list_selected = GameState.current_car_id
+		return
+	_car_list_selected = GameState.owned_car_ids[0] if not GameState.owned_car_ids.is_empty() else ""
+
+
+func _car_list_row(car_id: String, index: int) -> Button:
+	var btn := Button.new()
+	btn.toggle_mode = true
+	btn.button_group = _car_list_group
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 36)
+	var label := GameState.car_display_name(car_id)
+	if car_id == GameState.current_car_id:
+		label = "%s    ·    in the bay" % label
+	btn.text = "%d.  %s" % [index + 1, label]
+	btn.toggled.connect(_on_car_list_row_toggled.bind(car_id))
+	btn.set_pressed_no_signal(car_id == _car_list_selected)
+	return btn
+
+
+## S switches, L sells, F closes. 1–9 pick those cars, and 0 picks the 10th.
+func _try_car_list_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	if _gui_has_text_focus():
+		return false
+	var index := _car_list_number_index(key.keycode)
+	if index >= 0:
+		_select_car_list_index(index)
+		return true
+	match key.keycode:
+		KEY_S:
+			_on_car_list_switch()
+		KEY_L:
+			_on_car_list_sell()
+		KEY_F:
+			_on_car_list_forget()
+		_:
+			return false
+	return true
+
+
+func _car_list_number_index(code: Key) -> int:
+	match code:
+		KEY_1, KEY_KP_1:
+			return 0
+		KEY_2, KEY_KP_2:
+			return 1
+		KEY_3, KEY_KP_3:
+			return 2
+		KEY_4, KEY_KP_4:
+			return 3
+		KEY_5, KEY_KP_5:
+			return 4
+		KEY_6, KEY_KP_6:
+			return 5
+		KEY_7, KEY_KP_7:
+			return 6
+		KEY_8, KEY_KP_8:
+			return 7
+		KEY_9, KEY_KP_9:
+			return 8
+		KEY_0, KEY_KP_0:
+			return 9
+		_:
+			return -1
+
+
+func _select_car_list_index(index: int) -> void:
+	if index < 0 or index >= _car_list_rows.get_child_count():
+		return
+	var btn := _car_list_rows.get_child(index) as Button
+	if btn == null:
+		return
+	btn.button_pressed = true
+	btn.grab_focus()
+
+
+func _on_car_list_row_toggled(on: bool, car_id: String) -> void:
+	if not on:
+		return
+	_car_list_selected = car_id
+	_car_list_status.text = ""
+	_refresh_car_list_actions()
+
+
+func _refresh_car_list_actions() -> void:
+	var picked := GameState.owned_car_ids.has(_car_list_selected)
+	_car_list_switch.disabled = not picked
+	_car_list_sell.disabled = not picked
+
+
+func _on_car_list_switch() -> void:
+	var car_id := _car_list_selected
 	if _bay_busy or _departing or not GameState.owned_car_ids.has(car_id):
 		return
+	if car_id == GameState.current_car_id:
+		_hide_car_list()
+		_show_here_bubble()
+		return
+	if GameState.has_active_car() and not GameState.has_wheels():
+		_car_list_status.text = GameState.NO_WHEELS_IN_BAY
+		return
+	_dismiss_here_bubble()
+	_hide_car_list()
 	_swap_car_in_bay(car_id)
+
+
+func _input(event: InputEvent) -> void:
+	if _try_say_bubble_key(event) or (_car_sale != null and _try_sale_key(event)):
+		get_viewport().set_input_as_handled()
+		return
+	if _say_bubble != null and _say_bubble.visible or _car_sale != null:
+		return
+	if not _is_enter_key(event):
+		return
+	if _car_list != null and _car_list.visible:
+		if _here_bubble != null and _here_bubble.visible:
+			get_viewport().set_input_as_handled()
+			return
+		if _bay_busy or _departing:
+			return
+		_on_car_list_switch()
+		get_viewport().set_input_as_handled()
+		return
+	if _spares_list_open():
+		_on_spares_sell()
+		get_viewport().set_input_as_handled()
+		return
+	if _clock_menu.visible and _clock_main.visible:
+		_on_clock_save_pressed()
+		get_viewport().set_input_as_handled()
+
+
+func _is_enter_key(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	return key.keycode == KEY_ENTER or key.keycode == KEY_KP_ENTER
+
+
+## Selling the selected car is not wired yet.
+func _on_car_list_sell() -> void:
+	if _bay_busy or _departing:
+		return
+	if not GameState.owned_car_ids.has(_car_list_selected):
+		_car_list_status.text = "Pick a car first."
+		return
+	_sale_car_id = _car_list_selected
+	_car_sale = _CarSale.new(GameState.car_value(_sale_car_id))
+	_sale_name.text = GameState.car_display_name(_sale_car_id)
+	_sale_entry.text = ""
+	_car_list_status.text = ""
+	_show_sale_ask()
+
+
+func _on_car_list_forget() -> void:
+	_hide_car_list()
+
+
+func _build_sale_panel() -> void:
+	var shade := ColorRect.new()
+	shade.color = Color(0.0, 0.0, 0.0, 0.45)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.visible = false
+	$GarageUI.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override(&"panel", _car_list_style())
+	center.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 10)
+	panel.add_child(box)
+	_sale_name = _car_list_label("")
+	_sale_name.custom_minimum_size = Vector2(400, 24)
+	box.add_child(_sale_name)
+	_sale_line = _car_list_label("")
+	box.add_child(_sale_line)
+	_sale_ask = HBoxContainer.new()
+	_sale_ask.alignment = BoxContainer.ALIGNMENT_CENTER
+	_sale_ask.add_theme_constant_override(&"separation", 4)
+	_sale_ask.add_child(_car_list_label("I'll take $"))
+	_sale_entry = LineEdit.new()
+	_sale_entry.max_length = 5
+	_sale_entry.custom_minimum_size = Vector2(90, 0)
+	_sale_entry.virtual_keyboard_type = LineEdit.KEYBOARD_TYPE_NUMBER
+	_sale_entry.text_changed.connect(_on_sale_entry_changed)
+	_sale_ask.add_child(_sale_entry)
+	box.add_child(_sale_ask)
+	_sale_buttons = HBoxContainer.new()
+	_sale_buttons.add_theme_constant_override(&"separation", 8)
+	_sale_offer = _car_list_action("Offer", _on_sale_offer)
+	_sale_never = _car_list_action("Never mind", _close_car_sale)
+	_mark_switch_button(_sale_offer)
+	_sale_offer.tooltip_text = "O or Enter"
+	_sale_never.tooltip_text = "N or Esc"
+	_sale_buttons.add_child(_sale_offer)
+	_sale_buttons.add_child(_sale_never)
+	box.add_child(_sale_buttons)
+	_sale_answers = HBoxContainer.new()
+	_sale_answers.add_theme_constant_override(&"separation", 8)
+	_sale_take = _car_list_action("OK", _on_sale_answer.bind(true))
+	_sale_refuse = _car_list_action("No", _on_sale_answer.bind(false))
+	_mark_switch_button(_sale_take)
+	_sale_take.tooltip_text = "O or Enter"
+	_sale_refuse.tooltip_text = "N or Esc"
+	_sale_answers.add_child(_sale_take)
+	_sale_answers.add_child(_sale_refuse)
+	box.add_child(_sale_answers)
+	_sale_panel = shade
+
+
+## Digits only, as the price is read.
+func _on_sale_entry_changed(text: String) -> void:
+	var digits := ""
+	for ch in text:
+		if ch >= "0" and ch <= "9":
+			digits += ch
+	if digits != text:
+		_sale_entry.text = digits
+		_sale_entry.caret_column = digits.length()
+
+
+func _show_sale_ask() -> void:
+	_sale_line.visible = false
+	_sale_ask.visible = true
+	_sale_buttons.visible = true
+	_sale_answers.visible = false
+	_sale_panel.visible = true
+	_sync_menu_nav()
+	_sale_entry.grab_focus()
+	_sale_entry.edit()
+	_sale_entry.select_all()
+
+
+func _show_sale_counter(offer: int) -> void:
+	_sale_line.text = "How about $%d ?" % offer
+	_sale_line.visible = true
+	_sale_ask.visible = false
+	_sale_buttons.visible = false
+	_sale_answers.visible = true
+	_sale_panel.visible = true
+	_sync_menu_nav()
+	_sale_take.grab_focus()
+
+
+func _on_sale_offer() -> void:
+	var asked := _sale_entry.text.to_int()
+	if asked <= 0:
+		_sale_entry.grab_focus()
+		_sale_entry.edit()
+		return
+	_car_sale.give_price(asked)
+	_follow_sale()
+
+
+func _on_sale_answer(taken: bool) -> void:
+	_car_sale.answer_offer(taken)
+	_follow_sale()
+
+
+## On to whatever the buyer's last word calls for.
+func _follow_sale() -> void:
+	var after := _show_sale_ask
+	match _car_sale.step:
+		_CarSale.Step.OFFER:
+			_show_sale_counter(_car_sale.offer)
+			return
+		_CarSale.Step.SOLD:
+			after = _finish_car_sale
+		_CarSale.Step.NO_SALE:
+			after = _close_car_sale
+	if _car_sale.say.is_empty():
+		after.call()
+		return
+	_sale_panel.visible = false
+	_say(_car_sale.say, after)
+
+
+## Back to the car list, with or without a sale.
+func _close_car_sale() -> void:
+	_car_sale = null
+	_sale_panel.visible = false
+	_sync_menu_nav()
+	if _car_list.visible and not _car_list_switch.disabled:
+		_car_list_switch.grab_focus()
+
+
+func _finish_car_sale() -> void:
+	var car_id := _sale_car_id
+	var price: int = _car_sale.price
+	var sold := "Sold the %s for $%d." % [GameState.car_display_name(car_id), price]
+	_close_car_sale()
+	if car_id == GameState.current_car_id:
+		await _drive_sold_car_away(car_id, price)
+		if not is_instance_valid(self):
+			return
+	else:
+		GameState.sell_car(car_id, price)
+		_refresh_hud()
+	if GameState.owned_car_ids.is_empty():
+		_hide_car_list()
+		return
+	_rebuild_car_list()
+	_car_list_status.text = sold
+	_car_list.visible = true
+	_sync_menu_nav()
+	_car_list_switch.grab_focus()
+
+
+## The buyer drives the car off and the bay stays empty.
+func _drive_sold_car_away(car_id: String, price: int) -> void:
+	_bay_busy = true
+	_swapping_car = true
+	_orbiting = false
+	_hide_garage_overlays()
+	var bay := _car_pivot.position
+	await _swing_doors(_DOOR_SWING)
+	if not is_instance_valid(self):
+		return
+	await _pause(0.18)
+	if not is_instance_valid(self):
+		return
+	await _roll_car(bay, bay + Vector3(0.0, 0.0, -_EXIT_DISTANCE), Tween.EASE_IN)
+	if not is_instance_valid(self):
+		return
+	GameState.sell_car(car_id, price)
+	_car_pivot.position = bay
+	_apply_active_car_visual()
+	_refresh_hud()
+	_place_bay_targets()
+	await _swing_doors(0.0)
+	if not is_instance_valid(self):
+		return
+	_swapping_car = false
+	_bay_busy = false
+
+
+## A click's worth of keys for the bubble: Enter, Space, or Esc.
+func _try_say_bubble_key(event: InputEvent) -> bool:
+	if _say_bubble == null or not _say_bubble.visible or not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if _is_enter_key(event) or key.keycode == KEY_SPACE or event.is_action_pressed(&"ui_cancel"):
+		_dismiss_say_bubble()
+		return true
+	return false
+
+
+## Enter or O for the red button, Esc or N for the other. Digits go on to the price.
+func _try_sale_key(event: InputEvent) -> bool:
+	if not _sale_panel.visible or not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	var countering := _sale_answers.visible
+	if _is_enter_key(event) or key.keycode == KEY_O:
+		if countering:
+			_on_sale_answer(true)
+		else:
+			_on_sale_offer()
+		return true
+	if event.is_action_pressed(&"ui_cancel") or key.keycode == KEY_N:
+		if countering:
+			_on_sale_answer(false)
+		else:
+			_close_car_sale()
+		return true
+	return false
 
 
 func _apply_active_car_visual() -> void:
@@ -1590,6 +2529,49 @@ func _build_creeper() -> void:
 	_creeper.set_meta(&"garage_interact", &"creeper")
 
 
+## A tire machine against the front wall: a cabinet with a turntable on top, the column and its
+## swing arm over the table, and the pedals at its foot.
+func _build_tire_machine() -> void:
+	_tire_machine = StaticBody3D.new()
+	_tire_machine.name = "InteractTireMachine"
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(0.8, 1.5, 0.75)
+	col.shape = shape
+	col.position = Vector3(0.0, 0.75, 0.0)
+	_tire_machine.add_child(col)
+	var cabinet := _prop_mat(Color(0.12, 0.26, 0.42), 0.3, 0.5)
+	var steel := _prop_mat(Color(0.6, 0.6, 0.62), 0.8, 0.3)
+	var dark := _prop_mat(Color(0.08, 0.08, 0.08), 0.4, 0.6)
+	_prop_box(_tire_machine, Vector3(0.72, 0.56, 0.62), Vector3(0.0, 0.28, 0.0), cabinet)
+	_prop_box(_tire_machine, Vector3(0.76, 0.03, 0.66), Vector3(0.0, 0.575, 0.0), dark)
+	_prop_cyl(_tire_machine, 0.26, 0.05, Vector3(0.0, 0.615, 0.0), steel)
+	_prop_cyl(_tire_machine, 0.03, 0.14, Vector3(0.0, 0.66, 0.0), steel)
+	_prop_box(_tire_machine, Vector3(0.1, 0.88, 0.12), Vector3(0.33, 1.02, 0.0), cabinet)
+	_prop_box(_tire_machine, Vector3(0.42, 0.07, 0.07), Vector3(0.15, 1.3, 0.0), dark)
+	_prop_box(_tire_machine, Vector3(0.05, 0.3, 0.05), Vector3(-0.03, 1.15, 0.0), steel)
+	_prop_box(_tire_machine, Vector3(0.09, 0.04, 0.09), Vector3(-0.03, 0.99, 0.0), dark)
+	for cz in [-0.14, 0.0, 0.14]:
+		_prop_box(_tire_machine, Vector3(0.16, 0.025, 0.08), Vector3(-0.42, 0.04, cz), steel)
+	_tire_machine.position = _TIRE_MACHINE_SPOT
+	# The column to the wall, the pedals to the room.
+	_tire_machine.rotation.y = -PI * 0.5
+	add_child(_tire_machine)
+	_tire_machine.set_meta(&"garage_interact", &"tire_machine")
+
+
+func _prop_cyl(parent: Node3D, radius: float, height: float, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = height
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+
+
 func _prop_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
 	var mi := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
@@ -1670,12 +2652,29 @@ func _show_stats() -> void:
 	_sync_menu_nav()
 
 
+## Clockwise on the dial is negative rotation about the face's Z axis.
+func _update_clock_hands() -> void:
+	var now := Time.get_time_dict_from_system()
+	var second := fposmod(Time.get_unix_time_from_system(), 60.0)
+	var minute := float(now.get("minute", 0)) + second / 60.0
+	var hour := fposmod(float(now.get("hour", 0)), 12.0) + minute / 60.0
+	_clock_hour.rotation.z = -hour * TAU / 12.0
+	_clock_minute.rotation.z = -minute * TAU / 60.0
+	_clock_second.rotation.z = -second * TAU / 60.0
+
+
 func _on_clock_save_pressed() -> void:
 	_open_save_slots(true)
 
 
 func _on_clock_load_pressed() -> void:
 	_open_save_slots(false)
+
+
+func _on_clock_new_pressed() -> void:
+	GameState.new_game()
+	GameState.current_scene_path = GameState.SCENE_GARAGE
+	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 
 
 ## Puts the clock away and brings up the slot list for saving or loading.
@@ -1766,7 +2765,7 @@ func _on_clock_arcade_toggled(pressed: bool) -> void:
 func _start_wheel_change(wheel_id: String) -> void:
 	if _bay_busy:
 		return
-	if not GameState.owns_wheel(wheel_id) or wheel_id == GameState.equipped_wheel_id:
+	if GameState.free_spare_count("wheels", wheel_id) <= 0 or wheel_id == GameState.equipped_wheel_id:
 		return
 	var wheel: Dictionary = GameState.listing_by_id(GameState.WHEELS, wheel_id)
 	if wheel.is_empty():
@@ -1779,31 +2778,71 @@ func _start_wheel_change(wheel_id: String) -> void:
 	_bay_busy = false
 
 
-func _run_wheel_change(wheel: Dictionary) -> void:
-	var car_start := _car_pivot.position
+func _shop_sound(sound_name: String) -> void:
+	if not _shop_players.has(sound_name):
+		var player := AudioStreamPlayer.new()
+		player.stream = _ShopSounds.stream(sound_name)
+		player.volume_db = -6.0
+		player.max_polyphony = 4
+		add_child(player)
+		_shop_players[sound_name] = player
+	(_shop_players[sound_name] as AudioStreamPlayer).play()
+
+
+func _shop_sound_stop(sound_name: String) -> void:
+	if _shop_players.has(sound_name):
+		(_shop_players[sound_name] as AudioStreamPlayer).stop()
+
+
+## The jack rolls in and raises the car.
+func _jack_up(car_start: Vector3) -> void:
 	var work := Vector3(-2.15, _lift_home.origin.y, 0.12)
 	await _tween_global_pos(_lift, work, _T_JACK)
 	if not is_instance_valid(self):
 		return
+	_shop_sound("jack_pump")
 	var lift_to := car_start + Vector3(0.0, _LIFT_HEIGHT, 0.0)
 	var arm_to := _lift_arm_home + Vector3(0.0, _LIFT_HEIGHT, 0.0)
 	await _tween_together(_car_pivot, lift_to, _lift_arm, arm_to, _T_LIFT)
 	if not is_instance_valid(self):
 		return
 	await _pause(_T_PAUSE)
-	var radius := maxf(float(wheel.get("height", 0.5)) * 0.5, 0.18)
-	for wname in _WHEEL_NODES:
-		var mount := _car_pivot.get_node_or_null(wname) as Node3D
-		if mount == null:
-			continue
-		await _swap_one_wheel(mount, wheel, radius)
-		if not is_instance_valid(self):
-			return
-		await _pause(_T_PAUSE)
+
+
+## The jack lets the car down and rolls home.
+func _jack_down(car_start: Vector3) -> void:
+	_shop_sound("jack_release")
 	await _tween_together(_car_pivot, car_start, _lift_arm, _lift_arm_home, _T_LIFT)
 	if not is_instance_valid(self):
 		return
 	await _tween_global_xform(_lift, _lift_home, _T_JACK)
+
+
+## The car goes up, the wheels on it roll away together, the new set rolls in together and
+## goes on, and the car comes down.
+func _run_wheel_change(wheel: Dictionary) -> void:
+	var car_start := _car_pivot.position
+	var had_wheels := GameState.has_wheels()
+	await _jack_up(car_start)
+	if not is_instance_valid(self):
+		return
+	var old_radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
+	var radius := maxf(float(wheel.get("height", 0.5)) * 0.5, 0.18)
+	var wheels := _take_wheels_off(had_wheels)
+	if had_wheels:
+		var off: Array[Callable] = []
+		for each in wheels:
+			off.append(_roll_wheel_away.bind(each, old_radius))
+		await _await_all(off)
+		if not is_instance_valid(self):
+			return
+	var on: Array[Callable] = []
+	for each in wheels:
+		on.append(_roll_wheel_on.bind(each, wheel, radius))
+	await _await_all(on)
+	if not is_instance_valid(self):
+		return
+	await _jack_down(car_start)
 	if not is_instance_valid(self):
 		return
 	var err := GameState.buy_or_equip_wheel(str(wheel.get("id", "")))
@@ -1813,47 +2852,225 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 	_refresh_hud()
 
 
-func _swap_one_wheel(mount: Node3D, wheel: Dictionary, radius: float) -> void:
-	var home_local := mount.transform
+## Takes each wheel off its hub into the garage, drawn with the set on the car if `shown`.
+func _take_wheels_off(shown: bool) -> Array[Dictionary]:
+	var wheels: Array[Dictionary] = []
+	for wname in _WHEEL_NODES:
+		var mount := _car_pivot.get_node_or_null(wname) as Node3D
+		if mount == null:
+			continue
+		if shown and _car_pivot.has_method(&"apply_wheel_to_mount"):
+			_car_pivot.call(&"apply_wheel_to_mount", mount, GameState.get_equipped_wheel())
+		wheels.append(_take_wheel_off(mount, str(wname)))
+	return wheels
+
+
+## A set rolls in from where the old one went, rises onto the hub, and is bolted up.
+func _roll_wheel_on(wheel: Dictionary, part: Dictionary, radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	var kept_scale: Vector3 = wheel["scale"]
+	if _car_pivot.has_method(&"apply_wheel_to_mount"):
+		_car_pivot.call(&"apply_wheel_to_mount", mount, part)
+	var upright: Basis = (wheel["mounted"] as Basis).orthonormalized()
+	mount.global_transform = Transform3D(upright.scaled(kept_scale), wheel["spot"])
+	wheel["facing"] = upright
+	await _roll_wheel(wheel, wheel["floor"], radius)
+	if not is_instance_valid(mount):
+		return
+	await _lift_to_axle(mount, wheel["axle"], wheel["mounted"], _T_RISE)
+	if not is_instance_valid(mount):
+		return
+	await _pause(float(wheel["turn"]) * _T_WRENCH_GAP)
+	if not is_instance_valid(mount):
+		return
+	_shop_sound("wrench")
+	remove_child(mount)
+	(wheel["parent"] as Node).add_child(mount)
+	mount.transform = wheel["home_local"]
+
+
+func _on_wheels_off_pressed() -> void:
+	_hide_parts_board()
+	if _bay_busy or not GameState.has_wheels():
+		return
+	_bay_busy = true
+	_hide_garage_overlays()
+	await _run_wheels_off()
+	if not is_instance_valid(self):
+		return
+	_bay_busy = false
+
+
+## The car goes up and the wheels, tires and all, roll away to spare parts, and the car comes
+## down with none.
+func _run_wheels_off() -> void:
+	var car_start := _car_pivot.position
+	await _jack_up(car_start)
+	if not is_instance_valid(self):
+		return
+	var radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
+	var wheels := _take_wheels_off(true)
+	var off: Array[Callable] = []
+	for wheel in wheels:
+		off.append(_roll_wheel_away.bind(wheel, radius))
+	await _await_all(off)
+	if not is_instance_valid(self):
+		return
+	GameState.remove_wheels()
+	for wheel in wheels:
+		var mount: Node3D = wheel["mount"]
+		remove_child(mount)
+		(wheel["parent"] as Node).add_child(mount)
+		mount.transform = wheel["home_local"]
+		mount.visible = false
+	await _jack_down(car_start)
+	if not is_instance_valid(self):
+		return
+	if _car_pivot.has_method(&"apply_equipped_wheels"):
+		_car_pivot.call(&"apply_equipped_wheels")
+	_refresh_hud()
+
+
+## The tire machine on the chosen wheels: one wheel on the table stands for the set, its old
+## tire coming off and the new one going on. It stays open on those wheels until the player
+## leaves.
+func _start_shelf_tire_change(wheel_id: String, tire_id: String) -> void:
+	if _bay_busy:
+		return
+	var has_old := not GameState.shelved_wheel_tires_id(wheel_id).is_empty()
+	if tire_id.is_empty() and not has_old:
+		return
+	if not tire_id.is_empty() and GameState.spare_count(tire_id) <= 0:
+		return
+	_bay_busy = true
+	_hide_garage_overlays()
+	await _run_shelf_tire_change(wheel_id, has_old, not tire_id.is_empty())
+	if not is_instance_valid(self):
+		return
+	if tire_id.is_empty():
+		GameState.remove_tires_from_shelved_wheels(wheel_id)
+	else:
+		GameState.fit_tires_on_shelved_wheels(wheel_id, tire_id)
+	_refresh_hud()
+	_bay_busy = false
+	_show_tire_board(wheel_id)
+
+
+func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> void:
+	var radius := maxf(float(GameState.listing_by_id(GameState.WHEELS, wheel_id).get("height", 0.5)) * 0.5, 0.18)
+	var on_table := _TIRE_MACHINE_SPOT + Vector3(0.0, _TIRE_TABLE_Y + _TIRE_THICK * 0.5, 0.0)
+	var rim := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius * 0.62
+	mesh.bottom_radius = radius * 0.62
+	mesh.height = _TIRE_THICK * 1.2
+	rim.mesh = mesh
+	rim.material_override = _prop_mat(Color(0.6, 0.6, 0.62), 0.8, 0.3)
+	add_child(rim)
+	rim.global_position = on_table
+	var rings: Array[MeshInstance3D] = []
+	_shop_sound("motor")
+	if has_old:
+		var old := _tire_ring(radius, on_table)
+		rings.append(old)
+		_shop_sound("bead_pop")
+		await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * 0.5, 0.0))
+		if not is_instance_valid(self):
+			return
+	if has_new:
+		var fresh := _tire_ring(radius, _TIRE_STACK_NEW + Vector3(0.0, _TIRE_THICK * 0.5, 0.0))
+		rings.append(fresh)
+		await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
+		if not is_instance_valid(self):
+			return
+		fresh.visible = false
+		_shop_sound("air")
+	_shop_sound_stop("motor")
+	for ring in rings:
+		ring.queue_free()
+	rim.queue_free()
+
+
+## Runs the coroutines side by side and waits for them all.
+func _await_all(jobs: Array[Callable]) -> void:
+	var left := [jobs.size()]
+	for job in jobs:
+		_finish_job(job, left)
+	while left[0] > 0 and is_instance_valid(self):
+		await get_tree().process_frame
+
+
+func _finish_job(job: Callable, left: Array) -> void:
+	await job.call()
+	left[0] -= 1
+
+
+## Takes a wheel off its hub into the garage and says where it came from and is going.
+func _take_wheel_off(mount: Node3D, wname: String) -> Dictionary:
 	var world_xf := mount.global_transform
 	var axle := world_xf.origin
 	var floor_pos := Vector3(axle.x, axle.y - _LIFT_HEIGHT, axle.z)
-	var side := 1.0 if axle.x >= 0.0 else -1.0
-	var side_pos := Vector3(axle.x + side * _WHEEL_SIDE_M, floor_pos.y, axle.z)
-	var outside := Vector3(side_pos.x, floor_pos.y, _WHEEL_OUT_Z)
 	var parent := mount.get_parent()
+	var home_local := mount.transform
 	parent.remove_child(mount)
 	add_child(mount)
 	mount.global_transform = world_xf
-	await _tween_global_pos(mount, floor_pos, _T_DROP)
+	return {
+		"mount": mount,
+		"parent": parent,
+		"home_local": home_local,
+		"mounted": world_xf.basis,
+		"axle": axle,
+		"floor": floor_pos,
+		"spot": Vector3(axle.x, floor_pos.y, float(_TIRE_WAIT_Z[wname])),
+		"scale": mount.scale,
+		"facing": world_xf.basis.orthonormalized(),
+		"turn": _WHEEL_NODES.find(wname),
+	}
+
+
+func _roll_wheel_away(wheel: Dictionary, radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	await _pause(float(wheel["turn"]) * _T_WRENCH_GAP)
 	if not is_instance_valid(mount):
 		return
-	await _pause(_T_PAUSE)
-	var facing := world_xf.basis.orthonormalized()
-	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
+	_shop_sound("wrench")
+	await _pause(_T_WRENCH)
 	if not is_instance_valid(mount):
 		return
-	facing = await _roll_node(mount, outside, radius, _T_ROLL_LONG, world_xf.basis, facing)
+	await _tween_global_pos(mount, wheel["floor"], _T_DROP)
 	if not is_instance_valid(mount):
 		return
-	await _pause(_T_PAUSE)
-	var kept_scale := mount.scale
-	if _car_pivot.has_method(&"apply_wheel_to_mount"):
-		_car_pivot.call(&"apply_wheel_to_mount", mount, wheel)
-	mount.global_transform = Transform3D(world_xf.basis.orthonormalized().scaled(kept_scale), outside)
-	facing = world_xf.basis.orthonormalized()
-	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_LONG, world_xf.basis, facing)
-	if not is_instance_valid(mount):
-		return
-	await _roll_node(mount, floor_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
-	if not is_instance_valid(mount):
-		return
-	await _lift_to_axle(mount, axle, world_xf.basis, _T_RISE)
-	if not is_instance_valid(mount):
-		return
-	remove_child(mount)
-	parent.add_child(mount)
-	mount.transform = home_local
+	_shop_sound("thud")
+	await _roll_wheel(wheel, wheel["spot"], radius)
+
+
+func _roll_wheel(wheel: Dictionary, to: Vector3, radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	var duration := mount.global_position.distance_to(to) / _TIRE_ROLL_SPEED
+	wheel["facing"] = await _roll_node(mount, to, radius, duration, wheel["mounted"], wheel["facing"])
+
+
+## A tire swings up to `over`, then across and down to `to`.
+func _move_tire(tire: Node3D, over: Vector3, to: Vector3) -> void:
+	var tw := create_tween()
+	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(tire, "global_position", over, _T_TIRE_MOVE)
+	tw.tween_property(tire, "global_position", to, _T_TIRE_MOVE)
+	await tw.finished
+
+
+## A tire on its own, lying flat, drawn around a wheel of this radius.
+func _tire_ring(radius: float, at: Vector3) -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	var mesh := TorusMesh.new()
+	mesh.inner_radius = radius * 0.62
+	mesh.outer_radius = radius * 1.08
+	ring.mesh = mesh
+	ring.material_override = _prop_mat(Color(0.04, 0.04, 0.04), 0.0, 0.9)
+	add_child(ring)
+	ring.global_position = at
+	return ring
 
 
 func _tween_global_pos(node: Node3D, to: Vector3, duration: float) -> void:

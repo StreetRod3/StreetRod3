@@ -1,7 +1,7 @@
 extends Node3D
 
 ## An engine built up from its parts as the active car has them: the long block with
-## its front drive (balancer, timing tab, pulleys, belt), the intake, its carburetors, the
+## its front drive (balancer, timing tab, pulleys, belt), the camshaft, the intake, its carburetors, the
 ## distributor, the air cleaner, and the plug wires. Each part is a rig under `frame`,
 ## keyed by `GameState.HOOD_ENGINE`, a hood slot, or `WIRES`, so the hood screen can lift
 ## it out on its own. Parts are built in engine units: +X toward the back of the car, +Y
@@ -48,6 +48,13 @@ const HEAD_BOLT_X := 1.26
 const HEAD_BOLT_Y := 0.3
 const HEAD_DECK_IN := Vector2(0.09, 0.79)
 const HEAD_DECK_OUT := Vector2(0.59, 1.18)
+## The camshaft lies down the valley on top of the block, running back into the
+## distributor's boss, where the heads close in over it. A retainer plate holds its front
+## end, with a bolt each side.
+const CAM_Z := 0.8
+const CAM_FRONT_X := -1.42
+const CAM_BACK_X := 1.0
+const CAM_BOLTS: Array[Vector3] = [Vector3(-1.32, 0.12, 0.765), Vector3(-1.32, -0.12, 0.765)]
 ## The distributor's hold-down clamp bolt, on the boss behind it.
 const CLAMP_BOLT := Vector3(1.16, 0.0, 1.05)
 
@@ -97,6 +104,10 @@ var rigs: Dictionary = {}
 ## Turns about the crank: the mark is on top at 0, clockwise from the front.
 var balancer: Node3D
 var _mats: Dictionary = {}
+## A rival's engine, shown instead of the car in the garage. Empty slots mean the garage car.
+var _spec_on: bool = false
+var _spec_engine: Dictionary = {}
+var _spec_slots: Dictionary = {}
 
 
 func _init() -> void:
@@ -105,6 +116,58 @@ func _init() -> void:
 	frame.rotation.x = -PI * 0.5
 	frame.scale = Vector3.ONE * ENGINE_SCALE
 	add_child(frame)
+
+
+## Show `engine` with hood `slots` (part dictionaries keyed by slot) instead of the garage car.
+func show_spec(engine: Dictionary, slots: Dictionary) -> void:
+	_spec_on = true
+	_spec_engine = engine
+	_spec_slots = slots
+
+
+func _view_engine() -> Dictionary:
+	if _spec_on:
+		return _spec_engine
+	return GameState.get_equipped_engine()
+
+
+func _view_part(key: String) -> Dictionary:
+	if _spec_on:
+		var part: Variant = _spec_slots.get(key, {})
+		if part is Dictionary:
+			return part
+		return {}
+	return GameState.slot_part(key)
+
+
+func _view_fitted(key: String) -> bool:
+	if _spec_on:
+		if key == GameState.HOOD_ENGINE:
+			return not _spec_engine.is_empty()
+		return not _view_part(key).is_empty()
+	return GameState.is_hood_part_fitted(key)
+
+
+func _view_wires() -> bool:
+	if _spec_on:
+		return true
+	return GameState.plug_wires
+
+
+func _view_head_count() -> int:
+	return GameState.engine_head_count(_view_engine())
+
+
+func _view_carb_slots() -> Array[String]:
+	if not _spec_on:
+		return GameState.carb_slots()
+	var out: Array[String] = []
+	var intake := _view_part(GameState.SLOT_INTAKE)
+	if intake.is_empty():
+		return out
+	for i in clampi(int(intake.get("carbs", 1)), 1, GameState.CARB_SLOTS.size()):
+		out.append(GameState.CARB_SLOTS[i])
+	return out
 
 
 ## Builds every part the active car has.
@@ -138,25 +201,27 @@ func rebuild(key: String) -> Node3D:
 	match key:
 		GameState.HOOD_ENGINE:
 			_build_engine(rig)
+		GameState.SLOT_CAM:
+			_build_cam(rig, _view_part(key))
 		GameState.SLOT_HEADS:
-			_build_heads(rig, GameState.slot_part(key))
+			_build_heads(rig, _view_part(key))
 		GameState.SLOT_INTAKE:
-			_build_intake(rig, GameState.slot_part(key))
+			_build_intake(rig, _view_part(key))
 		GameState.SLOT_DISTRIBUTOR:
-			_build_distributor(rig, GameState.slot_part(key))
+			_build_distributor(rig, _view_part(key))
 		GameState.SLOT_AIR_CLEANER:
-			_build_air_cleaner(rig, GameState.slot_part(key))
+			_build_air_cleaner(rig, _view_part(key))
 		WIRES:
 			_build_wires(rig)
 		_:
-			_build_carb(rig, GameState.slot_part(key), carb_pad(key))
+			_build_carb(rig, _view_part(key), carb_pad(key))
 	return rig
 
 
 func _present(key: String) -> bool:
 	if key == WIRES:
-		return GameState.has_engine() and GameState.plug_wires and not GameState.slot_part(GameState.SLOT_DISTRIBUTOR).is_empty() and not GameState.slot_part(GameState.SLOT_HEADS).is_empty()
-	return GameState.is_hood_part_fitted(key)
+		return _view_fitted(GameState.HOOD_ENGINE) and _view_wires() and not _view_part(GameState.SLOT_DISTRIBUTOR).is_empty() and not _view_part(GameState.SLOT_HEADS).is_empty()
+	return _view_fitted(key)
 
 
 ## Where each bolt of a part goes, in engine units: origin at the hole, +Z out of it.
@@ -165,6 +230,9 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 	match key:
 		GameState.HOOD_ENGINE:
 			for p in MOUNT_BOLTS:
+				out.append(Transform3D(Basis.IDENTITY, p))
+		GameState.SLOT_CAM:
+			for p in CAM_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
 		GameState.SLOT_HEADS:
 			var slope := HEAD_DECK_OUT - HEAD_DECK_IN
@@ -183,7 +251,7 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		_:
 			if GameState.CARB_SLOTS.has(key):
 				# Two nuts on opposite corners of the base, front one first.
-				var four := int(GameState.slot_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
+				var four := int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
 				var nut := Vector3(0.25, 0.2, 0.25) if four else Vector3(0.15, 0.21, 0.09)
 				for corner in [Vector3(-nut.x, -nut.y, nut.z), nut]:
 					out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + corner))
@@ -204,13 +272,13 @@ static func pads_for(style: String) -> Array[Vector3]:
 
 ## The pad a carburetor slot sits on, on the fitted intake.
 func carb_pad(slot: String) -> Vector3:
-	var pads := pads_for(str(GameState.slot_part(GameState.SLOT_INTAKE).get("style", "iron4")))
+	var pads := pads_for(str(_view_part(GameState.SLOT_INTAKE).get("style", "iron4")))
 	return pads[clampi(GameState.CARB_SLOTS.find(slot), 0, pads.size() - 1)]
 
 
 ## Height of a carburetor's air horn above its pad.
 func _carb_height() -> float:
-	return 0.48 if int(GameState.slot_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4 else 0.36
+	return 0.48 if int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4 else 0.36
 
 
 func _cleaner_top() -> float:
@@ -321,14 +389,37 @@ func _build_timing_tab(rig: Node3D) -> void:
 	_box(rig, Vector3(0.18, 0.06, 0.06), Vector3(x + 0.09, -(BALANCER_R + 0.12) * sin(foot), CRANK_Z + (BALANCER_R + 0.12) * cos(foot)), steel)
 
 
+# --- Camshaft ----------------------------------------------------------------------
+
+
+## A shaft with an intake and an exhaust lobe for each cylinder of each bank, turned to
+## different angles. A racing cam has taller lobes and is polished.
+func _build_cam(rig: Node3D, part: Dictionary) -> void:
+	var racing := str(part.get("style", "stock")) == "racing"
+	var metal := _mat("cam_racing", _CHROME, 0.9, 0.2) if racing else _mat("steel", _STEEL, 0.6, 0.35)
+	var lobe_r := 0.09 if racing else 0.075
+	_cyl_x(rig, 0.045, CAM_BACK_X - CAM_FRONT_X, CAM_BACK_X, metal, 12, 0.0, CAM_Z)
+	var phase := 0.0
+	for bore in BORES_X:
+		for offset in [-0.21, -0.07, 0.07, 0.21]:
+			var turned := Node3D.new()
+			turned.position = Vector3(bore + offset, 0.0, CAM_Z)
+			turned.rotation.x = phase
+			rig.add_child(turned)
+			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
+			lobe.scale.x = 0.62
+			phase += 2.4
+	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(CAM_BOLTS[0].x, 0.0, CAM_BOLTS[0].z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
+
+
 # --- Heads -------------------------------------------------------------------------
 
 
 ## The banks the engine has heads on, by side: +1 on the right, -1 on the left. One head
 ## on an inline engine is the right-hand one.
-static func head_sides() -> Array[float]:
+func head_sides() -> Array[float]:
 	var sides: Array[float] = [1.0]
-	if GameState.engine_head_count() >= 2:
+	if _view_head_count() >= 2:
 		sides.append(-1.0)
 	return sides
 
@@ -458,7 +549,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 	var shell := _mat("chrome", _CHROME, 1.0, 0.12) if chrome else _mat("cleaner", Color(0.05, 0.05, 0.06), 0.4, 0.35)
 	var element := _mat("element", Color(0.85, 0.82, 0.7), 0.0, 0.9)
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
-	var slots := GameState.carb_slots()
+	var slots := _view_carb_slots()
 	var pads: Array[Vector3] = []
 	for slot in slots:
 		pads.append(carb_pad(slot))
@@ -482,7 +573,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		_cyl_z(rig, 0.02, 0.02, h + 0.02, at, steel, 8)
 	if pads.size() == 1:
 		var label := Label3D.new()
-		label.text = "%d V8" % GameState.engine_cid()
+		label.text = "%d V8" % GameState.engine_cid(_view_engine())
 		label.font_size = 64
 		label.pixel_size = 0.004
 		label.modulate = Color(0.85, 0.12, 0.08) if not chrome else Color(0.15, 0.15, 0.15)
@@ -566,7 +657,7 @@ static func cap_towers() -> Array[Vector3]:
 ## The fitted engine's model with only the nodes named by `prefixes` in it (`keep`), or
 ## with those taken out.
 func _add_model_nodes(rig: Node3D, prefixes: Array[String], keep: bool) -> Node3D:
-	var path := str(GameState.get_equipped_engine().get("model", ""))
+	var path := str(_view_engine().get("model", ""))
 	if path.is_empty() or not ResourceLoader.exists(path):
 		path = _MODEL_DEFAULT
 	var packed := load(path) as PackedScene

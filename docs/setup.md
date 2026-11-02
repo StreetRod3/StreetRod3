@@ -4,7 +4,7 @@
 
 - [Godot 4.6.1](https://godotengine.org/download) standard build (GDScript). The .NET build is not required.
 - Git, to clone the repo.
-- A desktop OpenGL 3 / Vulkan / Metal capable machine for the editor. The exported game targets the Web.
+- A desktop OpenGL 3 / Vulkan / Metal capable machine for the editor. The game is exported for the Web, Windows, macOS, and Linux.
 
 No language runtime, package install, or `.env` file is required.
 
@@ -63,7 +63,20 @@ godot --headless --export-release "Web" build/web/index.html
 
 A successful export writes `build/web/index.html`, `index.wasm`, and `index.pck`. Serve that directory with any static host. Godot’s Web export needs the [cross-origin isolation headers](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html) (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`) if you enable thread support later. The current preset has `variant/thread_support=false`.
 
-`.trk` and `.obj` files are included via `include_filter` in `export_presets.cfg`. If you add another non-imported extension, add it there or the Web build will not see the file.
+`.trk`, `.obj`, `.car`, `.register`, and `.json` files are included via `include_filter` in `export_presets.cfg`. If you add another non-imported extension, add it to the `include_filter` of every preset or the exported builds will not see the file.
+
+## Desktop export
+
+The presets `Windows Desktop`, `Linux`, and `macOS` export 64-bit release builds into `build/`, which is gitignored. All three can be made from Linux with the same export templates as the Web build.
+
+```bash
+mkdir -p build/windows build/linux build/macos
+godot --headless --export-release "Windows Desktop" build/windows/StreetRod3.exe
+godot --headless --export-release "Linux" build/linux/StreetRod3.x86_64
+godot --headless --export-release "macOS" build/macos/StreetRod3.zip
+```
+
+The Windows and Linux builds are one file each, with the game data packed into the executable. The macOS build is a zipped `Street Rod 3.app`, a universal binary for Intel and Apple Silicon. It is ad-hoc signed and not notarized, so macOS blocks it on first launch: open it once, then choose **Open Anyway** in System Settings → Privacy & Security, or run `xattr -dr com.apple.quarantine "Street Rod 3.app"`. Apple Silicon needs ETC2/ASTC textures, so `rendering/textures/vram_compression/import_etc2_astc` is on in `project.godot`.
 
 ## Continuous integration
 

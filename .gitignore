@@ -27,3 +27,6 @@ mono_crash.*.json
 # Local directories
 backup/
 tools/
+
+# Export builds
+build/

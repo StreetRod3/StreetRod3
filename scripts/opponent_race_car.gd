@@ -5,10 +5,13 @@ extends CharacterBody3D
 
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
+const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
-const ARCADE_REF_ACCEL := 24.0
+## Pull at a preset `accel_scale` of 1 in the arcade drive. Set so the ladder of rivals
+## lines up with what the player's car can do there
+const ARCADE_REF_ACCEL := 46.0
 const ARCADE_RATIOS: Array[float] = [2.52, 1.52, 1.00]
 
 ## Opponent preset `accel_scale` that matches the player's drive force.
@@ -37,6 +40,7 @@ var _gear: int = 0
 var _shift_timer: float = 0.0
 var _shift_time: float = 0.35
 var _drive_scale: float = 1.0
+var _power_hp: float = 280.0
 var _max_mps: float = 40.0
 var _lane_x: float = 0.0
 var _lane_ready: bool = false
@@ -62,9 +66,10 @@ func _ready() -> void:
 	_apply_opponent_look(opp)
 	_drive_scale = float(opp.get("accel_scale", PRESET_ACCEL_REF)) / PRESET_ACCEL_REF
 	_shift_time = float(opp.get("shift_time", 0.35))
-	var player_vmax: float = GameState.get_effective_vmax_kmh() / 3.6
-	_max_mps = player_vmax * float(opp.get("vmax_scale", 0.90))
-	_arcade_accel = ARCADE_REF_ACCEL * float(opp.get("accel_scale", 0.30)) * (GameState.engine_power_hp / 280.0)
+	var top_mps: float = GameState.opponent_top_kmh(opp) / 3.6
+	_max_mps = top_mps * float(opp.get("vmax_scale", 0.90))
+	_power_hp = GameState.opponent_power_hp(opp)
+	_arcade_accel = ARCADE_REF_ACCEL * float(opp.get("accel_scale", 0.30)) * (_power_hp / 280.0) * _ArcadeDrive.grip_accel_scale(GameState.opponent_tire_grip(opp))
 	_lane_x = global_position.x
 	_apply_car_spec()
 	_layout_wheels()
@@ -72,7 +77,7 @@ func _ready() -> void:
 	_skids = _SkidMarks.new()
 	_skids.name = "SkidMarks"
 	add_child(_skids)
-	_gearbox = GameState.get_equipped_gearbox()
+	_gearbox = GameState.opponent_gearbox(opp)
 	_gear = 0
 
 
@@ -260,13 +265,8 @@ func _apply_opponent_look(opp: Dictionary) -> void:
 
 
 func _apply_car_spec() -> void:
-	var chassis: Dictionary = {}
-	var spec: Variant = GameState.car_spec.get("chassis", {})
-	if typeof(spec) == TYPE_DICTIONARY:
-		chassis = spec
-	var wheel: Dictionary = GameState.get_equipped_wheel()
-	var grip_rating := clampf(float(wheel.get("grip", 3.0)), 1.0, 5.0)
-	_dynamics.apply_setup(chassis, grip_rating)
+	var opp := GameState.selected_opponent()
+	_dynamics.apply_setup(GameState.opponent_chassis(opp), GameState.opponent_tire_grip(opp))
 
 
 func _layout_wheels() -> void:
@@ -369,7 +369,7 @@ func _gear_top_mps(gear_index: int) -> float:
 func _requested_drive_force() -> float:
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)])
-	var force := _dynamics.drive_force(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp)
+	var force := _dynamics.drive_force(ratio, _gear_top_mps(_gear), forward_speed, _power_hp)
 	return force * _drive_scale
 
 
