@@ -880,6 +880,7 @@ func load_game(slot: int) -> bool:
 		if not owns_gearbox(equipped_gearbox_id):
 			owned_gearbox_ids.append(equipped_gearbox_id)
 	_load_saved_cars(d)
+	_own_fitted_parts()
 	if has_active_car():
 		load_player_car()
 		_sync_record_from_active()
@@ -1364,24 +1365,19 @@ func _pop_spare_condition(kind: String, id: String) -> float:
 	return c
 
 
-## Every part fitted to a car is an owned copy: the stock parts a car comes with, and
-## those of saves from when stock parts did not run out.
+## Everything fitted to a car is an owned copy: what a car comes with, and what saves
+## from when stock parts did not run out, or two cars shared one engine, are missing.
 func _own_fitted_parts() -> void:
 	var fitted := {}
 	for stored in car_records.values():
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
-		var ids: Array[String] = _string_array((stored as Dictionary).get("part_ids", []))
-		var slots: Variant = (stored as Dictionary).get("slot_parts", {})
-		if typeof(slots) == TYPE_DICTIONARY:
-			for part_id in (slots as Dictionary).values():
-				ids.append(str(part_id))
-		for part_id in ids:
-			if part_id != NO_PART_ID and not part_id.is_empty():
-				fitted[part_id] = int(fitted.get(part_id, 0)) + 1
-	for part_id in fitted.keys():
-		while owned_part_ids.count(part_id) < int(fitted[part_id]):
-			owned_part_ids.append(part_id)
+		for mount in _record_mounts(stored):
+			fitted[mount] = int(fitted.get(mount, 0)) + 1
+	for mount in fitted.keys():
+		var owned := _owned_list(mount[0])
+		while owned.count(mount[1]) < int(fitted[mount]):
+			owned.append(mount[1])
 
 
 ## Owned copies that are on no car.
@@ -1522,15 +1518,7 @@ func sell_spare(kind: String, id: String, offer: int) -> String:
 	var err := sell_trouble(kind, id)
 	if not err.is_empty():
 		return err
-	match kind:
-		"part":
-			owned_part_ids.erase(id)
-		"engine":
-			owned_engine_ids.erase(id)
-		"transmission":
-			owned_gearbox_ids.erase(id)
-		"wheels":
-			owned_wheel_ids.erase(id)
+	_owned_list(kind).erase(id)
 	var key := _condition_key(kind, id)
 	var pool: Array = spare_conditions.get(key, [])
 	if not pool.is_empty():
@@ -1541,6 +1529,18 @@ func sell_spare(kind: String, id: String, offer: int) -> String:
 	money += maxi(offer, 0)
 	_sync_record_from_active()
 	return ""
+
+
+## The list holding the owned copies of a kind, one entry for each copy.
+func _owned_list(kind: String) -> Array[String]:
+	match kind:
+		"engine":
+			return owned_engine_ids
+		"transmission":
+			return owned_gearbox_ids
+		"wheels":
+			return owned_wheel_ids
+	return owned_part_ids
 
 
 ## Takes the condition of what another car had at `mount` into the spares pool, when a
@@ -1986,11 +1986,15 @@ func _drop_active_car() -> void:
 	car_spec = {}
 	car_name = "No car"
 	if before > 0 and owned_car_ids.is_empty():
-		cars_just_gone = true
-		var tree := get_tree()
-		var scene := tree.current_scene if tree != null else null
-		if scene != null and scene.has_method(&"announce_cars_gone"):
-			scene.call(&"announce_cars_gone")
+		_note_cars_gone()
+
+
+func _note_cars_gone() -> void:
+	cars_just_gone = true
+	var tree := get_tree()
+	var scene := tree.current_scene if tree != null else null
+	if scene != null and scene.has_method(&"announce_cars_gone"):
+		scene.call(&"announce_cars_gone")
 
 
 ## The garage reads this once, on the visit straight after the last car left.
@@ -2011,22 +2015,13 @@ func remove_engine() -> void:
 	engine_bolts.clear()
 	plug_wires = false
 	_sync_record_from_active()
-	if not _engine_mounted_anywhere(blown):
-		owned_engine_ids.erase(blown)
+	owned_engine_ids.erase(blown)
 	refresh_car_stats()
 
 
 func _clear_hood_slots(slots: Dictionary) -> void:
 	for slot in HOOD_SLOTS:
 		slots[slot] = NO_PART_ID
-
-
-func _engine_mounted_anywhere(engine_id: String) -> bool:
-	for raw_id in car_records.keys():
-		var stored: Variant = car_records[raw_id]
-		if typeof(stored) == TYPE_DICTIONARY and str((stored as Dictionary).get("engine_id", "")) == engine_id:
-			return true
-	return false
 
 
 func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
@@ -2098,11 +2093,99 @@ func buy_or_select_car(model_id: String) -> String:
 	return ""
 
 
+## What a car is worth, as in Street Rod 2: what the paper asks for it, plus the price of
+## each part put on it, less the price of each stock part no longer on it. Wear does not
+## come into it. A stripped car still has its body, so it never falls below a tenth of
+## the paper's price and there is always a price it sells at.
+func car_value(instance_id: String) -> int:
+	if instance_id == current_car_id:
+		_sync_record_from_active()
+	var stored: Variant = car_records.get(instance_id, null)
+	if typeof(stored) != TYPE_DICTIONARY:
+		return 0
+	var rec: Dictionary = stored
+	var model_id := str(rec.get("model_id", ""))
+	var listed := int(listing_by_id(USED_CARS, model_id).get("price", 0))
+	var value := listed + _mounts_price(_record_mounts(rec)) - _mounts_price(_stock_mounts(model_id))
+	return maxi(value, roundi(listed * 0.1))
+
+
+## Sells a car for `price`. What is on it goes with it. The bay stays empty if it was the
+## car in the bay, even if other cars are owned.
+func sell_car(instance_id: String, price: int) -> String:
+	if not owned_car_ids.has(instance_id):
+		return "That car isn't in the garage."
+	var active := instance_id == current_car_id
+	if active:
+		_sync_record_from_active()
+	var spares := {}
+	for mount in _record_mounts(car_records.get(instance_id, {})):
+		spares[mount] = free_spare_count(mount[0], mount[1])
+	money += maxi(price, 0)
+	if active:
+		_drop_active_car()
+	else:
+		owned_car_ids.erase(instance_id)
+		car_records.erase(instance_id)
+		if owned_car_ids.is_empty():
+			_note_cars_gone()
+	for mount in spares.keys():
+		while free_spare_count(mount[0], mount[1]) > int(spares[mount]):
+			_owned_list(mount[0]).erase(mount[1])
+	_trim_spare_conditions()
+	return ""
+
+
+## What is on a car record, as [kind, id] pairs, one for each copy.
+func _record_mounts(rec: Dictionary) -> Array:
+	var out: Array = []
+	var engine_id := str(rec.get("engine_id", NO_ENGINE_ID))
+	if not engine_id.is_empty() and engine_id != NO_ENGINE_ID:
+		out.append(["engine", engine_id])
+	var gearbox_id := str(rec.get("gearbox_id", NO_GEARBOX_ID))
+	if not gearbox_id.is_empty() and gearbox_id != NO_GEARBOX_ID:
+		out.append(["transmission", gearbox_id])
+	var wheel_id := str(rec.get("wheel_id", ""))
+	if not wheel_id.is_empty():
+		out.append(["wheels", wheel_id])
+	var slots: Variant = rec.get("slot_parts", {})
+	if typeof(slots) == TYPE_DICTIONARY:
+		for part_id in (slots as Dictionary).values():
+			if str(part_id) != NO_PART_ID and not str(part_id).is_empty():
+				out.append(["part", str(part_id)])
+	for part_id in _string_array(rec.get("part_ids", [])):
+		out.append(["part", part_id])
+	return out
+
+
+## What a model comes with, as [kind, id] pairs.
+func _stock_mounts(model_id: String) -> Array:
+	var gearbox_id := _stock_part_id(model_id, "transmission")
+	return _record_mounts({
+		"engine_id": _stock_part_id(model_id, "engine"),
+		"gearbox_id": gearbox_id if not gearbox_id.is_empty() else DEFAULT_GEARBOX_ID,
+		"wheel_id": _stock_part_id(model_id, "wheels"),
+		"slot_parts": STOCK_SLOT_PARTS,
+	})
+
+
+func _mounts_price(mounts: Array) -> int:
+	var total := 0
+	for mount in mounts:
+		total += int(listing_for(mount[0], mount[1]).get("price", 0))
+	return total
+
+
+## A new car brings its own copy of everything on it, so spares stay spares.
 func _add_owned_car(model_id: String, paint: Color) -> String:
+	_own_fitted_parts()
 	var instance_id := "car-%d" % _next_car_serial
 	_next_car_serial += 1
 	owned_car_ids.append(instance_id)
-	car_records[instance_id] = _make_car_record(model_id, paint)
+	var rec := _make_car_record(model_id, paint)
+	car_records[instance_id] = rec
+	for mount in _record_mounts(rec):
+		_owned_list(mount[0]).append(mount[1])
 	return instance_id
 
 
@@ -2122,7 +2205,6 @@ func _make_car_record(model_id: String, paint: Color) -> Dictionary:
 	var wheel_id := _stock_part_id(model_id, "wheels")
 	if gearbox_id.is_empty():
 		gearbox_id = DEFAULT_GEARBOX_ID
-	_remember_stock_ids(engine_id, gearbox_id, wheel_id)
 	var parts: Array[String] = []
 	return {
 		"model_id": model_id,
@@ -2223,15 +2305,6 @@ func _settle_slot_parts() -> void:
 			owned_part_ids.append(part_id)
 
 
-func _remember_stock_ids(engine_id: String, gearbox_id: String, wheel_id: String) -> void:
-	if not engine_id.is_empty() and not owned_engine_ids.has(engine_id):
-		owned_engine_ids.append(engine_id)
-	if not gearbox_id.is_empty() and not owned_gearbox_ids.has(gearbox_id):
-		owned_gearbox_ids.append(gearbox_id)
-	if not wheel_id.is_empty() and not owned_wheel_ids.has(wheel_id):
-		owned_wheel_ids.append(wheel_id)
-
-
 func _stock_part_id(car_id: String, slot: String) -> String:
 	var spec := _CarFile.load_path(car_file_path(car_id))
 	var errors: Variant = spec.get("errors", [])
@@ -2330,7 +2403,21 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 	if slot == "slot" or slot == "part":
 		_take_copies_from_other_cars(part_id)
 		return
+	var key := "engine_id"
+	if slot == "transmission":
+		key = "gearbox_id"
+	elif slot == "wheels":
+		key = "wheel_id"
+	# The active car has this copy, even if its record does not say so yet. A spare copy
+	# fitted leaves the other cars alone; only a copy that is not spare comes off one.
+	var excess := 1 - _owned_list(slot).count(part_id)
 	for raw_id in car_records.keys():
+		var other: Variant = car_records[raw_id]
+		if str(raw_id) != current_car_id and typeof(other) == TYPE_DICTIONARY and str((other as Dictionary).get(key, "")) == part_id:
+			excess += 1
+	for raw_id in car_records.keys():
+		if excess <= 0:
+			return
 		var car_id := str(raw_id)
 		if car_id == current_car_id:
 			continue
@@ -2338,11 +2425,6 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
 		var rec: Dictionary = stored
-		var key := "engine_id"
-		if slot == "transmission":
-			key = "gearbox_id"
-		elif slot == "wheels":
-			key = "wheel_id"
 		if str(rec.get(key, "")) != part_id:
 			continue
 		var stock := _stock_part_id(car_id, slot)
@@ -2355,6 +2437,7 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		elif slot == "transmission" and not owned_gearbox_ids.has(stock):
 			stock = NO_GEARBOX_ID
 		rec[key] = stock
+		excess -= 1
 		_release_condition(rec, slot)
 		if slot == "transmission":
 			rec["gearbox_bolts"] = _tight_bolts()

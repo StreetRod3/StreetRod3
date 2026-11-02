@@ -24,4 +24,4 @@ New Game starts in the garage with cash, a basic car, and an automatic 3-speed. 
 
 Install [Godot 4.6.1](https://godotengine.org/download) (standard build, not .NET), open this folder, and press F5. The main scene is `scenes/main_menu.tscn`.
 
-Setup, Web export, and save-file locations are in [docs/setup.md](docs/setup.md). Architecture and the track file format are in [docs/architecture.md](docs/architecture.md) and [docs/track-format.md](docs/track-format.md).
+Setup, Web export, and save-file locations are in [docs/setup.md](docs/setup.md). Architecture and the track file format are in [docs/architecture.md](docs/architecture.md) and [docs/track-format.md](docs/track-format.md). Known bugs are in [docs/bugs.md](docs/bugs.md).
