@@ -968,6 +968,7 @@ func _open_transmission() -> void:
 func _open_hood() -> void:
 	if _bay_busy or _departing or not GameState.has_active_car():
 		return
+	GameState.hood_peek.clear()
 	get_tree().change_scene_to_file(GameState.SCENE_HOOD)
 
 
