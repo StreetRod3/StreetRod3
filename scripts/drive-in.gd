@@ -849,7 +849,12 @@ func _hint_label(text: String) -> Label:
 
 
 func _opponent_button(opp: Dictionary) -> Button:
-	return _menu_button("%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))])
+	var label := "%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))]
+	if GameState.opponent_needs_engine(opp):
+		var btn := _menu_button(label + " (no engine)")
+		btn.disabled = true
+		return btn
+	return _menu_button(label)
 
 
 func _opponent_color(opp: Dictionary) -> Color:
@@ -1574,6 +1579,7 @@ func _on_road_stake_back() -> void:
 
 func _start_race(race_type: String, stake: int, pink_slips: bool = false) -> void:
 	_forget_drive_in_visit()
+	GameState.note_race_started()
 	GameState.selected_opponent_id = _chosen_index
 	GameState.selected_race_type = race_type
 	GameState.race_stake = stake
