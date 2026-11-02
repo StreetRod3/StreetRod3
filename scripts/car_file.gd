@@ -143,7 +143,6 @@ static func _parse_parts(root: Dictionary, result: Dictionary) -> void:
 	wheels["path"] = str(wheel_part.get("path", ""))
 	wheels["scale"] = float(wheel_part.get("scale", 1.0))
 	wheels["height"] = float(wheel_part.get("height", 0.5))
-	wheels["grip"] = clampf(float(wheel_part.get("grip", 3.0)), 1.0, 5.0)
 	wheels["part"] = str(wheel_part.get("id", ""))
 	if str(wheels.get("path", "")).is_empty():
 		result.errors.append("Wheel part '%s' is missing a path." % str(wheel_part.get("id", "")))

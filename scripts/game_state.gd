@@ -51,8 +51,13 @@ const ROAD_STAKE_LOW := 25
 const ROAD_STAKE_HIGH := 100
 ## Engine id for a car whose engine was blown and pulled out.
 const NO_ENGINE_ID := "none"
+## Races the player runs before a rival has a new engine in a car that came with none.
+const RIVAL_ENGINE_WAIT_RACES := 3
 ## Gearbox id for a car whose transmission was taken out. The gearbox goes to spare parts.
 const NO_GEARBOX_ID := "none"
+## A car with its wheels off. It stays in the bay until it gets some.
+const NO_WHEEL_ID := "none"
+const NO_WHEELS_IN_BAY := "The car in the garage has no wheels, so it can't roll out."
 ## Bellhousing bolts holding the gearbox to the engine.
 const GEARBOX_BOLT_COUNT := 2
 ## Turns that seat a bellhousing bolt. Zero is out of its hole.
@@ -68,10 +73,14 @@ const SLOT_MUFFLER := "muffler"
 ## `SLOT_MUFFLER`, which is the one muffler of a single exhaust.
 const SLOT_MUFFLER_LEFT := "muffler_left"
 const SLOT_DIFFERENTIAL := "differential"
+## The tires on the car's wheels. They are changed at the tire machine with the wheels off
+## the car. Wheels can be bare, but a car does not leave the garage on bare wheels.
+const SLOT_TIRES := "tires"
 const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
-## Parts changed under the hood, from the bottom up: the cylinder heads on the engine,
-## the intake on the heads, the carburetors and the distributor in the intake, the air
+## Parts changed under the hood, from the bottom up: the camshaft in the block, the
+## cylinder heads over it, the intake on the heads, the carburetors and the distributor in the intake, the air
 ## cleaner over the carburetors. The heads are one part however many the engine has.
+const SLOT_CAM := "cam"
 const SLOT_HEADS := "heads"
 const SLOT_INTAKE := "intake"
 const SLOT_CARB := "carb"
@@ -82,17 +91,17 @@ const SLOT_CARB_3 := "carb_3"
 const SLOT_DISTRIBUTOR := "distributor"
 const SLOT_AIR_CLEANER := "air_cleaner"
 const CARB_SLOTS: Array[String] = [SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3]
-const HOOD_SLOTS: Array[String] = [SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
+const HOOD_SLOTS: Array[String] = [SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
 const ALL_SLOTS: Array[String] = [
-	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL,
-	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
+	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_TIRES,
+	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## Slot id for an empty slot. The exhaust, the mufflers, and everything under the hood
 ## can come off for good.
 const NO_PART_ID := "none"
 const REMOVABLE_SLOTS: Array[String] = [
-	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT,
-	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
+	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_TIRES,
+	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## What every car rolls out of the factory with.
 const STOCK_SLOT_PARTS := {
@@ -101,6 +110,8 @@ const STOCK_SLOT_PARTS := {
 	SLOT_MUFFLER: "muffler-stock",
 	SLOT_MUFFLER_LEFT: NO_PART_ID,
 	SLOT_DIFFERENTIAL: "diff-308",
+	SLOT_TIRES: "tires-bias",
+	SLOT_CAM: "cam-stock",
 	SLOT_HEADS: "heads-iron",
 	SLOT_INTAKE: "intake-iron4",
 	SLOT_CARB: "carb-4bbl-stock",
@@ -115,6 +126,7 @@ const HOOD_ENGINE := "engine"
 ## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each (`hood_bolt_count()`).
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
+	SLOT_CAM: 2,
 	SLOT_HEADS: 4,
 	SLOT_INTAKE: 2,
 	SLOT_CARB: 2,
@@ -131,6 +143,11 @@ const CONDITION_USED_MAX := 0.9
 const CONDITION_WEAR_MIN := 0.01
 const CONDITION_WEAR_MAX := 0.03
 const CONDITION_FLOOR := 0.05
+## Tires worn down to this blow out in the next race, somewhere between these shares of
+## the way along it.
+const TIRE_BLOWOUT_CONDITION := 0.15
+const TIRE_BLOWOUT_MIN := 0.2
+const TIRE_BLOWOUT_MAX := 0.8
 ## A buyer offers between these fractions of the paper's price. Condition skews where in
 ## the range: a new part draws high offers more often, a worn one low.
 const SELL_OFFER_MIN := 0.5
@@ -142,6 +159,9 @@ const TIMING_DEG_PER_STEP := 2
 const CFM_PER_CID := 1.5
 const CARB_STARVED := 0.85
 const CARB_BOGGED := 1.8
+## How much a kilogram of wheel counts against a kilogram of car. A wheel's mass has to be
+## spun up as well as carried along.
+const WHEEL_ROTATING_FACTOR := 2.0
 ## Engine sound boost with the exhaust off and the headers open, in dB.
 const OPEN_EXHAUST_DB := 6.0
 ## Outcomes of `apply_pink_slips`.
@@ -184,7 +204,7 @@ var cars_just_gone: bool = false
 ## station, and a car just bought from the paper. Not saved.
 var drive_into_garage: bool = false
 ## A rival's engine on the hood screen. Empty when the bay is the player's car.
-## Not saved. Keys: engine_id, car_name, color.
+## Not saved. Keys: engine_id, hp, parts (hood slot to part id), car_name, color.
 var hood_peek: Dictionary = {}
 ## Rival left waiting at the drive-in while the player looks under the hood. -1 if none.
 ## Not saved.
@@ -227,6 +247,10 @@ var car_records: Dictionary = {}
 ## list names them: engine, transmission, wheels, part). Each car record keeps its own
 ## fitted parts' conditions under "conditions".
 var spare_conditions: Dictionary = {}
+## Tires stay on their wheels until the tire machine takes them off. For each wheel id, the
+## tires on its spare sets as {"id", "c"}, one entry for each set that has any. Those tires
+## are owned but are not spare parts.
+var spare_wheel_tires: Dictionary = {}
 ## The last offer made for each spare, so the next one differs.
 var _last_offers: Dictionary = {}
 ## Parsed `PLAYER_CAR_FILE`. Empty sections mean the file failed to load.
@@ -234,19 +258,22 @@ var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
 var newspaper_colors: Dictionary = {}
 
-## Driving presets assigned the first time a rival is called.
-## Scales are relative to the player's current effective vmax and 24 m/s² launch.
-const _OPPONENT_PRESETS: Array[Dictionary] = [
-	{"accel_scale": 0.28, "vmax_scale": 0.86, "shift_time": 0.40},
-	{"accel_scale": 0.34, "vmax_scale": 0.94, "shift_time": 0.28},
-	{"accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.36},
-]
 ## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
+## A rival's pronouns by their `gender` in `OPPONENTS_PATH`. Anyone with none listed is
+## they/them: a name does not say.
+const _PRONOUNS := {
+	"man": {"subject": "he", "possessive": "his"},
+	"woman": {"subject": "she", "possessive": "her"},
+}
+const _PRONOUNS_DEFAULT := {"subject": "they", "possessive": "their"}
+## What each new rival drives, in the order they are met.
+var _rival_ladder: Array[Dictionary] = []
 var _opponent_names: Array[String] = []
 ## Skin and head model from `OPPONENTS_PATH`, keyed by rival name.
 var _opponent_skins: Dictionary = {}
 var _opponent_heads: Dictionary = {}
+var _opponent_genders: Dictionary = {}
 
 const DEFAULT_GEARBOX_ID := "gb_auto3"
 
@@ -332,7 +359,15 @@ func is_gearbox_bolted() -> bool:
 
 ## The car can leave the garage under its own power.
 func can_drive() -> bool:
-	return engine_runs() and is_gearbox_bolted()
+	return engine_runs() and is_gearbox_bolted() and has_wheels() and has_tires()
+
+
+func has_wheels() -> bool:
+	return has_active_car() and equipped_wheel_id != NO_WHEEL_ID
+
+
+func has_tires() -> bool:
+	return not slot_part(SLOT_TIRES).is_empty()
 
 
 ## Everything the engine needs is on and bolted down, and the wires are on.
@@ -346,6 +381,10 @@ func engine_trouble() -> String:
 		return "There is no engine."
 	if not is_hood_part_bolted(HOOD_ENGINE):
 		return "The engine mounts are loose."
+	if slot_part(SLOT_CAM).is_empty():
+		return "There is no camshaft."
+	if not is_hood_part_bolted(SLOT_CAM):
+		return "The camshaft is loose."
 	if slot_part(SLOT_HEADS).is_empty():
 		return "There are no cylinder heads."
 	if not is_hood_part_bolted(SLOT_HEADS):
@@ -365,6 +404,8 @@ func engine_trouble() -> String:
 		return "The distributor is loose."
 	if not plug_wires:
 		return "The plug wires are off."
+	if slot_part(SLOT_MANIFOLD).is_empty():
+		return "There are no exhaust manifolds."
 	return ""
 
 
@@ -438,6 +479,9 @@ func hood_part_blocker(key: String) -> String:
 		HOOD_ENGINE:
 			if not slot_part(SLOT_HEADS).is_empty():
 				return SLOT_HEADS
+		SLOT_CAM:
+			if not slot_part(SLOT_HEADS).is_empty():
+				return SLOT_HEADS
 		SLOT_HEADS:
 			if not slot_part(SLOT_INTAKE).is_empty():
 				return SLOT_INTAKE
@@ -467,8 +511,10 @@ func hood_spot_trouble(key: String) -> String:
 		return "Put an engine in first."
 	if not slot_part(key).is_empty():
 		return "Take the old one off first."
+	if key == SLOT_CAM:
+		return "Take the cylinder heads off first." if not slot_part(SLOT_HEADS).is_empty() else ""
 	if key == SLOT_HEADS:
-		return ""
+		return "Put a camshaft in first." if slot_part(SLOT_CAM).is_empty() else ""
 	if slot_part(SLOT_HEADS).is_empty():
 		return "Put the cylinder heads on first."
 	if key == SLOT_INTAKE:
@@ -507,7 +553,6 @@ func fit_hood_part(part_id: String, slot: String) -> String:
 		return "That part is on a car, not in spare parts."
 	slot_part_ids[slot] = part_id
 	engine_bolts[slot] = _loose_bolts(slot)
-	_take_mount_from_other_cars("slot", part_id)
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -524,14 +569,14 @@ func fit_engine(engine_id: String) -> String:
 	equipped_engine_id = engine_id
 	engine_bolts = {HOOD_ENGINE: _loose_bolts(HOOD_ENGINE)}
 	plug_wires = false
-	_take_mount_from_other_cars("engine", engine_id)
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
 
 
 ## Lifts a part out from under the hood into spare parts: an engine, or a hood slot's
-## part. Its bolts must be out and nothing may be on top of it.
+## part. Its bolts must be out and nothing may be on top of it. The exhaust manifolds and
+## the camshaft go to spare parts with the engine.
 func remove_hood_part(key: String) -> String:
 	if not is_hood_part_fitted(key):
 		return "There is nothing there to take off."
@@ -543,6 +588,8 @@ func remove_hood_part(key: String) -> String:
 	engine_bolts.erase(key)
 	if key == HOOD_ENGINE:
 		equipped_engine_id = NO_ENGINE_ID
+		_clear_engine_parts(slot_part_ids)
+		engine_bolts.clear()
 		plug_wires = false
 	else:
 		slot_part_ids[key] = NO_PART_ID
@@ -672,9 +719,8 @@ func _ensure_stock_fitment() -> void:
 			owned_engine_ids.append(engine_id)
 		if equipped_engine_id.is_empty() or listing_by_id(ENGINES, equipped_engine_id).is_empty():
 			equipped_engine_id = engine_id
-	if not wheel_id.is_empty() and not owned_wheel_ids.has(wheel_id):
-		owned_wheel_ids.append(wheel_id)
-	if equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty():
+	# Wheels sold stay sold: whatever is fitted is owned already (`_own_fitted_parts()`).
+	if equipped_wheel_id != NO_WHEEL_ID and (equipped_wheel_id.is_empty() or listing_by_id(WHEELS, equipped_wheel_id).is_empty()):
 		equipped_wheel_id = wheel_id
 
 
@@ -729,6 +775,7 @@ func new_game() -> void:
 	equipped_wheel_id = ""
 	car_records.clear()
 	spare_conditions.clear()
+	spare_wheel_tires.clear()
 	_last_offers.clear()
 	current_car_id = _add_owned_car(DEFAULT_CAR_ID, car_color)
 	_install_car(current_car_id)
@@ -815,6 +862,7 @@ func save_game(slot: int) -> bool:
 		"owned_wheel_ids": owned_wheel_ids,
 		"equipped_wheel_id": equipped_wheel_id,
 		"spare_conditions": spare_conditions,
+		"spare_wheel_tires": spare_wheel_tires,
 	}
 	var json := JSON.stringify(data)
 	var path := save_slot_path(slot)
@@ -886,6 +934,7 @@ func load_game(slot: int) -> bool:
 	owned_wheel_ids = _string_array(d.get("owned_wheel_ids", owned_wheel_ids))
 	equipped_wheel_id = str(d.get("equipped_wheel_id", equipped_wheel_id))
 	spare_conditions = _conditions_pool_from(d.get("spare_conditions", null))
+	spare_wheel_tires = _spare_wheel_tires_from(d.get("spare_wheel_tires", null))
 	_last_offers.clear()
 	if owned_gearbox_ids.is_empty():
 		owned_gearbox_ids = [DEFAULT_GEARBOX_ID]
@@ -932,16 +981,67 @@ func _random_paint() -> Color:
 	return Color.from_hsv(randf(), randf_range(0.55, 0.95), randf_range(0.45, 0.92))
 
 
-## Picks a name at random. A rival who is not on the list yet gets a car assigned now.
+## Who turns up next. Once the newest rival has been beaten, the next call brings someone
+## new, the next step up `_rival_ladder`. Until then it is anybody already met.
 func call_random_opponent() -> int:
 	var names := _opponent_name_pool()
 	if names.is_empty():
 		return -1
-	var picked := names[randi() % names.size()]
-	var existing := _index_of_opponent(picked)
-	if existing >= 0:
-		return existing
-	return _meet_opponent(picked)
+	if opponents.is_empty() or bool(opponents.back().get("beaten", false)):
+		var unmet: Array[String] = []
+		for opp_name in names:
+			if _index_of_opponent(opp_name) < 0:
+				unmet.append(opp_name)
+		if not unmet.is_empty():
+			return _meet_opponent(unmet[randi() % unmet.size()])
+	var running: Array[int] = []
+	var soonest := -1
+	for i in opponents.size():
+		if not opponent_needs_engine(opponents[i]):
+			running.append(i)
+		elif soonest < 0 or int(opponents[i].get("engine_wait", 0)) < int(opponents[soonest].get("engine_wait", 0)):
+			soonest = i
+	if not running.is_empty():
+		return running[randi() % running.size()]
+	# With nobody else to race there would be no races to wait for.
+	if soonest >= 0:
+		_fit_rival_engine(opponents[soonest])
+	return soonest
+
+
+## A rival with no engine in their car can't drive it, so they don't turn up.
+func opponent_needs_engine(opp: Dictionary) -> bool:
+	return str(opp.get("engine", "")) == NO_ENGINE_ID
+
+
+## Every race the player runs brings the rivals waiting on an engine closer to having one.
+func note_race_started() -> void:
+	for opp in opponents:
+		if not opponent_needs_engine(opp):
+			continue
+		opp["engine_wait"] = int(opp.get("engine_wait", 0)) - 1
+		if int(opp["engine_wait"]) <= 0:
+			_fit_rival_engine(opp)
+
+
+## Puts the engine the car came with into a rival's car. Everything else on the car stays
+## as it is, the parts that were on the blown engine going on this one.
+func _fit_rival_engine(opp: Dictionary) -> void:
+	var stock := _opponent_stock_build(str(opp.get("car_file", "")))
+	var hood := opponent_hood_parts(opp)
+	var slots := hood
+	var taken: Variant = opp.get("taken_car", null)
+	if typeof(taken) == TYPE_DICTIONARY:
+		(taken as Dictionary)["engine_id"] = str(stock["engine"])
+		slots = (taken as Dictionary)["slot_parts"]
+	var build := {"hp": float(stock["hp"]), "vmax": float(stock["vmax"])}
+	_add_rival_parts(build, slots)
+	var diff := listing_by_id(PARTS, str(slots.get(SLOT_DIFFERENTIAL, NO_PART_ID)))
+	opp["engine"] = str(stock["engine"])
+	opp["engine_hp"] = build["hp"]
+	opp["hp"] = float(build["hp"]) * float(diff.get("accel", 1.0))
+	opp["vmax"] = float(build["vmax"]) * float(diff.get("top_speed", 1.0))
+	opp.erase("engine_wait")
 
 
 func selected_opponent() -> Dictionary:
@@ -977,6 +1077,13 @@ func opponent_head(opp_name: String) -> String:
 	return path
 
 
+## A rival's pronoun, "subject" or "possessive", in lower case.
+func opponent_pronoun(opp: Dictionary, form: String) -> String:
+	_opponent_name_pool()
+	var gender := str(_opponent_genders.get(str(opp.get("name", "")), ""))
+	return str(_PRONOUNS.get(gender, _PRONOUNS_DEFAULT)[form])
+
+
 func _index_of_opponent(opp_name: String) -> int:
 	for i in opponents.size():
 		if str(opponents[i].get("name", "")) == opp_name:
@@ -985,30 +1092,104 @@ func _index_of_opponent(opp_name: String) -> int:
 
 
 func _meet_opponent(opp_name: String) -> int:
-	var car := _random_opponent_car()
-	if car.is_empty():
-		push_warning("No cars available for opponent %s" % opp_name)
-		return -1
-	var preset: Dictionary = _OPPONENT_PRESETS[randi() % _OPPONENT_PRESETS.size()]
 	var index := opponents.size()
-	opponents.append({
-		"id": index,
-		"name": opp_name,
-		"car_id": str(car.get("id", "")),
-		"car_name": str(car.get("name", "Car")),
-		"car_file": str(car.get("car_file", "")),
-		"color": _random_paint(),
-		"accel_scale": float(preset.get("accel_scale", 0.3)),
-		"vmax_scale": float(preset.get("vmax_scale", 0.9)),
-		"shift_time": float(preset.get("shift_time", 0.35)),
-	})
+	opponents.append({"id": index, "name": opp_name, "tier": index, "beaten": false, "color": _random_paint()})
+	_apply_rival_build(opponents[index], _ladder_row(index))
 	return index
 
 
-func _random_opponent_car() -> Dictionary:
-	if USED_CARS.is_empty():
+func _ladder_row(tier: int) -> Dictionary:
+	_opponent_name_pool()
+	if _rival_ladder.is_empty():
 		return {}
-	return USED_CARS[randi() % USED_CARS.size()]
+	return _rival_ladder[clampi(tier, 0, _rival_ladder.size() - 1)]
+
+
+## The rival's car and everything about how it goes, from a row of the ladder. A rival's
+## performance comes from here, never from the player's car.
+func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
+	var car := listing_by_id(USED_CARS, str(row.get("car", "")))
+	if car.is_empty() and not USED_CARS.is_empty():
+		car = USED_CARS[0]
+	opp["car_id"] = str(car.get("id", ""))
+	opp["car_name"] = str(car.get("name", "Car"))
+	opp["car_file"] = str(car.get("car_file", ""))
+	opp["tires"] = str(row.get("tires", STOCK_SLOT_PARTS[SLOT_TIRES]))
+	opp["accel_scale"] = float(row.get("accel_scale", 0.3))
+	opp["vmax_scale"] = float(row.get("vmax_scale", 0.9))
+	opp["shift_time"] = float(row.get("shift_time", 0.35))
+	var build := _opponent_stock_build(opp["car_file"])
+	var engine := listing_by_id(ENGINES, str(row.get("engine", build["engine"])))
+	if not engine.is_empty():
+		build["engine"] = str(engine.get("id", ""))
+		build["hp"] = float(engine.get("hp", 280.0))
+		build["vmax"] = float(engine.get("vmax", 220.0))
+	var hood := _rival_hood_parts(row.get("parts", {}))
+	_add_rival_parts(build, hood)
+	build["engine_hp"] = build["hp"]
+	build["hood_parts"] = hood
+	opp.erase("taken_car")
+	build["gearbox"] = str(row.get("gearbox", build["gearbox"]))
+	opp.merge(build, true)
+
+
+## Adds what the parts in `slots` give to a rival's `build`. Each muffler of a dual exhaust
+## does half the work, and each carburetor of a multi-carb intake its share, as on the
+## player's car. Tires are counted in the race.
+func _add_rival_parts(build: Dictionary, slots: Dictionary) -> void:
+	var intake := listing_by_id(PARTS, str(slots.get(SLOT_INTAKE, NO_PART_ID)))
+	var carb_share := 1.0 / float(clampi(int(intake.get("carbs", 1)), 1, CARB_SLOTS.size()))
+	var muffler_share := 0.5 if str(slots.get(SLOT_MUFFLER_LEFT, NO_PART_ID)) != NO_PART_ID else 1.0
+	for slot in slots:
+		if slot == SLOT_TIRES:
+			continue
+		var part := listing_by_id(PARTS, str(slots[slot]))
+		var share := 1.0
+		if spot_kind(slot) == SLOT_CARB:
+			share = carb_share
+		elif spot_kind(slot) == SLOT_MUFFLER:
+			share = muffler_share
+		build["hp"] += float(part.get("hp", 0.0)) * share
+		build["vmax"] += float(part.get("vmax", 0.0)) * share
+
+
+## A rival's own hood parts by slot: stock wherever `listed` names nothing.
+func _rival_hood_parts(listed: Variant) -> Dictionary:
+	var hood := {}
+	for slot in HOOD_SLOTS:
+		hood[slot] = str(STOCK_SLOT_PARTS[slot])
+	if typeof(listed) != TYPE_DICTIONARY:
+		return hood
+	for slot in hood.keys():
+		var part_id := str((listed as Dictionary).get(slot, hood[slot]))
+		if part_id == NO_PART_ID or not listing_by_id(PARTS, part_id).is_empty():
+			hood[slot] = part_id
+	return hood
+
+
+## What is under a rival's hood, slot to part id.
+func opponent_hood_parts(opp: Dictionary) -> Dictionary:
+	return _rival_hood_parts(opp.get("hood_parts", {}))
+
+
+## Marks the selected rival as beaten, which brings the next one along.
+func note_race_win() -> void:
+	var opp := selected_opponent()
+	if not opp.is_empty():
+		opp["beaten"] = true
+
+
+## What a car came with: its power, top speed before gearing and tires, engine, and gearbox.
+func _opponent_stock_build(car_file: String) -> Dictionary:
+	var spec := _CarFile.load_path(car_file)
+	var engine: Dictionary = spec.get("engine", {})
+	var gearbox: Dictionary = spec.get("transmission", {})
+	return {
+		"hp": float(engine.get("hp", 280.0)),
+		"vmax": float(engine.get("vmax", 220.0)),
+		"engine": str(engine.get("id", "")),
+		"gearbox": str(gearbox.get("id", DEFAULT_GEARBOX_ID)),
+	}
 
 
 func _load_opponent_names() -> Array[String]:
@@ -1033,13 +1214,17 @@ func _load_opponent_names() -> Array[String]:
 		return names
 	_opponent_skins.clear()
 	_opponent_heads.clear()
+	_opponent_genders.clear()
+	_rival_ladder = _dict_list(root.get("ladder", []))
 	for item in listed:
 		var name := ""
 		var skin := Color(0.76, 0.58, 0.44)
 		var head := DEFAULT_OPPONENT_HEAD
+		var gender := ""
 		if typeof(item) == TYPE_DICTIONARY:
 			var row: Dictionary = item
 			name = str(row.get("name", "")).strip_edges()
+			gender = str(row.get("gender", ""))
 			skin = _color_from_save(row.get("skin", null), skin)
 			var listed_head := str(row.get("head", "")).strip_edges()
 			if not listed_head.is_empty():
@@ -1051,6 +1236,7 @@ func _load_opponent_names() -> Array[String]:
 		names.append(name)
 		_opponent_skins[name] = skin
 		_opponent_heads[name] = head
+		_opponent_genders[name] = gender
 	return names
 
 
@@ -1070,7 +1256,21 @@ func _opponents_for_save() -> Array:
 			"accel_scale": float(opp.get("accel_scale", 0.3)),
 			"vmax_scale": float(opp.get("vmax_scale", 0.9)),
 			"shift_time": float(opp.get("shift_time", 0.35)),
+			"tires": str(opp.get("tires", "")),
+			"hp": float(opp.get("hp", 280.0)),
+			"engine_hp": float(opp.get("engine_hp", opp.get("hp", 280.0))),
+			"hood_parts": opponent_hood_parts(opp),
+			"vmax": float(opp.get("vmax", 220.0)),
+			"engine": str(opp.get("engine", "")),
+			"gearbox": str(opp.get("gearbox", DEFAULT_GEARBOX_ID)),
+			"tier": int(opp.get("tier", 0)),
+			"beaten": bool(opp.get("beaten", false)),
 		})
+		var taken: Variant = opp.get("taken_car", null)
+		if typeof(taken) == TYPE_DICTIONARY:
+			rows.back()["taken_car"] = _record_to_save(taken, str(opp.get("car_id", "")))
+		if opponent_needs_engine(opp):
+			rows.back()["engine_wait"] = int(opp.get("engine_wait", RIVAL_ENGINE_WAIT_RACES))
 	return rows
 
 
@@ -1097,7 +1297,28 @@ func _load_saved_opponents(d: Dictionary) -> void:
 			"accel_scale": float(row.get("accel_scale", 0.3)),
 			"vmax_scale": float(row.get("vmax_scale", 0.9)),
 			"shift_time": float(row.get("shift_time", 0.35)),
+			"tires": str(row.get("tires", "")),
+			"tier": int(row.get("tier", i)),
+			"beaten": bool(row.get("beaten", false)),
 		})
+		# Rivals in older saves went by the player's car, so they start on what theirs came with.
+		var saved_build := row if row.has("hp") else _opponent_stock_build(str(row.get("car_file", "")))
+		opponents[i]["hp"] = float(saved_build.get("hp", 280.0))
+		opponents[i]["engine_hp"] = float(saved_build.get("engine_hp", opponents[i]["hp"]))
+		opponents[i]["hood_parts"] = _rival_hood_parts(row.get("hood_parts", {}))
+		var taken: Variant = row.get("taken_car", null)
+		if typeof(taken) == TYPE_DICTIONARY:
+			# A player's car with no engine loads with its parts off. This one waits with them on.
+			var taken_row: Dictionary = (taken as Dictionary).duplicate()
+			taken_row.erase("engine_id")
+			var taken_rec := _record_from_save(taken_row, str(row.get("car_id", "")))
+			taken_rec["engine_id"] = str((taken as Dictionary).get("engine_id", NO_ENGINE_ID))
+			opponents[i]["taken_car"] = taken_rec
+		opponents[i]["vmax"] = float(saved_build.get("vmax", 220.0))
+		opponents[i]["gearbox"] = str(saved_build.get("gearbox", DEFAULT_GEARBOX_ID))
+		opponents[i]["engine"] = str(saved_build.get("engine", ""))
+		if opponent_needs_engine(opponents[i]):
+			opponents[i]["engine_wait"] = int(row.get("engine_wait", RIVAL_ENGINE_WAIT_RACES))
 		i += 1
 
 
@@ -1142,6 +1363,106 @@ func get_equipped_engine() -> Dictionary:
 	if engine.is_empty():
 		return get_stock_engine()
 	return engine
+
+
+## How well the active car's tires hold the road, from 1 to 5.
+func tire_grip() -> float:
+	return _grip_of(slot_part(SLOT_TIRES)) if has_tires() else 1.0
+
+
+func tires_worn_out() -> bool:
+	return has_tires() and mount_condition("slot:" + SLOT_TIRES) <= TIRE_BLOWOUT_CONDITION
+
+
+## How far from the finish worn-out tires let go in a race of `length_m`, or -1 if the tires
+## will last.
+func tire_blowout_distance_m(length_m: float) -> float:
+	if not tires_worn_out():
+		return -1.0
+	return length_m * randf_range(TIRE_BLOWOUT_MIN, TIRE_BLOWOUT_MAX)
+
+
+## A blowout: the tires are gone, not spares, and the wheels stay on the car.
+func blow_tires() -> void:
+	var tires := _tires_off_active_car()
+	if tires.is_empty():
+		return
+	owned_part_ids.erase(str(tires.get("id", "")))
+	_sync_record_from_active()
+	refresh_car_stats()
+
+
+## The tires on a rival's car. A rival from an older save is on the stock set.
+func opponent_tires(opp: Dictionary) -> Dictionary:
+	var tires := listing_by_id(PARTS, str(opp.get("tires", "")))
+	if str(tires.get("slot", "")) != SLOT_TIRES:
+		return listing_by_id(PARTS, str(STOCK_SLOT_PARTS[SLOT_TIRES]))
+	return tires
+
+
+func opponent_tire_grip(opp: Dictionary) -> float:
+	return _grip_of(opponent_tires(opp))
+
+
+## A rival's car's top speed through its gearbox and on its tires, before the driver's
+## `vmax_scale`.
+func opponent_top_kmh(opp: Dictionary) -> float:
+	var top := float(opp.get("vmax", 220.0)) + float(opponent_tires(opp).get("vmax", 0.0))
+	return top * float(opponent_gearbox(opp).get("top_speed", 1.0))
+
+
+func opponent_power_hp(opp: Dictionary) -> float:
+	return float(opp.get("hp", 280.0))
+
+
+func opponent_gearbox(opp: Dictionary) -> Dictionary:
+	var box := listing_by_id(GEARBOXES, str(opp.get("gearbox", "")))
+	return listing_by_id(GEARBOXES, DEFAULT_GEARBOX_ID) if box.is_empty() else box
+
+
+## The chassis of a rival's car, from its car file.
+func opponent_chassis(opp: Dictionary) -> Dictionary:
+	var spec := _CarFile.load_path(str(opp.get("car_file", "")))
+	var chassis: Variant = spec.get("chassis", {})
+	return chassis if typeof(chassis) == TYPE_DICTIONARY else {}
+
+
+func _grip_of(tires: Dictionary) -> float:
+	return clampf(float(tires.get("grip", 3.0)), 1.0, 5.0)
+
+
+## How much heavier the active car's wheels make it than the set it came on, in kg as they
+## count on the road. Lighter wheels make this negative.
+func wheel_mass_delta_kg() -> float:
+	var stock := listing_by_id(WHEELS, _stock_part_id(current_car_id, "wheels"))
+	var fitted: Dictionary = listing_by_id(WHEELS, equipped_wheel_id)
+	if stock.is_empty() or fitted.is_empty():
+		return 0.0
+	return (float(fitted.get("mass", 0.0)) - float(stock.get("mass", 0.0))) * WHEEL_ROTATING_FACTOR
+
+
+## The active car's chassis for a race, with its wheels' weight counted in.
+func race_chassis() -> Dictionary:
+	var spec: Variant = car_spec.get("chassis", {})
+	if typeof(spec) != TYPE_DICTIONARY or (spec as Dictionary).is_empty():
+		return {}
+	var chassis: Dictionary = (spec as Dictionary).duplicate()
+	chassis["mass"] = float(chassis.get("mass", 1360.0)) + wheel_mass_delta_kg()
+	return chassis
+
+
+## What the wheels' weight does to the pull in every gear, for the arcade drive, whose
+## acceleration does not come from the mass. 1 on the wheels the car came on.
+func wheel_weight_accel() -> float:
+	var chassis := race_chassis()
+	if chassis.is_empty():
+		return 1.0
+	var mass := float(chassis["mass"])
+	return (mass - wheel_mass_delta_kg()) / maxf(mass, 1.0)
+
+
+func wheel_detail(wheel: Dictionary) -> String:
+	return "%d kg the set" % int(wheel.get("mass", 0))
 
 
 func get_equipped_wheel() -> Dictionary:
@@ -1319,7 +1640,7 @@ func _active_mounts() -> Dictionary:
 		out["engine"] = ["engine", equipped_engine_id]
 	if not equipped_gearbox_id.is_empty() and equipped_gearbox_id != NO_GEARBOX_ID:
 		out["transmission"] = ["transmission", equipped_gearbox_id]
-	if not equipped_wheel_id.is_empty():
+	if not equipped_wheel_id.is_empty() and equipped_wheel_id != NO_WHEEL_ID:
 		out["wheels"] = ["wheels", equipped_wheel_id]
 	for slot in ALL_SLOTS:
 		var part_id := str(slot_part_ids.get(slot, NO_PART_ID))
@@ -1424,6 +1745,11 @@ func free_spare_count(kind: String, id: String) -> int:
 			mounted += _string_array(rec.get("part_ids", [])).count(id)
 		elif str(rec.get(key, "")) == id:
 			mounted += 1
+	if kind == "part":
+		for sets in spare_wheel_tires.values():
+			for tires in sets:
+				if str(tires.get("id", "")) == id:
+					mounted += 1
 	return maxi(owned - mounted, 0)
 
 
@@ -1492,18 +1818,13 @@ func listing_for(kind: String, id: String) -> Dictionary:
 	return listing_by_id(PARTS, id)
 
 
-## Why a spare cannot be sold, or "" when it can. Only copies on no car sell, and not a
-## set of wheels one of the player's cars came with, since a car always stands on some.
+## Why a spare cannot be sold, or "" when it can. Only copies on no car sell.
 func sell_trouble(kind: String, id: String) -> String:
 	var item := listing_for(kind, id)
 	if item.is_empty():
 		return "Nobody knows what that is."
 	if int(item.get("price", 0)) <= 0:
 		return "Nobody would pay for that."
-	if kind == "wheels":
-		for car_id in owned_car_ids:
-			if _stock_part_id(car_id, kind) == id:
-				return "One of your cars came on these wheels."
 	if free_spare_count(kind, id) <= 0:
 		return "It is on one of your cars."
 	return ""
@@ -1514,6 +1835,8 @@ func sell_trouble(kind: String, id: String) -> String:
 ## and never the same as the last offer for it.
 func sell_offer(kind: String, id: String) -> int:
 	var price := int(listing_for(kind, id).get("price", 0))
+	if kind == "wheels":
+		price += int(tires_sold_with_wheels(id).get("price", 0))
 	var list := spare_condition_list(kind, id)
 	var c := list[list.size() - 1] if not list.is_empty() else 1.0
 	var key := _condition_key(kind, id)
@@ -1533,6 +1856,8 @@ func sell_spare(kind: String, id: String, offer: int) -> String:
 	var err := sell_trouble(kind, id)
 	if not err.is_empty():
 		return err
+	if kind == "wheels" and not tires_sold_with_wheels(id).is_empty():
+		owned_part_ids.erase(str(_pop_spare_wheel_tires(id).get("id", "")))
 	_owned_list(kind).erase(id)
 	var key := _condition_key(kind, id)
 	var pool: Array = spare_conditions.get(key, [])
@@ -1606,7 +1931,6 @@ func equip_part(part_id: String) -> String:
 	if spare_count(part_id) <= 0:
 		return "That part is not in spare parts."
 	equipped_part_ids.append(part_id)
-	_take_mount_from_other_cars("part", part_id)
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -1619,7 +1943,7 @@ func buy_gearbox(gearbox_id: String) -> String:
 		return "That gearbox is not in the paper."
 	if equipped_gearbox_id == gearbox_id:
 		return "Already on the car."
-	if owns_gearbox(gearbox_id):
+	if free_spare_count("transmission", gearbox_id) > 0:
 		return "Already in spare parts."
 	var price := int(box.get("price", 0))
 	if money < price:
@@ -1681,7 +2005,6 @@ func fit_gearbox(gearbox_id: String) -> String:
 	if free_spare_count("transmission", gearbox_id) <= 0 or listing_by_id(GEARBOXES, gearbox_id).is_empty():
 		return "That gearbox is not in spare parts."
 	equipped_gearbox_id = gearbox_id
-	_take_mount_from_other_cars("transmission", gearbox_id)
 	gearbox_bolts.clear()
 	for i in GEARBOX_BOLT_COUNT:
 		gearbox_bolts.append(1)
@@ -1722,12 +2045,17 @@ func muffler_slots() -> Array[String]:
 
 
 ## Slots in use on the active car. The left muffler is there only behind a dual exhaust,
-## the hood slots only with an engine in, and only as many carburetors as the intake takes.
+## the manifolds and hood slots only with an engine in, and only as many carburetors as
+## the intake takes.
 func active_slots() -> Array[String]:
 	var out: Array[String] = []
 	for slot in UNDER_CAR_SLOTS:
-		if slot != SLOT_MUFFLER_LEFT or has_dual_exhaust():
-			out.append(slot)
+		if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
+			continue
+		if slot == SLOT_MANIFOLD and not has_engine():
+			continue
+		out.append(slot)
+	out.append(SLOT_TIRES)
 	if not has_engine():
 		return out
 	var carbs := carb_slots()
@@ -1763,7 +2091,7 @@ func part_detail(part: Dictionary) -> String:
 			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
 			roundi(float(part.get("top_speed", 1.0)) * 100.0),
 		]
-	var bits: Array[String] = ["+%d hp" % int(part.get("hp", 0))]
+	var bits: Array[String] = ["Grip %d" % int(part.get("grip", 0)) if part.has("grip") else "+%d hp" % int(part.get("hp", 0))]
 	var vmax := int(part.get("vmax", 0))
 	if vmax != 0:
 		bits.append("%+d km/h" % vmax)
@@ -1801,6 +2129,10 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 		return "That part is not in spare parts."
 	if str(slot_part_ids.get(slot, NO_PART_ID)) == part_id:
 		return "Already on the car."
+	if kind == SLOT_MANIFOLD and not has_engine():
+		return "Put an engine in first."
+	if kind == SLOT_TIRES:
+		return "Tires go on wheels at the tire machine."
 	if kind == SLOT_MUFFLER and slot_part(SLOT_EXHAUST).is_empty():
 		return "Put an exhaust on first."
 	if slot == SLOT_MUFFLER_LEFT and not has_dual_exhaust():
@@ -1811,7 +2143,6 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 	slot_part_ids[slot] = part_id
 	if slot == SLOT_EXHAUST and not bool(part.get("dual", false)):
 		slot_part_ids[SLOT_MUFFLER_LEFT] = NO_PART_ID
-	_take_mount_from_other_cars("slot", part_id)
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -1822,6 +2153,8 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 func remove_slot_part(slot: String) -> String:
 	if not has_active_car():
 		return "There is no car in the garage."
+	if slot == SLOT_TIRES:
+		return "Tires come off wheels at the tire machine."
 	if not REMOVABLE_SLOTS.has(slot) or HOOD_SLOTS.has(slot):
 		return "That has to stay on the car."
 	if slot_part(slot).is_empty():
@@ -1843,6 +2176,150 @@ func buy_or_equip_wheel(wheel_id: String) -> String:
 	return _buy_or_equip(WHEELS, owned_wheel_ids, wheel_id, "wheel")
 
 
+## What the tires on a set of wheels are called, for the lists: the set on the car, or else
+## the next spare set of them to come off the shelf.
+func wheel_tires_text(wheel_id: String) -> String:
+	var tires := slot_part(SLOT_TIRES) if wheel_id == equipped_wheel_id else listing_by_id(PARTS, _next_spare_wheel_tires(wheel_id))
+	return "no tires" if tires.is_empty() else "on %s" % str(tires.get("name", "tires"))
+
+
+## The tires that go too when a spare set of these wheels is sold, or {}. A bare set goes
+## first if there is one.
+func tires_sold_with_wheels(wheel_id: String) -> Dictionary:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	if sets.is_empty() or free_spare_count("wheels", wheel_id) > sets.size():
+		return {}
+	return listing_by_id(PARTS, _next_spare_wheel_tires(wheel_id))
+
+
+func _next_spare_wheel_tires(wheel_id: String) -> String:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	return "" if sets.is_empty() else str(sets[sets.size() - 1].get("id", ""))
+
+
+func _pop_spare_wheel_tires(wheel_id: String) -> Dictionary:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	if sets.is_empty():
+		return {}
+	var tires: Dictionary = sets.pop_back()
+	if sets.is_empty():
+		spare_wheel_tires.erase(wheel_id)
+	return tires
+
+
+## Takes the tires off the active car with their condition: {"id", "c"}, or {} when the
+## wheels are bare.
+func _tires_off_active_car() -> Dictionary:
+	if not has_tires():
+		return {}
+	var tires := {"id": str(slot_part_ids[SLOT_TIRES]), "c": mount_condition("slot:" + SLOT_TIRES)}
+	slot_part_ids[SLOT_TIRES] = NO_PART_ID
+	var rec: Variant = car_records.get(current_car_id, null)
+	if typeof(rec) == TYPE_DICTIONARY and (rec as Dictionary).has("conditions"):
+		(rec["conditions"] as Dictionary).erase("slot:" + SLOT_TIRES)
+	return tires
+
+
+## Puts tires that came on a set of wheels on the active car, keeping their condition.
+func _tires_onto_active_car(tires: Dictionary) -> void:
+	if tires.is_empty():
+		return
+	var id := str(tires.get("id", ""))
+	slot_part_ids[SLOT_TIRES] = id
+	var rec: Variant = car_records.get(current_car_id, null)
+	if typeof(rec) == TYPE_DICTIONARY:
+		var conditions: Dictionary = (rec as Dictionary).get("conditions", {})
+		conditions["slot:" + SLOT_TIRES] = {"kind": "part", "id": id, "c": float(tires.get("c", 1.0))}
+		rec["conditions"] = conditions
+
+
+func _shelve_active_tires() -> void:
+	var tires := _tires_off_active_car()
+	if tires.is_empty():
+		return
+	var sets: Array = spare_wheel_tires.get(equipped_wheel_id, [])
+	sets.append(tires)
+	spare_wheel_tires[equipped_wheel_id] = sets
+
+
+## Takes the wheels off the active car onto the shelf, with their tires still on them.
+func remove_wheels() -> String:
+	if not has_wheels():
+		return "There are no wheels on the car."
+	_shelve_active_tires()
+	equipped_wheel_id = NO_WHEEL_ID
+	_sync_record_from_active()
+	refresh_car_stats()
+	return ""
+
+
+## Wheel sets on the shelf, in register order.
+func shelved_wheels() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for wheel in WHEELS:
+		if free_spare_count("wheels", str(wheel.get("id", ""))) > 0:
+			out.append(wheel)
+	return out
+
+
+## The id of the tires on a shelved set of wheels, or "" when it is bare: the next set of
+## them to come off the shelf.
+func shelved_wheel_tires_id(wheel_id: String) -> String:
+	return _next_spare_wheel_tires(wheel_id)
+
+
+## Whether the tires on a shelved set of wheels are worn enough to blow.
+func shelved_wheel_tires_worn(wheel_id: String) -> bool:
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	return not sets.is_empty() and float(sets[sets.size() - 1].get("c", 1.0)) <= TIRE_BLOWOUT_CONDITION
+
+
+## The tire machine on a shelved set of wheels: spare tires go on it, and any tires that
+## were on it go to spare parts.
+func fit_tires_on_shelved_wheels(wheel_id: String, tire_id: String) -> String:
+	if free_spare_count("wheels", wheel_id) <= 0:
+		return "Those wheels are not on the shelf."
+	if part_slot(tire_id) != SLOT_TIRES or spare_count(tire_id) <= 0:
+		return "Those tires are not in spare parts."
+	var sets: Array = spare_wheel_tires.get(wheel_id, [])
+	var bare_set := free_spare_count("wheels", wheel_id) > sets.size()
+	if not bare_set and shelved_wheel_tires_id(wheel_id) == tire_id:
+		return "Those tires are already on them."
+	if not bare_set:
+		remove_tires_from_shelved_wheels(wheel_id)
+	sets = spare_wheel_tires.get(wheel_id, [])
+	sets.append({"id": tire_id, "c": _pop_spare_condition("part", tire_id)})
+	spare_wheel_tires[wheel_id] = sets
+	_trim_spare_conditions()
+	return ""
+
+
+## The tire machine takes the tires off a shelved set of wheels into spare parts.
+func remove_tires_from_shelved_wheels(wheel_id: String) -> String:
+	var tires := _pop_spare_wheel_tires(wheel_id)
+	if tires.is_empty():
+		return "Those wheels have no tires on them."
+	_push_spare_condition("part", str(tires.get("id", "")), float(tires.get("c", 1.0)))
+	_trim_spare_conditions()
+	return ""
+
+
+func _spare_wheel_tires_from(value: Variant) -> Dictionary:
+	var out := {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return out
+	for wheel_id in (value as Dictionary).keys():
+		if typeof(value[wheel_id]) != TYPE_ARRAY:
+			continue
+		var sets: Array = []
+		for tires in value[wheel_id]:
+			if typeof(tires) == TYPE_DICTIONARY and part_slot(str(tires.get("id", ""))) == SLOT_TIRES:
+				sets.append({"id": str(tires["id"]), "c": clampf(float(tires.get("c", 1.0)), CONDITION_FLOOR, 1.0)})
+		if not sets.is_empty():
+			out[str(wheel_id)] = sets
+	return out
+
+
 func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: String, label: String) -> String:
 	var part: Dictionary = listing_by_id(list, part_id)
 	if part.is_empty():
@@ -1850,7 +2327,8 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 	var equipped := equipped_engine_id if label == "engine" else equipped_wheel_id
 	if equipped == part_id:
 		return "Already on the car."
-	if not owned.has(part_id):
+	# What is on another car stays there, so a copy here has to be a spare.
+	if free_spare_count("engine" if label == "engine" else "wheels", part_id) <= 0:
 		var price := int(part.get("price", 0))
 		if money < price:
 			return "Not enough cash."
@@ -1859,10 +2337,12 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 		return ""
 	if label == "engine":
 		equipped_engine_id = part_id
-		_take_mount_from_other_cars("engine", part_id)
 	else:
+		# Tires stay on their wheels: the old tires go to the shelf on the old set, and the
+		# new set comes off the shelf with whatever is on it.
+		_shelve_active_tires()
 		equipped_wheel_id = part_id
-		_take_mount_from_other_cars("wheels", part_id)
+		_tires_onto_active_car(_pop_spare_wheel_tires(part_id))
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -1968,7 +2448,13 @@ func _take_opponent_car() -> bool:
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
-	var won_id := _add_owned_car(model_id, paint)
+	# A car they took from the player comes back as it left, and any other as they built it.
+	var taken: Variant = opp.get("taken_car", null)
+	var won_id := ""
+	if typeof(taken) == TYPE_DICTIONARY:
+		won_id = _add_owned_record((taken as Dictionary).duplicate(true))
+	else:
+		won_id = _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), opponent_hood_parts(opp))
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
 	return true
@@ -1980,8 +2466,31 @@ func _lose_raced_car() -> void:
 	_sync_record_from_active()
 	var lost_id := current_car_id
 	var model_id := car_model_id(lost_id)
-	_set_opponent_car(selected_opponent_id, model_id, car_color)
+	# The rival keeps the car as it stands now, its rear end built into the numbers.
+	var tires := slot_part(SLOT_TIRES)
+	var hood := {}
+	for slot in HOOD_SLOTS:
+		hood[slot] = str(slot_part_ids.get(slot, NO_PART_ID))
+	var taken: Dictionary = (car_records[lost_id] as Dictionary).duplicate(true)
+	taken["fuel"] = DEFAULT_TANK_L
+	# Tires that blew in this race are replaced, the same as `opponent_tires()` reads them.
+	if str(taken["slot_parts"][SLOT_TIRES]) == NO_PART_ID:
+		taken["slot_parts"][SLOT_TIRES] = str(STOCK_SLOT_PARTS[SLOT_TIRES])
+	var build := {
+		"hp": engine_power_hp * final_drive_accel(),
+		"engine_hp": engine_power_hp,
+		"hood_parts": hood,
+		"taken_car": taken,
+		"vmax": (vmax_kmh - float(tires.get("vmax", 0.0))) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0)),
+		"engine": equipped_engine_id,
+		"engine_wait": RIVAL_ENGINE_WAIT_RACES,
+		"gearbox": equipped_gearbox_id,
+	}
+	_set_opponent_car(selected_opponent_id, model_id, car_color, str(tires.get("id", "")), build)
+	# What is on the car goes with it. Spares of the same parts stay the player's.
+	var spares := _spares_beside(lost_id)
 	_drop_active_car()
+	_drop_copies_beyond(spares)
 	if not owned_car_ids.is_empty():
 		_install_car(owned_car_ids[0])
 
@@ -2020,26 +2529,44 @@ func take_cars_just_gone() -> bool:
 
 
 ## Pulls the blown engine out of the active car. It is gone, not a spare; what was
-## bolted on top of it goes to spare parts.
+## bolted to it or inside it goes to spare parts. On pink slips the car is about to be
+## lost, and those parts stay on it and go along.
 func remove_engine() -> void:
 	if not has_engine():
 		return
 	var blown := equipped_engine_id
 	equipped_engine_id = NO_ENGINE_ID
-	_clear_hood_slots(slot_part_ids)
-	engine_bolts.clear()
-	plug_wires = false
+	if not race_pink_slips:
+		_clear_engine_parts(slot_part_ids)
+		engine_bolts.clear()
+		plug_wires = false
 	_sync_record_from_active()
 	owned_engine_ids.erase(blown)
 	refresh_car_stats()
 
 
-func _clear_hood_slots(slots: Dictionary) -> void:
+## Takes off everything that needs an engine. Owned copies off a car are spare parts.
+func _clear_engine_parts(slots: Dictionary) -> void:
+	slots[SLOT_MANIFOLD] = NO_PART_ID
 	for slot in HOOD_SLOTS:
 		slots[slot] = NO_PART_ID
 
 
-func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
+## `_clear_engine_parts()` for a car that is not in the bay, with the conditions of what
+## came off passed on to the spares.
+func _clear_record_engine_parts(rec: Dictionary) -> void:
+	var slots := _slots_from(rec.get("slot_parts", null))
+	_clear_engine_parts(slots)
+	rec["slot_parts"] = slots
+	rec["engine_bolts"] = {}
+	rec["plug_wires"] = false
+	for slot in ALL_SLOTS:
+		if str(slots[slot]) == NO_PART_ID:
+			_release_condition(rec, "slot:" + slot)
+
+
+## Gives a rival the player's car, with its numbers in `build`.
+func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String, build: Dictionary) -> void:
 	if index < 0 or index >= opponents.size():
 		return
 	var car := listing_by_id(USED_CARS, model_id)
@@ -2048,13 +2575,16 @@ func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
 	opp["car_name"] = str(car.get("name", "Car"))
 	opp["car_file"] = str(car.get("car_file", ""))
 	opp["color"] = paint
+	opp["tires"] = tires
+	opp.merge(build, true)
 
 
 func _replace_opponent_car(index: int) -> void:
-	if USED_CARS.is_empty():
+	var opp := opponent_at(index)
+	if opp.is_empty():
 		return
-	var picked: Dictionary = USED_CARS[randi() % USED_CARS.size()]
-	_set_opponent_car(index, str(picked.get("id", "")), _random_paint())
+	_apply_rival_build(opp, _ladder_row(int(opp.get("tier", index))))
+	opp["color"] = _random_paint()
 
 
 func consume_race_fuel(race_type: String = "") -> void:
@@ -2084,6 +2614,8 @@ func select_owned_car(instance_id: String) -> String:
 		return "That car isn't in the garage."
 	if current_car_id == instance_id:
 		return "Already in the garage."
+	if has_active_car() and not has_wheels():
+		return NO_WHEELS_IN_BAY
 	if has_active_car():
 		_sync_record_from_active()
 	current_car_id = instance_id
@@ -2100,6 +2632,8 @@ func buy_or_select_car(model_id: String) -> String:
 	var price := int(car.get("price", 0))
 	if money < price:
 		return "Not enough cash."
+	if has_active_car() and not has_wheels():
+		return NO_WHEELS_IN_BAY
 	if has_active_car():
 		_sync_record_from_active()
 	money -= price
@@ -2133,9 +2667,7 @@ func sell_car(instance_id: String, price: int) -> String:
 	var active := instance_id == current_car_id
 	if active:
 		_sync_record_from_active()
-	var spares := {}
-	for mount in _record_mounts(car_records.get(instance_id, {})):
-		spares[mount] = free_spare_count(mount[0], mount[1])
+	var spares := _spares_beside(instance_id)
 	money += maxi(price, 0)
 	if active:
 		_drop_active_car()
@@ -2144,11 +2676,24 @@ func sell_car(instance_id: String, price: int) -> String:
 		car_records.erase(instance_id)
 		if owned_car_ids.is_empty():
 			_note_cars_gone()
+	_drop_copies_beyond(spares)
+	return ""
+
+
+## How many spares there are now of each thing on a car about to go.
+func _spares_beside(instance_id: String) -> Dictionary:
+	var spares := {}
+	for mount in _record_mounts(car_records.get(instance_id, {})):
+		spares[mount] = free_spare_count(mount[0], mount[1])
+	return spares
+
+
+## With the car gone, what was on it no longer counts as owned.
+func _drop_copies_beyond(spares: Dictionary) -> void:
 	for mount in spares.keys():
 		while free_spare_count(mount[0], mount[1]) > int(spares[mount]):
 			_owned_list(mount[0]).erase(mount[1])
 	_trim_spare_conditions()
-	return ""
 
 
 ## What is on a car record, as [kind, id] pairs, one for each copy.
@@ -2161,7 +2706,7 @@ func _record_mounts(rec: Dictionary) -> Array:
 	if not gearbox_id.is_empty() and gearbox_id != NO_GEARBOX_ID:
 		out.append(["transmission", gearbox_id])
 	var wheel_id := str(rec.get("wheel_id", ""))
-	if not wheel_id.is_empty():
+	if not wheel_id.is_empty() and wheel_id != NO_WHEEL_ID:
 		out.append(["wheels", wheel_id])
 	var slots: Variant = rec.get("slot_parts", {})
 	if typeof(slots) == TYPE_DICTIONARY:
@@ -2192,12 +2737,25 @@ func _mounts_price(mounts: Array) -> int:
 
 
 ## A new car brings its own copy of everything on it, so spares stay spares.
-func _add_owned_car(model_id: String, paint: Color) -> String:
+## A new car in the garage, as it came unless a tire set, engine, or gearbox is named.
+func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "", hood: Dictionary = {}) -> String:
+	var rec := _make_car_record(model_id, paint)
+	if not tires.is_empty():
+		rec["slot_parts"][SLOT_TIRES] = tires
+	rec["slot_parts"].merge(hood, true)
+	if not listing_by_id(ENGINES, engine).is_empty():
+		rec["engine_id"] = engine
+	if not listing_by_id(GEARBOXES, gearbox).is_empty():
+		rec["gearbox_id"] = gearbox
+	return _add_owned_record(rec)
+
+
+## Adds a car as `rec` has it. Everything on it is owned from now on.
+func _add_owned_record(rec: Dictionary) -> String:
 	_own_fitted_parts()
 	var instance_id := "car-%d" % _next_car_serial
 	_next_car_serial += 1
 	owned_car_ids.append(instance_id)
-	var rec := _make_car_record(model_id, paint)
 	car_records[instance_id] = rec
 	for mount in _record_mounts(rec):
 		_owned_list(mount[0]).append(mount[1])
@@ -2263,7 +2821,8 @@ func _slots_from(value: Variant) -> Dictionary:
 		var saved: Dictionary = value
 		for slot in ALL_SLOTS:
 			var part_id := str(saved.get(slot, ""))
-			if part_id == NO_PART_ID and REMOVABLE_SLOTS.has(slot):
+			# The manifolds are off a car with no engine, or one just put in.
+			if part_id == NO_PART_ID and (REMOVABLE_SLOTS.has(slot) or slot == SLOT_MANIFOLD):
 				slots[slot] = part_id
 			elif str(listing_by_id(PARTS, part_id).get("slot", "")) == spot_kind(slot):
 				slots[slot] = part_id
@@ -2284,6 +2843,10 @@ func _slots_from(value: Variant) -> Dictionary:
 	if intake.is_empty():
 		slots[SLOT_DISTRIBUTOR] = NO_PART_ID
 		slots[SLOT_AIR_CLEANER] = NO_PART_ID
+	# The air cleaner sits on the carburetors, so it needs all of them.
+	for i in pads:
+		if str(slots[CARB_SLOTS[i]]) == NO_PART_ID:
+			slots[SLOT_AIR_CLEANER] = NO_PART_ID
 	return slots
 
 
@@ -2406,100 +2969,10 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	_settle_slot_parts()
 	slot_part_ids = _slots_from(slot_part_ids)
 	if equipped_engine_id == NO_ENGINE_ID:
-		_clear_hood_slots(slot_part_ids)
+		_clear_engine_parts(slot_part_ids)
 	engine_bolts = _hood_bolts_from(rec.get("engine_bolts", null))
 	plug_wires = bool(rec.get("plug_wires", true))
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
-
-
-func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
-	if part_id.is_empty():
-		return
-	if slot == "slot" or slot == "part":
-		_take_copies_from_other_cars(part_id)
-		return
-	var key := "engine_id"
-	if slot == "transmission":
-		key = "gearbox_id"
-	elif slot == "wheels":
-		key = "wheel_id"
-	# The active car has this copy, even if its record does not say so yet. A spare copy
-	# fitted leaves the other cars alone; only a copy that is not spare comes off one.
-	var excess := 1 - _owned_list(slot).count(part_id)
-	for raw_id in car_records.keys():
-		var other: Variant = car_records[raw_id]
-		if str(raw_id) != current_car_id and typeof(other) == TYPE_DICTIONARY and str((other as Dictionary).get(key, "")) == part_id:
-			excess += 1
-	for raw_id in car_records.keys():
-		if excess <= 0:
-			return
-		var car_id := str(raw_id)
-		if car_id == current_car_id:
-			continue
-		var stored: Variant = car_records[raw_id]
-		if typeof(stored) != TYPE_DICTIONARY:
-			continue
-		var rec: Dictionary = stored
-		if str(rec.get(key, "")) != part_id:
-			continue
-		var stock := _stock_part_id(car_id, slot)
-		if part_id == stock:
-			continue
-		# That car gets its own engine or gearbox back if it is still owned; otherwise it
-		# goes without. Wheels always fall back to its own set.
-		if slot == "engine" and not owned_engine_ids.has(stock):
-			stock = NO_ENGINE_ID
-		elif slot == "transmission" and not owned_gearbox_ids.has(stock):
-			stock = NO_GEARBOX_ID
-		rec[key] = stock
-		excess -= 1
-		_release_condition(rec, slot)
-		if slot == "transmission":
-			rec["gearbox_bolts"] = _tight_bolts()
-		car_records[car_id] = rec
-
-
-## Parts from the parts list come in copies, stock ones too, and come off the other cars
-## only until no more copies are fitted than are owned. A slot that can be empty is left
-## empty there; the exhaust manifolds and rear end fall back to stock.
-func _take_copies_from_other_cars(part_id: String) -> void:
-	var excess := _copies_fitted(part_id) - part_count(part_id)
-	for raw_id in car_records.keys():
-		if excess <= 0:
-			return
-		if str(raw_id) == current_car_id or typeof(car_records[raw_id]) != TYPE_DICTIONARY:
-			continue
-		var rec: Dictionary = car_records[raw_id]
-		var slots := _slots_from(rec.get("slot_parts", null))
-		for key in ALL_SLOTS:
-			if excess > 0 and str(slots[key]) == part_id:
-				slots[key] = NO_PART_ID if REMOVABLE_SLOTS.has(key) else STOCK_SLOT_PARTS[key]
-				_release_condition(rec, "slot:" + key)
-				excess -= 1
-		var kept: Array[String] = []
-		for item in _string_array(rec.get("part_ids", [])):
-			if excess > 0 and item == part_id:
-				_release_condition(rec, "bolt:" + item)
-				excess -= 1
-			else:
-				kept.append(item)
-		rec["slot_parts"] = _slots_from(slots)
-		rec["part_ids"] = kept
-		car_records[raw_id] = rec
-
-
-## Copies of `part_id` fitted to every car, the active one included, in slots or as bolt-ons.
-func _copies_fitted(part_id: String) -> int:
-	var count := slot_part_ids.values().count(part_id) + equipped_part_ids.count(part_id)
-	for raw_id in car_records.keys():
-		if str(raw_id) == current_car_id:
-			continue
-		var stored: Variant = car_records[raw_id]
-		if typeof(stored) == TYPE_DICTIONARY:
-			var rec: Dictionary = stored
-			count += _slots_from(rec.get("slot_parts", null)).values().count(part_id)
-			count += _string_array(rec.get("part_ids", [])).count(part_id)
-	return count
 
 
 func _cars_for_save() -> Dictionary:
@@ -2509,28 +2982,32 @@ func _cars_for_save() -> Dictionary:
 		var stored: Variant = car_records[raw_id]
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
-		var rec: Dictionary = stored
-		var paint: Color = car_color
-		var stored_paint: Variant = rec.get("color", null)
-		if stored_paint is Color:
-			paint = stored_paint
-		out[str(raw_id)] = {
-			"model_id": str(rec.get("model_id", car_model_id(str(raw_id)))),
-			"color": [paint.r, paint.g, paint.b, paint.a],
-			"fuel": float(rec.get("fuel", fuel)),
-			"engine_id": str(rec.get("engine_id", "")),
-			"gearbox_id": str(rec.get("gearbox_id", "")),
-			"gearbox_bolts": _bolts_from(rec.get("gearbox_bolts", null)),
-			"wheel_id": str(rec.get("wheel_id", "")),
-			"part_ids": _string_array(rec.get("part_ids", [])),
-			"slot_parts": _slots_from(rec.get("slot_parts", null)),
-			"engine_bolts": _hood_bolts_from(rec.get("engine_bolts", null)),
-			"plug_wires": bool(rec.get("plug_wires", true)),
-			"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
-		}
-		if rec.has("conditions"):
-			out[str(raw_id)]["conditions"] = _mount_conditions_from(rec["conditions"])
+		out[str(raw_id)] = _record_to_save(stored, car_model_id(str(raw_id)))
 	return out
+
+
+func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
+	var paint: Color = car_color
+	var stored_paint: Variant = rec.get("color", null)
+	if stored_paint is Color:
+		paint = stored_paint
+	var row := {
+		"model_id": str(rec.get("model_id", model_id)),
+		"color": [paint.r, paint.g, paint.b, paint.a],
+		"fuel": float(rec.get("fuel", fuel)),
+		"engine_id": str(rec.get("engine_id", "")),
+		"gearbox_id": str(rec.get("gearbox_id", "")),
+		"gearbox_bolts": _bolts_from(rec.get("gearbox_bolts", null)),
+		"wheel_id": str(rec.get("wheel_id", "")),
+		"part_ids": _string_array(rec.get("part_ids", [])),
+		"slot_parts": _slots_from(rec.get("slot_parts", null)),
+		"engine_bolts": _hood_bolts_from(rec.get("engine_bolts", null)),
+		"plug_wires": bool(rec.get("plug_wires", true)),
+		"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
+	}
+	if rec.has("conditions"):
+		row["conditions"] = _mount_conditions_from(rec["conditions"])
+	return row
 
 
 func _load_saved_cars(d: Dictionary) -> void:
@@ -2588,7 +3065,29 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 	}
 	if row.has("conditions"):
 		rec["conditions"] = _mount_conditions_from(row["conditions"])
+	_move_record_bolt_ons_to_slots(rec)
+	if rec["engine_id"] == NO_ENGINE_ID:
+		_clear_record_engine_parts(rec)
 	return rec
+
+
+## Older saves keep some parts that now have a slot with the bolt-ons (see
+## `_settle_slot_parts()`, the same for the car in the bay). The stock part in that slot
+## is only a stand-in and is not owned yet.
+func _move_record_bolt_ons_to_slots(rec: Dictionary) -> void:
+	var slots: Dictionary = rec["slot_parts"]
+	var conditions: Dictionary = rec.get("conditions", {})
+	var kept: Array[String] = []
+	for part_id in _string_array(rec.get("part_ids", [])):
+		var slot := part_slot(part_id)
+		if slot.is_empty():
+			kept.append(part_id)
+			continue
+		slots[slot] = part_id
+		if conditions.has("bolt:" + part_id):
+			conditions["slot:" + slot] = conditions["bolt:" + part_id]
+			conditions.erase("bolt:" + part_id)
+	rec["part_ids"] = kept
 
 
 func _note_instance_serial(instance_id: String) -> void:

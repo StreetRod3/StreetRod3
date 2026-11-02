@@ -3,7 +3,6 @@ extends Node3D
 ## Night drive-in. Click the man, pick a rival, and their car drives in from the left.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
-const _CarFile := preload("res://scripts/car_file.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 ## Upright height of the rival's head, in meters.
@@ -707,7 +706,7 @@ func _build_opponent_popup() -> void:
 	_opp_root = built["root"]
 	_opp_box = built["box"]
 	_opp_panel = built["panel"]
-	var hint := _hint_label("He's waiting by the cars.")
+	var hint := _hint_label("They're waiting by the cars.")
 	_opp_box.add_child(hint)
 	_opp_list = VBoxContainer.new()
 	_opp_list.add_theme_constant_override(&"separation", 10)
@@ -850,7 +849,12 @@ func _hint_label(text: String) -> Label:
 
 
 func _opponent_button(opp: Dictionary) -> Button:
-	return _menu_button("%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))])
+	var label := "%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))]
+	if GameState.opponent_needs_engine(opp):
+		var btn := _menu_button(label + " (no engine)")
+		btn.disabled = true
+		return btn
+	return _menu_button(label)
 
 
 func _opponent_color(opp: Dictionary) -> Color:
@@ -1325,6 +1329,8 @@ func _refresh_race_popup() -> void:
 	var rival := str(opp.get("name", "Rival"))
 	var car_name := str(opp.get("car_name", "car"))
 	_race_hint.text = "Racing %s in a %s.\nTank %.0f L." % [rival, car_name, GameState.fuel]
+	if GameState.tires_worn_out():
+		_race_hint.text += "\nYour tires are worn out and will blow."
 	_drag_btn.text = "Drag race\nQuarter mile · %.0f L" % GameState.race_fuel_liters(GameState.RACE_DRAG)
 	_road_btn.text = "Road race\n2.4 km with turns · %.0f L" % GameState.race_fuel_liters(GameState.RACE_ROAD)
 
@@ -1365,7 +1371,7 @@ func _show_road_stake_menu() -> void:
 	if _chosen_index >= 0 and _chosen_index < GameState.opponents.size():
 		opp = GameState.opponents[_chosen_index]
 	var car_name := str(opp.get("car_name", "their car"))
-	_road_stake_hint.text = "Side bet on the road course.\nTheir car: %s\nBankroll: $%d" % [car_name, GameState.money]
+	_road_stake_hint.text = "Side bet on the road course.\n%s car: %s\nBankroll: $%d" % [GameState.opponent_pronoun(opp, "possessive").capitalize(), car_name, GameState.money]
 	_road_stake_low.disabled = GameState.money < GameState.ROAD_STAKE_LOW
 	_road_stake_high.disabled = GameState.money < GameState.ROAD_STAKE_HIGH
 	_road_stake_pink.disabled = false
@@ -1402,20 +1408,15 @@ func _open_hood_peek() -> void:
 	if _chosen_index < 0 or _chosen_index >= GameState.opponents.size():
 		return
 	var opp: Dictionary = GameState.opponents[_chosen_index]
-	var spec: Dictionary = _CarFile.load_path(str(opp.get("car_file", "")))
-	var errors: Variant = spec.get("errors", [])
-	if typeof(errors) == TYPE_ARRAY and not (errors as Array).is_empty():
-		return
-	var engine: Variant = spec.get("engine", {})
-	if typeof(engine) != TYPE_DICTIONARY:
-		return
-	var engine_id := str((engine as Dictionary).get("id", ""))
+	var engine_id := str(opp.get("engine", ""))
 	if engine_id.is_empty():
 		return
 	GameState.drive_in_rival_index = _chosen_index
 	GameState.drive_in_hood_seen = true
 	GameState.hood_peek = {
 		"engine_id": engine_id,
+		"hp": float(opp.get("engine_hp", opp.get("hp", 0.0))),
+		"parts": GameState.opponent_hood_parts(opp),
 		"car_name": str(opp.get("car_name", "Car")),
 		"color": _opponent_color(opp),
 	}
@@ -1578,6 +1579,7 @@ func _on_road_stake_back() -> void:
 
 func _start_race(race_type: String, stake: int, pink_slips: bool = false) -> void:
 	_forget_drive_in_visit()
+	GameState.note_race_started()
 	GameState.selected_opponent_id = _chosen_index
 	GameState.selected_race_type = race_type
 	GameState.race_stake = stake

@@ -13,9 +13,9 @@ To reproduce:
 3. Switch to another car, then switch back.
 4. The stock engine is in spare parts again and can be sold again.
 
-Cause: `_ensure_stock_fitment()` in `scripts/game_state.gd` adds the car's stock engine to `owned_engine_ids` whenever no copy is owned, even if the car has a different engine fitted. It does the same for stock wheels, but those are protected because `sell_trouble()` refuses to sell a set of wheels one of your cars came on.
+Cause: `_ensure_stock_fitment()` in `scripts/game_state.gd` adds the car's stock engine to `owned_engine_ids` whenever no copy is owned, even if the car has a different engine fitted.
 
-Possible fix: remove those two appends. `_own_fitted_parts()` now makes sure everything fitted to a car is owned, so they may no longer be needed. This has not been tested.
+Possible fix: remove that append, as was done for stock wheels. `_own_fitted_parts()` now makes sure everything fitted to a car is owned, so they may no longer be needed. This has not been tested.
 
 ## An empty bay is not kept when a game is loaded
 
@@ -36,12 +36,12 @@ Stripping a car and selling its parts pays more than the car costs, so buying ca
 
 | Car | Price in the paper | Its stock parts at the paper's prices | Those parts at the lowest offers (half price) |
 | --- | --- | --- | --- |
-| Corvette 1956 | $1350 | $2925 | $1462 |
-| Fairlane 500 | $1050 | $2225 | $1112 |
-| Ford Coupe 1932 | $1250 | $3085 | $1542 |
-| Corvette 1962 | $1500 | $2925 | $1462 |
+| Corvette 1956 | $1350 | $3205 | $1602 |
+| Fairlane 500 | $1050 | $2505 | $1252 |
+| Ford Coupe 1932 | $1250 | $3365 | $1682 |
+| Corvette 1962 | $1500 | $3205 | $1602 |
 
-A buyer offers between half and nine tenths of a part's price. At the lowest offers that is already a profit on every car here but the 1962 Corvette, and offers lean higher the better a part's condition. The bare car can then be sold as well: a car is never worth less than a tenth of its price in the paper.
+A buyer offers between half and nine tenths of a part's price. At the lowest offers that is already a profit on every car here, and offers lean higher the better a part's condition. The bare car can then be sold as well: a car is never worth less than a tenth of its price in the paper.
 
 Possible fix: set real part prices, so that the stock parts together come to less than the car.
 

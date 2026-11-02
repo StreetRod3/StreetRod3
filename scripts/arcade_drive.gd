@@ -94,7 +94,7 @@ func step(
 	var speed_before := forward_speed
 	var accel_scale := OFFROAD_ACCEL_SCALE if _off_road else 1.0
 	if throttle and not shifting:
-		forward_speed += gear_accel * accel_scale * _grip_accel_scale() * delta
+		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * delta
 	elif brake:
 		forward_speed -= BRAKING * delta
 	else:
@@ -136,8 +136,8 @@ func hold(body: CharacterBody3D, delta: float, car_center: Vector3) -> void:
 	_apply_heading(body, car_center)
 
 
-func _grip_accel_scale() -> float:
-	return 1.0 + (_wheel_grip - 3.0) * 0.04
+static func grip_accel_scale(grip_rating: float) -> float:
+	return 1.0 + (grip_rating - 3.0) * 0.04
 
 
 func _grip_steer_scale() -> float:

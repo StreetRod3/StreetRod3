@@ -1,11 +1,20 @@
 {
   "names": [
-    { "name": "Vaelor", "skin": [0.76, 0.58, 0.44], "head": "res://assets/opponents/head-hair.glb" },
-    { "name": "Hellmark", "skin": [0.45, 0.30, 0.22], "head": "res://assets/opponents/head-hair.glb" },
-    { "name": "TSJ", "skin": [0.90, 0.76, 0.64], "head": "res://assets/opponents/head-hair.glb" },
-    { "name": "MP81", "skin": [0.62, 0.46, 0.32], "head": "res://assets/opponents/head-hair.glb" },
-    { "name": "CDoubleJJ", "skin": [0.55, 0.36, 0.26], "head": "res://assets/opponents/head.glb" },
-    { "name": "Maxle", "skin": [0.34, 0.22, 0.16], "head": "res://assets/opponents/head.glb" },
-    { "name": "Kshyshieck", "skin": [0.93, 0.78, 0.68], "head": "res://assets/opponents/head.glb" }
+    { "name": "Vaelor", "gender": "man", "skin": [0.76, 0.58, 0.44], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "Hellmark", "gender": "woman", "skin": [0.45, 0.30, 0.22], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "TSJ", "gender": "man", "skin": [0.90, 0.76, 0.64], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "MP81", "gender": "man", "skin": [0.62, 0.46, 0.32], "head": "res://assets/opponents/head-hair.glb" },
+    { "name": "CDoubleJJ", "gender": "man", "skin": [0.55, 0.36, 0.26], "head": "res://assets/opponents/head.glb" },
+    { "name": "Maxle", "gender": "man", "skin": [0.34, 0.22, 0.16], "head": "res://assets/opponents/head.glb" },
+    { "name": "Kshyshieck", "gender": "man", "skin": [0.93, 0.78, 0.68], "head": "res://assets/opponents/head.glb" }
+  ],
+  "ladder": [
+    {"car": "fairlane-1957", "tires": "tires-bias", "accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.4},
+    {"car": "chevy-styleline-1950", "tires": "tires-bias", "accel_scale": 0.28, "vmax_scale": 0.9, "shift_time": 0.36},
+    {"car": "sr1-corvette-1956", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.9, "shift_time": 0.34},
+    {"car": "corvette-1962", "engine": "v8-327", "gearbox": "gb_man4", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.92, "shift_time": 0.28},
+    {"car": "ford-coupe-1932", "engine": "v8-327", "gearbox": "gb_man4", "tires": "tires-radial", "accel_scale": 0.32, "vmax_scale": 0.93, "shift_time": 0.26},
+    {"car": "corvette-1962", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "parts": {"cam": "cam"}, "accel_scale": 0.33, "vmax_scale": 0.94, "shift_time": 0.22},
+    {"car": "ford-coupe-1932", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "parts": {"cam": "cam", "carb": "carb", "distributor": "dist-dualpoint"}, "accel_scale": 0.34, "vmax_scale": 0.95, "shift_time": 0.18}
   ]
 }

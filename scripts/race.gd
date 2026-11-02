@@ -1,5 +1,6 @@
 extends Node3D
 
+const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
@@ -49,6 +50,8 @@ var _fuel_used: bool = false
 var _opponent_finished: bool = false
 var _is_road: bool = false
 var _elapsed: float = 0.0
+## How far from the finish the player's tires blow out, or below zero if they will last.
+var _tire_blowout_m: float = -1.0
 var _nav = _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
@@ -77,6 +80,7 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_RACE
 	GameState.update_music()
 	_is_road = GameState.selected_race_type == GameState.RACE_ROAD
+	_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
 	_setup_race_layout()
 	_result.visible = false
 	_build_result_bubble()
@@ -232,6 +236,9 @@ func _process(delta: float) -> void:
 	_hud_dist.text = "To finish: %.1f m" % _distance_to_finish()
 	var spd: float = _player.get_forward_speed()
 	_hud_speed.text = "Speed: %.0f km/h" % (spd * 3.6)
+	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
+		_show_tire_blowout()
+		return
 	_maybe_finish_by_progress()
 
 
@@ -327,7 +334,23 @@ func _show_engine_blown() -> void:
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew the engine!"
 	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
-		text += "\nThey took your car!"
+		text += "\n" + _took_your_car()
+	text += _lost_bucks_line(payout)
+	_show_bubble(text, GameState.SCENE_GARAGE)
+
+
+func _show_tire_blowout() -> void:
+	_race_over = true
+	_end_race_ui()
+	var bang := AudioStreamPlayer.new()
+	bang.stream = _ShopSounds.stream("blowout")
+	add_child(bang)
+	bang.play()
+	GameState.blow_tires()
+	var payout := GameState.apply_race_stake(false)
+	var text := "You blew a tire!\nThat set of tires is finished."
+	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
+		text += "\n" + _took_your_car()
 	text += _lost_bucks_line(payout)
 	_show_bubble(text, GameState.SCENE_GARAGE)
 
@@ -341,11 +364,13 @@ func _show_wreck() -> void:
 	GameState.race_pink_slips = false
 	var payout := GameState.apply_race_stake(false)
 	GameState.wreck_active_car()
-	_show_bubble("Lucky you weren't killed, 'cause the car" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+	_show_bubble("Lucky you weren't killed, 'cause the car is totaled." + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 
 
 func _show_result(player_won: bool) -> void:
 	_end_race_ui()
+	if player_won:
+		GameState.note_race_win()
 	var payout := GameState.apply_race_stake(player_won)
 	var pink := GameState.apply_pink_slips(player_won)
 	if player_won:
@@ -357,11 +382,15 @@ func _show_result(player_won: bool) -> void:
 			_show_bubble("You just won the race!", GameState.SCENE_DRIVE_IN)
 		return
 	if pink == GameState.PINK_LOST:
-		_show_bubble("They took your car!" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+		_show_bubble(_took_your_car() + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 	elif payout < 0:
 		_show_bubble("You lost %d bucks!" % -payout, GameState.SCENE_DRIVE_IN)
 	else:
 		_show_bubble("You lost the race!", GameState.SCENE_DRIVE_IN)
+
+
+func _took_your_car() -> String:
+	return "%s took your car!" % GameState.opponent_pronoun(GameState.selected_opponent(), "subject").capitalize()
 
 
 func _lost_bucks_line(payout: int) -> String:
