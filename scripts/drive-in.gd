@@ -696,7 +696,7 @@ func _build_opponent_popup() -> void:
 	_opp_root = built["root"]
 	_opp_box = built["box"]
 	_opp_panel = built["panel"]
-	var hint := _hint_label("He's waiting by the cars.")
+	var hint := _hint_label("They're waiting by the cars.")
 	_opp_box.add_child(hint)
 	_opp_list = VBoxContainer.new()
 	_opp_list.add_theme_constant_override(&"separation", 10)
@@ -1313,7 +1313,7 @@ func _show_road_stake_menu() -> void:
 	if _chosen_index >= 0 and _chosen_index < GameState.opponents.size():
 		opp = GameState.opponents[_chosen_index]
 	var car_name := str(opp.get("car_name", "their car"))
-	_road_stake_hint.text = "Side bet on the road course.\nTheir car: %s\nBankroll: $%d" % [car_name, GameState.money]
+	_road_stake_hint.text = "Side bet on the road course.\n%s car: %s\nBankroll: $%d" % [GameState.opponent_pronoun(opp, "possessive").capitalize(), car_name, GameState.money]
 	_road_stake_low.disabled = GameState.money < GameState.ROAD_STAKE_LOW
 	_road_stake_high.disabled = GameState.money < GameState.ROAD_STAKE_HIGH
 	_road_stake_pink.disabled = false

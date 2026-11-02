@@ -327,7 +327,7 @@ func _show_engine_blown() -> void:
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew the engine!"
 	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
-		text += "\nThey took your car!"
+		text += "\n" + _took_your_car()
 	text += _lost_bucks_line(payout)
 	_show_bubble(text, GameState.SCENE_GARAGE)
 
@@ -359,11 +359,15 @@ func _show_result(player_won: bool) -> void:
 			_show_bubble("You just won the race!", GameState.SCENE_DRIVE_IN)
 		return
 	if pink == GameState.PINK_LOST:
-		_show_bubble("They took your car!" + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+		_show_bubble(_took_your_car() + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 	elif payout < 0:
 		_show_bubble("You lost %d bucks!" % -payout, GameState.SCENE_DRIVE_IN)
 	else:
 		_show_bubble("You lost the race!", GameState.SCENE_DRIVE_IN)
+
+
+func _took_your_car() -> String:
+	return "%s took your car!" % GameState.opponent_pronoun(GameState.selected_opponent(), "subject").capitalize()
 
 
 func _lost_bucks_line(payout: int) -> String:

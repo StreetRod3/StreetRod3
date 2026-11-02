@@ -237,12 +237,20 @@ var newspaper_colors: Dictionary = {}
 
 ## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
+## A rival's pronouns by their `gender` in `OPPONENTS_PATH`. Anyone with none listed is
+## they/them: a name does not say.
+const _PRONOUNS := {
+	"man": {"subject": "he", "possessive": "his"},
+	"woman": {"subject": "she", "possessive": "her"},
+}
+const _PRONOUNS_DEFAULT := {"subject": "they", "possessive": "their"}
 ## What each new rival drives, in the order they are met.
 var _rival_ladder: Array[Dictionary] = []
 var _opponent_names: Array[String] = []
 ## Skin and head model from `OPPONENTS_PATH`, keyed by rival name.
 var _opponent_skins: Dictionary = {}
 var _opponent_heads: Dictionary = {}
+var _opponent_genders: Dictionary = {}
 
 const DEFAULT_GEARBOX_ID := "gb_auto3"
 
@@ -985,6 +993,13 @@ func opponent_head(opp_name: String) -> String:
 	return path
 
 
+## A rival's pronoun, "subject" or "possessive", in lower case.
+func opponent_pronoun(opp: Dictionary, form: String) -> String:
+	_opponent_name_pool()
+	var gender := str(_opponent_genders.get(str(opp.get("name", "")), ""))
+	return str(_PRONOUNS.get(gender, _PRONOUNS_DEFAULT)[form])
+
+
 func _index_of_opponent(opp_name: String) -> int:
 	for i in opponents.size():
 		if str(opponents[i].get("name", "")) == opp_name:
@@ -1073,14 +1088,17 @@ func _load_opponent_names() -> Array[String]:
 		return names
 	_opponent_skins.clear()
 	_opponent_heads.clear()
+	_opponent_genders.clear()
 	_rival_ladder = _dict_list(root.get("ladder", []))
 	for item in listed:
 		var name := ""
 		var skin := Color(0.76, 0.58, 0.44)
 		var head := DEFAULT_OPPONENT_HEAD
+		var gender := ""
 		if typeof(item) == TYPE_DICTIONARY:
 			var row: Dictionary = item
 			name = str(row.get("name", "")).strip_edges()
+			gender = str(row.get("gender", ""))
 			skin = _color_from_save(row.get("skin", null), skin)
 			var listed_head := str(row.get("head", "")).strip_edges()
 			if not listed_head.is_empty():
@@ -1092,6 +1110,7 @@ func _load_opponent_names() -> Array[String]:
 		names.append(name)
 		_opponent_skins[name] = skin
 		_opponent_heads[name] = head
+		_opponent_genders[name] = gender
 	return names
 
 
