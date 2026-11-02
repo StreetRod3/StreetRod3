@@ -379,6 +379,90 @@ radial_segments = 12
 [sub_resource type="BoxShape3D" id="LiftShape"]
 size = Vector3(1.6, 0.6, 0.45)
 
+[sub_resource type="StandardMaterial3D" id="VodkaGlassMat"]
+transparency = 1
+albedo_color = Color(0.78, 0.9, 0.96, 0.38)
+metallic = 0.12
+roughness = 0.06
+
+[sub_resource type="StandardMaterial3D" id="VodkaLiquidMat"]
+transparency = 1
+albedo_color = Color(0.92, 0.94, 0.96, 0.55)
+roughness = 0.15
+
+[sub_resource type="StandardMaterial3D" id="VodkaLabelMat"]
+albedo_color = Color(0.95, 0.94, 0.9, 1)
+roughness = 0.55
+
+[sub_resource type="StandardMaterial3D" id="VodkaRedMat"]
+albedo_color = Color(0.62, 0.08, 0.1, 1)
+roughness = 0.4
+
+[sub_resource type="StandardMaterial3D" id="VodkaCapMat"]
+albedo_color = Color(0.72, 0.12, 0.1, 1)
+metallic = 0.35
+roughness = 0.32
+
+[sub_resource type="CylinderMesh" id="VodkaBodyMesh"]
+material = SubResource("VodkaGlassMat")
+top_radius = 0.06
+bottom_radius = 0.06
+height = 0.22
+radial_segments = 20
+
+[sub_resource type="CylinderMesh" id="VodkaLiquidMesh"]
+material = SubResource("VodkaLiquidMat")
+top_radius = 0.05
+bottom_radius = 0.05
+height = 0.16
+radial_segments = 16
+
+[sub_resource type="CylinderMesh" id="VodkaShoulderMesh"]
+material = SubResource("VodkaGlassMat")
+top_radius = 0.022
+bottom_radius = 0.06
+height = 0.05
+radial_segments = 20
+
+[sub_resource type="CylinderMesh" id="VodkaNeckMesh"]
+material = SubResource("VodkaGlassMat")
+top_radius = 0.02
+bottom_radius = 0.02
+height = 0.1
+radial_segments = 16
+
+[sub_resource type="CylinderMesh" id="VodkaFoilMesh"]
+material = SubResource("VodkaCapMat")
+top_radius = 0.022
+bottom_radius = 0.022
+height = 0.028
+radial_segments = 16
+
+[sub_resource type="CylinderMesh" id="VodkaCapMesh"]
+material = SubResource("VodkaCapMat")
+top_radius = 0.024
+bottom_radius = 0.024
+height = 0.032
+radial_segments = 16
+
+[sub_resource type="CylinderMesh" id="VodkaLabelMesh"]
+material = SubResource("VodkaLabelMat")
+top_radius = 0.063
+bottom_radius = 0.063
+height = 0.09
+radial_segments = 20
+
+[sub_resource type="CylinderMesh" id="VodkaStripeMesh"]
+material = SubResource("VodkaRedMat")
+top_radius = 0.065
+bottom_radius = 0.065
+height = 0.014
+radial_segments = 20
+
+[sub_resource type="CylinderShape3D" id="VodkaShape"]
+height = 0.44
+radius = 0.09
+
 [node name="Garage" type="Node3D" unique_id=3918559]
 script = ExtResource("1")
 
@@ -589,6 +673,53 @@ mesh = SubResource("ChartLineMesh")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/ShelfOther/InteractFolder" unique_id=210046017]
 shape = SubResource("ChartShape")
+
+[node name="InteractVodka" type="StaticBody3D" parent="InteractDesk" unique_id=210090001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.97, 0.452, -0.12)
+
+[node name="Body" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.11, 0)
+mesh = SubResource("VodkaBodyMesh")
+
+[node name="Liquid" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0)
+mesh = SubResource("VodkaLiquidMesh")
+
+[node name="Shoulder" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.245, 0)
+mesh = SubResource("VodkaShoulderMesh")
+
+[node name="Neck" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090005]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.32, 0)
+mesh = SubResource("VodkaNeckMesh")
+
+[node name="Foil" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090006]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.34, 0)
+mesh = SubResource("VodkaFoilMesh")
+
+[node name="Cap" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090007]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.386, 0)
+mesh = SubResource("VodkaCapMesh")
+
+[node name="Label" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090008]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.12, 0)
+mesh = SubResource("VodkaLabelMesh")
+
+[node name="Stripe" type="MeshInstance3D" parent="InteractDesk/InteractVodka" unique_id=210090009]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.152, 0)
+mesh = SubResource("VodkaStripeMesh")
+
+[node name="Word" type="Label3D" parent="InteractDesk/InteractVodka" unique_id=210090010]
+transform = Transform3D(-1, 0, 0, 0, 1, 0, 0, 0, -1, 0, 0.105, -0.068)
+text = "VODKA"
+font_size = 32
+pixel_size = 0.0011
+modulate = Color(0.55, 0.06, 0.08, 1)
+outline_size = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/InteractVodka" unique_id=210090011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
+shape = SubResource("VodkaShape")
 
 [node name="Walls" type="Node3D" parent="." unique_id=730314795]
 
