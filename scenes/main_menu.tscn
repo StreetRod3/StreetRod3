@@ -51,7 +51,7 @@ text = "New Game"
 [node name="LoadGameButton" type="Button" parent="Margin/Row/Menu" unique_id=668962882]
 custom_minimum_size = Vector2(280, 44)
 layout_mode = 2
-text = "Load Game"
+text = "Old Game"
 
 [node name="SettingsButton" type="Button" parent="Margin/Row/Menu" unique_id=35875293]
 custom_minimum_size = Vector2(280, 44)

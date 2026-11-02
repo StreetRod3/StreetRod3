@@ -206,6 +206,9 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	_stats_label = _stats_panel.get_node("Panel/Margin/VBox/StatsText") as Label
 	_reset_clock_menu_page()
+	var save_btn := $GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn as Button
+	_mark_switch_button(save_btn)
+	save_btn.tooltip_text = "Enter"
 	_clock_menu.visible = false
 	_stats_panel.visible = false
 	_spray_menu.visible = false
@@ -835,10 +838,12 @@ func _sync_menu_nav() -> void:
 		_nav.setup([
 			$GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/LoadBtn,
+			$GarageUI/ClockMenu/Panel/Margin/VBox/NewBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/SettingsBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/QuitBtn,
 			$GarageUI/ClockMenu/Panel/Margin/VBox/CloseBtn,
 		])
+		_nav.select(0)
 	elif _stats_panel.visible:
 		_nav.setup([$GarageUI/StatsPanel/Panel/Margin/VBox/StatsClose])
 	elif _spray_menu.visible:
@@ -2015,6 +2020,10 @@ func _input(event: InputEvent) -> void:
 	if _spares_list_open():
 		_on_spares_sell()
 		get_viewport().set_input_as_handled()
+		return
+	if _clock_menu.visible and _clock_main.visible:
+		_on_clock_save_pressed()
+		get_viewport().set_input_as_handled()
 
 
 func _is_enter_key(event: InputEvent) -> bool:
@@ -2457,6 +2466,12 @@ func _on_clock_save_pressed() -> void:
 
 func _on_clock_load_pressed() -> void:
 	_open_save_slots(false)
+
+
+func _on_clock_new_pressed() -> void:
+	GameState.new_game()
+	GameState.current_scene_path = GameState.SCENE_GARAGE
+	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 
 
 ## Puts the clock away and brings up the slot list for saving or loading.

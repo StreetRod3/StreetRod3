@@ -180,7 +180,8 @@ var race_stake: int = 0
 var race_pink_slips: bool = false
 ## The next garage visit says the roster is empty. Not saved: only the trip straight back.
 var cars_just_gone: bool = false
-## The next garage visit rolls the car in from outside. Set by the drive-in. Not saved.
+## The next garage visit rolls the car in from outside. Set by the drive-in, the gas
+## station, and a car just bought from the paper. Not saved.
 var drive_into_garage: bool = false
 ## The direct-speed driving model from before the tire simulation.
 var arcade_drive: bool = true
