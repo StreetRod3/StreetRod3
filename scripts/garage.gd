@@ -157,6 +157,7 @@ const _TOOLTIP_DOORS_NO_ENGINE := "Needs an engine to drive out"
 const _TOOLTIP_DOORS_NO_RUN := "Won't start: %s"
 const _TOOLTIP_DOORS_NO_GEARBOX := "Needs a transmission to drive out"
 const _TOOLTIP_DOORS_LOOSE := "Tighten the transmission bolts to drive out"
+const _TOOLTIP_DOORS_NO_TIRES := "Needs tires to drive out"
 const _SLOT_NAMES := {
 	"manifold": "Exhaust manifolds",
 	"exhaust": "Exhaust",
@@ -481,6 +482,8 @@ func _tooltip_text_at_mouse() -> String:
 		return _TOOLTIP_DOORS_NO_GEARBOX
 	if kind == &"doors" and not GameState.is_gearbox_bolted():
 		return _TOOLTIP_DOORS_LOOSE
+	if (kind == &"doors" or kind == &"fuel") and not GameState.has_tires():
+		return _TOOLTIP_DOORS_NO_TIRES
 	return str(_TOOLTIPS.get(kind, ""))
 
 
@@ -1509,11 +1512,33 @@ func _rebuild_tires_list() -> void:
 		_parts_list.add_child(_parts_row(part, "part", ""))
 	if spares == 0:
 		_parts_status.text = "No spare tires here. Buy a set in the newspaper."
+	if GameState.has_tires():
+		_parts_list.add_child(_tires_off_row())
+	else:
+		_parts_status.text = "These wheels have no tires. " + _parts_status.text
+
+
+func _tires_off_row() -> HBoxContainer:
+	var row := HBoxContainer.new()
+	var label := Label.new()
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	label.text = "Take the tires off"
+	row.add_child(label)
+	var btn := Button.new()
+	btn.text = "Remove"
+	btn.pressed.connect(_on_tires_off_pressed)
+	row.add_child(btn)
+	return row
+
+
+func _on_tires_off_pressed() -> void:
+	_hide_parts_board()
+	_start_tire_change("")
 
 
 func _rebuild_wheels_list() -> void:
 	_parts_title.text = "Wheels"
-	_parts_status.text = "Pick a set. The jack will change them one corner at a time."
+	_parts_status.text = "Pick a set. The jack will change them one corner at a time. They go on without tires, and the old tires go to spare parts."
 	var count := 0
 	for wheel in GameState.WHEELS:
 		var wheel_id := str(wheel.get("id", ""))
@@ -2734,8 +2759,14 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 	_refresh_hud()
 
 
+## Puts a spare set of tires on the wheels, or with no id takes the set that is on them off.
 func _start_tire_change(tire_id: String) -> void:
-	if _bay_busy or GameState.spare_count(tire_id) <= 0 or GameState.part_slot(tire_id) != GameState.SLOT_TIRES:
+	if _bay_busy:
+		return
+	if tire_id.is_empty():
+		if not GameState.has_tires():
+			return
+	elif GameState.spare_count(tire_id) <= 0 or GameState.part_slot(tire_id) != GameState.SLOT_TIRES:
 		return
 	_bay_busy = true
 	_hide_garage_overlays()
@@ -2745,8 +2776,9 @@ func _start_tire_change(tire_id: String) -> void:
 	_bay_busy = false
 
 
-## The car goes up, all four wheels roll over to the tire machine, it changes the tires on
-## each in turn, and they roll back. The part changes hands once they are back on.
+## The car goes up, all four wheels roll over to the tire machine, it takes off what tires
+## are on each and puts on the new ones, if any, and they roll back. The part changes hands
+## once they are back on.
 func _run_tire_change(tire_id: String) -> void:
 	var car_start := _car_pivot.position
 	await _jack_up(car_start)
@@ -2766,12 +2798,14 @@ func _run_tire_change(tire_id: String) -> void:
 	await _await_all(off)
 	if not is_instance_valid(self):
 		return
+	var had_tires := GameState.has_tires()
 	var pile_new: Array[MeshInstance3D] = []
-	for i in wheels.size():
+	for i in wheels.size() if not tire_id.is_empty() else 0:
 		pile_new.append(_tire_ring(radius, _TIRE_STACK_NEW + Vector3(0.0, _TIRE_THICK * (float(i) + 0.5), 0.0)))
 	var pile_old: Array[MeshInstance3D] = []
 	for i in wheels.size():
-		await _change_tire_on_machine(wheels[i], radius, pile_new[wheels.size() - 1 - i], pile_old, i)
+		var fresh: MeshInstance3D = null if pile_new.is_empty() else pile_new[wheels.size() - 1 - i]
+		await _change_tire_on_machine(wheels[i], radius, had_tires, fresh, pile_old, i)
 		if not is_instance_valid(self):
 			return
 	var back: Array[Callable] = []
@@ -2785,7 +2819,10 @@ func _run_tire_change(tire_id: String) -> void:
 	await _jack_down(car_start)
 	if not is_instance_valid(self):
 		return
-	GameState.fit_slot_part(tire_id)
+	if tire_id.is_empty():
+		GameState.remove_slot_part(GameState.SLOT_TIRES)
+	else:
+		GameState.fit_slot_part(tire_id)
 	if _car_pivot.has_method(&"apply_equipped_wheels"):
 		_car_pivot.call(&"apply_equipped_wheels")
 	_align_wheels_to_floor()
@@ -2856,9 +2893,10 @@ func _roll_wheel(wheel: Dictionary, to: Vector3, radius: float) -> void:
 	wheel["facing"] = await _roll_node(mount, to, radius, duration, wheel["mounted"], wheel["facing"])
 
 
-## Lays one wheel on the turntable, lifts its old tire off onto the old pile, lowers the
-## new one on while the table turns, and stands the wheel back on its spot.
-func _change_tire_on_machine(wheel: Dictionary, radius: float, fresh: MeshInstance3D, pile_old: Array[MeshInstance3D], index: int) -> void:
+## Lays one wheel on the turntable, lifts its old tire off onto the old pile if it has one,
+## lowers the new one on if there is one while the table turns, and stands the wheel back on
+## its spot.
+func _change_tire_on_machine(wheel: Dictionary, radius: float, has_old: bool, fresh: MeshInstance3D, pile_old: Array[MeshInstance3D], index: int) -> void:
 	var mount: Node3D = wheel["mount"]
 	var standing := mount.global_transform
 	var flat := Basis.IDENTITY.scaled(wheel["scale"])
@@ -2869,15 +2907,17 @@ func _change_tire_on_machine(wheel: Dictionary, radius: float, fresh: MeshInstan
 	# Turns for as long as the tires are moving; it is stopped, not waited for.
 	var turn := create_tween().set_loops()
 	turn.tween_method(func(a: float) -> void: mount.global_basis = Basis(Vector3.UP, a) * flat, 0.0, TAU, _T_TIRE_MOVE * 2.0)
-	var old := _tire_ring(radius, on_table)
-	pile_old.append(old)
-	await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(index) + 0.5), 0.0))
-	if not is_instance_valid(mount):
-		return
-	await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
-	if not is_instance_valid(mount):
-		return
-	fresh.visible = false
+	if has_old:
+		var old := _tire_ring(radius, on_table)
+		pile_old.append(old)
+		await _move_tire(old, on_table + Vector3(0.0, 0.3, 0.0), _TIRE_STACK_OLD + Vector3(0.0, _TIRE_THICK * (float(index) + 0.5), 0.0))
+		if not is_instance_valid(mount):
+			return
+	if fresh != null:
+		await _move_tire(fresh, on_table + Vector3(0.0, 0.3, 0.0), on_table)
+		if not is_instance_valid(mount):
+			return
+		fresh.visible = false
 	turn.kill()
 	await _tween_global_xform(mount, standing, _T_TIRE_ON_TABLE)
 

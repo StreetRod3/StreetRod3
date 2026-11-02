@@ -68,7 +68,8 @@ const SLOT_MUFFLER := "muffler"
 ## `SLOT_MUFFLER`, which is the one muffler of a single exhaust.
 const SLOT_MUFFLER_LEFT := "muffler_left"
 const SLOT_DIFFERENTIAL := "differential"
-## The tires on the car's wheels, changed at the tire machine. A car always has a set.
+## The tires on the car's wheels, changed at the tire machine. Wheels can be bare, but a
+## car does not leave the garage on bare wheels.
 const SLOT_TIRES := "tires"
 const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
 ## Parts changed under the hood, from the bottom up: the camshaft in the block, the
@@ -94,7 +95,7 @@ const ALL_SLOTS: Array[String] = [
 ## can come off for good.
 const NO_PART_ID := "none"
 const REMOVABLE_SLOTS: Array[String] = [
-	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT,
+	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_TIRES,
 	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## What every car rolls out of the factory with.
@@ -336,7 +337,11 @@ func is_gearbox_bolted() -> bool:
 
 ## The car can leave the garage under its own power.
 func can_drive() -> bool:
-	return engine_runs() and is_gearbox_bolted()
+	return engine_runs() and is_gearbox_bolted() and has_tires()
+
+
+func has_tires() -> bool:
+	return not slot_part(SLOT_TIRES).is_empty()
 
 
 ## Everything the engine needs is on and bolted down, and the wires are on.
@@ -1222,7 +1227,7 @@ func get_equipped_engine() -> Dictionary:
 
 ## How well the active car's tires hold the road, from 1 to 5.
 func tire_grip() -> float:
-	return _grip_of(slot_part(SLOT_TIRES))
+	return _grip_of(slot_part(SLOT_TIRES)) if has_tires() else 1.0
 
 
 ## The tires on a rival's car. A rival from an older save is on the stock set.
@@ -2022,7 +2027,10 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 		equipped_engine_id = part_id
 		_take_mount_from_other_cars("engine", part_id)
 	else:
+		# Tires do not move across by themselves: the old set goes to spare parts with the
+		# old wheels, and the new wheels go on bare.
 		equipped_wheel_id = part_id
+		slot_part_ids[SLOT_TIRES] = NO_PART_ID
 		_take_mount_from_other_cars("wheels", part_id)
 	_sync_record_from_active()
 	refresh_car_stats()
