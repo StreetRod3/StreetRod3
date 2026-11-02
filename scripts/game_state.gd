@@ -148,6 +148,9 @@ const TIMING_DEG_PER_STEP := 2
 const CFM_PER_CID := 1.5
 const CARB_STARVED := 0.85
 const CARB_BOGGED := 1.8
+## How much a kilogram of wheel counts against a kilogram of car. A wheel's mass has to be
+## spun up as well as carried along.
+const WHEEL_ROTATING_FACTOR := 2.0
 ## Engine sound boost with the exhaust off and the headers open, in dB.
 const OPEN_EXHAUST_DB := 6.0
 ## Outcomes of `apply_pink_slips`.
@@ -1153,6 +1156,40 @@ func get_equipped_engine() -> Dictionary:
 ## How well the active car's tires hold the road, from 1 to 5.
 func tire_grip() -> float:
 	return clampf(float(slot_part(SLOT_TIRES).get("grip", 3.0)), 1.0, 5.0)
+
+
+## How much heavier the active car's wheels make it than the set it came on, in kg as they
+## count on the road. Lighter wheels make this negative.
+func wheel_mass_delta_kg() -> float:
+	var stock := listing_by_id(WHEELS, _stock_part_id(current_car_id, "wheels"))
+	var fitted: Dictionary = listing_by_id(WHEELS, equipped_wheel_id)
+	if stock.is_empty() or fitted.is_empty():
+		return 0.0
+	return (float(fitted.get("mass", 0.0)) - float(stock.get("mass", 0.0))) * WHEEL_ROTATING_FACTOR
+
+
+## The active car's chassis for a race, with its wheels' weight counted in.
+func race_chassis() -> Dictionary:
+	var spec: Variant = car_spec.get("chassis", {})
+	if typeof(spec) != TYPE_DICTIONARY or (spec as Dictionary).is_empty():
+		return {}
+	var chassis: Dictionary = (spec as Dictionary).duplicate()
+	chassis["mass"] = float(chassis.get("mass", 1360.0)) + wheel_mass_delta_kg()
+	return chassis
+
+
+## What the wheels' weight does to the pull in every gear, for the arcade drive, whose
+## acceleration does not come from the mass. 1 on the wheels the car came on.
+func wheel_weight_accel() -> float:
+	var chassis := race_chassis()
+	if chassis.is_empty():
+		return 1.0
+	var mass := float(chassis["mass"])
+	return (mass - wheel_mass_delta_kg()) / maxf(mass, 1.0)
+
+
+func wheel_detail(wheel: Dictionary) -> String:
+	return "%d kg the set" % int(wheel.get("mass", 0))
 
 
 func get_equipped_wheel() -> Dictionary:

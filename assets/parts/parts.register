@@ -91,11 +91,12 @@
   "wheels": [
     {
       "id": "wheels-premium",
-      "name": "Premium wheels",
+      "name": "Premium magnesium wheels",
       "price": 300,
       "path": "res://assets/parts/wheel-premium.glb",
       "scale": 1.35,
-      "height": 0.5
+      "height": 0.5,
+      "mass": 24
     },
     {
       "id": "wheel-c1",
@@ -103,7 +104,8 @@
       "price": 200,
       "path": "res://assets/parts/wheel-c1.glb",
       "scale": 1.35,
-      "height": 0.5
+      "height": 0.5,
+      "mass": 44
     },
     {
       "id": "wheel-std",
@@ -111,7 +113,8 @@
       "price": 120,
       "path": "res://assets/parts/wheel-standard.stl",
       "scale": 1.35,
-      "height": 0.5
+      "height": 0.5,
+      "mass": 48
     }
   ],
   "parts": [

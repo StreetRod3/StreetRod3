@@ -1723,6 +1723,8 @@ func _parts_row_text(item: Dictionary, kind: String) -> String:
 		return "%s  %s" % [name, GameState.part_detail(item)]
 	if kind == "part":
 		return "%s  +%d hp" % [name, int(item.get("hp", 0))]
+	if kind == "wheels":
+		return "%s  %s" % [name, GameState.wheel_detail(item)]
 	return name
 
 

@@ -330,7 +330,7 @@ func _make_engine_card(engine: Dictionary) -> Control:
 
 
 func _make_wheel_card(wheel: Dictionary) -> Control:
-	return _make_swap_card(wheel, GameState.equipped_wheel_id, GameState.owns_wheel(str(wheel.get("id", ""))), "Set of four", _on_buy_wheel)
+	return _make_swap_card(wheel, GameState.equipped_wheel_id, GameState.owns_wheel(str(wheel.get("id", ""))), GameState.wheel_detail(wheel), _on_buy_wheel)
 
 
 func _make_swap_card(part: Dictionary, equipped_id: String, owned: bool, detail: String, handler: Callable) -> Control:
