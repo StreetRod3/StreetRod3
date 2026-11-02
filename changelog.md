@@ -50,6 +50,18 @@ In the garage, T changes the tires and L opens spare parts. Pressing the same ke
 
 The newspaper sells a 1950 Chevy Styleline for $900, a voxel model made in Goxel. It is built to the real car's size (5.02 m long, 1.46 m from the bottom of the body to the roof, 2.92 m wheelbase, about 1,430 kg) and comes with the 265 V8, the 3-speed manual, and the C1 steel wheels. The body takes the car's paint, while the glass, interior, and lights keep their own colors. The bumpers, grille, side trim, and window frames are satin chrome: half metal and very smooth, so they stay bright and catch the lamp, because full mirror chrome turns dark on the model's flat voxel faces. The model has no wheels of its own, so it uses the game's wheels, with the rear ones tucked behind the fender skirts. Car files can now give the body a `ground_clearance` in the model block: when a scene snaps the car to the floor, the body's lowest point stays that far above it instead of resting on the floor. The other cars leave it out and sit as before.
 
+The car's name in the garage now sits in a white box at the top of the screen, as in Street Rod 2, and only the box opens the car list. The list fits its rows without a scrollbar up to eight cars.
+
+Sell it now works, with Street Rod 2's haggling. You type a price into "I'll take $" and press Offer (O or Enter), or Never mind (N or Esc). The buyer has a figure in mind, 75 to 94 percent of what the car is worth, and a price at or under it sells. Over it, the buyer counters with "How about $…?" up to twice, and you can say OK or No and name another price; after the second counter the buyer takes anything within a tenth of it and otherwise says "No thanks!" More than the car is worth gets "No way!" and one more try before "Get lost!", and more than 115 percent gets "You must be kidding!" Under half its worth gets "You must be crazy. I'll take it!" A car is worth the paper's price, plus the price of each part put on it, less the price of each stock part no longer on it, and never less than a tenth of the paper's price. Wear does not change it.
+
+What is on a sold car goes with it, and spare parts stay as they were. A car sold from the bay drives off through the doors and leaves the bay empty, even with other cars in the garage, and the list comes back so another can be rolled in. Selling the last car says "All cars gone!", and opening the list with no cars says "You've got no car, dummy!"
+
+Every car now owns its own copy of what is on it, engines, gearboxes, and wheels as well as parts. Before, buying or winning a car with the same stock part as a spare used up the spare, and two cars with the same engine shared one copy, so pulling that engine off one of them lost it instead of putting it in spare parts. A spare keeps its wear when another car comes in, fitting a spare no longer takes the same part off another car, and a blown engine is always gone. Older saves get the missing copies when they load; a spare already lost does not come back.
+
+Known bugs that are not fixed yet are now listed in `docs/bugs.md`.
+
 ## 2026-11-02
 
 The fuel can in the garage is the jerry can model. It stands on the floor where the old can stood, and clicking it still drives out to the gas station.
+
+Pressing Esc under the hood, on the transmission, under the car, or on the timing screen crashed the game. Esc now leaves those screens the same way Done does. While a parts list is open, Esc still closes the list and stays on the screen.

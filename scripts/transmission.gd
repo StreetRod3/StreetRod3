@@ -180,9 +180,11 @@ func _handle_key(key: InputEventKey) -> void:
 	if key.keycode == KEY_ESCAPE:
 		if _picker.visible:
 			_close_picker()
+			get_viewport().set_input_as_handled()
 		else:
+			# Mark the key first. Leaving drops this scene, and the viewport is gone after that.
+			get_viewport().set_input_as_handled()
 			_on_done_pressed()
-		get_viewport().set_input_as_handled()
 		return
 	if key.keycode == KEY_G and not _picker.visible:
 		_on_select_pressed()

@@ -110,8 +110,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_DOWN, KEY_PAGEDOWN, KEY_KP_SUBTRACT, KEY_MINUS:
 			_step(-1)
 		KEY_ESCAPE:
-			if not key.echo:
-				_on_done_pressed()
+			if key.echo:
+				return
+			# Mark the key first. Leaving drops this scene, and the viewport is gone after that.
+			get_viewport().set_input_as_handled()
+			_on_done_pressed()
+			return
 		_:
 			return
 	get_viewport().set_input_as_handled()

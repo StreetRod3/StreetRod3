@@ -214,7 +214,10 @@ func _handle_key(key: InputEventKey) -> void:
 	if key.echo:
 		return
 	if key.keycode == KEY_ESCAPE:
+		# Mark the key first. Leaving drops this scene, and the viewport is gone after that.
+		get_viewport().set_input_as_handled()
 		_on_done_pressed()
+		return
 	elif _SLOT_KEYCODES.has(key.keycode):
 		_open_picker(str(_SLOT_KEYCODES[key.keycode]))
 	else:
