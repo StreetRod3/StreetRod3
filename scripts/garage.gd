@@ -164,6 +164,7 @@ const _SLOT_NAMES := {
 	"muffler_left": "Left muffler",
 	"differential": "Rear end",
 	"tires": "Tires",
+	"cam": "Camshaft",
 	"heads": "Cylinder heads",
 	"intake": "Intake manifold",
 	"carb": "Carburetor",

@@ -36,10 +36,10 @@ Stripping a car and selling its parts pays more than the car costs, so buying ca
 
 | Car | Price in the paper | Its stock parts at the paper's prices | Those parts at the lowest offers (half price) |
 | --- | --- | --- | --- |
-| Corvette 1956 | $1350 | $3085 | $1542 |
-| Fairlane 500 | $1050 | $2385 | $1192 |
-| Ford Coupe 1932 | $1250 | $3245 | $1622 |
-| Corvette 1962 | $1500 | $3085 | $1542 |
+| Corvette 1956 | $1350 | $3205 | $1602 |
+| Fairlane 500 | $1050 | $2505 | $1252 |
+| Ford Coupe 1932 | $1250 | $3365 | $1682 |
+| Corvette 1962 | $1500 | $3205 | $1602 |
 
 A buyer offers between half and nine tenths of a part's price. At the lowest offers that is already a profit on every car here, and offers lean higher the better a part's condition. The bare car can then be sold as well: a car is never worth less than a tenth of its price in the paper.
 

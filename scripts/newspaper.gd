@@ -115,10 +115,13 @@ func _rebuild_parts() -> void:
 	for part in GameState.PARTS:
 		if str(part.get("slot", "")) == GameState.SLOT_TIRES:
 			_parts_list.add_child(_make_part_card(part))
-	_parts_list.add_child(_heading("ENGINE & CHASSIS"))
+	var bolt_ons: Array[Dictionary] = []
 	for part in GameState.PARTS:
-		if not str(part.get("slot", "")).is_empty():
-			continue
+		if str(part.get("slot", "")).is_empty():
+			bolt_ons.append(part)
+	if not bolt_ons.is_empty():
+		_parts_list.add_child(_heading("ENGINE & CHASSIS"))
+	for part in bolt_ons:
 		_parts_list.add_child(_make_part_card(part))
 	_parts_list.add_child(_heading("UNDER THE HOOD"))
 	for part in GameState.PARTS:

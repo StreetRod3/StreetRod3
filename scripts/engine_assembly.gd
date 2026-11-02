@@ -1,7 +1,7 @@
 extends Node3D
 
 ## An engine built up from its parts as the active car has them: the long block with
-## its front drive (balancer, timing tab, pulleys, belt), the intake, its carburetors, the
+## its front drive (balancer, timing tab, pulleys, belt), the camshaft, the intake, its carburetors, the
 ## distributor, the air cleaner, and the plug wires. Each part is a rig under `frame`,
 ## keyed by `GameState.HOOD_ENGINE`, a hood slot, or `WIRES`, so the hood screen can lift
 ## it out on its own. Parts are built in engine units: +X toward the back of the car, +Y
@@ -48,6 +48,13 @@ const HEAD_BOLT_X := 1.26
 const HEAD_BOLT_Y := 0.3
 const HEAD_DECK_IN := Vector2(0.09, 0.79)
 const HEAD_DECK_OUT := Vector2(0.59, 1.18)
+## The camshaft lies down the valley on top of the block, running back into the
+## distributor's boss, where the heads close in over it. A retainer plate holds its front
+## end, with a bolt each side.
+const CAM_Z := 0.8
+const CAM_FRONT_X := -1.42
+const CAM_BACK_X := 1.0
+const CAM_BOLTS: Array[Vector3] = [Vector3(-1.32, 0.12, 0.765), Vector3(-1.32, -0.12, 0.765)]
 ## The distributor's hold-down clamp bolt, on the boss behind it.
 const CLAMP_BOLT := Vector3(1.16, 0.0, 1.05)
 
@@ -138,6 +145,8 @@ func rebuild(key: String) -> Node3D:
 	match key:
 		GameState.HOOD_ENGINE:
 			_build_engine(rig)
+		GameState.SLOT_CAM:
+			_build_cam(rig, GameState.slot_part(key))
 		GameState.SLOT_HEADS:
 			_build_heads(rig, GameState.slot_part(key))
 		GameState.SLOT_INTAKE:
@@ -165,6 +174,9 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 	match key:
 		GameState.HOOD_ENGINE:
 			for p in MOUNT_BOLTS:
+				out.append(Transform3D(Basis.IDENTITY, p))
+		GameState.SLOT_CAM:
+			for p in CAM_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
 		GameState.SLOT_HEADS:
 			var slope := HEAD_DECK_OUT - HEAD_DECK_IN
@@ -319,6 +331,29 @@ func _build_timing_tab(rig: Node3D) -> void:
 		seg.rotation.x = a
 	var foot := mark_angle(8.0)
 	_box(rig, Vector3(0.18, 0.06, 0.06), Vector3(x + 0.09, -(BALANCER_R + 0.12) * sin(foot), CRANK_Z + (BALANCER_R + 0.12) * cos(foot)), steel)
+
+
+# --- Camshaft ----------------------------------------------------------------------
+
+
+## A shaft with an intake and an exhaust lobe for each cylinder of each bank, turned to
+## different angles. A racing cam has taller lobes and is polished.
+func _build_cam(rig: Node3D, part: Dictionary) -> void:
+	var racing := str(part.get("style", "stock")) == "racing"
+	var metal := _mat("cam_racing", _CHROME, 0.9, 0.2) if racing else _mat("steel", _STEEL, 0.6, 0.35)
+	var lobe_r := 0.09 if racing else 0.075
+	_cyl_x(rig, 0.045, CAM_BACK_X - CAM_FRONT_X, CAM_BACK_X, metal, 12, 0.0, CAM_Z)
+	var phase := 0.0
+	for bore in BORES_X:
+		for offset in [-0.21, -0.07, 0.07, 0.21]:
+			var turned := Node3D.new()
+			turned.position = Vector3(bore + offset, 0.0, CAM_Z)
+			turned.rotation.x = phase
+			rig.add_child(turned)
+			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
+			lobe.scale.x = 0.62
+			phase += 2.4
+	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(CAM_BOLTS[0].x, 0.0, CAM_BOLTS[0].z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 
 
 # --- Heads -------------------------------------------------------------------------

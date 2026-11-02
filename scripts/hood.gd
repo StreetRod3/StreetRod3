@@ -1,8 +1,8 @@
 extends Node3D
 
 ## Under the hood, looking down into the engine bay from in front of the car. The engine
-## is built up in layers as in Street Rod 2: the engine on its mounts, the cylinder heads
-## on the engine, the intake on the heads, the carburetors and the distributor in the intake, the air cleaner over the
+## is built up in layers as in Street Rod 2: the engine on its mounts, the camshaft in the
+## block, the cylinder heads over it, the intake on the heads, the carburetors and the distributor in the intake, the air cleaner over the
 ## carburetors, and the plug wires from the distributor cap to the plugs. Each part is
 ## held by bolts: click a bolt hole to thread a bolt in, click the bolt again to tighten
 ## it, and click a tight bolt to back it out. With all of a part's bolts out and nothing
@@ -49,9 +49,10 @@ const CAM_DISTANCE_MAX := 2.6
 const ZOOM_STEP := 0.1
 
 ## Hood parts from the top down: the order they come off in.
-const TOP_DOWN: Array[String] = ["air_cleaner", "carb_3", "carb_2", "carb", "distributor", "intake", "heads", "engine"]
+const TOP_DOWN: Array[String] = ["air_cleaner", "carb_3", "carb_2", "carb", "distributor", "intake", "heads", "cam", "engine"]
 const PART_NAMES := {
 	"engine": "Engine",
+	"cam": "Camshaft",
 	"heads": "Cylinder heads",
 	"intake": "Intake manifold",
 	"carb": "Carburetor",
@@ -63,6 +64,7 @@ const PART_NAMES := {
 }
 const BOLT_NAMES := {
 	"engine": ["Right engine mount bolt", "Left engine mount bolt"],
+	"cam": ["Right cam retainer bolt", "Left cam retainer bolt"],
 	"heads": ["Right head, front bolt", "Right head, rear bolt", "Left head, front bolt", "Left head, rear bolt"],
 	"intake": ["Front intake bolt", "Rear intake bolt"],
 	"carb": ["Front carburetor nut", "Rear carburetor nut"],
@@ -427,6 +429,11 @@ func _lift_out(key: String) -> void:
 		return
 	var rig: Node3D = _engine.rigs.get(key, null)
 	_engine.rigs.erase(key)
+	# A camshaft still in the block comes up with the engine.
+	if key == GameState.HOOD_ENGINE and _engine.rigs.has(GameState.SLOT_CAM):
+		(_engine.rigs[GameState.SLOT_CAM] as Node3D).reparent(rig, false)
+		_engine.rigs.erase(GameState.SLOT_CAM)
+		_build_bolts(GameState.SLOT_CAM)
 	if key == GameState.SLOT_DISTRIBUTOR:
 		_engine.rebuild(_EngineAssembly.WIRES)
 	_hint.text = "Lifting the %s off…" % str(PART_NAMES[key]).to_lower()
@@ -777,7 +784,7 @@ func _refresh_ui() -> void:
 	else:
 		_engine_label.text = "No engine"
 	var lines: Array[String] = []
-	for key in ["engine", "heads", "intake", "carb", "carb_2", "carb_3", "distributor", "air_cleaner"]:
+	for key in ["engine", "cam", "heads", "intake", "carb", "carb_2", "carb_3", "distributor", "air_cleaner"]:
 		if not GameState.is_hood_part_fitted(key):
 			if key == GameState.HOOD_ENGINE or (GameState.has_engine() and (not GameState.CARB_SLOTS.has(key) or GameState.carb_slots().has(key))):
 				lines.append("%s: none" % PART_NAMES[key])

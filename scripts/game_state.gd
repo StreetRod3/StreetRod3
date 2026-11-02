@@ -71,9 +71,10 @@ const SLOT_DIFFERENTIAL := "differential"
 ## The tires on the car's wheels, changed at the tire machine. A car always has a set.
 const SLOT_TIRES := "tires"
 const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
-## Parts changed under the hood, from the bottom up: the cylinder heads on the engine,
-## the intake on the heads, the carburetors and the distributor in the intake, the air
+## Parts changed under the hood, from the bottom up: the camshaft in the block, the
+## cylinder heads over it, the intake on the heads, the carburetors and the distributor in the intake, the air
 ## cleaner over the carburetors. The heads are one part however many the engine has.
+const SLOT_CAM := "cam"
 const SLOT_HEADS := "heads"
 const SLOT_INTAKE := "intake"
 const SLOT_CARB := "carb"
@@ -84,20 +85,18 @@ const SLOT_CARB_3 := "carb_3"
 const SLOT_DISTRIBUTOR := "distributor"
 const SLOT_AIR_CLEANER := "air_cleaner"
 const CARB_SLOTS: Array[String] = [SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3]
-const HOOD_SLOTS: Array[String] = [SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
+const HOOD_SLOTS: Array[String] = [SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
 const ALL_SLOTS: Array[String] = [
 	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_TIRES,
-	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
+	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## Slot id for an empty slot. The exhaust, the mufflers, and everything under the hood
 ## can come off for good.
 const NO_PART_ID := "none"
 const REMOVABLE_SLOTS: Array[String] = [
 	SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT,
-	SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
+	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
-## Bolt-ons inside the engine, which come out of the car with it.
-const ENGINE_BOLT_ONS: Array[String] = ["cam"]
 ## What every car rolls out of the factory with.
 const STOCK_SLOT_PARTS := {
 	SLOT_MANIFOLD: "manifold-iron",
@@ -106,6 +105,7 @@ const STOCK_SLOT_PARTS := {
 	SLOT_MUFFLER_LEFT: NO_PART_ID,
 	SLOT_DIFFERENTIAL: "diff-308",
 	SLOT_TIRES: "tires-bias",
+	SLOT_CAM: "cam-stock",
 	SLOT_HEADS: "heads-iron",
 	SLOT_INTAKE: "intake-iron4",
 	SLOT_CARB: "carb-4bbl-stock",
@@ -120,6 +120,7 @@ const HOOD_ENGINE := "engine"
 ## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each (`hood_bolt_count()`).
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
+	SLOT_CAM: 2,
 	SLOT_HEADS: 4,
 	SLOT_INTAKE: 2,
 	SLOT_CARB: 2,
@@ -343,6 +344,10 @@ func engine_trouble() -> String:
 		return "There is no engine."
 	if not is_hood_part_bolted(HOOD_ENGINE):
 		return "The engine mounts are loose."
+	if slot_part(SLOT_CAM).is_empty():
+		return "There is no camshaft."
+	if not is_hood_part_bolted(SLOT_CAM):
+		return "The camshaft is loose."
 	if slot_part(SLOT_HEADS).is_empty():
 		return "There are no cylinder heads."
 	if not is_hood_part_bolted(SLOT_HEADS):
@@ -437,6 +442,9 @@ func hood_part_blocker(key: String) -> String:
 		HOOD_ENGINE:
 			if not slot_part(SLOT_HEADS).is_empty():
 				return SLOT_HEADS
+		SLOT_CAM:
+			if not slot_part(SLOT_HEADS).is_empty():
+				return SLOT_HEADS
 		SLOT_HEADS:
 			if not slot_part(SLOT_INTAKE).is_empty():
 				return SLOT_INTAKE
@@ -466,8 +474,10 @@ func hood_spot_trouble(key: String) -> String:
 		return "Put an engine in first."
 	if not slot_part(key).is_empty():
 		return "Take the old one off first."
+	if key == SLOT_CAM:
+		return "Take the cylinder heads off first." if not slot_part(SLOT_HEADS).is_empty() else ""
 	if key == SLOT_HEADS:
-		return ""
+		return "Put a camshaft in first." if slot_part(SLOT_CAM).is_empty() else ""
 	if slot_part(SLOT_HEADS).is_empty():
 		return "Put the cylinder heads on first."
 	if key == SLOT_INTAKE:
@@ -531,7 +541,7 @@ func fit_engine(engine_id: String) -> String:
 
 ## Lifts a part out from under the hood into spare parts: an engine, or a hood slot's
 ## part. Its bolts must be out and nothing may be on top of it. The exhaust manifolds and
-## what is inside the engine go to spare parts with the engine.
+## the camshaft go to spare parts with the engine.
 func remove_hood_part(key: String) -> String:
 	if not is_hood_part_fitted(key):
 		return "There is nothing there to take off."
@@ -543,7 +553,8 @@ func remove_hood_part(key: String) -> String:
 	engine_bolts.erase(key)
 	if key == HOOD_ENGINE:
 		equipped_engine_id = NO_ENGINE_ID
-		_clear_engine_parts(slot_part_ids, equipped_part_ids)
+		_clear_engine_parts(slot_part_ids)
+		engine_bolts.clear()
 		plug_wires = false
 	else:
 		slot_part_ids[key] = NO_PART_ID
@@ -1603,8 +1614,6 @@ func equip_part(part_id: String) -> String:
 		return fit_slot_part(part_id)
 	if is_part_equipped(part_id):
 		return "Already on the car."
-	if ENGINE_BOLT_ONS.has(part_id) and not has_engine():
-		return "Put an engine in first."
 	if spare_count(part_id) <= 0:
 		return "That part is not in spare parts."
 	equipped_part_ids.append(part_id)
@@ -2035,7 +2044,7 @@ func remove_engine() -> void:
 		return
 	var blown := equipped_engine_id
 	equipped_engine_id = NO_ENGINE_ID
-	_clear_engine_parts(slot_part_ids, equipped_part_ids)
+	_clear_engine_parts(slot_part_ids)
 	engine_bolts.clear()
 	plug_wires = false
 	_sync_record_from_active()
@@ -2044,30 +2053,23 @@ func remove_engine() -> void:
 
 
 ## Takes off everything that needs an engine. Owned copies off a car are spare parts.
-func _clear_engine_parts(slots: Dictionary, bolt_ons: Array[String]) -> void:
+func _clear_engine_parts(slots: Dictionary) -> void:
 	slots[SLOT_MANIFOLD] = NO_PART_ID
 	for slot in HOOD_SLOTS:
 		slots[slot] = NO_PART_ID
-	for part_id in ENGINE_BOLT_ONS:
-		while bolt_ons.has(part_id):
-			bolt_ons.erase(part_id)
 
 
 ## `_clear_engine_parts()` for a car that is not in the bay, with the conditions of what
 ## came off passed on to the spares.
 func _clear_record_engine_parts(rec: Dictionary) -> void:
 	var slots := _slots_from(rec.get("slot_parts", null))
-	var bolt_ons := _string_array(rec.get("part_ids", []))
-	_clear_engine_parts(slots, bolt_ons)
+	_clear_engine_parts(slots)
 	rec["slot_parts"] = slots
-	rec["part_ids"] = bolt_ons
 	rec["engine_bolts"] = {}
 	rec["plug_wires"] = false
 	for slot in ALL_SLOTS:
 		if str(slots[slot]) == NO_PART_ID:
 			_release_condition(rec, "slot:" + slot)
-	for part_id in ENGINE_BOLT_ONS:
-		_release_condition(rec, "bolt:" + part_id)
 
 
 func _set_opponent_car(index: int, model_id: String, paint: Color) -> void:
@@ -2442,7 +2444,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	_settle_slot_parts()
 	slot_part_ids = _slots_from(slot_part_ids)
 	if equipped_engine_id == NO_ENGINE_ID:
-		_clear_engine_parts(slot_part_ids, equipped_part_ids)
+		_clear_engine_parts(slot_part_ids)
 	engine_bolts = _hood_bolts_from(rec.get("engine_bolts", null))
 	plug_wires = bool(rec.get("plug_wires", true))
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
