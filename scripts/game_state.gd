@@ -138,6 +138,11 @@ const CONDITION_USED_MAX := 0.9
 const CONDITION_WEAR_MIN := 0.01
 const CONDITION_WEAR_MAX := 0.03
 const CONDITION_FLOOR := 0.05
+## Tires worn down to this blow out in the next race, somewhere between these shares of
+## the way along it.
+const TIRE_BLOWOUT_CONDITION := 0.15
+const TIRE_BLOWOUT_MIN := 0.2
+const TIRE_BLOWOUT_MAX := 0.8
 ## A buyer offers between these fractions of the paper's price. Condition skews where in
 ## the range: a new part draws high offers more often, a worn one low.
 const SELL_OFFER_MIN := 0.5
@@ -1237,6 +1242,28 @@ func get_equipped_engine() -> Dictionary:
 ## How well the active car's tires hold the road, from 1 to 5.
 func tire_grip() -> float:
 	return _grip_of(slot_part(SLOT_TIRES)) if has_tires() else 1.0
+
+
+func tires_worn_out() -> bool:
+	return has_tires() and mount_condition("slot:" + SLOT_TIRES) <= TIRE_BLOWOUT_CONDITION
+
+
+## How far from the finish worn-out tires let go in a race of `length_m`, or -1 if the tires
+## will last.
+func tire_blowout_distance_m(length_m: float) -> float:
+	if not tires_worn_out():
+		return -1.0
+	return length_m * randf_range(TIRE_BLOWOUT_MIN, TIRE_BLOWOUT_MAX)
+
+
+## A blowout: the tires are gone, not spares, and the wheels stay on the car.
+func blow_tires() -> void:
+	var tires := _tires_off_active_car()
+	if tires.is_empty():
+		return
+	owned_part_ids.erase(str(tires.get("id", "")))
+	_sync_record_from_active()
+	refresh_car_stats()
 
 
 ## The tires on a rival's car. A rival from an older save is on the stock set.

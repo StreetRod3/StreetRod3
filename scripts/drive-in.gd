@@ -1273,6 +1273,8 @@ func _refresh_race_popup() -> void:
 	var rival := str(opp.get("name", "Rival"))
 	var car_name := str(opp.get("car_name", "car"))
 	_race_hint.text = "Racing %s in a %s.\nTank %.0f L." % [rival, car_name, GameState.fuel]
+	if GameState.tires_worn_out():
+		_race_hint.text += "\nYour tires are worn out and will blow."
 	_drag_btn.text = "Drag race\nQuarter mile · %.0f L" % GameState.race_fuel_liters(GameState.RACE_DRAG)
 	_road_btn.text = "Road race\n2.4 km with turns · %.0f L" % GameState.race_fuel_liters(GameState.RACE_ROAD)
 

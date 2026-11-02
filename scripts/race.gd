@@ -49,6 +49,8 @@ var _fuel_used: bool = false
 var _opponent_finished: bool = false
 var _is_road: bool = false
 var _elapsed: float = 0.0
+## How far from the finish the player's tires blow out, or below zero if they will last.
+var _tire_blowout_m: float = -1.0
 var _nav = _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
@@ -77,6 +79,7 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_RACE
 	GameState.update_music()
 	_is_road = GameState.selected_race_type == GameState.RACE_ROAD
+	_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
 	_setup_race_layout()
 	_result.visible = false
 	_build_result_bubble()
@@ -232,6 +235,9 @@ func _process(delta: float) -> void:
 	_hud_dist.text = "To finish: %.1f m" % _distance_to_finish()
 	var spd: float = _player.get_forward_speed()
 	_hud_speed.text = "Speed: %.0f km/h" % (spd * 3.6)
+	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
+		_show_tire_blowout()
+		return
 	_maybe_finish_by_progress()
 
 
@@ -326,6 +332,18 @@ func _show_engine_blown() -> void:
 	GameState.remove_engine()
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew the engine!"
+	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
+		text += "\n" + _took_your_car()
+	text += _lost_bucks_line(payout)
+	_show_bubble(text, GameState.SCENE_GARAGE)
+
+
+func _show_tire_blowout() -> void:
+	_race_over = true
+	_end_race_ui()
+	GameState.blow_tires()
+	var payout := GameState.apply_race_stake(false)
+	var text := "You blew a tire!\nThat set of tires is finished."
 	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
 		text += "\n" + _took_your_car()
 	text += _lost_bucks_line(payout)

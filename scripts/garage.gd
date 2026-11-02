@@ -1519,6 +1519,8 @@ func _rebuild_tires_list() -> void:
 		_parts_list.add_child(_parts_row(part, "part", ""))
 	if spares == 0:
 		_parts_status.text = "No spare tires here. Buy a set in the newspaper."
+	if GameState.tires_worn_out():
+		_parts_status.text = "The tires on the car are worn out and will blow in the next race. " + _parts_status.text
 	if GameState.has_tires():
 		_parts_list.add_child(_tires_off_row())
 	else:
