@@ -84,4 +84,4 @@ Rivals now come along gradually, each in a faster car than the last. The drive-i
 
 The Corvette 1962 could not move in the non-arcade drive, for the player or a rival. Its wheel mounts sit too high for the suspension to find the road, so its tires never touched. The hub height is now brought down when a mount is that high.
 
-Rivals can have a gender in `assets/opponents/opponents.json`, and the game's text uses the right pronouns for them: "She took your car!", "Her car: Corvette 1962". Anyone with none listed is they/them. So far only Hellmark has one.
+Rivals can have a gender in `assets/opponents/opponents.json`, and the game's text uses the right pronouns for them: "She took your car!", "Her car: Corvette 1962". Anyone with none listed is they/them.
