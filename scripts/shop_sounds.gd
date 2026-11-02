@@ -82,10 +82,10 @@ static func _wrench() -> PackedFloat32Array:
 
 ## A floor jack being pumped: a low stroke and a creak of the handle, over and over.
 static func _jack_pump() -> PackedFloat32Array:
-	var out := _blank(1.5)
-	var strokes := 5
+	var out := _blank(1.0)
+	var strokes := 4
 	for s in strokes:
-		var start := int(float(s) / float(strokes) * 1.4 * RATE)
+		var start := int(float(s) / float(strokes) * 0.95 * RATE)
 		for k in int(0.2 * RATE):
 			var i := start + k
 			if i >= out.size():
@@ -99,16 +99,16 @@ static func _jack_pump() -> PackedFloat32Array:
 
 ## The jack's valve opening: a long breath of oil and air, and the car settling.
 static func _jack_release() -> PackedFloat32Array:
-	var out := _blank(1.5)
+	var out := _blank(1.1)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 5
 	var low := 0.0
 	for i in out.size():
 		var t := float(i) / RATE
 		low = lerpf(low, rng.randf_range(-1.0, 1.0), 0.25)
-		out[i] = low * minf(t * 12.0, 1.0) * exp(-t * 1.1) * 0.5
-		if t > 1.2:
-			var u := t - 1.2
+		out[i] = low * minf(t * 12.0, 1.0) * exp(-t * 1.6) * 0.5
+		if t > 0.85:
+			var u := t - 0.85
 			out[i] += sin(TAU * 62.0 * u) * exp(-u * 16.0) * 0.8
 	return out
 

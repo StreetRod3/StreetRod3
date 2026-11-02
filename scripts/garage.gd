@@ -193,7 +193,6 @@ const _WHEEL_NODES: Array[String] = [
 	"WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight",
 ]
 const _LIFT_HEIGHT := 0.42
-const _WHEEL_SIDE_M := 2.6
 ## The tire machine stands against the front wall, ahead of the car. With the car up on
 ## the jack, the wheels roll straight ahead under it along their own tracks and wait in
 ## front of the machine, the front pair nearer it.
@@ -205,20 +204,19 @@ const _TIRE_WAIT_Z := {
 	"WheelBackLeft": 4.2,
 	"WheelBackRight": 4.2,
 }
-const _TIRE_ROLL_SPEED := 3.0
+const _TIRE_ROLL_SPEED := 5.0
 ## The new set waits beside the machine, and the old set piles up on the other side.
 const _TIRE_STACK_NEW := Vector3(1.0, 0.0, 6.75)
 const _TIRE_STACK_OLD := Vector3(2.8, 0.0, 6.75)
 const _TIRE_THICK := 0.13
-const _T_WRENCH := 0.5
+## Wheels start this far apart, so that the wrench is heard on each.
+const _T_WRENCH_GAP := 0.3
+const _T_WRENCH := 0.4
 const _T_TIRE_MOVE := 0.55
-const _WHEEL_OUT_Z := -5.4
-const _T_JACK := 1.8
-const _T_LIFT := 1.5
-const _T_DROP := 0.9
-const _T_ROLL_SIDE := 1.6
-const _T_ROLL_LONG := 2.2
-const _T_RISE := 0.85
+const _T_JACK := 0.9
+const _T_LIFT := 1.0
+const _T_DROP := 0.4
+const _T_RISE := 0.4
 const _T_PAUSE := 0.28
 const _T_DOOR_OPEN := 1.25
 const _DOOR_SWING := 1.92
@@ -2816,20 +2814,30 @@ func _jack_down(car_start: Vector3) -> void:
 	await _tween_global_xform(_lift, _lift_home, _T_JACK)
 
 
+## The car goes up, the wheels on it roll away together, the new set rolls in together and
+## goes on, and the car comes down.
 func _run_wheel_change(wheel: Dictionary) -> void:
 	var car_start := _car_pivot.position
+	var had_wheels := GameState.has_wheels()
 	await _jack_up(car_start)
 	if not is_instance_valid(self):
 		return
+	var old_radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
 	var radius := maxf(float(wheel.get("height", 0.5)) * 0.5, 0.18)
-	for wname in _WHEEL_NODES:
-		var mount := _car_pivot.get_node_or_null(wname) as Node3D
-		if mount == null:
-			continue
-		await _swap_one_wheel(mount, wheel, radius)
+	var wheels := _take_wheels_off(had_wheels)
+	if had_wheels:
+		var off: Array[Callable] = []
+		for each in wheels:
+			off.append(_roll_wheel_away.bind(each, old_radius))
+		await _await_all(off)
 		if not is_instance_valid(self):
 			return
-		await _pause(_T_PAUSE)
+	var on: Array[Callable] = []
+	for each in wheels:
+		on.append(_roll_wheel_on.bind(each, wheel, radius))
+	await _await_all(on)
+	if not is_instance_valid(self):
+		return
 	await _jack_down(car_start)
 	if not is_instance_valid(self):
 		return
@@ -2838,6 +2846,43 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 		_car_pivot.call(&"apply_equipped_wheels")
 	_align_wheels_to_floor()
 	_refresh_hud()
+
+
+## Takes each wheel off its hub into the garage, drawn with the set on the car if `shown`.
+func _take_wheels_off(shown: bool) -> Array[Dictionary]:
+	var wheels: Array[Dictionary] = []
+	for wname in _WHEEL_NODES:
+		var mount := _car_pivot.get_node_or_null(wname) as Node3D
+		if mount == null:
+			continue
+		if shown and _car_pivot.has_method(&"apply_wheel_to_mount"):
+			_car_pivot.call(&"apply_wheel_to_mount", mount, GameState.get_equipped_wheel())
+		wheels.append(_take_wheel_off(mount, str(wname)))
+	return wheels
+
+
+## A set rolls in from where the old one went, rises onto the hub, and is bolted up.
+func _roll_wheel_on(wheel: Dictionary, part: Dictionary, radius: float) -> void:
+	var mount: Node3D = wheel["mount"]
+	var kept_scale: Vector3 = wheel["scale"]
+	if _car_pivot.has_method(&"apply_wheel_to_mount"):
+		_car_pivot.call(&"apply_wheel_to_mount", mount, part)
+	var upright: Basis = (wheel["mounted"] as Basis).orthonormalized()
+	mount.global_transform = Transform3D(upright.scaled(kept_scale), wheel["spot"])
+	wheel["facing"] = upright
+	await _roll_wheel(wheel, wheel["floor"], radius)
+	if not is_instance_valid(mount):
+		return
+	await _lift_to_axle(mount, wheel["axle"], wheel["mounted"], _T_RISE)
+	if not is_instance_valid(mount):
+		return
+	await _pause(float(wheel["turn"]) * _T_WRENCH_GAP)
+	if not is_instance_valid(mount):
+		return
+	_shop_sound("wrench")
+	remove_child(mount)
+	(wheel["parent"] as Node).add_child(mount)
+	mount.transform = wheel["home_local"]
 
 
 func _on_wheels_off_pressed() -> void:
@@ -2860,16 +2905,10 @@ func _run_wheels_off() -> void:
 	if not is_instance_valid(self):
 		return
 	var radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
-	var wheels: Array[Dictionary] = []
-	for wname in _WHEEL_NODES:
-		var mount := _car_pivot.get_node_or_null(wname) as Node3D
-		if mount != null:
-			if _car_pivot.has_method(&"apply_wheel_to_mount"):
-				_car_pivot.call(&"apply_wheel_to_mount", mount, GameState.get_equipped_wheel())
-			wheels.append(_take_wheel_off(mount, str(wname)))
+	var wheels := _take_wheels_off(true)
 	var off: Array[Callable] = []
 	for wheel in wheels:
-		off.append(_roll_wheel_to_machine.bind(wheel, radius))
+		off.append(_roll_wheel_away.bind(wheel, radius))
 	await _await_all(off)
 	if not is_instance_valid(self):
 		return
@@ -2986,10 +3025,9 @@ func _take_wheel_off(mount: Node3D, wname: String) -> Dictionary:
 	}
 
 
-func _roll_wheel_to_machine(wheel: Dictionary, radius: float) -> void:
+func _roll_wheel_away(wheel: Dictionary, radius: float) -> void:
 	var mount: Node3D = wheel["mount"]
-	# One corner after another, so the wrench is heard on each.
-	await _pause(float(wheel["turn"]) * _T_WRENCH)
+	await _pause(float(wheel["turn"]) * _T_WRENCH_GAP)
 	if not is_instance_valid(mount):
 		return
 	_shop_sound("wrench")
@@ -3029,55 +3067,6 @@ func _tire_ring(radius: float, at: Vector3) -> MeshInstance3D:
 	add_child(ring)
 	ring.global_position = at
 	return ring
-
-
-func _swap_one_wheel(mount: Node3D, wheel: Dictionary, radius: float) -> void:
-	var home_local := mount.transform
-	var world_xf := mount.global_transform
-	var axle := world_xf.origin
-	var floor_pos := Vector3(axle.x, axle.y - _LIFT_HEIGHT, axle.z)
-	var side := 1.0 if axle.x >= 0.0 else -1.0
-	var side_pos := Vector3(axle.x + side * _WHEEL_SIDE_M, floor_pos.y, axle.z)
-	var outside := Vector3(side_pos.x, floor_pos.y, _WHEEL_OUT_Z)
-	var parent := mount.get_parent()
-	parent.remove_child(mount)
-	add_child(mount)
-	mount.global_transform = world_xf
-	_shop_sound("wrench")
-	await _pause(_T_WRENCH)
-	if not is_instance_valid(mount):
-		return
-	await _tween_global_pos(mount, floor_pos, _T_DROP)
-	if not is_instance_valid(mount):
-		return
-	_shop_sound("thud")
-	await _pause(_T_PAUSE)
-	var facing := world_xf.basis.orthonormalized()
-	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
-	if not is_instance_valid(mount):
-		return
-	facing = await _roll_node(mount, outside, radius, _T_ROLL_LONG, world_xf.basis, facing)
-	if not is_instance_valid(mount):
-		return
-	await _pause(_T_PAUSE)
-	var kept_scale := mount.scale
-	if _car_pivot.has_method(&"apply_wheel_to_mount"):
-		_car_pivot.call(&"apply_wheel_to_mount", mount, wheel)
-	mount.global_transform = Transform3D(world_xf.basis.orthonormalized().scaled(kept_scale), outside)
-	facing = world_xf.basis.orthonormalized()
-	facing = await _roll_node(mount, side_pos, radius, _T_ROLL_LONG, world_xf.basis, facing)
-	if not is_instance_valid(mount):
-		return
-	await _roll_node(mount, floor_pos, radius, _T_ROLL_SIDE, world_xf.basis, facing)
-	if not is_instance_valid(mount):
-		return
-	await _lift_to_axle(mount, axle, world_xf.basis, _T_RISE)
-	if not is_instance_valid(mount):
-		return
-	_shop_sound("wrench")
-	remove_child(mount)
-	parent.add_child(mount)
-	mount.transform = home_local
 
 
 func _tween_global_pos(node: Node3D, to: Vector3, duration: float) -> void:
