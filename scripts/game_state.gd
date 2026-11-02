@@ -53,8 +53,9 @@ const ROAD_STAKE_HIGH := 100
 const NO_ENGINE_ID := "none"
 ## Gearbox id for a car whose transmission was taken out. The gearbox goes to spare parts.
 const NO_GEARBOX_ID := "none"
-## A car whose wheels have been taken for another car. It stays put until it gets some.
+## A car with its wheels off. It stays in the bay until it gets some.
 const NO_WHEEL_ID := "none"
+const NO_WHEELS_IN_BAY := "The car in the garage has no wheels, so it can't roll out."
 ## Bellhousing bolts holding the gearbox to the engine.
 const GEARBOX_BOLT_COUNT := 2
 ## Turns that seat a bellhousing bolt. Zero is out of its hole.
@@ -240,8 +241,6 @@ var spare_conditions: Dictionary = {}
 ## tires on its spare sets as {"id", "c"}, one entry for each set that has any. Those tires
 ## are owned but are not spare parts.
 var spare_wheel_tires: Dictionary = {}
-## The tires that came along on wheels just taken off another car.
-var _carried_tires: Dictionary = {}
 ## The last offer made for each spare, so the next one differs.
 var _last_offers: Dictionary = {}
 ## Parsed `PLAYER_CAR_FILE`. Empty sections mean the file failed to load.
@@ -2209,7 +2208,9 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 	var equipped := equipped_engine_id if label == "engine" else equipped_wheel_id
 	if equipped == part_id:
 		return "Already on the car."
-	if not owned.has(part_id):
+	# Wheels on another car stay there, so a set here has to be on the shelf.
+	var have := owned.has(part_id) if label == "engine" else free_spare_count("wheels", part_id) > 0
+	if not have:
 		var price := int(part.get("price", 0))
 		if money < price:
 			return "Not enough cash."
@@ -2221,13 +2222,10 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 		_take_mount_from_other_cars("engine", part_id)
 	else:
 		# Tires stay on their wheels: the old tires go to the shelf on the old set, and the
-		# new set comes with whatever is on it, off the shelf or off another car.
-		var from_shelf := free_spare_count("wheels", part_id) > 0
+		# new set comes off the shelf with whatever is on it.
 		_shelve_active_tires()
 		equipped_wheel_id = part_id
-		_carried_tires = {}
-		_take_mount_from_other_cars("wheels", part_id)
-		_tires_onto_active_car(_pop_spare_wheel_tires(part_id) if from_shelf else _carried_tires)
+		_tires_onto_active_car(_pop_spare_wheel_tires(part_id))
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -2427,21 +2425,6 @@ func _clear_record_engine_parts(rec: Dictionary) -> void:
 			_release_condition(rec, "slot:" + slot)
 
 
-## The tires off another car's record, when its wheels are taken: {"id", "c"} or {}.
-func _tires_off_record(rec: Dictionary) -> Dictionary:
-	var slots := _slots_from(rec.get("slot_parts", null))
-	var id := str(slots[SLOT_TIRES])
-	if id == NO_PART_ID:
-		return {}
-	var conditions: Dictionary = rec.get("conditions", {})
-	var entry: Variant = conditions.get("slot:" + SLOT_TIRES, null)
-	var c := float((entry as Dictionary).get("c", 1.0)) if entry is Dictionary else 1.0
-	conditions.erase("slot:" + SLOT_TIRES)
-	slots[SLOT_TIRES] = NO_PART_ID
-	rec["slot_parts"] = slots
-	return {"id": id, "c": c}
-
-
 ## Gives a rival the player's car, with its numbers in `build`.
 func _set_opponent_car(index: int, model_id: String, paint: Color, tires: String, build: Dictionary) -> void:
 	if index < 0 or index >= opponents.size():
@@ -2491,6 +2474,8 @@ func select_owned_car(instance_id: String) -> String:
 		return "That car isn't in the garage."
 	if current_car_id == instance_id:
 		return "Already in the garage."
+	if has_active_car() and not has_wheels():
+		return NO_WHEELS_IN_BAY
 	if has_active_car():
 		_sync_record_from_active()
 	current_car_id = instance_id
@@ -2507,6 +2492,8 @@ func buy_or_select_car(model_id: String) -> String:
 	var price := int(car.get("price", 0))
 	if money < price:
 		return "Not enough cash."
+	if has_active_car() and not has_wheels():
+		return NO_WHEELS_IN_BAY
 	if has_active_car():
 		_sync_record_from_active()
 	money -= price
@@ -2840,8 +2827,6 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 	var key := "engine_id"
 	if slot == "transmission":
 		key = "gearbox_id"
-	elif slot == "wheels":
-		key = "wheel_id"
 	# The active car has this copy, even if its record does not say so yet. A spare copy
 	# fitted leaves the other cars alone; only a copy that is not spare comes off one.
 	var excess := 1 - _owned_list(slot).count(part_id)
@@ -2862,21 +2847,17 @@ func _take_mount_from_other_cars(slot: String, part_id: String) -> void:
 		if str(rec.get(key, "")) != part_id:
 			continue
 		var stock := _stock_part_id(car_id, slot)
-		if part_id == stock and slot != "wheels":
+		if part_id == stock:
 			continue
 		# That car gets its own engine or gearbox back if it is still owned; otherwise it
-		# goes without. Wheels leave it with none, its tires going with them.
+		# goes without.
 		if slot == "engine" and not owned_engine_ids.has(stock):
 			stock = NO_ENGINE_ID
 		elif slot == "transmission" and not owned_gearbox_ids.has(stock):
 			stock = NO_GEARBOX_ID
-		elif slot == "wheels":
-			stock = NO_WHEEL_ID
 		rec[key] = stock
 		excess -= 1
 		_release_condition(rec, slot)
-		if slot == "wheels":
-			_carried_tires = _tires_off_record(rec)
 		if slot == "engine" and stock == NO_ENGINE_ID:
 			_clear_record_engine_parts(rec)
 		if slot == "transmission":

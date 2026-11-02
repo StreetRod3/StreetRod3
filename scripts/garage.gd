@@ -1599,7 +1599,7 @@ func _rebuild_wheels_list() -> void:
 	var count := 0
 	for wheel in GameState.WHEELS:
 		var wheel_id := str(wheel.get("id", ""))
-		if not GameState.owns_wheel(wheel_id):
+		if wheel_id != GameState.equipped_wheel_id and GameState.free_spare_count("wheels", wheel_id) <= 0:
 			continue
 		_parts_list.add_child(_parts_row(wheel, "wheels", GameState.equipped_wheel_id))
 		count += 1
@@ -1609,7 +1609,7 @@ func _rebuild_wheels_list() -> void:
 		_parts_status.text = "This car has no wheels and can't move until it gets some. Pick a set."
 	if count == 0:
 		_parts_status.text = "No wheels on the shelf. Buy a set in the newspaper."
-	elif count == 1 and GameState.owns_wheel(GameState.equipped_wheel_id):
+	elif count == 1 and GameState.has_wheels():
 		_parts_status.text = "Only the wheels on the car are here. Buy another set in the newspaper."
 
 
@@ -1843,7 +1843,7 @@ func _on_fit_part(kind: String, part_id: String) -> void:
 			_open_transmission()
 			return
 		"wheels":
-			if GameState.owns_wheel(part_id) and part_id != GameState.equipped_wheel_id:
+			if GameState.free_spare_count("wheels", part_id) > 0 and part_id != GameState.equipped_wheel_id:
 				_hide_parts_board()
 				_start_wheel_change(part_id)
 				return
@@ -2150,6 +2150,9 @@ func _on_car_list_switch() -> void:
 	if car_id == GameState.current_car_id:
 		_hide_car_list()
 		_show_here_bubble()
+		return
+	if GameState.has_active_car() and not GameState.has_wheels():
+		_car_list_status.text = GameState.NO_WHEELS_IN_BAY
 		return
 	_dismiss_here_bubble()
 	_hide_car_list()
@@ -2761,7 +2764,7 @@ func _on_clock_arcade_toggled(pressed: bool) -> void:
 func _start_wheel_change(wheel_id: String) -> void:
 	if _bay_busy:
 		return
-	if not GameState.owns_wheel(wheel_id) or wheel_id == GameState.equipped_wheel_id:
+	if GameState.free_spare_count("wheels", wheel_id) <= 0 or wheel_id == GameState.equipped_wheel_id:
 		return
 	var wheel: Dictionary = GameState.listing_by_id(GameState.WHEELS, wheel_id)
 	if wheel.is_empty():
