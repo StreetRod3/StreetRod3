@@ -55,6 +55,8 @@ const CARD_VALUES: Array[Dictionary] = [
 
 var _typed_font := FontVariation.new()
 var _signature := Label.new()
+## The name as typed. The line shows it in capitals, the signature keeps its case.
+var _typed_name := ""
 
 
 func _ready() -> void:
@@ -159,13 +161,23 @@ func _update_signature() -> void:
 	_signature.reset_size()
 
 
-## People sign in upper and lower case, whatever the typed line says.
+## People sign in upper and lower case, whatever the typed line says. Capitals typed
+## inside a word stay, as in McGee, unless the whole word is capitals.
 func _signed_name(driver_name: String) -> String:
+	var words := driver_name.split(" ")
+	for i in words.size():
+		words[i] = _signed_word(words[i])
+	return " ".join(words)
+
+
+func _signed_word(word: String) -> String:
+	if word == word.to_upper():
+		word = word.to_lower()
 	var signed := ""
-	var starts_word := true
-	for letter in driver_name.to_lower():
-		signed += letter.to_upper() if starts_word else letter
-		starts_word = letter in " -'"
+	var starts_part := true
+	for letter in word:
+		signed += letter.to_upper() if starts_part else letter
+		starts_part = letter in "-'"
 	return signed
 
 
@@ -174,10 +186,26 @@ func _ascent() -> float:
 
 
 func _driver_name() -> String:
-	return _name_edit.text.strip_edges()
+	return _typed_name.strip_edges()
+
+
+## Works out the typed form of the line after an edit: everything after the caret and the
+## part before the edit are unchanged, and what lies between arrived as it was typed.
+func _typed_form(new_text: String) -> String:
+	var caret := _name_edit.caret_column
+	var after_caret := new_text.length() - caret
+	var unchanged := 0
+	var most := mini(_typed_name.length() - after_caret, caret)
+	while unchanged < most and _typed_name[unchanged].to_upper() == new_text[unchanged].to_upper():
+		unchanged += 1
+	var typed := _typed_name.left(unchanged) + new_text.substr(unchanged, caret - unchanged)
+	if after_caret > 0:
+		typed += _typed_name.right(after_caret)
+	return typed if typed.to_upper() == new_text.to_upper() else new_text
 
 
 func _on_name_changed(new_text: String) -> void:
+	_typed_name = _typed_form(new_text)
 	# Licenses are typed in capitals, whatever the shift key says.
 	var capitals := new_text.to_upper()
 	if capitals != new_text:
@@ -195,7 +223,7 @@ func _on_name_submitted(_new_text: String) -> void:
 func _on_continue_pressed() -> void:
 	if _driver_name().is_empty():
 		return
-	var driver_name := _driver_name()
+	var driver_name := _signed_name(_driver_name())
 	var traits := {}
 	for id in _choices:
 		traits[id] = (_card.get_node(id) as Label).text

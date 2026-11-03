@@ -227,7 +227,8 @@ var arcade_drive: bool = true
 ## Whether background music is on. Persisted in settings; also toggled by the garage radio.
 var music_enabled: bool = true
 
-## The name typed on the license at the start of a new game.
+## The name signed on the license at the start of a new game. Print it with to_upper()
+## for the typed line, because McGee can be made from this and not from MCGEE.
 var driver_name: String = ""
 ## What the license says about the driver, as printed on it and clicked through there.
 const DRIVER_TRAITS_DEFAULT := {"sex": "M", "hair": "BRN", "eyes": "BRN", "height": "5-08", "weight": "165"}
