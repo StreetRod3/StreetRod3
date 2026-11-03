@@ -811,6 +811,8 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_show_spray_picker()
 		KEY_D:
 			_handle_interact(&"doors")
+		KEY_G:
+			_handle_interact(&"fuel")
 		KEY_X:
 			if _calendar_inspecting:
 				_hang_calendar()

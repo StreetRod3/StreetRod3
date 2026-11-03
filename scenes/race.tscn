@@ -33,10 +33,10 @@ albedo_color = Color(0.18, 0.19, 0.2, 1)
 
 [sub_resource type="BoxMesh" id="GroundMesh"]
 material = SubResource("GroundMat")
-size = Vector3(40, 1, 520)
+size = Vector3(40, 1, 870)
 
 [sub_resource type="BoxShape3D" id="GroundShape"]
-size = Vector3(40, 1, 520)
+size = Vector3(40, 1, 870)
 
 [sub_resource type="BoxShape3D" id="CarShapeP"]
 size = Vector3(1.6, 0.5, 3.8)
@@ -87,7 +87,7 @@ light_energy = 1.1
 shadow_enabled = true
 
 [node name="Ground" type="StaticBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 210)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 385)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Ground"]
 mesh = SubResource("GroundMesh")
