@@ -330,26 +330,28 @@
        r="3.6"
        id="circle38" />
   </g>
-  <!-- Show this layer in Inkscape to see where the game prints each value. Left hidden so
-       the card imports blank; x and y are the left end of the text baseline. Name and
-       address lines hold 28 characters before they reach the right edge of the card. -->
-  <g id="fields" style="display:none">
-    <g id="field-portrait" transform="translate(138 622)" fill="#5a6d82">
+  <!-- Sample values, one id per field, showing where the game prints each one. Godot's SVG
+       importer does not draw text, so the card still imports blank and the screen prints these
+       itself; x and y are the left end of the text baseline. Name and address lines hold 28
+       characters before they reach the right edge of the card. field-portrait is hidden because
+       Godot would draw it. -->
+  <g id="fields">
+    <g id="field-portrait" style="display:none" transform="translate(138 622)" fill="#5a6d82">
       <circle cy="-210" r="62"/>
       <path d="M-138 0V-70Q-138 -125 -60 -135Q0 -115 60 -135Q138 -125 138 -70V0Z"/>
     </g>
-    <text id="field-number" x="354" y="166" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">R1234567</text>
-    <text id="field-name" x="354" y="200" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">JOHNNY RAY DRAGSTER</text>
-    <text id="field-address" x="354" y="234" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">1234 HOT ROD LN</text>
-    <text id="field-city" x="354" y="266" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">VALLEY CITY, CAL, 90000</text>
-    <text id="field-sex" x="354" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">M</text>
-    <text id="field-hair" x="392" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">BRN</text>
-    <text id="field-eyes" x="474" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">BRN</text>
-    <text id="field-height" x="554" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">5-08</text>
-    <text id="field-weight" x="674" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">165</text>
-    <text id="field-prev-lic" x="794" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">73</text>
-    <text id="field-birth" x="354" y="400" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">08-13-55</text>
-    <text id="field-issued" x="674" y="400" style="font-family:'Liberation Mono';font-weight:bold;font-size:33px;fill:#25252a">08-13-73</text>
+    <text id="field-number" x="354" y="166" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">R1234567</text>
+    <text id="field-name" x="354" y="200" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">JOHNNY RAY DRAGSTER</text>
+    <text id="field-address" x="354" y="234" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">1234 HOT ROD LN</text>
+    <text id="field-city" x="354" y="266" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">VALLEY CITY, CAL, 90000</text>
+    <text id="field-sex" x="354" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">M</text>
+    <text id="field-hair" x="392" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">BRN</text>
+    <text id="field-eyes" x="474" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">BRN</text>
+    <text id="field-height" x="554" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">5-08</text>
+    <text id="field-weight" x="674" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">165</text>
+    <text id="field-prev-lic" x="794" y="336" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">73</text>
+    <text id="field-birth" x="354" y="400" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">08-13-55</text>
+    <text id="field-issued" x="674" y="400" style="font-family:'Liberation Mono';font-weight:bold;font-size:30px;letter-spacing:1.8px;fill:#25252a">08-13-73</text>
     <text id="field-signature" x="366" y="548" style="font-family:'Liberation Mono';font-weight:bold;font-size:40px;fill:#2a2d55;font-family:'Z003';font-weight:normal;font-style:italic">Johnny Ray Dragster</text>
   </g>
 </svg>
