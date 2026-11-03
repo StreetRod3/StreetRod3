@@ -18,7 +18,14 @@ const SIGNATURE_POSITION := Vector2(366, 552)
 ## Long names shrink to stop this far short of the right edge of the card.
 const SIGNATURE_MARGIN := 10.0
 
-## Stand-ins until the character creator can set them.
+## Values that change with a click on the card, by id in CARD_VALUES. The first is the default.
+const CARD_CHOICES := {
+	"sex": ["M", "F"],
+}
+## A letter alone is a small target, so a clickable value is at least this wide.
+const CHOICE_MIN_WIDTH := 34.0
+
+## The rest are stand-ins until the character creator can set them.
 const CARD_VALUES: Array[Dictionary] = [
 	{"id": "number", "x": 354, "y": 166, "text": "B2026327"},
 	{"id": "address", "x": 354, "y": 234, "text": "1104 SOUTH VICTORY BLVD"},
@@ -69,6 +76,20 @@ func _add_value(value: Dictionary) -> void:
 	label.add_theme_color_override("font_color", INK)
 	label.position = Vector2(value["x"], value["y"] - _ascent())
 	_card.add_child(label)
+	if CARD_CHOICES.has(label.name):
+		label.custom_minimum_size.x = CHOICE_MIN_WIDTH
+		label.mouse_filter = Control.MOUSE_FILTER_STOP
+		label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		label.gui_input.connect(_on_choice_input.bind(label))
+
+
+func _on_choice_input(event: InputEvent, label: Label) -> void:
+	var button := event as InputEventMouseButton
+	if button == null or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var choices: Array = CARD_CHOICES[label.name]
+	label.text = choices[wrapi(choices.find(label.text) + 1, 0, choices.size())]
+	label.accept_event()
 
 
 func _setup_name_edit() -> void:
@@ -143,8 +164,10 @@ func _on_continue_pressed() -> void:
 	if _driver_name().is_empty():
 		return
 	var driver_name := _driver_name()
+	var driver_sex: String = (_card.get_node("sex") as Label).text
 	GameState.new_game()
 	GameState.driver_name = driver_name
+	GameState.driver_sex = driver_sex
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 

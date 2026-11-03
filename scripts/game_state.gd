@@ -229,6 +229,8 @@ var music_enabled: bool = true
 
 ## The name typed on the license at the start of a new game.
 var driver_name: String = ""
+## "M" or "F", clicked on the license.
+var driver_sex: String = "M"
 ## Cash on hand for classifieds (parts and used cars).
 var money: int = 2500
 ## Instance id of the car currently in the garage. Empty when the bay is empty.
@@ -753,6 +755,7 @@ func get_stock_transmission() -> Dictionary:
 func new_game() -> void:
 	save_slot = 0
 	driver_name = ""
+	driver_sex = "M"
 	car_name = "Corvette 1956"
 	car_color = Color(0.78, 0.14, 0.14, 1.0)
 	fuel = DEFAULT_TANK_L
@@ -866,6 +869,7 @@ func save_game(slot: int) -> bool:
 		"race_stake": race_stake,
 		"race_pink_slips": race_pink_slips,
 		"driver_name": driver_name,
+		"driver_sex": driver_sex,
 		"money": money,
 		"current_car_id": current_car_id,
 		"owned_car_ids": owned_car_ids,
@@ -937,6 +941,7 @@ func load_game(slot: int) -> bool:
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
 	driver_name = str(d.get("driver_name", ""))
+	driver_sex = str(d.get("driver_sex", "M"))
 	money = int(d.get("money", money))
 	_next_car_serial = maxi(int(d.get("next_car_serial", 1)), 1)
 	current_car_id = _migrate_car_id(str(d.get("current_car_id", current_car_id)))
