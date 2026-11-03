@@ -216,8 +216,9 @@ func _input(event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel"):
-		_on_cancel()
+		# Mark the key first. Leaving drops this scene, and the viewport is gone after that.
 		get_viewport().set_input_as_handled()
+		_on_cancel()
 		return
 	if _nav.handle_event(self, event):
 		get_viewport().set_input_as_handled()

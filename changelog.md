@@ -137,3 +137,11 @@ The license photo now looks like a color print from the 1970s that has spent yea
 The stray line above DO NOT LAMINATE on the license is gone.
 
 The license no longer looks brand new, since these were only paper back then. The whole card has aged together, including what you type, the signature, and the photo: the paper has yellowed and browned at the edges, the ink has faded a little, the edges are rubbed, and there are faint wallet folds across the middle.
+
+Picking a set of wheels on the tire board could crash the game outright. Choosing them rebuilds the list, and rebuilding it freed the Select button on the spot while that button was still finishing its own click, so the engine went on using memory that was already gone. It did not happen every time, but a few clicks were usually enough. The old rows now come out of the list straight away and are freed once the click is over. This covers every row on the parts board that rebuilds the list it sits in.
+
+Pressing Esc at the drive-in with nothing open raised an error on the way out, which stops the game when it is run from the editor. The key is now marked as handled before leaving, the same way the hood, transmission, under-the-car and timing screens do it.
+
+Clicking the speech bubble at the end of a game, when the money and the cars are gone, raised an error on the way back to the main menu, which stops the game when it is run from the editor. A speech bubble now marks the click as handled before telling anyone it was clicked.
+
+In the newspaper, the keys that move through the list stopped working after buying something, and each press raised an error. Buying rebuilds the list, and the keys were still set up with the old rows, which were freed a moment later. The old rows now leave the list before the new ones are picked up.

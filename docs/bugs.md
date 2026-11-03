@@ -58,3 +58,21 @@ To reproduce:
 Cause: `_lose_raced_car()` in `scripts/game_state.gd` goes through `_drop_active_car()`, which removes the car but not the owned copies of what was on it.
 
 This one needs a decision. A wrecked car goes the same way on purpose, because a wreck gets stripped for parts, but that reason does not cover a car that was handed over whole. If the parts should go with the car, `sell_car()` already shows how to remove them and leave real spares alone.
+
+## The game can freeze for good in the audio mixer
+
+One automated test run froze and never came back. Nobody has seen this in play and it has not been reproduced on demand, so it may only happen under that test setup. It is noted here in case it turns up in play.
+
+The run was headless on Godot 4.6.3, with random input, the dummy audio driver, and `--fixed-fps 60`, which lets the game run faster than real time. It was one of about 50 such runs. The last logged action was pressing H in the garage to open the hood, but the log can lag behind what the game was doing. A second run also timed out, without leaving a stack to look at. Replaying its input finished normally, so there is no telling whether it was the same thing.
+
+A core dump of the frozen run showed:
+
+- The audio thread at 100% CPU in `AudioStreamPlaybackResampled::mix()` and `AudioStreamGeneratorPlayback::_mix_internal()`, called from `AudioServer::_mix_step()` with `fading_out` true, so that player was being stopped.
+- The playback's `generator` pointer reading garbage: a `mix_rate` of 3.07e-41, and a `mix_offset` of 1.8e19, which leaves about 2.8e14 passes of the mixer's catch-up loop.
+- The main thread waiting for the audio lock in `AudioDriverDummy::lock()`, called from `AudioStreamWAV::set_data()`, while the audio thread held it.
+
+Likely cause, not proven: an `AudioStreamPlayer` playing an `AudioStreamGenerator` is freed and takes the generator with it while the mixer is still fading it out. The playback only has a raw pointer to the generator, so it goes on reading freed memory. Only `scripts/engine_sound.gd` and `scripts/pump_sound.gd` use generators. A small test that created and freed 240,000 such players did not freeze, so something more is needed to set it off.
+
+Possible fix, not tested: keep the generator alive after its player goes, for example with one shared generator held in a static variable.
+
+If it does turn up in play, note what was on screen and what was just pressed. On Linux, `top -H` shows whether a thread is spinning, and `SIGABRT` leaves a core dump for `gdb`.

@@ -148,5 +148,7 @@ func _style() -> StyleBoxFlat:
 
 func _on_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed:
-		pressed.emit()
+		# Mark the click first. Whoever hears this may leave the scene, and the viewport is gone
+		# after that.
 		get_viewport().set_input_as_handled()
+		pressed.emit()

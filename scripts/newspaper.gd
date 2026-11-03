@@ -101,6 +101,8 @@ func _refresh() -> void:
 
 func _rebuild_parts() -> void:
 	for child in _parts_list.get_children():
+		# Out of the list now, or the keys pick up rows that are about to be freed.
+		_parts_list.remove_child(child)
 		child.queue_free()
 	_parts_list.add_child(_heading("ENGINES"))
 	for engine in GameState.ENGINES:
@@ -138,6 +140,7 @@ func _rebuild_parts() -> void:
 
 func _rebuild_cars() -> void:
 	for child in _cars_list.get_children():
+		_cars_list.remove_child(child)
 		child.queue_free()
 	for car in GameState.USED_CARS:
 		_cars_list.add_child(_make_car_card(car))
