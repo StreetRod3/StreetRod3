@@ -11,6 +11,10 @@ const NAME_POSITION := Vector2(354, 200)
 ## The widest letters, a full line of M, still fit before the edge of the card.
 const NAME_MAX_LENGTH := 24
 
+## Up, up, down, down, left, right, left, right, B, A as a name starts the game with more cash.
+const CHEAT_NAME := "UUDDLRLRBA"
+const CHEAT_MONEY := 10000
+
 const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
 const SIGNATURE_SIZE := 30
 const SIGNATURE_INK := Color("#2a2d55")
@@ -18,9 +22,18 @@ const SIGNATURE_POSITION := Vector2(366, 552)
 ## Long names shrink to stop this far short of the right edge of the card.
 const SIGNATURE_MARGIN := 10.0
 
-## Values that change with a click on the card, by id in CARD_VALUES. The first is the default.
-const CARD_CHOICES := {
+## Inches for height, in the card's feet-inches form, and pounds for weight.
+const HEIGHT_RANGE := Vector2i(58, 80)
+const WEIGHT_RANGE := Vector2i(100, 300)
+const WEIGHT_STEP := 5
+
+## The values that change with a click on the card, by id in CARD_VALUES.
+var _choices := {
 	"sex": ["M", "F"],
+	"hair": ["BRN", "BLK", "BLN", "RED", "GRY", "WHI", "BAL"],
+	"eyes": ["BRN", "BLU", "GRN", "HZL", "GRY"],
+	"height": _height_choices(),
+	"weight": _weight_choices(),
 }
 ## A letter alone is a small target, so a clickable value is at least this wide.
 const CHOICE_MIN_WIDTH := 34.0
@@ -30,11 +43,11 @@ const CARD_VALUES: Array[Dictionary] = [
 	{"id": "number", "x": 354, "y": 166, "text": "B2026327"},
 	{"id": "address", "x": 354, "y": 234, "text": "1104 SOUTH VICTORY BLVD"},
 	{"id": "city", "x": 354, "y": 266, "text": "BURBANK, CAL, 91502"},
-	{"id": "sex", "x": 354, "y": 336, "text": "M"},
-	{"id": "hair", "x": 392, "y": 336, "text": "BRN"},
-	{"id": "eyes", "x": 474, "y": 336, "text": "BRN"},
-	{"id": "height", "x": 554, "y": 336, "text": "5-08"},
-	{"id": "weight", "x": 674, "y": 336, "text": "165"},
+	{"id": "sex", "x": 354, "y": 336},
+	{"id": "hair", "x": 392, "y": 336},
+	{"id": "eyes", "x": 474, "y": 336},
+	{"id": "height", "x": 554, "y": 336},
+	{"id": "weight", "x": 674, "y": 336},
 	{"id": "prev_lic", "x": 794, "y": 336, "text": "72"},
 	{"id": "birth", "x": 354, "y": 400, "text": "03-19-55"},
 	{"id": "issued", "x": 674, "y": 400, "text": "03-19-72"},
@@ -46,6 +59,8 @@ const CARD_VALUES: Array[Dictionary] = [
 
 var _typed_font := FontVariation.new()
 var _signature := Label.new()
+## The name as typed. The line shows it in capitals, the signature keeps its case.
+var _typed_name := ""
 
 
 func _ready() -> void:
@@ -70,13 +85,13 @@ func _input(event: InputEvent) -> void:
 func _add_value(value: Dictionary) -> void:
 	var label := Label.new()
 	label.name = str(value["id"])
-	label.text = str(value["text"])
+	label.text = str(value.get("text", GameState.DRIVER_TRAITS_DEFAULT.get(value["id"], "")))
 	label.add_theme_font_override("font", _typed_font)
 	label.add_theme_font_size_override("font_size", FONT_SIZE)
 	label.add_theme_color_override("font_color", INK)
 	label.position = Vector2(value["x"], value["y"] - _ascent())
 	_card.add_child(label)
-	if CARD_CHOICES.has(label.name):
+	if _choices.has(label.name):
 		label.custom_minimum_size.x = CHOICE_MIN_WIDTH
 		label.mouse_filter = Control.MOUSE_FILTER_STOP
 		label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -85,11 +100,34 @@ func _add_value(value: Dictionary) -> void:
 
 func _on_choice_input(event: InputEvent, label: Label) -> void:
 	var button := event as InputEventMouseButton
-	if button == null or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
+	if button == null or not button.pressed:
 		return
-	var choices: Array = CARD_CHOICES[label.name]
-	label.text = choices[wrapi(choices.find(label.text) + 1, 0, choices.size())]
+	var step := 0
+	match button.button_index:
+		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP:
+			step = 1
+		MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_WHEEL_DOWN:
+			step = -1
+		_:
+			return
+	var choices: Array = _choices[label.name]
+	label.text = choices[wrapi(choices.find(label.text) + step, 0, choices.size())]
+	label.reset_size()
 	label.accept_event()
+
+
+static func _height_choices() -> Array:
+	var heights := []
+	for inches in range(HEIGHT_RANGE.x, HEIGHT_RANGE.y + 1):
+		heights.append("%d-%02d" % [inches / 12, inches % 12])
+	return heights
+
+
+static func _weight_choices() -> Array:
+	var weights := []
+	for pounds in range(WEIGHT_RANGE.x, WEIGHT_RANGE.y + 1, WEIGHT_STEP):
+		weights.append(str(pounds))
+	return weights
 
 
 func _setup_name_edit() -> void:
@@ -127,13 +165,23 @@ func _update_signature() -> void:
 	_signature.reset_size()
 
 
-## People sign in upper and lower case, whatever the typed line says.
+## People sign in upper and lower case, whatever the typed line says. Capitals typed
+## inside a word stay, as in McGee, unless the whole word is capitals.
 func _signed_name(driver_name: String) -> String:
+	var words := driver_name.split(" ")
+	for i in words.size():
+		words[i] = _signed_word(words[i])
+	return " ".join(words)
+
+
+func _signed_word(word: String) -> String:
+	if word == word.to_upper():
+		word = word.to_lower()
 	var signed := ""
-	var starts_word := true
-	for letter in driver_name.to_lower():
-		signed += letter.to_upper() if starts_word else letter
-		starts_word = letter in " -'"
+	var starts_part := true
+	for letter in word:
+		signed += letter.to_upper() if starts_part else letter
+		starts_part = letter in "-'"
 	return signed
 
 
@@ -142,10 +190,26 @@ func _ascent() -> float:
 
 
 func _driver_name() -> String:
-	return _name_edit.text.strip_edges()
+	return _typed_name.strip_edges()
+
+
+## Works out the typed form of the line after an edit: everything after the caret and the
+## part before the edit are unchanged, and what lies between arrived as it was typed.
+func _typed_form(new_text: String) -> String:
+	var caret := _name_edit.caret_column
+	var after_caret := new_text.length() - caret
+	var unchanged := 0
+	var most := mini(_typed_name.length() - after_caret, caret)
+	while unchanged < most and _typed_name[unchanged].to_upper() == new_text[unchanged].to_upper():
+		unchanged += 1
+	var typed := _typed_name.left(unchanged) + new_text.substr(unchanged, caret - unchanged)
+	if after_caret > 0:
+		typed += _typed_name.right(after_caret)
+	return typed if typed.to_upper() == new_text.to_upper() else new_text
 
 
 func _on_name_changed(new_text: String) -> void:
+	_typed_name = _typed_form(new_text)
 	# Licenses are typed in capitals, whatever the shift key says.
 	var capitals := new_text.to_upper()
 	if capitals != new_text:
@@ -163,11 +227,15 @@ func _on_name_submitted(_new_text: String) -> void:
 func _on_continue_pressed() -> void:
 	if _driver_name().is_empty():
 		return
-	var driver_name := _driver_name()
-	var driver_sex: String = (_card.get_node("sex") as Label).text
+	var driver_name := _signed_name(_driver_name())
+	var traits := {}
+	for id in _choices:
+		traits[id] = (_card.get_node(id) as Label).text
 	GameState.new_game()
 	GameState.driver_name = driver_name
-	GameState.driver_sex = driver_sex
+	GameState.driver_traits = traits
+	if driver_name.to_upper() == CHEAT_NAME:
+		GameState.money = CHEAT_MONEY
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 
