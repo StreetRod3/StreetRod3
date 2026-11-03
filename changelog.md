@@ -107,3 +107,11 @@ Rivals have their own parts under the hood now, and a look under a rival's hood 
 Losing a car on pink slips now loses what is on it. The parts used to stay behind as spares as well as going with the car, so you could win it back and have two of everything. Spares you already had are still yours.
 
 Blow your engine in a pink slips race and the rival gets the car with no engine, and can't drive it until they get a new one. They stay away from the drive-in for your next three races, and are listed as having no engine, then come back with the engine the car came with. You lose everything attached to the car, including what was bolted to the blown engine, and those parts go on their new engine. Win the car back and it comes with that engine and those parts.
+
+## 2026-11-03
+
+The Corvette 1956 now shows its real wheels. Its model had tires and hubs welded into the body, so whatever wheels the car had on, those were the ones drawn. They are cut out of `sr1-c56.glb` now and each arch has a dark wheel well, and the car uses the same wheel mounts as the Chevy, so changing wheels shows on it, and taking them off leaves empty arches. The wheels are a little smaller than the old fake ones, and the body sits about 5 cm lower to match. Its wheels are now where the model's arches are, a little farther apart than before, which changes its handling slightly in the non-arcade drive.
+
+The Fairlane and the Ford Coupe now show their real wheels too, and for the same reason. Their tires are cut out of the models and their arches are dark, and the real wheel wells behind are kept, along with the Coupe's axles. The Fairlane's rear fenders hide the top of its wheels, like skirts. Both models now face forward by themselves, so the Coupe's car file no longer turns it around, and the Fairlane no longer sits 0.6 degrees off straight. The floating strip in front of the Corvette's bumper is gone. All three cars sit lower than before on the slightly smaller wheels, and their wheels moved to where the arches are, which changes their handling slightly in the non-arcade drive.
+
+The three car models are now stored in Git LFS, as `.gitattributes` always said they should be, so cloning the repo needs `git-lfs`. The web build now fetches them.

@@ -3,32 +3,31 @@
   "name": "Ford Coupe 1932",
   "model": {
     "path": "res://assets/cars/sr1-ford-customized-coupe-1932.glb",
-    "position": [0.0, 0.0, 0.0],
-    "rotation": [0, 180, 0],
-    "height": 1.5
+    "position": [0.0, 0.213, 0.0],
+    "height": 1.267,
+    "ground_clearance": 0.213
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
-    "overlay": false,
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.806, 0.338, 1.886],
+        "position": [-0.8, 0.34, 1.919],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.803, 0.338, 1.891],
+        "position": [0.8, 0.34, 1.918],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.828, 0.369, -1.614],
+        "position": [-0.8, 0.34, -1.627],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.828, 0.369, -1.608],
+        "position": [0.8, 0.34, -1.627],
         "rotation": [0, 180, -90]
       }
     ]
@@ -39,7 +38,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [-0.25, 1.08, -0.1]
+    "position": [-0.25, 1.06, -0.1]
   },
   "chassis": {
     "mass": 1140,

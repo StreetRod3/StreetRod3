@@ -3,7 +3,7 @@
 ## Requirements
 
 - [Godot 4.6.1](https://godotengine.org/download) standard build (GDScript). The .NET build is not required.
-- Git, to clone the repo.
+- Git and [Git LFS](https://git-lfs.com), to clone the repo. Without LFS, the car models that are stored in it come down as small pointer files and those cars will not load.
 - A desktop OpenGL 3 / Vulkan / Metal capable machine for the editor. The game is exported for the Web, Windows, macOS, and Linux.
 
 No language runtime, package install, or `.env` file is required.

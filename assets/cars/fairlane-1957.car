@@ -3,31 +3,31 @@
   "name": "Fairlane 500",
   "model": {
     "path": "res://assets/cars/sr1-fairlane-1957.glb",
-    "position": [0.0, 0.0, 0.0],
-    "height": 1.6
+    "position": [0.0, 0.185, 0.0],
+    "height": 1.365,
+    "ground_clearance": 0.185
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
-    "overlay": false,
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-1.204, 0.452, 1.996],
+        "position": [-1.1, 0.34, 1.992],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [1.172, 0.452, 1.996],
+        "position": [1.1, 0.34, 1.995],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-1.190, 0.452, -1.677],
+        "position": [-1.1, 0.34, -1.676],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [1.217, 0.452, -1.677],
+        "position": [1.1, 0.34, -1.677],
         "rotation": [0, 180, -90]
       }
     ]
@@ -38,7 +38,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [-0.62, 1.18, -1]
+    "position": [-0.62, 1.13, -1]
   },
   "chassis": {
     "mass": 1590,
