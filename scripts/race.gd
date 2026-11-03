@@ -365,6 +365,7 @@ func _show_wreck() -> void:
 
 
 func _show_result(player_won: bool) -> void:
+	_park_cars()
 	_end_race_ui()
 	if player_won:
 		GameState.note_race_win()
@@ -394,6 +395,13 @@ func _lost_bucks_line(payout: int) -> String:
 	if payout >= 0:
 		return ""
 	return "\nYou lost %d bucks!" % -payout
+
+
+func _park_cars() -> void:
+	if _player.has_method(&"begin_park"):
+		_player.begin_park(0.0)
+	if _opponent.has_method(&"begin_park"):
+		_opponent.begin_park(4.2)
 
 
 func _end_race_ui() -> void:

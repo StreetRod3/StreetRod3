@@ -1,9 +1,10 @@
 extends Node3D
 
-## Matches Ground in race.tscn: BoxMesh (40, 1, 520) centered at (0, -0.5, 210).
+## Matches Ground in race.tscn: BoxMesh (40, 1, 870) centered at (0, -0.5, 385).
+## The quarter mile ends at `FINISH_Z`. The pavement keeps going so the run does not stop at the line.
 const GROUND_HALF_W := 20.0
 const GROUND_Z_MIN := -50.0
-const GROUND_Z_MAX := 470.0
+const GROUND_Z_MAX := 820.0
 const FINISH_Z := 402.336
 
 const CURB_W := 0.45

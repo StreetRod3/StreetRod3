@@ -1,0 +1,968 @@
+extends Node3D
+
+## A short automatic drive between two places on the city map.
+
+const CITY_MAP := "res://assets/maps/city.trk"
+const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
+const _EngineSound := preload("res://scripts/engine_sound.gd")
+
+const _BODY_Y := 0.35
+const _WHEEL_R := 0.32
+const _LOOK_AHEAD := 6.0
+## Corner radius through a junction. Kept inside the width of the street.
+const _TURN_RADIUS := 14.0
+const _FADE_IN_S := 0.28
+const _FADE_OUT_S := 0.28
+const _CRUISE_SPEED := 18.0
+const _CRUISE_MIN_S := 2.2
+const _CRUISE_MAX_S := 16.0
+
+const _ROAD_COLOR := Color(0.32, 0.33, 0.35, 1)
+const _EDGE_COLOR := Color(0.86, 0.84, 0.78, 1)
+const _LANE_COLOR := Color(0.95, 0.86, 0.45, 1)
+## Streets at least this wide, from the center to the curb, get two lanes.
+const _TWO_LANE_HALF := 6.0
+const _LANE_DASH := 3.2
+const _LANE_GAP := 2.6
+## White line sits this far inside the pavement edge. Its half-width is `_CURB_HALF`.
+const _CURB_FROM_EDGE := 0.28
+const _CURB_HALF := 0.12
+const _GROUND_COLOR := Color(0.2, 0.28, 0.18, 1)
+const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
+## Each place is built with its front on local z = 0. Local -Z faces the street.
+const _SHOP_WALL := Color(0.62, 0.58, 0.52)
+const _SHOP_DOOR := Color(0.4, 0.43, 0.48)
+const _DINER_WALL := Color(0.84, 0.78, 0.68)
+const _DINER_RED := Color(0.62, 0.08, 0.09)
+const _GAS_BLUE := Color(0.16, 0.32, 0.62)
+const _GAS_YELLOW := Color(0.95, 0.78, 0.16)
+const _DOOR_SWING := 1.75
+const _DOOR_OPEN_S := 1.1
+
+var _car: Node3D
+var _wheels: Array[Node3D] = []
+var _wheel_bases: Array[Basis] = []
+var _engine: AudioStreamPlayer
+var _shade: ColorRect
+var _pts: PackedVector3Array = PackedVector3Array()
+var _dists: PackedFloat32Array = PackedFloat32Array()
+var _length: float = 0.0
+var _duration: float = _CRUISE_MIN_S
+var _driven: float = 0.0
+var _spin: float = 0.0
+var _fade: float = 1.0
+var _phase: int = 0
+var _destination: String = ""
+var _streets: Array[Dictionary] = []
+var _garage_left: Node3D
+var _garage_right: Node3D
+var _leaving_garage := false
+var _finished := false
+
+
+func _ready() -> void:
+	GameState.update_music()
+	var destination := GameState.cruise_scene
+	var from_poi := GameState.cruise_from_poi
+	var to_poi := GameState.cruise_to_poi
+	_leaving_garage = from_poi == GameState.POI_GARAGE
+	GameState.cruise_from_poi = ""
+	GameState.cruise_to_poi = ""
+	GameState.cruise_scene = ""
+	_destination = destination if not destination.is_empty() else GameState.SCENE_GARAGE
+	_build_world()
+	_build_fade()
+	var track := TrackFile.load_path(CITY_MAP)
+	var errors: Array = track.get("errors", [])
+	var route: Array[Vector3] = []
+	if errors.is_empty():
+		route = TrackFile.cruise_route(track, from_poi, to_poi)
+	if route.size() < 2:
+		for err in errors:
+			push_error(str(err))
+		if errors.is_empty():
+			push_error("No city route from %s to %s." % [from_poi, to_poi])
+		set_process(false)
+		call_deferred(&"_finish")
+		return
+	_build_city(track)
+	_bake(route)
+	_duration = clampf(_length / _CRUISE_SPEED, _CRUISE_MIN_S, _CRUISE_MAX_S)
+	_build_car()
+	_place_car(0.0)
+	if GameState.engine_runs():
+		_engine = _EngineSound.new()
+		_car.add_child(_engine)
+		_engine.set_state(900.0, 0.2, false)
+		GameState.set_music_dimmed(true)
+	if _leaving_garage:
+		_set_garage_doors_open()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _finished or not event is InputEventKey:
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo or key.keycode != KEY_SPACE:
+		return
+	get_viewport().set_input_as_handled()
+	_finish()
+
+
+func _process(delta: float) -> void:
+	if _phase == 0:
+		_fade = maxf(_fade - delta / _FADE_IN_S, 0.0)
+		_paint_fade()
+		if _fade <= 0.0:
+			_phase = 1
+			if _leaving_garage:
+				_close_garage_doors()
+		return
+	if _phase == 1:
+		_driven = minf(_driven + delta, _duration)
+		var along := _smooth(_driven / _duration) * _length
+		_place_car(along)
+		_spin_wheels(delta)
+		_update_engine(along)
+		if _driven >= _duration:
+			_phase = 2
+		return
+	_fade = minf(_fade + delta / _FADE_OUT_S, 1.0)
+	_paint_fade()
+	if _fade >= 1.0:
+		_finish()
+
+
+func _finish() -> void:
+	if _finished:
+		return
+	_finished = true
+	set_process(false)
+	set_process_unhandled_input(false)
+	GameState.set_music_dimmed(false)
+	if _engine != null and is_instance_valid(_engine):
+		_engine.stop()
+	GameState.current_scene_path = _destination
+	get_tree().change_scene_to_file(_destination)
+
+
+func _smooth(t: float) -> float:
+	var u := clampf(t, 0.0, 1.0)
+	return u * u * (3.0 - 2.0 * u)
+
+
+func _build_world() -> void:
+	var env := Environment.new()
+	env.background_mode = Environment.BG_SKY
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.25, 0.35, 0.55)
+	sky_mat.sky_horizon_color = Color(0.55, 0.6, 0.65)
+	sky_mat.ground_bottom_color = Color(0.15, 0.16, 0.18)
+	sky_mat.ground_horizon_color = Color(0.4, 0.42, 0.45)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_color = Color(0.5, 0.52, 0.55)
+	env.ambient_light_energy = 0.55
+	var world := WorldEnvironment.new()
+	world.environment = env
+	add_child(world)
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-42.0, -35.0, 0.0)
+	sun.light_energy = 1.1
+	sun.shadow_enabled = true
+	add_child(sun)
+
+
+func _build_city(track: Dictionary) -> void:
+	var ground := _build_ground(track)
+	add_child(ground)
+	var road_mat := StandardMaterial3D.new()
+	road_mat.albedo_color = _ROAD_COLOR
+	road_mat.roughness = 0.92
+	road_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var roads := MeshInstance3D.new()
+	var edges := MeshInstance3D.new()
+	var lanes := MeshInstance3D.new()
+	var built := _road_meshes(track)
+	roads.mesh = built[0]
+	edges.mesh = built[1]
+	lanes.mesh = built[2]
+	roads.material_override = road_mat
+	var edge_mat := StandardMaterial3D.new()
+	edge_mat.albedo_color = _EDGE_COLOR
+	edge_mat.roughness = 0.8
+	edge_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	edges.material_override = edge_mat
+	var lane_mat := StandardMaterial3D.new()
+	lane_mat.albedo_color = _LANE_COLOR
+	lane_mat.roughness = 0.7
+	lane_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	lanes.material_override = lane_mat
+	add_child(roads)
+	add_child(edges)
+	add_child(lanes)
+	_build_places(track)
+	_build_blocks(track)
+	_floor = ground
+
+
+var _floor: MeshInstance3D
+
+
+func _build_ground(track: Dictionary) -> MeshInstance3D:
+	var min_x := 0.0
+	var max_x := 0.0
+	var min_z := 0.0
+	var max_z := 0.0
+	var first := true
+	var points: Array[Vector3] = []
+	for id in track["nodes"]:
+		points.append(TrackFile.world_position(track["nodes"][id]))
+	for pid in track["poi_order"]:
+		points.append(TrackFile.world_position(track["pois"][pid]))
+	for point in points:
+		if first:
+			min_x = point.x
+			max_x = point.x
+			min_z = point.z
+			max_z = point.z
+			first = false
+		else:
+			min_x = minf(min_x, point.x)
+			max_x = maxf(max_x, point.x)
+			min_z = minf(min_z, point.z)
+			max_z = maxf(max_z, point.z)
+	var pad := 40.0
+	var box := BoxMesh.new()
+	box.size = Vector3(max_x - min_x + pad * 2.0, 1.0, max_z - min_z + pad * 2.0)
+	var ground_mat := StandardMaterial3D.new()
+	ground_mat.albedo_color = _GROUND_COLOR
+	ground_mat.roughness = 0.95
+	box.material = ground_mat
+	var ground := MeshInstance3D.new()
+	ground.mesh = box
+	ground.position = Vector3((min_x + max_x) * 0.5, -0.5, (min_z + max_z) * 0.5)
+	return ground
+
+
+func _road_meshes(track: Dictionary) -> Array:
+	var asphalt := SurfaceTool.new()
+	var marks := SurfaceTool.new()
+	var lanes := SurfaceTool.new()
+	asphalt.begin(Mesh.PRIMITIVE_TRIANGLES)
+	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	lanes.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var segments: Array[Dictionary] = []
+	var links: Dictionary = {}
+	var seen := {}
+	var nodes: Dictionary = track["nodes"]
+	for road in track["roads"]:
+		var a_id := int(road["from"])
+		var b_id := int(road["to"])
+		var key := "%d-%d" % [mini(a_id, b_id), maxi(a_id, b_id)]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		var half := maxf(float(road["width"]) * 0.5, 1.0)
+		_add_street(segments, links, a_id, b_id, TrackFile.world_position(nodes[a_id]), TrackFile.world_position(nodes[b_id]), half)
+	for pid in track["poi_order"]:
+		var poi: Dictionary = track["pois"][pid]
+		var stop := TrackFile.world_position(poi)
+		var at_id := int(poi["at"])
+		var join := TrackFile.world_position(nodes[at_id])
+		if stop.distance_squared_to(join) > 0.25:
+			_add_street(segments, links, -1, at_id, stop, join, 4.5)
+	for segment in segments:
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		var half_w := float(segment["half"])
+		_add_ribbon(asphalt, a, b, half_w, 0.03 if int(segment["a_node"]) >= 0 else 0.04)
+		var span := Vector3(b.x - a.x, 0.0, b.z - a.z)
+		var length := span.length()
+		if length < 0.2:
+			continue
+		var dir := span / length
+		var side := dir.cross(Vector3.UP)
+		var inset := maxf(half_w - _CURB_FROM_EDGE, _CURB_HALF * 2.0)
+		var a_node := int(segment["a_node"])
+		var b_node := int(segment["b_node"])
+		for sign_i in 2:
+			var sign := -1.0 if sign_i == 0 else 1.0
+			var side_dir := side * sign
+			var trim_a := _curb_trim(links, a_node, side_dir)
+			var trim_b := _curb_trim(links, b_node, side_dir)
+			if trim_a + trim_b + 0.3 >= length:
+				continue
+			var shift := side_dir * inset
+			_add_ribbon(marks, a + dir * trim_a + shift, b - dir * trim_b + shift, _CURB_HALF, 0.05)
+		if half_w >= _TWO_LANE_HALF:
+			var stop_a := _junction_half(links, a_node, dir)
+			var stop_b := _junction_half(links, b_node, -dir)
+			_add_lane_dashes(lanes, a, b, stop_a, stop_b)
+	_streets = segments
+	asphalt.generate_normals()
+	marks.generate_normals()
+	lanes.generate_normals()
+	return [asphalt.commit(), marks.commit(), lanes.commit()]
+
+
+func _add_street(segments: Array[Dictionary], links: Dictionary, a_id: int, b_id: int, a: Vector3, b: Vector3, half: float) -> void:
+	var span := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	if span.length_squared() < 0.01:
+		return
+	var dir := span.normalized()
+	segments.append({
+		"a": a,
+		"b": b,
+		"half": half,
+		"a_node": a_id,
+		"b_node": b_id,
+	})
+	_note_link(links, a_id, dir, half)
+	_note_link(links, b_id, -dir, half)
+
+
+func _note_link(links: Dictionary, node_id: int, dir: Vector3, half: float) -> void:
+	if node_id < 0:
+		return
+	if not links.has(node_id):
+		links[node_id] = []
+	(links[node_id] as Array).append({"dir": dir, "half": half})
+
+
+## Distance along a road before its curb meets the curb of a street on `side_dir`.
+func _curb_trim(links: Dictionary, node_id: int, side_dir: Vector3) -> float:
+	if node_id < 0 or not links.has(node_id):
+		return 0.0
+	var widest := 0.0
+	var found := false
+	for raw in links[node_id]:
+		var entry: Dictionary = raw
+		var dir: Vector3 = entry["dir"]
+		if dir.dot(side_dir) <= 0.5:
+			continue
+		widest = maxf(widest, float(entry["half"]))
+		found = true
+	if not found:
+		return 0.0
+	return maxf(widest - _CURB_FROM_EDGE - _CURB_HALF, 0.0)
+
+
+## How far a center line must stop so it does not run across the side street.
+func _junction_half(links: Dictionary, node_id: int, along: Vector3) -> float:
+	if node_id < 0 or not links.has(node_id):
+		return 0.0
+	var along_flat := Vector3(along.x, 0.0, along.z)
+	if along_flat.length_squared() < 0.0001:
+		return 0.0
+	along_flat = along_flat.normalized()
+	var widest := 0.0
+	for raw in links[node_id]:
+		var entry: Dictionary = raw
+		var dir: Vector3 = entry["dir"]
+		if absf(dir.dot(along_flat)) > 0.85:
+			continue
+		widest = maxf(widest, float(entry["half"]))
+	return widest
+
+
+func _add_lane_dashes(st: SurfaceTool, a: Vector3, b: Vector3, trim_a: float, trim_b: float) -> void:
+	var span := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var length := span.length()
+	if length < trim_a + trim_b + _LANE_DASH:
+		return
+	var dir := span / length
+	var cursor := trim_a
+	var end := length - trim_b
+	while cursor < end - 0.2:
+		var dash_end := minf(cursor + _LANE_DASH, end)
+		_add_ribbon(st, a + dir * cursor, a + dir * dash_end, 0.1, 0.06)
+		cursor = dash_end + _LANE_GAP
+
+
+func _add_ribbon(st: SurfaceTool, a: Vector3, b: Vector3, half_w: float, lift: float) -> void:
+	var flat := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	if flat.length_squared() < 0.01:
+		return
+	var side := flat.normalized().cross(Vector3.UP) * half_w
+	var y := lift
+	var a_l := Vector3(a.x, y, a.z) - side
+	var a_r := Vector3(a.x, y, a.z) + side
+	var b_l := Vector3(b.x, y, b.z) - side
+	var b_r := Vector3(b.x, y, b.z) + side
+	st.set_uv(Vector2(0.0, 0.0))
+	st.add_vertex(a_l)
+	st.set_uv(Vector2(1.0, 0.0))
+	st.add_vertex(a_r)
+	st.set_uv(Vector2(1.0, 1.0))
+	st.add_vertex(b_r)
+	st.set_uv(Vector2(0.0, 0.0))
+	st.add_vertex(a_l)
+	st.set_uv(Vector2(1.0, 1.0))
+	st.add_vertex(b_r)
+	st.set_uv(Vector2(0.0, 1.0))
+	st.add_vertex(b_l)
+
+
+func _build_places(track: Dictionary) -> void:
+	var nodes: Dictionary = track["nodes"]
+	for pid in track["poi_order"]:
+		var poi: Dictionary = track["pois"][pid]
+		var stop := TrackFile.world_position(poi)
+		var join := TrackFile.world_position(nodes[int(poi["at"])])
+		var away := stop - join
+		away.y = 0.0
+		if away.length_squared() < 0.25:
+			away = Vector3(0.0, 0.0, 1.0)
+		else:
+			away = away.normalized()
+		var root := Node3D.new()
+		root.name = str(poi["name"])
+		var place_id := str(poi["id"])
+		if place_id == "drive-in" or place_id == "gas-station":
+			_place_alongside(root, stop, away)
+		else:
+			root.position = stop + away * 4.0
+			root.rotation.y = atan2(away.x, away.z)
+		add_child(root)
+		match place_id:
+			"garage":
+				_build_garage(root)
+			"drive-in":
+				_build_drive_in(root)
+			"gas-station":
+				_build_gas_station(root)
+			_:
+				_add_box(root, Vector3(9.0, 4.2, 7.0), Vector3(0.0, 2.1, 3.5), Color(0.35, 0.35, 0.38))
+
+
+## The front faces the lane. Local +X runs with the car, left to right across that front.
+func _place_alongside(root: Node3D, stop: Vector3, away: Vector3) -> void:
+	root.rotation.y = atan2(-away.z, away.x)
+	var side := Vector3(-away.z, 0.0, away.x)
+	root.position = stop - away * 4.0 + side * 7.2
+
+
+func _build_garage(root: Node3D) -> void:
+	_add_box(root, Vector3(8.4, 0.06, 4.6), Vector3(-0.3, 0.03, -2.2), Color(0.55, 0.54, 0.5), 0.92)
+	_add_box(root, Vector3(3.5, 5.2, 0.32), Vector3(-4.25, 2.6, 0.0), _SHOP_WALL)
+	_add_box(root, Vector3(2.0, 5.2, 0.32), Vector3(4.2, 2.6, 0.0), _SHOP_WALL)
+	_add_box(root, Vector3(0.32, 5.2, 8.8), Vector3(-5.84, 2.6, 4.4), _SHOP_WALL)
+	_add_box(root, Vector3(0.32, 5.2, 8.8), Vector3(5.04, 2.6, 4.4), _SHOP_WALL)
+	_add_box(root, Vector3(11.2, 5.2, 0.32), Vector3(-0.4, 2.6, 8.8), _SHOP_WALL)
+	_add_box(root, Vector3(5.9, 0.72, 0.32), Vector3(0.35, 4.84, 0.0), _SHOP_WALL)
+	_add_box(root, Vector3(11.8, 0.24, 9.3), Vector3(-0.4, 5.44, 4.45), Color(0.34, 0.32, 0.28), 0.92)
+	_garage_left = _garage_door(root, -1.05, -1.0)
+	_garage_right = _garage_door(root, 1.75, 1.0)
+	_add_light(root, Vector3(0.3, 3.4, -4.5), Color(1.0, 0.95, 0.86), 0.7, 14.0)
+
+
+## `hinge_sign` is -1 for the left leaf and +1 for the right. The hinge is the outer edge.
+func _garage_door(root: Node3D, center_x: float, hinge_sign: float) -> Node3D:
+	var half := 1.35
+	var hinge := Node3D.new()
+	hinge.position = Vector3(center_x + hinge_sign * half, 0.0, -0.2)
+	root.add_child(hinge)
+	var leaf := -hinge_sign * half
+	_add_box(hinge, Vector3(2.7, 4.5, 0.1), Vector3(leaf, 2.25, 0.0), _SHOP_DOOR, 0.42, 0.28)
+	for i in 4:
+		var rib_y := -1.5 + float(i) * 1.0
+		_add_box(hinge, Vector3(2.35, 0.07, 0.04), Vector3(leaf, 2.25 + rib_y, -0.07), Color(0.62, 0.64, 0.68), 0.35, 0.5)
+	var handle_x := leaf - hinge_sign * 1.15
+	_add_box(hinge, Vector3(0.06, 0.42, 0.05), Vector3(handle_x, 2.05, -0.1), Color(0.18, 0.18, 0.2), 0.32, 0.75)
+	return hinge
+
+
+func _set_garage_doors_open() -> void:
+	if _garage_left == null or _garage_right == null:
+		return
+	_garage_left.rotation.y = _DOOR_SWING
+	_garage_right.rotation.y = -_DOOR_SWING
+
+
+func _close_garage_doors() -> void:
+	if _garage_left == null or _garage_right == null:
+		return
+	var doors := create_tween()
+	doors.set_parallel(true)
+	doors.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+	doors.tween_property(_garage_left, "rotation:y", 0.0, _DOOR_OPEN_S)
+	doors.tween_property(_garage_right, "rotation:y", 0.0, _DOOR_OPEN_S)
+
+
+func _build_drive_in(root: Node3D) -> void:
+	_add_box(root, Vector3(17.2, 0.06, 6.4), Vector3(0.0, 0.03, -3.0), Color(0.14, 0.14, 0.15), 0.94)
+	for i in 5:
+		var x := -6.0 + float(i) * 3.0
+		_add_box(root, Vector3(0.08, 0.02, 4.4), Vector3(x, 0.07, -2.6), Color(0.72, 0.72, 0.68), 0.6)
+	_add_box(root, Vector3(16.4, 3.3, 6.2), Vector3(0.0, 1.65, 3.1), _DINER_WALL)
+	_add_box(root, Vector3(17.0, 0.16, 6.8), Vector3(0.0, 3.4, 3.15), Color(0.09, 0.08, 0.09), 0.7)
+	_add_box(root, Vector3(16.4, 0.14, 0.06), Vector3(0.0, 3.12, -0.04), _DINER_RED, 0.45)
+	_add_box(root, Vector3(16.4, 0.16, 0.06), Vector3(0.0, 0.12, -0.04), Color(0.38, 0.06, 0.07), 0.5)
+	for i in 4:
+		_diner_window(root, -6.0 + float(i) * 2.8, 2.2)
+	_diner_window(root, 5.7, 2.5)
+	_add_box(root, Vector3(2.2, 0.08, 0.5), Vector3(5.7, 1.02, -0.28), Color(0.5, 0.28, 0.14), 0.55)
+	_add_box(root, Vector3(2.3, 0.5, 0.06), Vector3(5.7, 3.42, -0.12), Color(0.07, 0.04, 0.03))
+	var amber := Color(1.0, 0.62, 0.12)
+	_add_box(root, Vector3(2.1, 0.04, 0.03), Vector3(5.7, 3.6, -0.16), amber, 0.3, 0.0, amber, 2.4)
+	_add_box(root, Vector3(2.1, 0.04, 0.03), Vector3(5.7, 3.24, -0.16), amber, 0.3, 0.0, amber, 2.4)
+	_add_label(root, "ORDER", Vector3(5.7, 3.42, -0.18), 36, 0.01, Color(2.6, 1.7, 0.35), Color(0.85, 0.32, 0.05), 5)
+	_diner_awning(root)
+	_diner_sign(root)
+
+
+func _diner_window(root: Node3D, x: float, width: float) -> void:
+	_add_box(root, Vector3(width, 1.55, 0.06), Vector3(x, 1.8, -0.02), Color(0.74, 0.75, 0.78), 0.32, 0.65)
+	_add_box(root, Vector3(width - 0.14, 1.38, 0.04), Vector3(x, 1.8, -0.06), Color(0.5, 0.66, 0.78), 0.08, 0.12)
+
+
+func _diner_awning(root: Node3D) -> void:
+	var count := 14
+	var x0 := -7.3
+	var x1 := 3.9
+	var stripe_w := (x1 - x0) / float(count)
+	for i in count:
+		var color: Color = _DINER_RED if i % 2 == 0 else Color(0.92, 0.9, 0.86)
+		var x := x0 + stripe_w * (float(i) + 0.5)
+		_add_box(root, Vector3(stripe_w + 0.02, 0.05, 1.25), Vector3(x, 2.58, -0.58), color, 0.55, 0.0, Color.BLACK, 0.0, Vector3(-0.28, 0.0, 0.0))
+
+
+func _diner_sign(root: Node3D) -> void:
+	var metal := Color(0.2, 0.2, 0.22)
+	var tube := Color(1.0, 0.15, 0.28)
+	_add_box(root, Vector3(0.1, 1.35, 0.1), Vector3(-4.8, 4.25, 0.1), metal, 0.4, 0.65)
+	_add_box(root, Vector3(0.1, 1.35, 0.1), Vector3(4.8, 4.25, 0.1), metal, 0.4, 0.65)
+	_add_box(root, Vector3(11.4, 1.4, 0.14), Vector3(0.0, 4.25, 0.02), Color(0.04, 0.02, 0.03))
+	_add_box(root, Vector3(10.2, 0.9, 0.04), Vector3(0.0, 4.25, -0.08), Color(0.45, 0.03, 0.07), 0.4, 0.0, Color(1.0, 0.12, 0.22), 0.9)
+	_add_box(root, Vector3(10.8, 0.06, 0.04), Vector3(0.0, 4.88, -0.1), tube, 0.3, 0.0, tube, 2.8)
+	_add_box(root, Vector3(10.8, 0.06, 0.04), Vector3(0.0, 3.62, -0.1), tube, 0.3, 0.0, tube, 2.8)
+	_add_box(root, Vector3(0.06, 1.32, 0.04), Vector3(-5.4, 4.25, -0.1), tube, 0.3, 0.0, tube, 2.8)
+	_add_box(root, Vector3(0.06, 1.32, 0.04), Vector3(5.4, 4.25, -0.1), tube, 0.3, 0.0, tube, 2.8)
+	_add_label(root, "CHRIS'S DRIVE-IN", Vector3(0.0, 4.25, -0.14), 48, 0.012, Color(2.4, 1.45, 1.55), Color(0.85, 0.08, 0.16), 8)
+	var bulbs: Array[Color] = [
+		Color(1.0, 0.16, 0.18),
+		Color(1.0, 0.84, 0.22),
+		Color(0.25, 0.95, 1.0),
+		Color(0.35, 1.0, 0.42),
+		Color(1.0, 0.38, 0.86),
+	]
+	for i in 9:
+		var color: Color = bulbs[i % bulbs.size()]
+		var bx := -4.4 + float(i) * 1.1
+		_add_sphere(root, 0.07, Vector3(bx, 5.05, -0.08), color, 0.3, 0.0, color, 2.2)
+	_add_light(root, Vector3(0.0, 4.4, -1.2), Color(1.0, 0.35, 0.45), 1.3, 10.0)
+
+
+func _build_gas_station(root: Node3D) -> void:
+	var brick := _brick_material()
+	_add_box(root, Vector3(9.2, 0.06, 5.2), Vector3(0.2, 0.03, -2.4), Color(0.58, 0.56, 0.52), 0.9)
+	_add_box_mat(root, Vector3(10.2, 3.2, 0.28), Vector3(0.0, 1.6, 0.0), brick)
+	_add_box_mat(root, Vector3(0.28, 3.2, 5.5), Vector3(-5.0, 1.6, 2.75), brick)
+	_add_box_mat(root, Vector3(0.28, 3.2, 5.5), Vector3(5.0, 1.6, 2.75), brick)
+	_add_box_mat(root, Vector3(10.2, 3.2, 0.28), Vector3(0.0, 1.6, 5.5), brick)
+	_add_box(root, Vector3(1.7, 1.35, 0.06), Vector3(-3.55, 1.75, -0.16), _GAS_YELLOW, 0.5)
+	_add_box(root, Vector3(3.4, 1.7, 0.08), Vector3(-0.7, 1.9, -0.16), _GAS_BLUE, 0.4)
+	_add_box(root, Vector3(3.1, 1.4, 0.04), Vector3(-0.7, 1.9, -0.21), Color(0.62, 0.8, 0.9), 0.1, 0.08)
+	_add_box(root, Vector3(1.25, 2.25, 0.08), Vector3(2.75, 1.15, -0.16), Color(0.2, 0.4, 0.78), 0.42)
+	_add_box(root, Vector3(0.7, 0.85, 0.03), Vector3(2.75, 1.55, -0.21), Color(0.7, 0.84, 0.95), 0.12, 0.08)
+	_add_label(root, "OFFICE", Vector3(2.75, 1.55, -0.24), 20, 0.0065, Color(0.9, 0.95, 1.0), Color(0.08, 0.16, 0.35), 3)
+	_add_box(root, Vector3(10.5, 0.12, 0.14), Vector3(0.0, 3.18, -0.1), _GAS_BLUE, 0.5)
+	var tiles := Color(0.42, 0.32, 0.24)
+	_add_box(root, Vector3(10.6, 0.14, 3.2), Vector3(0.0, 4.2, 1.45), tiles, 0.86, 0.0, Color.BLACK, 0.0, Vector3(-0.7, 0.0, 0.0))
+	_add_box(root, Vector3(10.6, 0.14, 3.2), Vector3(0.0, 4.2, 3.95), tiles, 0.86, 0.0, Color.BLACK, 0.0, Vector3(0.7, 0.0, 0.0))
+	_add_box(root, Vector3(10.7, 0.1, 0.2), Vector3(0.0, 5.15, 2.7), Color(0.28, 0.29, 0.31), 0.7)
+	for side_i in 2:
+		var side := -1.0 if side_i == 0 else 1.0
+		var sx := 5.28 * side
+		_add_box(root, Vector3(0.1, 0.7, 3.0), Vector3(sx, 4.15, 1.45), _GAS_BLUE, 0.5, 0.0, Color.BLACK, 0.0, Vector3(-0.7, 0.0, 0.0))
+		_add_box(root, Vector3(0.1, 0.7, 3.0), Vector3(sx, 4.15, 3.95), _GAS_BLUE, 0.5, 0.0, Color.BLACK, 0.0, Vector3(0.7, 0.0, 0.0))
+	_gas_pump(root, Vector3(-1.5, 0.08, -2.3))
+	_gas_pump(root, Vector3(0.7, 0.08, -2.3))
+	_gas_sign(root)
+
+
+func _gas_pump(root: Node3D, pos: Vector3) -> void:
+	var red := Color(0.62, 0.1, 0.1)
+	_add_box(root, Vector3(0.7, 0.1, 0.5), pos + Vector3(0.0, 0.05, 0.0), Color(0.78, 0.76, 0.72), 0.55)
+	_add_box(root, Vector3(0.55, 1.2, 0.38), pos + Vector3(0.0, 0.7, 0.0), red, 0.42)
+	_add_box(root, Vector3(0.48, 0.07, 0.04), pos + Vector3(0.0, 1.05, -0.2), _GAS_YELLOW, 0.35, 0.0, _GAS_YELLOW, 0.45)
+	_add_sphere(root, 0.16, pos + Vector3(0.0, 1.48, 0.0), Color(0.75, 0.88, 0.95), 0.18, 0.08, Color(0.8, 0.92, 1.0), 0.3)
+
+
+func _gas_sign(root: Node3D) -> void:
+	var board := Color(0.04, 0.08, 0.06)
+	var glow := Color(1.4, 1.05, 0.2)
+	var green := Color(0.15, 0.72, 0.22)
+	_add_cylinder(root, 0.09, 6.0, Vector3(6.5, 3.0, -0.35), Color(0.38, 0.26, 0.16), 0.75)
+	_add_box(root, Vector3(2.4, 1.75, 0.1), Vector3(6.5, 5.55, -0.35), _GAS_YELLOW, 0.35, 0.0, glow, 0.3)
+	_add_box(root, Vector3(2.05, 1.4, 0.06), Vector3(6.5, 5.55, -0.44), board)
+	_add_label(root, "Chris'", Vector3(6.85, 5.9, -0.5), 40, 0.01, glow, board, 5)
+	_add_label(root, "Gas", Vector3(6.85, 5.25, -0.5), 46, 0.011, glow, board, 5)
+	_add_box(root, Vector3(0.62, 0.16, 0.05), Vector3(5.75, 5.78, -0.5), green, 0.4, 0.0, Color(0.25, 1.0, 0.4), 0.55, Vector3(0.0, 0.0, 0.62))
+	_add_box(root, Vector3(0.62, 0.16, 0.05), Vector3(5.75, 5.32, -0.5), green, 0.4, 0.0, Color(0.25, 1.0, 0.4), 0.55, Vector3(0.0, 0.0, -0.62))
+	_add_sphere(root, 0.08, Vector3(6.5, 6.55, -0.4), Color(1.0, 0.9, 0.6), 0.3, 0.0, Color(1.0, 0.85, 0.45), 1.8)
+	_add_light(root, Vector3(6.5, 5.6, -1.3), Color(1.0, 0.82, 0.4), 0.9, 8.0)
+
+
+func _brick_material() -> StandardMaterial3D:
+	var image := Image.create(16, 8, false, Image.FORMAT_RGB8)
+	var mortar := Color(0.76, 0.7, 0.62)
+	var a := Color(0.62, 0.24, 0.16)
+	var b := Color(0.48, 0.18, 0.13)
+	for y in 8:
+		for x in 16:
+			var row := int(y / 4)
+			var shifted := (x + (8 if row % 2 == 1 else 0)) % 16
+			var in_brick := (y % 4) < 3 and shifted < 15
+			var color := mortar
+			if in_brick:
+				color = a if (int(x / 4) + row) % 2 == 0 else b
+			image.set_pixel(x, y, color)
+	var tex := ImageTexture.create_from_image(image)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
+	mat.uv1_scale = Vector3(2.4, 1.5, 2.4)
+	mat.roughness = 0.9
+	return mat
+
+
+func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough: float = 0.82, metal: float = 0.0, emission: Color = Color.BLACK, energy: float = 0.0, rot: Vector3 = Vector3.ZERO) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = albedo
+	mat.roughness = rough
+	mat.metallic = metal
+	if energy > 0.0:
+		mat.emission_enabled = true
+		mat.emission = emission
+		mat.emission_energy_multiplier = energy
+	_add_box_mat(parent, size, pos, mat, rot)
+
+
+func _add_box_mat(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, rot: Vector3 = Vector3.ZERO) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	mi.rotation = rot
+	if size.y < 0.1:
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+
+
+func _add_sphere(parent: Node3D, radius: float, pos: Vector3, albedo: Color, rough: float, metal: float, emission: Color = Color.BLACK, energy: float = 0.0) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := SphereMesh.new()
+	mesh.radius = radius
+	mesh.height = radius * 2.0
+	mesh.radial_segments = 12
+	mesh.rings = 8
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = albedo
+	mat.roughness = rough
+	mat.metallic = metal
+	if energy > 0.0:
+		mat.emission_enabled = true
+		mat.emission = emission
+		mat.emission_energy_multiplier = energy
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+
+
+func _add_cylinder(parent: Node3D, radius: float, height: float, pos: Vector3, albedo: Color, rough: float) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = height
+	mesh.radial_segments = 10
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = albedo
+	mat.roughness = rough
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	parent.add_child(mi)
+
+
+func _add_label(parent: Node3D, text: String, pos: Vector3, font_size: int, pixel: float, color: Color, outline: Color, outline_px: int) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = font_size
+	label.pixel_size = pixel
+	label.modulate = color
+	label.outline_modulate = outline
+	label.outline_size = outline_px
+	label.shaded = false
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	label.position = pos
+	label.rotation.y = PI
+	parent.add_child(label)
+
+
+func _add_light(parent: Node3D, pos: Vector3, color: Color, energy: float, range_m: float) -> void:
+	var light := OmniLight3D.new()
+	light.position = pos
+	light.light_color = color
+	light.light_energy = energy
+	light.omni_range = range_m
+	light.shadow_enabled = false
+	parent.add_child(light)
+
+
+func _build_blocks(track: Dictionary) -> void:
+	var blocks: Array = track.get("buildings", [])
+	for raw in blocks:
+		var block: Dictionary = raw
+		var wide := float(block["w"])
+		var deep := float(block["d"])
+		var tall := float(block["h"])
+		var mesh := BoxMesh.new()
+		mesh.size = Vector3(wide, tall, deep)
+		var mat := StandardMaterial3D.new()
+		mat.roughness = 0.9
+		if block.has("color"):
+			mat.albedo_color = block["color"]
+		else:
+			mat.albedo_color = _BLOCK_COLOR
+		mesh.material = mat
+		var building := MeshInstance3D.new()
+		building.mesh = mesh
+		building.position = Vector3(float(block["x"]), tall * 0.5, float(block["y"]))
+		add_child(building)
+
+
+func _build_car() -> void:
+	_car = Node3D.new()
+	_car.name = "Car"
+	add_child(_car)
+	var pivot := _CAR_SCENE.instantiate() as Node3D
+	pivot.position = Vector3(0.0, 0.0, 1.9)
+	_car.add_child(pivot)
+	var cam := Camera3D.new()
+	cam.position = Vector3(0.0, 3.1, -9.5)
+	cam.rotation_degrees = Vector3(-12.0, 180.0, 0.0)
+	cam.fov = 66.0
+	cam.current = true
+	_car.add_child(cam)
+	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+		var wheel := pivot.get_node_or_null(NodePath(wname)) as Node3D
+		if wheel == null:
+			continue
+		_wheels.append(wheel)
+		_wheel_bases.append(wheel.basis)
+	if pivot.has_method(&"align_wheels_to_floor") and _floor != null:
+		pivot.call_deferred(&"align_wheels_to_floor", _floor)
+
+
+func _bake(points: Array[Vector3]) -> void:
+	var rounded := _round_corners(points)
+	_pts = PackedVector3Array()
+	_dists = PackedFloat32Array()
+	_pts.append(rounded[0])
+	_dists.append(0.0)
+	var total := 0.0
+	for i in range(1, rounded.size()):
+		var a: Vector3 = rounded[i - 1]
+		var b: Vector3 = rounded[i]
+		var span := Vector2(b.x - a.x, b.z - a.z).length()
+		var steps := maxi(int(ceil(span / 2.0)), 1)
+		for step in range(1, steps + 1):
+			var p := a.lerp(b, float(step) / float(steps))
+			var prev := _pts[_pts.size() - 1]
+			total += Vector2(p.x - prev.x, p.z - prev.z).length()
+			_pts.append(p)
+			_dists.append(total)
+	_length = total
+	_shift_into_right_lane()
+
+
+func _shift_into_right_lane() -> void:
+	if _pts.size() < 2:
+		return
+	var offset := 0.0
+	var shifted := PackedVector3Array()
+	shifted.resize(_pts.size())
+	for i in _pts.size():
+		var half := _half_near(_pts[i])
+		var target := half * 0.5 if half >= _TWO_LANE_HALF else 0.0
+		if i > 0:
+			var ds: float = _dists[i] - _dists[i - 1]
+			var step := ds * 0.4
+			if target > offset:
+				offset = minf(offset + step, target)
+			else:
+				offset = maxf(offset - step, target)
+		var tangent := _tangent_at(i)
+		# This side of the tangent is the right lane in the chase view.
+		var right := Vector3(-tangent.z, 0.0, tangent.x)
+		shifted[i] = _pts[i] + right * offset
+	_pts = shifted
+	var total := 0.0
+	_dists[0] = 0.0
+	for i in range(1, _pts.size()):
+		var prev := _pts[i - 1]
+		var here := _pts[i]
+		total += Vector2(here.x - prev.x, here.z - prev.z).length()
+		_dists[i] = total
+	_length = total
+
+
+func _tangent_at(index: int) -> Vector3:
+	var before := _pts[maxi(index - 1, 0)]
+	var after := _pts[mini(index + 1, _pts.size() - 1)]
+	var span := Vector3(after.x - before.x, 0.0, after.z - before.z)
+	if span.length_squared() < 0.0001:
+		return Vector3(0.0, 0.0, 1.0)
+	return span.normalized()
+
+
+func _half_near(point: Vector3) -> float:
+	var best := 0.0
+	var best_d := 12.0
+	var flat := Vector2(point.x, point.z)
+	for segment in _streets:
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		var gap := _gap_to_segment(flat, Vector2(a.x, a.z), Vector2(b.x, b.z))
+		if gap < best_d:
+			best_d = gap
+			best = float(segment["half"])
+	return best
+
+
+func _gap_to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var ab := b - a
+	var len2 := ab.length_squared()
+	if len2 < 0.0001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(ab) / len2, 0.0, 1.0)
+	return point.distance_to(a + ab * t)
+
+
+func _sample(distance: float) -> Vector3:
+	var s := clampf(distance, 0.0, _length)
+	var i := 0
+	while i + 1 < _dists.size() and _dists[i + 1] < s:
+		i += 1
+	var j := mini(i + 1, _pts.size() - 1)
+	var span: float = _dists[j] - _dists[i]
+	var t := 0.0
+	if span > 0.0001:
+		t = (s - _dists[i]) / span
+	return _pts[i].lerp(_pts[j], t)
+
+
+## Replace each kink with a circular arc so the car steers through the junction.
+func _round_corners(points: Array[Vector3]) -> Array[Vector3]:
+	var rounded: Array[Vector3] = []
+	if points.is_empty():
+		return rounded
+	rounded.append(points[0])
+	for i in range(1, points.size() - 1):
+		var prev: Vector3 = points[i - 1]
+		var corner: Vector3 = points[i]
+		var nxt: Vector3 = points[i + 1]
+		var in_v := Vector3(corner.x - prev.x, 0.0, corner.z - prev.z)
+		var out_v := Vector3(nxt.x - corner.x, 0.0, nxt.z - corner.z)
+		var in_len := in_v.length()
+		var out_len := out_v.length()
+		if in_len < 1.0 or out_len < 1.0:
+			rounded.append(corner)
+			continue
+		var in_dir := in_v / in_len
+		var out_dir := out_v / out_len
+		var dot := clampf(in_dir.dot(out_dir), -1.0, 1.0)
+		if dot > 0.985:
+			rounded.append(corner)
+			continue
+		var deflection := acos(dot)
+		if deflection > PI - 0.2:
+			rounded.append(corner)
+			continue
+		var radius := _TURN_RADIUS
+		var tangent := radius * tan(deflection * 0.5)
+		var limit := minf(in_len, out_len) * 0.45
+		if tangent > limit and deflection > 0.001:
+			tangent = limit
+			radius = tangent / tan(deflection * 0.5)
+		var p0 := corner - in_dir * tangent
+		var p2 := corner + out_dir * tangent
+		var cross := in_dir.x * out_dir.z - in_dir.z * out_dir.x
+		var left := Vector3(-in_dir.z, 0.0, in_dir.x)
+		if cross < 0.0:
+			left = -left
+		var center := p0 + left * radius
+		var start_angle := atan2(p0.x - center.x, p0.z - center.z)
+		var end_angle := atan2(p2.x - center.x, p2.z - center.z)
+		var sweep := angle_difference(start_angle, end_angle)
+		rounded.append(p0)
+		var steps := maxi(int(ceil(absf(sweep) * radius / 2.0)), 4)
+		for s in range(1, steps):
+			var ang := start_angle + sweep * float(s) / float(steps)
+			rounded.append(Vector3(
+				center.x + sin(ang) * radius,
+				corner.y,
+				center.z + cos(ang) * radius
+			))
+		rounded.append(p2)
+	rounded.append(points[points.size() - 1])
+	return rounded
+
+
+func _place_car(distance: float) -> void:
+	if _car == null:
+		return
+	var pos := _sample(distance)
+	var behind := _sample(maxf(distance - 2.0, 0.0))
+	var ahead := _sample(minf(distance + _LOOK_AHEAD, _length))
+	var flat := Vector2(ahead.x - behind.x, ahead.z - behind.z)
+	if flat.length_squared() > 0.0001:
+		_car.rotation.y = atan2(flat.x, flat.y)
+	_car.position = Vector3(pos.x, pos.y + _BODY_Y, pos.z)
+
+
+func _spin_wheels(delta: float) -> void:
+	var speed := 0.0
+	if _duration > 0.0:
+		var t := _driven / _duration
+		speed = (6.0 * t * (1.0 - t)) * _length / _duration
+	_spin -= speed * delta / _WHEEL_R
+	for i in _wheels.size():
+		var wheel := _wheels[i]
+		if is_instance_valid(wheel):
+			wheel.basis = _wheel_bases[i] * Basis(Vector3.UP, _spin)
+
+
+func _update_engine(distance: float) -> void:
+	if _engine == null:
+		return
+	var pace := 0.0
+	if _length > 0.0:
+		pace = 1.0 - absf(distance / _length * 2.0 - 1.0)
+	_engine.set_state(lerpf(900.0, 2600.0, pace), lerpf(0.25, 0.7, pace), false)
+
+
+func _build_fade() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	_shade = ColorRect.new()
+	_shade.color = Color(0.0, 0.0, 0.0, 1.0)
+	_shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	layer.add_child(_shade)
+
+
+func _paint_fade() -> void:
+	if _shade != null:
+		_shade.color.a = _fade

@@ -209,6 +209,11 @@ func _process(delta: float) -> void:
 	_advance_auto_call(delta)
 
 
+func _input(event: InputEvent) -> void:
+	if _try_shortcut(event):
+		get_viewport().set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel"):
 		_on_cancel()
@@ -216,6 +221,44 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if _nav.handle_event(self, event):
 		get_viewport().set_input_as_handled()
+
+
+func _try_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	match key.keycode:
+		KEY_O:
+			if _popup_open() or _rival_present():
+				return false
+			_show_opponents()
+		KEY_ENTER, KEY_KP_ENTER:
+			if _popup_open() or not _rival_present():
+				return false
+			_engage_rival()
+		KEY_H:
+			if _popup_open() or not _rival_present():
+				return false
+			_on_hood_pressed()
+		_:
+			return false
+	return true
+
+
+func _rival_present() -> bool:
+	return _rival != null and is_instance_valid(_rival) and _rival_phase != _RIVAL_LEAVE
+
+
+func _engage_rival() -> void:
+	_rival_engaged = true
+	_race_root.visible = true
+	_hover_prompt.visible = false
+	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+	_sync_nav()
 
 
 func _build_environment() -> void:
@@ -1306,11 +1349,7 @@ func _on_rival_input(camera: Node, event: InputEvent, _pos: Vector3, _normal: Ve
 		get_viewport().set_input_as_handled()
 		_on_hood_pressed()
 		return
-	_rival_engaged = true
-	_race_root.visible = true
-	_hover_prompt.visible = false
-	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-	_sync_nav()
+	_engage_rival()
 	get_viewport().set_input_as_handled()
 
 
@@ -1671,5 +1710,4 @@ func _sync_nav() -> void:
 func _on_back_pressed() -> void:
 	_forget_drive_in_visit()
 	GameState.drive_into_garage = true
-	GameState.current_scene_path = GameState.SCENE_GARAGE
-	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+	GameState.begin_cruise(GameState.POI_DRIVE_IN, GameState.POI_GARAGE, GameState.SCENE_GARAGE)

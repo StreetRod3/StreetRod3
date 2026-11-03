@@ -8,6 +8,7 @@ var heading_yaw: float = 0.0
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
+const _RacePark := preload("res://scripts/race_park.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -44,6 +45,9 @@ var _overrev_time: float = 0.0
 var _engine_blown: bool = false
 var _wrecked: bool = false
 var _arcade_active: bool = false
+var _parking := false
+var _park_speed := 0.0
+var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
 var _road_base_y: float = 0.0
 const _ROAD_PITCH_SPAN := 8.0
@@ -242,7 +246,23 @@ func _brake_down() -> bool:
 	return _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down()
 
 
+func begin_park(slot: float) -> void:
+	if _parking:
+		return
+	_parking = true
+	_park_slot = slot
+	_park_speed = maxf(forward_speed, 0.0)
+	_skids.end_strips()
+
+
 func _physics_process(delta: float) -> void:
+	if _parking:
+		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
+		forward_speed = _park_speed
+		heading_yaw = rotation.y
+		_stick_to_road()
+		_update_engine_sound(false)
+		return
 	_poll_touch_shifts()
 	if GameState.arcade_drive:
 		_physics_arcade(delta)

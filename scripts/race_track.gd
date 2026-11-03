@@ -17,6 +17,8 @@ const _BIN_CELL := 64.0
 const FILLET_MIN_ANGLE := 0.06 ## ~3.5 degrees; smaller turns stay as a sharp join
 const FILLET_LEN_FRACTION := 0.4
 const FILLET_MAX_CUT := 80.0
+## Straight pavement past the finish. The race still ends on the finish line.
+const _RUNOFF_M := 400.0
 const CURB_W := 0.45
 const CURB_H := 0.16
 const CURB_L := 2.0
@@ -40,6 +42,8 @@ var _half_ws: PackedFloat32Array = PackedFloat32Array()
 var _surfaces: PackedStringArray = PackedStringArray()
 var _road_types: PackedStringArray = PackedStringArray()
 var _length: float = 0.0
+## Distance along the path where the race ends. The mesh continues past this.
+var _race_length: float = 0.0
 var _pos := Vector3.ZERO
 var _yaw: float = 0.0
 var _seg_half_w: float = ROAD_HALF_W
@@ -57,7 +61,7 @@ func is_road_course() -> bool:
 
 
 func get_length() -> float:
-	return _length
+	return _race_length
 
 
 func get_half_width() -> float:
@@ -71,7 +75,7 @@ func get_road_mesh_instance() -> MeshInstance3D:
 
 
 func remaining_distance(world: Vector3) -> float:
-	return maxf(0.0, _length - closest_sample(world)["s"])
+	return maxf(0.0, _race_length - closest_sample(world)["s"])
 
 
 func sample_at(s: float) -> Dictionary:
@@ -146,10 +150,10 @@ func obstacle_escape(world: Vector3) -> Vector3:
 func finish_basis() -> Transform3D:
 	if _pts.is_empty():
 		return Transform3D.IDENTITY
-	var i := _pts.size() - 1
-	var yaw: float = _yaws[i]
-	var xf := Transform3D(Basis(Vector3.UP, yaw), _pts[i] + Vector3(0.0, 2.0, 0.0))
-	return xf
+	var sample := sample_at(_race_length)
+	var pos: Vector3 = sample["position"]
+	var yaw: float = sample["yaw"]
+	return Transform3D(Basis(Vector3.UP, yaw), pos + Vector3(0.0, 2.0, 0.0))
 
 
 func build_road_course() -> void:
@@ -215,6 +219,7 @@ func _build_path() -> void:
 	_pos = Vector3.ZERO
 	_yaw = 0.0
 	_length = 0.0
+	_race_length = 0.0
 	var data := TrackFile.load_path(track_path)
 	for warning in data.warnings:
 		push_warning("[track] %s" % warning)
@@ -268,6 +273,8 @@ func _build_path() -> void:
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
 	_smooth_path_heights(pts)
+	_race_length = _length
+	_append_runoff()
 	_build_bins()
 
 
@@ -350,6 +357,18 @@ func _hermite_height(y0: float, m0: float, y1: float, m1: float, span: float, t:
 	var h01 := -2.0 * t3 + 3.0 * t2
 	var h11 := t3 - t2
 	return h00 * y0 + h10 * span * m0 + h01 * y1 + h11 * span * m1
+
+
+## Keep the last heading and height, so the pavement runs on in a straight line.
+func _append_runoff() -> void:
+	if _pts.is_empty():
+		return
+	_pos = _pts[_pts.size() - 1]
+	_yaw = _yaws[_yaws.size() - 1]
+	var ahead := Vector3(sin(_yaw), 0.0, cos(_yaw))
+	var dest := _pos + ahead * _RUNOFF_M
+	dest.y = _pos.y
+	_append_to(dest)
 
 
 func _apply_road(road: Dictionary) -> void:
@@ -1054,11 +1073,12 @@ func _place_perp_barriers(
 func _build_finish_line() -> void:
 	if _pts.is_empty():
 		return
-	var i := _pts.size() - 1
-	var yaw: float = _yaws[i]
+	var sample := sample_at(_race_length)
+	var pos: Vector3 = sample["position"]
+	var yaw: float = sample["yaw"]
 	var root := Node3D.new()
 	root.name = "FinishLineVisual"
-	root.transform = Transform3D(Basis(Vector3.UP, yaw), _pts[i])
+	root.transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	add_child(root)
 	_add_checkered_strip(root)
 	_add_finish_gantry(root)

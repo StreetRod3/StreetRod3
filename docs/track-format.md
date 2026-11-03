@@ -22,17 +22,20 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 {
   "name": "Track 1",
   "nodes": [ ... ],
-  "roads": [ ... ]
+  "roads": [ ... ],
+  "pois": [ ... ]
 }
 ```
 
 | Field | Required | Default | Description |
 | --- | --- | --- | --- |
 | `name` | no | `""` | Display name. Unused by gameplay so far. |
-| `nodes` | yes | — | Graph vertices. |
-| `roads` | yes | — | Directed edges between nodes. |
+| `nodes` | yes | — | Street vertices. |
+| `roads` | yes | — | Directed edges between street nodes. |
+| `pois` | no | none | Points of interest. Each one is its own node, attached to a street node. |
+| `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
 
-Unknown root fields are ignored.
+Unknown root fields are ignored. A race course can leave `pois` out.
 
 ## Nodes
 
@@ -108,6 +111,42 @@ The loader walks directed roads from the start node, taking the first unused out
 A closing road from finish back to start is allowed (a circuit) and is **not** followed for a single-lap point-to-point race.
 
 If the walk cannot leave start, loading fails.
+
+## Points of interest
+
+A point of interest is not a street intersection. It lives in `pois`, has its own id, and names the street node its driveway joins.
+
+```json
+{ "id": "garage", "name": "Garage", "at": 1, "x": -12, "y": 0 }
+```
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `id` | yes | — | Unique string, such as `garage` or `drive-in`. |
+| `name` | no | the `id` | Display name. |
+| `at` | yes | — | Id of the street node this place is attached to. |
+| `x`, `y` | no | the street node's | Planar position of the stop, in the same meters as street nodes. Give both, or neither. |
+| `z` | no | `0` | Height in meters (world Y). |
+
+The cruise from one place to another drives from the origin's `x`/`y` onto its `at` node, follows directed roads to the destination's `at` node, and ends on the destination's `x`/`y`. When `x` and `y` are omitted, the stop is the street node itself.
+
+`assets/maps/city.trk` is the town: the garage, the drive-in, and the gas station, plus scenery buildings.
+
+## Buildings
+
+Optional boxes for the city view. They do not affect the road graph or the cruise route.
+
+```json
+{ "x": 20, "y": 16, "w": 12, "d": 9, "h": 7, "color": [0.45, 0.42, 0.38] }
+```
+
+| Field | Required | Default | Description |
+| --- | --- | --- | --- |
+| `x`, `y` | yes | — | Planar center, same meters as street nodes. |
+| `w` | no | `10` | Width along world X, in meters. |
+| `d` | no | `8` | Depth along world Z, in meters. |
+| `h` | no | `6` | Height in meters. |
+| `color` | no | a neutral gray | `[r, g, b]` from 0 to 1. |
 
 ## Example
 

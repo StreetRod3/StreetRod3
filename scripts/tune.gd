@@ -104,7 +104,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _nav.handle_event(self, key):
 		get_viewport().set_input_as_handled()
 		return
+	var plain := not key.ctrl_pressed and not key.meta_pressed and not key.alt_pressed and not key.shift_pressed
 	match key.keycode:
+		KEY_A:
+			if not plain:
+				return
+			_step(1)
+		KEY_R:
+			if not plain:
+				return
+			_step(-1)
 		KEY_UP, KEY_PAGEUP, KEY_KP_ADD, KEY_EQUAL:
 			_step(1)
 		KEY_DOWN, KEY_PAGEDOWN, KEY_KP_SUBTRACT, KEY_MINUS:
