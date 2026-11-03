@@ -135,3 +135,5 @@ The MUST WEAR CORRECTIVE LENSES box can now be clicked. It types a slightly croo
 The license photo now looks like a color print from the 1970s that has spent years in a wallet: soft focus, washed-out color, milky blacks, cream whites, a faint magenta cast, darkened corners, and a little grain. The driver stands against a backdrop that fades along with them.
 
 The stray line above DO NOT LAMINATE on the license is gone.
+
+The license no longer looks brand new, since these were only paper back then. The whole card has aged together, including what you type, the signature, and the photo: the paper has yellowed and browned at the edges, the ink has faded a little, the edges are rubbed, and there are faint wallet folds across the middle.
