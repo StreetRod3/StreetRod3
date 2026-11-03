@@ -32,13 +32,19 @@ func _ready() -> void:
 
 
 ## One sample per wheel of a vehicle_dynamics car, in wheel order.
-func record(wheels: Array, body: Transform3D) -> void:
+## `track` supplies the road height. Without one, the marks stay on flat ground.
+func record(wheels: Array, body: Transform3D, track: Object = null) -> void:
 	for i in wheels.size():
 		var wheel: _VehicleDynamics.Wheel = wheels[i]
 		var contact := Vector2(wheel.forward_velocity, wheel.lateral_velocity).length()
+		var world: Vector3 = body * wheel.local_position
+		var ground_y := wheel.road_y
+		if track != null and track.has_method(&"surface_height"):
+			ground_y = float(track.surface_height(world))
 		stamp(
 			i,
-			body * wheel.local_position,
+			world,
+			ground_y,
 			wheel.grip_utilization,
 			wheel.slip_angle,
 			wheel.long_slip,
@@ -57,6 +63,7 @@ func end_strips() -> void:
 func stamp(
 	index: int,
 	world: Vector3,
+	ground_y: float,
 	utilization: float,
 	slip_angle: float,
 	long_slip: float,
@@ -79,7 +86,7 @@ func stamp(
 			and contact_speed > 2.5
 			and (absf(slip_angle) > 0.1 or absf(long_slip) > 1.05)
 		)
-	var point := Vector3(world.x, MARK_Y, world.z)
+	var point := Vector3(world.x, ground_y + MARK_Y, world.z)
 	if not sliding:
 		_drawing[index] = false
 		_points[index] = point

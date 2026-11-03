@@ -159,11 +159,8 @@ func _debug_car_mesh_resource_load() -> void:
 
 
 func _align_race_cars_to_ground() -> void:
+	# Wheels sit on height 0. A road course then lifts the whole car by the track's z.
 	var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
-	if _is_road and _track.has_method(&"get_road_mesh_instance"):
-		var road_mi: MeshInstance3D = _track.get_road_mesh_instance()
-		if road_mi != null:
-			floor_mi = road_mi
 	for car in [_player, _opponent]:
 		var pivot: Node = car.get_node_or_null("CarPivot")
 		if pivot != null and pivot.has_method(&"align_wheels_to_floor"):
