@@ -120,4 +120,18 @@ There is a template for the Driver's Name screen, the 1970s California driver li
 
 New Game now opens the Driver's Name screen before the garage: a 1977 California license (assets/ui/DLTemplate.png) with the cursor on the name line. What you type comes out in capitals in the Special Elite typewriter font, up to 24 characters, and Continue or Enter takes you to the garage once there is a name. Back or Escape returns to the menu without touching the game in progress. The name is kept in saves, and saves from before this have no name. Sex, hair, eyes, height, and weight can be changed by clicking them on the card: left click or wheel up goes to the next value, right click or wheel down to the one before, and each list wraps around. Height runs from 4-10 to 6-08 and weight from 100 to 300 pounds in fives. These are kept in saves, and saves from before this get the card's defaults. The rest of the card (number, address, dates) shows fixed stand-in values for now. The blue portrait area is empty. As you type, the name also signs itself on the signature line in the Homemade Apple handwriting font, and long names shrink to fit. The signature is in upper and lower case and keeps any capitals you type inside a word, so McGee stays McGee while the typed line says MCGEE. A name typed all in capitals signs with just the first letter of each word capital, but capitals in part of a name stay, so DJ McGee stays DJ McGee. Special Elite, Homemade Apple, and their Apache 2.0 licenses are in assets/fonts.
 
+The license now says OTHER ADDRESS where it wrongly said GROUP OFFICE, matching the real card.
+
 There is a cheat on the license: type UUDDLRLRBA as the name, in any case, and the game starts with $10,000 instead of $2,500.
+
+The blue area of the license now shows a photo of your driver, and it changes as you click through the card. Hair sets the hair color, with no hair at all for BAL, and eyes set the eye color. Height moves you up or down in the frame, and weight for your height sets how broad the face, jaw, neck, and shoulders are. F gets long hair, narrower shoulders, and fuller lips. The driver is built in code by scripts/driver_figure.gd, which can be placed anywhere in the game, though the license is the only place it appears so far. It is a first pass and the art is basic. Rivals keep their own heads.
+
+The license photo now shows a realistic driver instead of the shapes built in code. There is a model for each sex, made with MakeHuman and baked in Blender, wearing a collared shirt or a striped blouse with hair from the 1970s. Hair color tints the hair and brows, eye color picks the iris, and weight for your height runs from a thin face and neck to a round face with a double chin, with the shirt following along. The photo is also framed a little tighter, so the face is larger on the card.
+
+Clicking the license photo now changes your driver's skin tone, through four tones from light to dark, and right click or the mouse wheel work as they do on the rest of the card. The tone changes the skin only, not the shape of the face, and it is saved with your other traits. To make that work every driver now shares one even face shape.
+
+The MUST WEAR CORRECTIVE LENSES box can now be clicked. It types a slightly crooked X in the box and puts a pair of dark, heavy-framed glasses on your driver, and clicking again takes them off. This is saved too.
+
+The license photo now looks like a color print from the 1970s that has spent years in a wallet: soft focus, washed-out color, milky blacks, cream whites, a faint magenta cast, darkened corners, and a little grain. The driver stands against a backdrop that fades along with them.
+
+The stray line above DO NOT LAMINATE on the license is gone.
