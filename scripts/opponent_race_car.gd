@@ -9,6 +9,7 @@ const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
+const _CarDamage := preload("res://scripts/car_damage.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
@@ -38,6 +39,13 @@ const SLIDE_LATERAL_MPS := 4.0
 const LANE_EDGE_MARGIN_M := 1.8
 ## Turn rate on the arcade rails that shows as a full steering input, in rad/s.
 const _RAIL_FULL_YAW_RATE := 0.5
+## How quickly a sideways shove on the arcade rails dies away, in 1/seconds.
+const _RAIL_SHOVE_DECAY := 2.2
+## How quickly a hit's turn on the arcade rails dies away, and how fast the nose comes back.
+const _RAIL_SPIN_DECAY := 3.0
+const _RAIL_WOBBLE_RETURN := 3.5
+## How hard a totaled car comes to a stop, in m/s².
+const _TOTALED_BRAKE := 11.0
 
 var forward_speed: float = 0.0
 
@@ -60,6 +68,10 @@ var _arcade_active: bool = false
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _last_yaw: float = 0.0
 var _rail_yaw_rate: float = 0.0
+var _rail_shove: float = 0.0
+var _rail_spin: float = 0.0
+var _rail_wobble: float = 0.0
+var _damage: _CarDamage = _CarDamage.new()
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
 var _arcade_accel: float = 7.0
@@ -78,8 +90,9 @@ func _ready() -> void:
 		_dynamics.name = "VehicleDynamics"
 		add_child(_dynamics)
 	motion_mode = MOTION_MODE_FLOATING
-	# Layer 2 is cars. Keep the road mask and also collide with other cars.
-	collision_mask = collision_mask | collision_layer
+	# Layer 2 is cars. Only the road and its barriers stop this body. Contact with the other
+	# car is all in `car_bump.gd`, or on a slope the bodies touch before it sees a hit.
+	collision_mask = 1
 	_visual = get_node_or_null("CarPivot") as Node3D
 	var opp := GameState.selected_opponent()
 	_apply_opponent_look(opp)
@@ -112,12 +125,33 @@ func planar_velocity() -> Vector3:
 	return _dynamics.cg_velocity
 
 
-## Moves this car out of another car and keeps the bumped speed. No damage.
-func apply_car_bump(offset: Vector3, new_velocity: Vector3) -> void:
+func get_mass_kg() -> float:
+	return _dynamics.config.mass_kg
+
+
+## A hit from the other car or a barrier, by how much it changed this car's speed.
+func take_hit(speed_change: float) -> bool:
+	if not _damage.take_hit(speed_change):
+		return false
+	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D if _visual != null else null)
+	return true
+
+
+func damage_amount() -> float:
+	return _damage.amount
+
+
+func is_wrecked() -> bool:
+	return _damage.is_totaled()
+
+
+## Moves this car out of another car, keeps the bumped speed, and sets it turning.
+func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> void:
 	var planar := Vector3(new_velocity.x, 0.0, new_velocity.z)
 	if not GameState.arcade_drive:
 		global_position += offset
 		_dynamics.cg_velocity = planar
+		_dynamics.yaw_rate += yaw_kick
 		velocity = planar
 		_sync_motion_state()
 		return
@@ -131,6 +165,8 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3) -> void:
 		_path_s += offset.dot(forward)
 		_lane_x += offset.dot(right)
 		_lane_ready = true
+		_rail_shove = planar.dot(right)
+		_rail_spin += yaw_kick
 	global_position += offset
 	forward_speed = clampf(planar.dot(forward), 0.0, _max_mps)
 
@@ -145,6 +181,10 @@ func begin_park(slot: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_damage.tick(delta)
+	if _damage.is_totaled():
+		_coast_to_a_stop(delta)
+		return
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
@@ -158,6 +198,23 @@ func _physics_process(delta: float) -> void:
 	else:
 		_physics_simulation(delta)
 		_body_motion.note_velocity(_dynamics.cg_velocity)
+	_stick_to_road()
+	_pose_body(delta)
+
+
+## A totaled car rolls straight on until it stops, and sits there smoking.
+func _coast_to_a_stop(delta: float) -> void:
+	forward_speed = move_toward(forward_speed, 0.0, _TOTALED_BRAKE * delta)
+	var nose := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	velocity = nose * forward_speed
+	_dynamics.yaw = rotation.y
+	_dynamics.yaw_rate = 0.0
+	_dynamics.cg_velocity = velocity
+	_dynamics.update_steering(delta, 0.0)
+	move_and_slide()
+	_skids.end_strips()
+	_dynamics.sample_surfaces(_race_track(get_parent()), global_transform)
+	_body_motion.ride_from_motion(delta, velocity, rotation.y)
 	_stick_to_road()
 	_pose_body(delta)
 
@@ -180,7 +237,7 @@ func _pose_body(delta: float) -> void:
 	_body_motion.capture()
 	var steer := _dynamics.steer_angle()
 	var steer_input := _dynamics.steer_input()
-	if GameState.arcade_drive and not _parking:
+	if GameState.arcade_drive and not _parking and not _damage.is_totaled():
 		steer = atan(_rail_yaw_rate * _dynamics.config.wheelbase_m / maxf(forward_speed, 1.0))
 		steer_input = clampf(_rail_yaw_rate / _RAIL_FULL_YAW_RATE, -1.0, 1.0)
 	_body_motion.pose(delta, forward_speed, steer, steer_input)
@@ -265,10 +322,15 @@ func _physics_arcade(delta: float) -> void:
 			_arcade_gear += 1
 			_arcade_shift = _shift_time
 		else:
-			forward_speed = minf(forward_speed + _arcade_gear_accel() * delta, maxf(corner, forward_speed))
+			forward_speed = minf(forward_speed + _arcade_gear_accel() * _damage.power_left() * delta, maxf(corner, forward_speed))
 	forward_speed = minf(forward_speed, _max_mps)
 	if track != null and track.has_method(&"sample_at"):
 		_path_s += forward_speed * delta
+		_lane_x += _rail_shove * delta
+		_rail_shove *= exp(-_RAIL_SHOVE_DECAY * delta)
+		_rail_wobble += _rail_spin * delta
+		_rail_spin *= exp(-_RAIL_SPIN_DECAY * delta)
+		_rail_wobble *= exp(-_RAIL_WOBBLE_RETURN * delta)
 		var sample: Dictionary = track.sample_at(_path_s)
 		var right: Vector3 = sample.get("right", Vector3.RIGHT)
 		var center: Vector3 = sample.get("position", global_position)
@@ -280,7 +342,7 @@ func _physics_arcade(delta: float) -> void:
 		move_and_slide()
 		global_position.x = dest.x
 		global_position.z = dest.z
-		rotation.y = float(sample.get("yaw", 0.0))
+		rotation.y = float(sample.get("yaw", 0.0)) + _rail_wobble
 		return
 	velocity = Vector3(0.0, velocity.y, forward_speed)
 	move_and_slide()
@@ -451,7 +513,7 @@ func _requested_drive_force() -> float:
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)])
 	var force := _dynamics.drive_force(ratio, _gear_top_mps(_gear), forward_speed, _power_hp)
-	return force * _drive_scale
+	return force * _drive_scale * _damage.power_left()
 
 
 func _auto_shift() -> void:
@@ -485,6 +547,7 @@ func _scrape_barrier(before: Vector3, track: Node, delta: float) -> bool:
 	var hit := _WallScrape.resolve(self, before, delta)
 	if hit.is_empty():
 		return false
+	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
 	var after: Vector3 = hit["velocity"]
 	_dynamics.cg_velocity = after
 	velocity = after

@@ -24,6 +24,7 @@ var _race_started: bool = false
 @onready var _hud_dist: Label = $RaceUI/Panel/Margin/VBox/DistLabel
 @onready var _hud_time: Label = $RaceUI/Panel/Margin/VBox/TimeLabel
 @onready var _hud_opp: Label = $RaceUI/Panel/Margin/VBox/OppLabel
+@onready var _hud_damage: Label = $RaceUI/Panel/Margin/VBox/DamageLabel
 @onready var _rpm_meter: Control = $RaceUI/RpmMeter
 @onready var _mobile: Control = $RaceUI/MobileControls
 @onready var _result: Control = $RaceUI/ResultPanel
@@ -56,9 +57,6 @@ var _nav = _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
 var _result_scene: String = ""
-
-## Closing speed between the two cars that wrecks the player's car. Ordinary bumps stay below it.
-const WRECK_BUMP_MPS := 9.0
 
 ## Dim “off” lamp colors (same hue, low value).
 const _DIM_RED := Color(0.12, 0.05, 0.05, 1)
@@ -203,8 +201,12 @@ func _debug_mesh_instances_recursive(node: Node, label: String) -> void:
 func _physics_process(_delta: float) -> void:
 	if get_tree().paused or _race_over or not _race_started:
 		return
-	if _car_bump.resolve(_player, _opponent) >= WRECK_BUMP_MPS:
-		_show_wreck()
+	var hit := _car_bump.resolve(_player, _opponent)
+	var hurt_player: bool = _player.take_hit(hit.x)
+	var hurt_rival: bool = _opponent.take_hit(hit.y)
+	if hurt_player or hurt_rival:
+		_play_crunch(maxf(hit.x, hit.y))
+	_check_wrecks()
 
 
 func _process(delta: float) -> void:
@@ -216,8 +218,7 @@ func _process(delta: float) -> void:
 	if _race_started and not _race_over and _player.has_method(&"is_engine_blown") and _player.is_engine_blown():
 		_show_engine_blown()
 		return
-	if _race_started and _player.has_method(&"is_wrecked") and _player.is_wrecked():
-		_show_wreck()
+	if _race_started and _check_wrecks():
 		return
 	if not _race_started:
 		_advance_countdown(delta)
@@ -233,6 +234,7 @@ func _process(delta: float) -> void:
 	_hud_dist.text = "To finish: %.1f m" % _distance_to_finish()
 	var spd: float = _player.get_forward_speed()
 	_hud_speed.text = "Speed: %.0f km/h" % (spd * 3.6)
+	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
 		_show_tire_blowout()
 		return
@@ -321,12 +323,36 @@ func _finish_player() -> void:
 	_race_over = true
 	GameState.drift_engine_tune_after_race()
 	GameState.wear_parts_after_race()
+	GameState.wear_parts_from_crashes(_player.damage_amount())
 	_show_result(not _opponent_finished)
+
+
+## True when a car has been totaled and the race has ended for it.
+func _check_wrecks() -> bool:
+	if _race_over:
+		return true
+	if _player.is_wrecked():
+		_show_wreck()
+		return true
+	if _opponent.is_wrecked():
+		_show_rival_wreck()
+		return true
+	return false
+
+
+func _play_crunch(speed_change: float) -> void:
+	var crunch := AudioStreamPlayer.new()
+	crunch.stream = _ShopSounds.stream("thud")
+	crunch.volume_db = lerpf(-12.0, 4.0, clampf(speed_change / 10.0, 0.0, 1.0))
+	crunch.finished.connect(crunch.queue_free)
+	add_child(crunch)
+	crunch.play()
 
 
 func _show_engine_blown() -> void:
 	_race_over = true
 	_end_race_ui()
+	GameState.wear_parts_from_crashes(_player.damage_amount())
 	GameState.remove_engine()
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew the engine!"
@@ -343,6 +369,7 @@ func _show_tire_blowout() -> void:
 	bang.stream = _ShopSounds.stream("blowout")
 	add_child(bang)
 	bang.play()
+	GameState.wear_parts_from_crashes(_player.damage_amount())
 	GameState.blow_tires()
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew a tire!\nThat set of tires is finished."
@@ -362,6 +389,26 @@ func _show_wreck() -> void:
 	var payout := GameState.apply_race_stake(false)
 	GameState.wreck_active_car()
 	_show_bubble("Lucky you weren't killed, 'cause the car is totaled." + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+
+
+## The rival's car is totaled, so the race is won. A wrecked car can't be handed over, so
+## pink slips are void, but the money is still paid.
+func _show_rival_wreck() -> void:
+	_race_over = true
+	GameState.drift_engine_tune_after_race()
+	GameState.wear_parts_after_race()
+	GameState.wear_parts_from_crashes(_player.damage_amount())
+	_player.begin_park(0.0)
+	_end_race_ui()
+	GameState.note_race_win()
+	GameState.race_pink_slips = false
+	var payout := GameState.apply_race_stake(true)
+	var text := "%s's car is totaled!" % str(GameState.selected_opponent().get("name", "The rival"))
+	if payout > 0:
+		text += "\nYou just won %d bucks!" % payout
+	else:
+		text += "\nYou just won the race!"
+	_show_bubble(text, GameState.SCENE_DRIVE_IN)
 
 
 func _show_result(player_won: bool) -> void:

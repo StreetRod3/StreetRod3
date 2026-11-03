@@ -148,6 +148,8 @@ const CONDITION_USED_MIN := 0.5
 const CONDITION_USED_MAX := 0.9
 const CONDITION_WEAR_MIN := 0.01
 const CONDITION_WEAR_MAX := 0.03
+## The most of a part's condition crashes can take in one race, just short of a total.
+const CRASH_WEAR_MAX := 0.5
 const CONDITION_FLOOR := 0.05
 ## Tires worn down to this blow out in the next race, somewhere between these shares of
 ## the way along it.
@@ -1832,6 +1834,20 @@ func wear_parts_after_race() -> void:
 	for mount in conditions.keys():
 		var entry: Dictionary = conditions[mount]
 		entry["c"] = maxf(float(entry.get("c", 1.0)) - randf_range(CONDITION_WEAR_MIN, CONDITION_WEAR_MAX), CONDITION_FLOOR)
+
+
+## A race's crashes wear everything on the active car, by how close they came to totaling
+## it (0 to 1). Each part takes between half and all of the most it can lose.
+func wear_parts_from_crashes(damage: float) -> void:
+	if damage <= 0.0:
+		return
+	_sync_record_from_active()
+	var rec: Dictionary = car_records.get(current_car_id, {})
+	var conditions: Dictionary = rec.get("conditions", {})
+	for mount in conditions.keys():
+		var entry: Dictionary = conditions[mount]
+		var wear := damage * CRASH_WEAR_MAX * randf_range(0.5, 1.0)
+		entry["c"] = maxf(float(entry.get("c", 1.0)) - wear, CONDITION_FLOOR)
 
 
 ## The register entry for an id of a garage parts-list kind.

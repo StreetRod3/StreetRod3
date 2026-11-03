@@ -198,10 +198,13 @@ Both cars are `CharacterBody3D` nodes with `MOTION_MODE_FLOATING` and a child in
 - Gear ratios from the equipped gearbox set each gear’s top speed and acceleration. Horsepower scales acceleration against a 280 hp reference.
 - Steering uses a bicycle model (`tan(steer) / wheelbase`). Lock tightens with speed.
 - Heading 0 points along world `+Z`.
-- Leaving the pavement cuts acceleration and caps speed. Hitting a narrow-obstacle barrier zeros speed.
+- Leaving the pavement cuts acceleration and caps speed.
+- Touching a barrier goes through `wall_scrape.gd`: only the speed going into it is lost, plus some scraping, and the car is turned back along the road.
+- `car_body_motion.gd` shows the springs and shocks. Both drives run the same four-corner suspension in `vehicle_dynamics.gd`: the simulation's tires do it as they go, and the arcade drive and a parking car call `ride()` with the acceleration measured from the car's velocity. Only the visuals move: `CarBody` leans, dives, and bounces over the wheels, and the wheels roll, steer, and ride over bumps. The collision box and the car's place on the road do not move.
+- `car_damage.gd` adds up hits on each car from nothing to totaled, by how suddenly the speed changed. Contact between the cars is all in `car_bump.gd`, which shares a hit by weight and turns a car hit off-center. The bodies do not collide with each other: on a slope they would touch before `car_bump.gd` saw a hit. Damage cuts power, a totaled player's car is lost, a totaled rival loses the race, and crash damage wears the parts on the car (`GameState.wear_parts_from_crashes`).
 - Manual boxes shift with Q/E (or touch paddles). Automatic boxes shift themselves. Over-rev is manual only.
 - `engine_sound.gd` is Street Rod 2's AdLib engine: `sr2_adlib.gd` (a port of its AdLib driver) plays the "motor" timbre from MSR.SND on `opl2.gd` (a YM3812 ported from ymfm, BSD 3-Clause), which fills an `AudioStreamGenerator` at the chip's 49,716 Hz. The RPM, laid onto SR2's 1500–5700 rev counter, sets the bend (`3 rpm - 4500`, the top of the bend at the redline) and the volume (`(rpm - 1500) / 128 + 0x50`), and a one-pole high-pass stands in for the card's output capacitor.
-- C cycles four cameras: far, close, cockpit, bumper.
+- C cycles four cameras: far, close, cockpit, bumper. The camera is `top_level` and placed each step: the two chase cameras lag behind the heading and drift with acceleration, and the other two ride the body's lean.
 
 `opponent_race_car.gd` uses the same gear idea with a fixed 3-speed ratio set. Stats are the player’s effective vmax and 24 m/s² launch, scaled by the chosen `OPPONENTS` entry. On a road course it advances a path distance and is placed with `sample_at`. On the drag strip it drives straight on `+Z`.
 

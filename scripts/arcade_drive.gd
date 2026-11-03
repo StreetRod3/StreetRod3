@@ -26,6 +26,10 @@ const STEER_INPUT_RETURN := 7.0
 const LONG_GRIP_SHARE_MAX := 0.72
 ## Acceleration past this shifts no more weight between the axles, in m/s².
 const LOAD_TRANSFER_ACCEL_MAX := 11.0
+## How quickly the tires stop a car turning after a hit, in 1/seconds.
+const SPIN_DECAY := 2.8
+## How fast a barrier swings the nose round, in rad/s.
+const SWING_RATE := 5.0
 const MASS_KG := 1360.0
 const CG_HEIGHT_M := 0.48
 const GRAVITY := 9.81
@@ -55,6 +59,10 @@ var _front_axle_fraction: float = FRONT_AXLE_FRACTION
 var _max_steer_rad: float = MAX_STEER_RAD
 var _wheel_grip: float = 3.0
 var _steer_input: float = 0.0
+## Turning from a hit, in rad/s. It is not the driver's, so the yaw cap does not hold it.
+var _spin: float = 0.0
+## Swing from a barrier still to come, in radians.
+var _swing: float = 0.0
 
 
 func apply_spec(chassis: Dictionary, grip_rating: float) -> void:
@@ -94,16 +102,22 @@ func apply_planar_velocity(body: CharacterBody3D, planar: Vector3, car_center: V
 	_apply_heading(body, car_center)
 
 
-## Turns the car by hand against a barrier, where the steering would not manage it.
-func turn_by(angle: float, body: CharacterBody3D, car_center: Vector3) -> void:
-	heading_yaw += angle
+## A hit sets the car turning.
+func kick_yaw(rate: float) -> void:
+	_spin += rate
+
+
+## A barrier swings the nose this far, in radians, over the next moments.
+func swing_by(angle: float) -> void:
+	_swing = angle
 	_yaw_rate = 0.0
-	_apply_heading(body, car_center)
 
 
 func _stop_slide() -> void:
 	_lateral_speed = 0.0
 	_yaw_rate = 0.0
+	_spin = 0.0
+	_swing = 0.0
 
 
 ## Gear acceleration is already scaled by ratio, power, and headroom.
@@ -152,7 +166,10 @@ func step(
 	_yaw_rate = clampf(_yaw_rate, -yaw_cap, yaw_cap)
 	_lateral_speed = clampf(_lateral_speed, -forward_speed * 0.45, forward_speed * 0.45)
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
-	heading_yaw += _yaw_rate * delta
+	var swung := clampf(_swing, -SWING_RATE * delta, SWING_RATE * delta)
+	_swing -= swung
+	heading_yaw += (_yaw_rate + _spin) * delta + swung
+	_spin *= exp(-SPIN_DECAY * delta)
 
 	var forward_dir := Vector3(sin(heading_yaw), 0.0, cos(heading_yaw))
 	var right_dir := Vector3(cos(heading_yaw), 0.0, -sin(heading_yaw))

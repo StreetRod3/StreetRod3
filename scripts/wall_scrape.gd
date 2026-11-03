@@ -4,7 +4,7 @@ extends RefCounted
 ## scraping along it, so a graze costs a little and a square hit costs nearly everything.
 
 ## Share of the speed into the barrier that comes back out.
-const _BOUNCE := 0.15
+const BOUNCE := 0.15
 ## Speed along the barrier lost per m/s going into it.
 const _FRICTION := 0.3
 ## Slowing while rubbing along a barrier, in m/s².
@@ -12,6 +12,7 @@ const _RUB_DRAG := 5.0
 ## How hard a touching car is turned back along the road. Heading error to rad/s, and the most.
 const _TURN_GAIN := 3.5
 const _TURN_MAX := 1.4
+const _ARCADE_MIN_MPS := 3.0
 
 
 ## What touching a barrier does this step: {"into", "velocity"}, or {} with no barrier touched.
@@ -39,8 +40,18 @@ static func resolve(car: CharacterBody3D, before: Vector3, delta: float) -> Dict
 	var planar := Vector3(before.x, 0.0, before.z)
 	var along := planar + normal * into
 	var speed := maxf(along.length() - into * _FRICTION - _RUB_DRAG * delta, 0.0)
-	var after := along.normalized() * speed + normal * into * _BOUNCE
+	var after := along.normalized() * speed + normal * into * BOUNCE
 	return {"into": into, "velocity": after}
+
+
+## How far the arcade drive's nose has to swing to where the car is now going, since that
+## drive goes where its nose points. Below walking pace it comes back along the road instead.
+static func arcade_swing(track: Node, car: Node3D, yaw: float, after: Vector3) -> float:
+	if after.length() >= _ARCADE_MIN_MPS:
+		return wrapf(atan2(after.x, after.z) - yaw, -PI, PI)
+	if track != null and track.has_method(&"closest_sample"):
+		return wrapf(float(track.closest_sample(car.global_position).get("yaw", yaw)) - yaw, -PI, PI)
+	return 0.0
 
 
 ## Turn rate that brings a touching car back along the road, so it cannot sit with its nose
