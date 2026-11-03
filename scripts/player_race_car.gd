@@ -10,6 +10,7 @@ const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
+const _WallScrape := preload("res://scripts/wall_scrape.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -390,10 +391,7 @@ func _physics_simulation(delta: float) -> void:
 	_dynamics.pose_body(self, true)
 	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle(before):
-		_dynamics.reset_motion()
-		_sync_motion_state()
-		velocity = Vector3.ZERO
+	if _scrape_barrier(before, delta):
 		_skids.end_strips()
 	else:
 		_skids.record(_dynamics.wheels(), global_transform, _race_track())
@@ -454,9 +452,7 @@ func _physics_arcade(delta: float) -> void:
 	)
 	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle(before):
-		_arcade.reset()
-		velocity = Vector3.ZERO
+	_scrape_barrier(before, delta)
 	forward_speed = _arcade.forward_speed
 	heading_yaw = _arcade.heading_yaw
 	_skids.end_strips()
@@ -580,16 +576,23 @@ func _escape_obstacle(track: Node) -> bool:
 	return true
 
 
-func _slide_hit_obstacle(before: Vector3) -> bool:
-	var hit := false
-	for i in get_slide_collision_count():
-		var col := get_slide_collision(i)
-		var collider := col.get_collider()
-		if collider is Node and (collider as Node).has_meta(&"track_obstacle"):
-			hit = true
-			if -before.dot(col.get_normal()) >= WRECK_BARRIER_MPS:
-				_wrecked = true
-	return hit
+## Applies touching a barrier to the driving model. True when one was touched.
+func _scrape_barrier(before: Vector3, delta: float) -> bool:
+	var hit := _WallScrape.resolve(self, before, delta)
+	if hit.is_empty():
+		return false
+	if float(hit["into"]) >= WRECK_BARRIER_MPS:
+		_wrecked = true
+	var after: Vector3 = hit["velocity"]
+	if GameState.arcade_drive:
+		_arcade.apply_planar_velocity(self, after, _car_center)
+		_arcade.turn_by(_WallScrape.turn_rate(_race_track(), self, _arcade.heading_yaw) * delta, self, _car_center)
+	else:
+		_dynamics.cg_velocity = after
+		velocity = after
+		_dynamics.yaw_rate = _WallScrape.turn_rate(_race_track(), self, _dynamics.yaw)
+		_sync_motion_state()
+	return true
 
 
 func _update_debug_draw() -> void:

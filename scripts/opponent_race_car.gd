@@ -8,6 +8,7 @@ const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
+const _WallScrape := preload("res://scripts/wall_scrape.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
@@ -20,6 +21,10 @@ const ARCADE_RATIOS: Array[float] = [2.52, 1.52, 1.00]
 const PRESET_ACCEL_REF := 0.30
 ## Share of the tire grip the driver plans to use in corners.
 const CORNER_GRIP_USE := 0.5
+## The same on the arcade rails, where the driver cannot lose it.
+const ARCADE_CORNER_GRIP_USE := 0.8
+## How hard the driver slows for a corner on the arcade rails, in m/s².
+const ARCADE_CORNER_BRAKE := 14.0
 ## Heading error that asks for full steering input.
 const STEER_FULL_ERROR_RAD := 0.175
 ## Steering per meter of drift from the chosen lane.
@@ -226,11 +231,9 @@ func _physics_simulation(delta: float) -> void:
 	_dynamics.step(delta, steer, drive, brake_input)
 	_sync_motion_state()
 	_dynamics.pose_body(self, true)
+	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle():
-		_dynamics.reset_motion()
-		_sync_motion_state()
-		velocity = Vector3.ZERO
+	if _scrape_barrier(before, track, delta):
 		_skids.end_strips()
 	else:
 		_skids.record(_dynamics.wheels(), global_transform, track)
@@ -249,7 +252,12 @@ func _physics_arcade(delta: float) -> void:
 		velocity = Vector3.ZERO
 		move_and_slide()
 		return
-	if _arcade_shift > 0.0:
+	var corner := _max_mps
+	if track != null and track.has_method(&"sample_at"):
+		corner = _corner_speed(track, forward_speed, ARCADE_CORNER_GRIP_USE)
+	if forward_speed > corner:
+		forward_speed = move_toward(forward_speed, corner, ARCADE_CORNER_BRAKE * delta)
+	elif _arcade_shift > 0.0:
 		_arcade_shift = maxf(0.0, _arcade_shift - delta)
 	else:
 		var top := _arcade_gear_top(_arcade_gear)
@@ -257,7 +265,7 @@ func _physics_arcade(delta: float) -> void:
 			_arcade_gear += 1
 			_arcade_shift = _shift_time
 		else:
-			forward_speed += _arcade_gear_accel() * delta
+			forward_speed = minf(forward_speed + _arcade_gear_accel() * delta, maxf(corner, forward_speed))
 	forward_speed = minf(forward_speed, _max_mps)
 	if track != null and track.has_method(&"sample_at"):
 		_path_s += forward_speed * delta
@@ -398,7 +406,7 @@ func _drive_command(track: Node) -> Vector3:
 	if planar < 4.0:
 		steer = err / (STEER_FULL_ERROR_RAD * 4.0)
 	steer = clampf(steer, -1.0, 1.0)
-	var too_fast := planar - _corner_speed(track, planar)
+	var too_fast := planar - _corner_speed(track, planar, CORNER_GRIP_USE)
 	var braking := (too_fast > 1.8 and absf(steer) < 0.3) or too_fast > 8.0
 	var throttle := not braking and too_fast < 0.6 and absf(err) < 0.7 and not sliding
 	if planar < 4.0 and absf(err) < 1.2:
@@ -408,8 +416,8 @@ func _drive_command(track: Node) -> Vector3:
 
 
 ## Fastest speed the tightest bend in the braking horizon allows.
-func _corner_speed(track: Node, planar: float) -> float:
-	var ay := _dynamics.grip_accel() * CORNER_GRIP_USE
+func _corner_speed(track: Node, planar: float, grip_use: float) -> float:
+	var ay := _dynamics.grip_accel() * grip_use
 	var horizon := clampf(planar * 2.8, 36.0, 110.0)
 	var step := 6.0
 	var count := maxi(int(horizon / step), 1)
@@ -472,10 +480,14 @@ func _escape_obstacle(track: Node) -> bool:
 	return true
 
 
-func _slide_hit_obstacle() -> bool:
-	for i in get_slide_collision_count():
-		var col := get_slide_collision(i)
-		var collider := col.get_collider()
-		if collider is Node and (collider as Node).has_meta(&"track_obstacle"):
-			return true
-	return false
+## Applies touching a barrier to the tires' model. True when one was touched.
+func _scrape_barrier(before: Vector3, track: Node, delta: float) -> bool:
+	var hit := _WallScrape.resolve(self, before, delta)
+	if hit.is_empty():
+		return false
+	var after: Vector3 = hit["velocity"]
+	_dynamics.cg_velocity = after
+	velocity = after
+	_dynamics.yaw_rate = _WallScrape.turn_rate(track, self, _dynamics.yaw)
+	_sync_motion_state()
+	return true

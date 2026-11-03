@@ -4,12 +4,28 @@ extends RefCounted
 ## directly, and a bicycle chassis with a yaw cap turns the car.
 
 const ACCELERATION := 24.0
-const BRAKING := 40.0
-const COAST_FACTOR := 0.985
+## Hard stops, but ones the tires could plausibly do, with steering left to use.
+const BRAKING := 14.0
+## Speed kept per 1/60 s, lifted off the throttle. Engine braking and drag, no more.
+const COAST_FACTOR := 0.998
+## Speed kept per 1/60 s while a shift interrupts the throttle.
+const SHIFT_COAST_FACTOR := 0.985
 const REF_GEAR_RATIO := 2.80
 const WHEELBASE_M := 2.59
 const MAX_STEER_RAD := 0.52
 const STEER_RESPONSE := 3.2
+## Sideways acceleration full steering asks for at speed, in m/s². As in the simulation,
+## the rack closes as speed rises, so a key press is not full lock at top speed.
+const STEER_FULL_LATERAL_ACCEL := 9.5
+## Extra angle at any speed, for the slip the front tires need to make that force.
+const STEER_SLIP_ALLOWANCE_RAD := 0.055
+## How fast the steering input moves on and back off, per second, so a tap is a small turn.
+const STEER_INPUT_RATE := 4.0
+const STEER_INPUT_RETURN := 7.0
+## The most of a tire's grip that braking or power can take. What is left always steers.
+const LONG_GRIP_SHARE_MAX := 0.72
+## Acceleration past this shifts no more weight between the axles, in m/s².
+const LOAD_TRANSFER_ACCEL_MAX := 11.0
 const MASS_KG := 1360.0
 const CG_HEIGHT_M := 0.48
 const GRAVITY := 9.81
@@ -78,6 +94,13 @@ func apply_planar_velocity(body: CharacterBody3D, planar: Vector3, car_center: V
 	_apply_heading(body, car_center)
 
 
+## Turns the car by hand against a barrier, where the steering would not manage it.
+func turn_by(angle: float, body: CharacterBody3D, car_center: Vector3) -> void:
+	heading_yaw += angle
+	_yaw_rate = 0.0
+	_apply_heading(body, car_center)
+
+
 func _stop_slide() -> void:
 	_lateral_speed = 0.0
 	_yaw_rate = 0.0
@@ -103,6 +126,8 @@ func step(
 		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * delta
 	elif brake:
 		forward_speed -= BRAKING * delta
+	elif throttle:
+		forward_speed *= pow(SHIFT_COAST_FACTOR, delta * 60.0)
 	else:
 		forward_speed *= pow(COAST_FACTOR, delta * 60.0)
 	if blown:
@@ -113,13 +138,13 @@ func step(
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
 
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
-	_steer_input = clampf(steer, -1.0, 1.0)
-	var steer_target := _steer_input * _max_steer_rad * _grip_steer_scale()
-	if absf(steer) < 0.01:
-		steer_target = 0.0
+	var wanted := clampf(steer, -1.0, 1.0)
+	var input_rate := STEER_INPUT_RATE if wanted * _steer_input > 0.0 and absf(wanted) > absf(_steer_input) else STEER_INPUT_RETURN
+	_steer_input = move_toward(_steer_input, wanted, input_rate * delta)
+	var steer_target := _steer_input * _steer_limit() * _grip_steer_scale()
 	steer_angle = move_toward(steer_angle, steer_target, STEER_RESPONSE * delta)
 	_step_chassis(delta, longitudinal_accel)
-	if absf(steer_angle) < 0.02:
+	if absf(_steer_input) < 0.02 and absf(steer_angle) < 0.02:
 		var straighten := clampf(12.0 * delta, 0.0, 1.0)
 		_yaw_rate = lerpf(_yaw_rate, 0.0, straighten)
 		_lateral_speed = lerpf(_lateral_speed, 0.0, straighten)
@@ -144,6 +169,12 @@ func hold(body: CharacterBody3D, delta: float, car_center: Vector3) -> void:
 	_apply_heading(body, car_center)
 
 
+## The road-wheel angle full steering gives at this speed, never past the lock.
+func _steer_limit() -> float:
+	var speed := maxf(forward_speed, 1.0)
+	return minf(_max_steer_rad, atan(STEER_FULL_LATERAL_ACCEL * _wheelbase / (speed * speed)) + STEER_SLIP_ALLOWANCE_RAD)
+
+
 static func grip_accel_scale(grip_rating: float) -> float:
 	return 1.0 + (grip_rating - 3.0) * 0.04
 
@@ -157,7 +188,8 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var axle_rear := _wheelbase - axle_front
 	var mu := MU_OFFROAD if _off_road else MU_DRY
 	var weight := _mass_kg * GRAVITY
-	var transfer := _mass_kg * longitudinal_accel * _cg_height / _wheelbase
+	var transfer_accel := clampf(longitudinal_accel, -LOAD_TRANSFER_ACCEL_MAX, LOAD_TRANSFER_ACCEL_MAX)
+	var transfer := _mass_kg * transfer_accel * _cg_height / _wheelbase
 	var fz_front := maxf(weight * axle_rear / _wheelbase - transfer, weight * 0.12)
 	var fz_rear := maxf(weight * axle_front / _wheelbase + transfer, weight * 0.12)
 	var long_front := 0.0
@@ -192,7 +224,7 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 
 func _tire_force(slip: float, stiffness: float, normal: float, longitudinal: float, mu: float) -> float:
 	var limit := mu * normal
-	var long_used := clampf(absf(longitudinal) / maxf(limit, 1.0), 0.0, 1.0)
+	var long_used := clampf(absf(longitudinal) / maxf(limit, 1.0), 0.0, LONG_GRIP_SHARE_MAX)
 	var lat_limit := limit * sqrt(maxf(0.0, 1.0 - long_used * long_used))
 	return clampf(-stiffness * slip, -lat_limit, lat_limit)
 
