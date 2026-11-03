@@ -11,6 +11,13 @@ const NAME_POSITION := Vector2(354, 200)
 ## The widest letters, a full line of M, still fit before the edge of the card.
 const NAME_MAX_LENGTH := 24
 
+const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
+const SIGNATURE_SIZE := 30
+const SIGNATURE_INK := Color("#2a2d55")
+const SIGNATURE_POSITION := Vector2(366, 552)
+## Long names shrink to stop this far short of the right edge of the card.
+const SIGNATURE_MARGIN := 10.0
+
 ## Stand-ins until the character creator can set them.
 const CARD_VALUES: Array[Dictionary] = [
 	{"id": "number", "x": 354, "y": 166, "text": "B2026327"},
@@ -31,6 +38,7 @@ const CARD_VALUES: Array[Dictionary] = [
 @onready var _continue_button: Button = $Buttons/ContinueButton
 
 var _typed_font := FontVariation.new()
+var _signature := Label.new()
 
 
 func _ready() -> void:
@@ -40,6 +48,7 @@ func _ready() -> void:
 	for value in CARD_VALUES:
 		_add_value(value)
 	_setup_name_edit()
+	_setup_signature()
 	_continue_button.disabled = true
 	_name_edit.edit()
 
@@ -77,6 +86,36 @@ func _setup_name_edit() -> void:
 	_name_edit.size = Vector2(_card.size.x - NAME_POSITION.x, _typed_font.get_height(FONT_SIZE))
 
 
+func _setup_signature() -> void:
+	_signature.name = "signature"
+	_signature.add_theme_font_override("font", SIGNATURE_FONT)
+	_signature.add_theme_color_override("font_color", SIGNATURE_INK)
+	_card.add_child(_signature)
+
+
+func _update_signature() -> void:
+	var signed := _signed_name(_driver_name())
+	var room := _card.size.x - SIGNATURE_POSITION.x - SIGNATURE_MARGIN
+	var width := SIGNATURE_FONT.get_string_size(signed, HORIZONTAL_ALIGNMENT_LEFT, -1, SIGNATURE_SIZE).x
+	var font_size := SIGNATURE_SIZE
+	if width > room:
+		font_size = floori(SIGNATURE_SIZE * room / width)
+	_signature.text = signed
+	_signature.add_theme_font_size_override("font_size", font_size)
+	_signature.position = SIGNATURE_POSITION - Vector2(0, SIGNATURE_FONT.get_ascent(font_size))
+	_signature.reset_size()
+
+
+## People sign in upper and lower case, whatever the typed line says.
+func _signed_name(driver_name: String) -> String:
+	var signed := ""
+	var starts_word := true
+	for letter in driver_name.to_lower():
+		signed += letter.to_upper() if starts_word else letter
+		starts_word = letter in " -'"
+	return signed
+
+
 func _ascent() -> float:
 	return _typed_font.get_ascent(FONT_SIZE)
 
@@ -93,6 +132,7 @@ func _on_name_changed(new_text: String) -> void:
 		_name_edit.text = capitals
 		_name_edit.caret_column = caret
 	_continue_button.disabled = _driver_name().is_empty()
+	_update_signature()
 
 
 func _on_name_submitted(_new_text: String) -> void:
