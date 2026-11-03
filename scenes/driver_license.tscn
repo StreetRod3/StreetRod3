@@ -1,0 +1,82 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/driver_license.gd" id="1"]
+[ext_resource type="Texture2D" path="res://assets/ui/DLTemplate.png" id="2_card"]
+
+[node name="DriverLicense" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.06, 0.07, 0.1, 1)
+
+[node name="Card" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -465.0
+offset_top = -345.0
+offset_right = 465.0
+offset_bottom = 277.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CardImage" type="TextureRect" parent="Card"]
+texture_filter = 4
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_card")
+expand_mode = 1
+
+[node name="NameEdit" type="LineEdit" parent="Card"]
+layout_mode = 0
+placeholder_text = "TYPE YOUR NAME"
+caret_blink = true
+
+[node name="Buttons" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -290.0
+offset_top = 291.0
+offset_right = 290.0
+offset_bottom = 335.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="BackButton" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(280, 44)
+layout_mode = 2
+text = "Back"
+
+[node name="ContinueButton" type="Button" parent="Buttons"]
+custom_minimum_size = Vector2(280, 44)
+layout_mode = 2
+text = "Continue"
+
+[connection signal="text_changed" from="Card/NameEdit" to="." method="_on_name_changed"]
+[connection signal="text_submitted" from="Card/NameEdit" to="." method="_on_name_submitted"]
+[connection signal="pressed" from="Buttons/BackButton" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="Buttons/ContinueButton" to="." method="_on_continue_pressed"]
