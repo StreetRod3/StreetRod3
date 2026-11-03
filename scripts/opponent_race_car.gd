@@ -51,9 +51,13 @@ var _arcade_active: bool = false
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
 var _arcade_accel: float = 7.0
+## Body height on flat ground. Track height is added on top of this.
+var _road_base_y: float = 0.0
+const _ROAD_PITCH_SPAN := 8.0
 
 
 func _ready() -> void:
+	_road_base_y = global_position.y
 	if _dynamics == null:
 		_dynamics = _VehicleDynamics.new()
 		_dynamics.name = "VehicleDynamics"
@@ -119,6 +123,7 @@ func _physics_process(delta: float) -> void:
 		_physics_arcade(delta)
 	else:
 		_physics_simulation(delta)
+	_stick_to_road()
 
 
 func _physics_simulation(delta: float) -> void:
@@ -173,7 +178,7 @@ func _physics_simulation(delta: float) -> void:
 		velocity = Vector3.ZERO
 		_skids.end_strips()
 	else:
-		_skids.record(_dynamics.wheels(), global_transform)
+		_skids.record(_dynamics.wheels(), global_transform, track)
 
 
 func _physics_arcade(delta: float) -> void:
@@ -242,6 +247,19 @@ func _hold_still() -> void:
 	_dynamics.pose_body(self, false)
 	move_and_slide()
 	_skids.end_strips()
+
+
+func _stick_to_road() -> void:
+	var track := _race_track(get_parent())
+	if track == null or not track.has_method(&"surface_height"):
+		rotation.x = 0.0
+		return
+	var here: float = track.surface_height(global_position)
+	global_position.y = _road_base_y + here
+	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
+	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
+	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
 
 
 func _race_track(race: Node) -> Node:

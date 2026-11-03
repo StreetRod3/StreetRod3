@@ -154,6 +154,8 @@ class Wheel:
 	var suspension_force: float = 0.0
 	var grounded: bool = false
 	var suspension_ready: bool = false
+	## Road height under this wheel. 0 is the flat ground.
+	var road_y: float = 0.0
 
 
 var config := Config.new()
@@ -185,8 +187,6 @@ var _roll_vel: float = 0.0
 var _pitch_inertia: float = 2500.0
 var _roll_inertia: float = 600.0
 
-## Flat road used when a wheel ray misses. The road mesh has no collider.
-const _GROUND_Y := 0.0
 const _WORLD_MASK := 1
 const _RAY_LENGTH_M := 2.5
 ## Hub height above the road for the race spawn, used when the first
@@ -370,18 +370,23 @@ func grass_amount(lateral: float, left_extent: float, right_extent: float) -> fl
 	return smoothstep(0.0, edge, outside)
 
 
-## Samples the road under each wheel. With no track every wheel is on asphalt.
+## Samples the road under each wheel. With no track every wheel is on asphalt at height 0.
 func sample_surfaces(track: Object, body: Transform3D) -> void:
 	var blends: Array[float] = []
 	for wheel in _wheels:
 		var amount := 0.0
+		var road_y := 0.0
+		var world: Vector3 = body * wheel.local_position
 		if track != null and track.has_method(&"closest_sample"):
-			var sample: Dictionary = track.closest_sample(body * wheel.local_position)
+			var sample: Dictionary = track.closest_sample(world)
 			amount = grass_amount(
 				float(sample.get("lateral", 0.0)),
 				float(sample.get("left_ext", 0.0)),
 				float(sample.get("right_ext", 0.0))
 			)
+		if track != null and track.has_method(&"surface_height"):
+			road_y = float(track.surface_height(world))
+		wheel.road_y = road_y
 		blends.append(amount)
 	set_surface_blends(blends)
 
@@ -733,7 +738,7 @@ func _update_load_transfer(dt: float) -> void:
 
 
 ## Ray length under each hub. A physics hit on the road wins. A miss uses the
-## flat y=0 surface the track is built on, because the road mesh has no collider.
+## track height under the wheel, because the road mesh has no collider.
 func _update_suspension(dt: float) -> void:
 	if _wheels.is_empty():
 		return
@@ -749,7 +754,7 @@ func _update_suspension(dt: float) -> void:
 	for wheel in _wheels:
 		var origin := car.global_transform * wheel.local_position
 		origin.y += _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
-		var ground_y := _raycast_ground(space, car, origin)
+		var ground_y := _raycast_ground(space, car, origin, wheel.road_y)
 		var drop := origin.y - ground_y
 		if wheel.ride_recapture:
 			wheel.ride_drop = _ride_drop_sample(wheel.ride_drop, drop)
@@ -789,7 +794,7 @@ func _ride_drop_sample(previous: float, drop: float) -> float:
 	return previous
 
 
-func _raycast_ground(space: PhysicsDirectSpaceState3D, car: CollisionObject3D, origin: Vector3) -> float:
+func _raycast_ground(space: PhysicsDirectSpaceState3D, car: CollisionObject3D, origin: Vector3, ground_y: float) -> float:
 	var end := origin + Vector3(0.0, -_RAY_LENGTH_M, 0.0)
 	if space != null:
 		var exclude: Array[RID] = [car.get_rid()]
@@ -800,11 +805,11 @@ func _raycast_ground(space: PhysicsDirectSpaceState3D, car: CollisionObject3D, o
 		if not hit.is_empty():
 			var normal: Vector3 = hit.get("normal", Vector3.UP)
 			var point: Vector3 = hit.get("position", end)
-			var near_road := point.y <= _GROUND_Y + 0.4 and point.y >= _GROUND_Y - 1.0
+			var near_road := point.y <= ground_y + 0.4 and point.y >= ground_y - 1.0
 			if normal.y > 0.45 and point.y <= origin.y and near_road:
 				return point.y
-	if origin.y >= _GROUND_Y - _RAY_LENGTH_M:
-		return _GROUND_Y
+	if origin.y >= ground_y - _RAY_LENGTH_M:
+		return ground_y
 	return origin.y + _RAY_LENGTH_M
 
 

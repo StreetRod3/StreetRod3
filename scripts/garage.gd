@@ -29,6 +29,7 @@ const _SaveSlots := preload("res://scripts/save_slots.gd")
 @onready var _hud_cash: Label = %CashLabel
 @onready var _hud_bottom: Control = $GarageUI/HudBottom
 @onready var _lift: StaticBody3D = $InteractLift
+@onready var _vodka: StaticBody3D = $InteractDesk/InteractVodka
 @onready var _lift_arm: Node3D = $InteractLift/LiftArm
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
 @onready var _door_right: Node3D = $InteractDoors/DoorRight
@@ -138,6 +139,8 @@ var _stall_bubble: Control
 var _here_bubble: Control
 ## Shown once, on the garage visit straight after the last car is sold or lost.
 var _gone_bubble: Control
+## Shown when the vodka bottle on the desk is clicked.
+var _vodka_bubble: Control
 var _tooltip: Label
 
 const _TOOLTIPS := {
@@ -155,6 +158,7 @@ const _TOOLTIPS := {
 	&"tire_machine": "Tire machine (T)",
 	&"transmission": "Transmission (A)",
 	&"creeper": "Under the car (U)",
+	&"vodka": "Wanna drink?",
 }
 const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
@@ -249,6 +253,7 @@ func _ready() -> void:
 	$InteractDoors.set_meta(&"garage_interact", &"doors")
 	$InteractSprayPistol.set_meta(&"garage_interact", &"spray")
 	$InteractFuelCan.set_meta(&"garage_interact", &"fuel")
+	_vodka.set_meta(&"garage_interact", &"vodka")
 	_build_engine_sound()
 	_build_hood_target()
 	_build_under_car_target()
@@ -277,6 +282,7 @@ func _ready() -> void:
 	_build_here_bubble()
 	_build_say_bubble()
 	_build_gone_bubble()
+	_build_vodka_bubble()
 	_build_tooltip()
 	if GameState.cars_just_gone:
 		announce_cars_gone()
@@ -419,6 +425,27 @@ func _dismiss_gone_bubble() -> void:
 		_gone_bubble.visible = false
 	if GameState.is_ruined() and _loss_bubble != null:
 		_loss_bubble.visible = true
+
+
+func _build_vodka_bubble() -> void:
+	var bubble := _SpeechBubble.instantiate()
+	bubble.visible = false
+	$GarageUI.add_child(bubble)
+	bubble.call("set_line", "Don't drink and drive, bub!", Vector2(520, 56), 26)
+	bubble.call("grab_screen")
+	bubble.call("follow_node", _camera, _vodka, Vector3(0.0, 0.46, 0.0))
+	bubble.connect("pressed", _dismiss_vodka_bubble)
+	_vodka_bubble = bubble
+
+
+func _show_vodka_bubble() -> void:
+	if _vodka_bubble != null:
+		_vodka_bubble.visible = true
+
+
+func _dismiss_vodka_bubble() -> void:
+	if _vodka_bubble != null:
+		_vodka_bubble.visible = false
 
 
 func _leave_after_loss() -> void:
@@ -576,6 +603,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _here_bubble != null and _here_bubble.visible:
 		if event.is_action_pressed(&"ui_cancel"):
 			_dismiss_here_bubble()
+		get_viewport().set_input_as_handled()
+		return
+	if _vodka_bubble != null and _vodka_bubble.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_dismiss_vodka_bubble()
 		get_viewport().set_input_as_handled()
 		return
 	if _say_bubble != null and _say_bubble.visible:
@@ -990,6 +1022,8 @@ func _handle_interact(kind: Variant) -> void:
 			_open_transmission()
 		&"creeper":
 			_open_under_car()
+		&"vodka":
+			_show_vodka_bubble()
 
 
 func _bay_needs_car(kind: Variant) -> bool:

@@ -81,8 +81,9 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	return result
 
 
+## Track `x` is world X, track `y` is world Z, track `z` is height (world Y).
 static func world_position(node: Dictionary) -> Vector3:
-	return Vector3(float(node.get("x", 0.0)), 0.0, float(node.get("y", 0.0)))
+	return Vector3(float(node.get("x", 0.0)), float(node.get("z", 0.0)), float(node.get("y", 0.0)))
 
 
 static func _empty_result() -> Dictionary:
@@ -129,6 +130,7 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 			"id": id,
 			"x": float(node["x"]),
 			"y": float(node["y"]),
+			"z": _node_height(node, id, result),
 			"type": ntype,
 		}
 		result.nodes[id] = parsed
@@ -149,6 +151,17 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 		var last_id := int(result.node_order[result.node_order.size() - 1])
 		result.finish_ids.append(last_id)
 		result.warnings.append("No finish node; using last node %d." % last_id)
+
+
+## Missing `z`, or a value that is not a number, is ground level.
+static func _node_height(node: Dictionary, id: int, result: Dictionary) -> float:
+	if not node.has("z"):
+		return 0.0
+	var raw: Variant = node["z"]
+	if typeof(raw) != TYPE_FLOAT and typeof(raw) != TYPE_INT:
+		result.warnings.append("Node %d has a non-numeric `z`; using 0." % id)
+		return 0.0
+	return float(raw)
 
 
 static func _parse_roads(root: Dictionary, result: Dictionary) -> void:

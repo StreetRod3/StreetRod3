@@ -8,6 +8,12 @@ const ROAD_HALF_W := 20.0
 ## Depth of the barrier strip past the driveable edge.
 const OBSTACLE_BAND := 0.7
 const BAKE_STEP := 2.0
+## Grass grid around the road. It sits just under the pavement so the two don't flicker.
+const _TERRAIN_PAD := 400.0
+const _TERRAIN_STEP := 12.0
+const _TERRAIN_SINK := 0.08
+## Cell size for the nearest-sample lookup used while shaping the grass.
+const _BIN_CELL := 64.0
 const FILLET_MIN_ANGLE := 0.06 ## ~3.5 degrees; smaller turns stay as a sharp join
 const FILLET_LEN_FRACTION := 0.4
 const FILLET_MAX_CUT := 80.0
@@ -39,7 +45,7 @@ var _yaw: float = 0.0
 var _seg_half_w: float = ROAD_HALF_W
 var _seg_surface: String = "regular"
 var _seg_road_type: String = "regular"
-var _hint_i: int = 0
+var _bins: Dictionary = {}
 var _road_mi: MeshInstance3D
 var _built: bool = false
 var _sign_mesh: ArrayMesh
@@ -86,26 +92,36 @@ func sample_at(s: float) -> Dictionary:
 func closest_sample(world: Vector3) -> Dictionary:
 	if _pts.is_empty():
 		return _empty_sample()
-	var best_i := _hint_i
-	var best_d := INF
-	var start_i := maxi(_hint_i - 70, 0)
-	var end_i := mini(_hint_i + 90, _pts.size() - 1)
-	for i in range(start_i, end_i + 1):
-		var d := world.distance_squared_to(_pts[i])
-		if d < best_d:
-			best_d = d
-			best_i = i
-	if best_d > 400.0:
-		for i in _pts.size():
-			var d := world.distance_squared_to(_pts[i])
-			if d < best_d:
-				best_d = d
-				best_i = i
-	_hint_i = best_i
+	var best_i := _nearest_index(world)
 	var yaw: float = _yaws[best_i]
 	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
 	var lateral := (world - _pts[best_i]).dot(right)
 	return _make_sample(_pts[best_i], yaw, _dists[best_i], lateral, best_i)
+
+
+## Height of the road under `world`, in meters. The grass beside it uses the same height.
+func surface_height(world: Vector3) -> float:
+	if _pts.is_empty():
+		return 0.0
+	var i := _nearest_index(world)
+	var height := _pts[i].y
+	var best_d := INF
+	for j in [i - 1, i]:
+		if j < 0 or j + 1 >= _pts.size():
+			continue
+		var a := _pts[j]
+		var b := _pts[j + 1]
+		var ab := Vector2(b.x - a.x, b.z - a.z)
+		var len2 := ab.length_squared()
+		if len2 < 0.0001:
+			continue
+		var ap := Vector2(world.x - a.x, world.z - a.z)
+		var t := clampf(ap.dot(ab) / len2, 0.0, 1.0)
+		var d := ap.distance_squared_to(ab * t)
+		if d < best_d:
+			best_d = d
+			height = lerpf(a.y, b.y, t)
+	return height
 
 
 ## Where a car at `world` must go when it sits in a barrier band just outside
@@ -190,6 +206,7 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 
 func _build_path() -> void:
 	_pts.clear()
+	_bins.clear()
 	_yaws.clear()
 	_dists.clear()
 	_half_ws.clear()
@@ -240,10 +257,99 @@ func _build_path() -> void:
 			continue
 		var p0 := pts[i] - in_dir * cut
 		var p2 := pts[i] + out_dir * cut
+		var in_span := Vector3(pts[i].x - pts[i - 1].x, 0.0, pts[i].z - pts[i - 1].z).length()
+		var out_span := Vector3(pts[i + 1].x - pts[i].x, 0.0, pts[i + 1].z - pts[i].z).length()
+		if in_span > 0.0001:
+			p0.y = lerpf(pts[i - 1].y, pts[i].y, 1.0 - cut / in_span)
+		if out_span > 0.0001:
+			p2.y = lerpf(pts[i].y, pts[i + 1].y, cut / out_span)
 		_append_to(p0)
 		_append_bezier(p0, pts[i], p2, roads[i - 1], roads[i])
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
+	_smooth_path_heights(pts)
+	_build_bins()
+
+
+## Replace the straight ramps between nodes with a smooth curve that still passes through each height.
+func _smooth_path_heights(nodes: Array[Vector3]) -> void:
+	if _pts.size() < 2 or nodes.size() < 2:
+		return
+	var knot_s := PackedFloat32Array()
+	var knot_y := PackedFloat32Array()
+	var search_from := 0
+	for node in nodes:
+		var best_i := search_from
+		var best_d := _planar_distance_sq(node, _pts[search_from])
+		for i in range(search_from + 1, _pts.size()):
+			var d := _planar_distance_sq(node, _pts[i])
+			if d < best_d:
+				best_d = d
+				best_i = i
+		knot_s.append(_dists[best_i])
+		knot_y.append(node.y)
+		search_from = best_i
+	for i in range(1, knot_s.size()):
+		if knot_s[i] <= knot_s[i - 1]:
+			knot_s[i] = knot_s[i - 1] + 0.5
+	var slopes := _height_slopes(knot_s, knot_y)
+	var k := 0
+	for i in _pts.size():
+		var s := _dists[i]
+		while k < knot_s.size() - 2 and s >= knot_s[k + 1]:
+			k += 1
+		var k1 := mini(k + 1, knot_s.size() - 1)
+		var span := knot_s[k1] - knot_s[k]
+		var y := knot_y[k]
+		if span > 0.0001:
+			var t := clampf((s - knot_s[k]) / span, 0.0, 1.0)
+			y = _hermite_height(knot_y[k], slopes[k], knot_y[k1], slopes[k1], span, t)
+		var p := _pts[i]
+		p.y = y
+		_pts[i] = p
+
+
+## Fritsch-Carlson slopes: the curve stays between the node heights and meets smoothly at each one.
+func _height_slopes(s: PackedFloat32Array, y: PackedFloat32Array) -> PackedFloat32Array:
+	var n := s.size()
+	var delta := PackedFloat32Array()
+	delta.resize(n - 1)
+	for i in n - 1:
+		var span := s[i + 1] - s[i]
+		delta[i] = 0.0 if span <= 0.0001 else (y[i + 1] - y[i]) / span
+	var m := PackedFloat32Array()
+	m.resize(n)
+	# Ease off the start line and onto the finish with a level grade.
+	m[0] = 0.0
+	m[n - 1] = 0.0
+	for i in range(1, n - 1):
+		if delta[i - 1] * delta[i] <= 0.0:
+			m[i] = 0.0
+		else:
+			m[i] = (delta[i - 1] + delta[i]) * 0.5
+	for i in n - 1:
+		if absf(delta[i]) < 0.0000001:
+			m[i] = 0.0
+			m[i + 1] = 0.0
+			continue
+		var a := m[i] / delta[i]
+		var b := m[i + 1] / delta[i]
+		var mag := a * a + b * b
+		if mag > 9.0:
+			var scale := 3.0 / sqrt(mag)
+			m[i] = scale * a * delta[i]
+			m[i + 1] = scale * b * delta[i]
+	return m
+
+
+func _hermite_height(y0: float, m0: float, y1: float, m1: float, span: float, t: float) -> float:
+	var t2 := t * t
+	var t3 := t2 * t
+	var h00 := 2.0 * t3 - 3.0 * t2 + 1.0
+	var h10 := t3 - 2.0 * t2 + t
+	var h01 := -2.0 * t3 + 3.0 * t2
+	var h11 := t3 - t2
+	return h00 * y0 + h10 * span * m0 + h01 * y1 + h11 * span * m1
 
 
 func _apply_road(road: Dictionary) -> void:
@@ -268,12 +374,13 @@ func _push_sample() -> void:
 
 func _append_to(dest: Vector3) -> void:
 	var delta := dest - _pos
-	delta.y = 0.0
 	var dist := delta.length()
 	if dist < 0.0001:
 		return
+	var planar := Vector3(delta.x, 0.0, delta.z)
+	if planar.length() > 0.0001:
+		_yaw = atan2(planar.x, planar.z)
 	var dir := delta / dist
-	_yaw = atan2(dir.x, dir.z)
 	var left := dist
 	while left > 0.0001:
 		var step := minf(BAKE_STEP, left)
@@ -316,7 +423,6 @@ func _append_bezier(
 			_apply_road(road_out)
 		var omt := 1.0 - t
 		var pos := p0 * (omt * omt) + p1 * (2.0 * omt * t) + p2 * (t * t)
-		pos.y = 0.0
 		var deriv := (p1 - p0) * (2.0 * omt) + (p2 - p1) * (2.0 * t)
 		deriv.y = 0.0
 		if deriv.length_squared() > 0.000001:
@@ -324,6 +430,71 @@ func _append_bezier(
 		_length += _pos.distance_to(pos)
 		_pos = pos
 		_push_sample()
+
+
+func _build_bins() -> void:
+	_bins.clear()
+	for i in _pts.size():
+		var key := _bin_key(_pts[i])
+		var packed: PackedInt32Array = _bins.get(key, PackedInt32Array())
+		packed.append(i)
+		_bins[key] = packed
+
+
+func _bin_key(point: Vector3) -> Vector2i:
+	return Vector2i(int(floor(point.x / _BIN_CELL)), int(floor(point.z / _BIN_CELL)))
+
+
+func _nearest_index(world: Vector3) -> int:
+	if _pts.is_empty():
+		return 0
+	if _bins.is_empty():
+		return _nearest_index_scan(world)
+	var cx := int(floor(world.x / _BIN_CELL))
+	var cz := int(floor(world.z / _BIN_CELL))
+	var best_i := 0
+	var best_d := INF
+	var r := 0
+	while r < 40:
+		for dz in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if r > 0 and absi(dx) != r and absi(dz) != r:
+					continue
+				var key := Vector2i(cx + dx, cz + dz)
+				if not _bins.has(key):
+					continue
+				var packed: PackedInt32Array = _bins[key]
+				for index in packed:
+					var d := _planar_distance_sq(world, _pts[index])
+					if d < best_d:
+						best_d = d
+						best_i = int(index)
+		var left := world.x - float(cx - r) * _BIN_CELL
+		var right := float(cx + r + 1) * _BIN_CELL - world.x
+		var down := world.z - float(cz - r) * _BIN_CELL
+		var up := float(cz + r + 1) * _BIN_CELL - world.z
+		var edge := minf(minf(left, right), minf(down, up))
+		if best_d <= edge * edge:
+			break
+		r += 1
+	return best_i
+
+
+func _nearest_index_scan(world: Vector3) -> int:
+	var best_i := 0
+	var best_d := INF
+	for i in _pts.size():
+		var d := _planar_distance_sq(world, _pts[i])
+		if d < best_d:
+			best_d = d
+			best_i = i
+	return best_i
+
+
+func _planar_distance_sq(a: Vector3, b: Vector3) -> float:
+	var dx := a.x - b.x
+	var dz := a.z - b.z
+	return dx * dx + dz * dz
 
 
 func _index_at_distance(s: float) -> int:
@@ -346,29 +517,100 @@ func _make_mat(color: Color, roughness: float = 0.72) -> StandardMaterial3D:
 
 
 func _build_terrain() -> void:
-	var min_x := 0.0
-	var max_x := 0.0
-	var min_z := 0.0
-	var max_z := 0.0
-	if not _pts.is_empty():
-		min_x = _pts[0].x
-		max_x = _pts[0].x
-		min_z = _pts[0].z
-		max_z = _pts[0].z
-		for p in _pts:
-			min_x = minf(min_x, p.x)
-			max_x = maxf(max_x, p.x)
-			min_z = minf(min_z, p.z)
-			max_z = maxf(max_z, p.z)
-	var pad := 400.0
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(max_x - min_x + pad * 2.0, max_z - min_z + pad * 2.0)
-	plane.material = _make_mat(TERRAIN_COLOR, 0.95)
+	if _pts.is_empty():
+		return
+	var min_x := _pts[0].x
+	var max_x := _pts[0].x
+	var min_z := _pts[0].z
+	var max_z := _pts[0].z
+	for p in _pts:
+		min_x = minf(min_x, p.x)
+		max_x = maxf(max_x, p.x)
+		min_z = minf(min_z, p.z)
+		max_z = maxf(max_z, p.z)
+	var origin_x := min_x - _TERRAIN_PAD
+	var origin_z := min_z - _TERRAIN_PAD
+	var span_x := max_x - min_x + _TERRAIN_PAD * 2.0
+	var span_z := max_z - min_z + _TERRAIN_PAD * 2.0
+	var cols := maxi(int(ceil(span_x / _TERRAIN_STEP)), 1)
+	var rows := maxi(int(ceil(span_z / _TERRAIN_STEP)), 1)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for row in rows + 1:
+		var z := origin_z + span_z * float(row) / float(rows)
+		for col in cols + 1:
+			var x := origin_x + span_x * float(col) / float(cols)
+			var y := _grass_height(x, z) - _TERRAIN_SINK
+			st.set_uv(Vector2(float(col), float(row)))
+			st.add_vertex(Vector3(x, y, z))
+	var stride := cols + 1
+	for row in rows:
+		for col in cols:
+			var i00 := row * stride + col
+			var i10 := i00 + 1
+			var i01 := i00 + stride
+			var i11 := i01 + 1
+			st.add_index(i00)
+			st.add_index(i10)
+			st.add_index(i11)
+			st.add_index(i00)
+			st.add_index(i11)
+			st.add_index(i01)
+	st.generate_normals()
+	var mesh := st.commit()
+	mesh.surface_set_material(0, _make_mat(TERRAIN_COLOR, 0.95))
 	var mi := MeshInstance3D.new()
 	mi.name = "Terrain"
-	mi.mesh = plane
-	mi.position = Vector3((min_x + max_x) * 0.5, -0.08, (min_z + max_z) * 0.5)
+	mi.mesh = mesh
 	add_child(mi)
+
+
+## Road height at a grass vertex. Coarser than the driving query, and local to the mesh build.
+func _grass_height(x: float, z: float) -> float:
+	var best_i := 0
+	var best_d := INF
+	var step := 4
+	var i := 0
+	while i < _pts.size():
+		var dx := x - _pts[i].x
+		var dz := z - _pts[i].z
+		var d := dx * dx + dz * dz
+		if d < best_d:
+			best_d = d
+			best_i = i
+		i += step
+	var start := maxi(best_i - step, 0)
+	var finish := mini(best_i + step, _pts.size() - 1)
+	for index in range(start, finish + 1):
+		var dx := x - _pts[index].x
+		var dz := z - _pts[index].z
+		var d := dx * dx + dz * dz
+		if d < best_d:
+			best_d = d
+			best_i = index
+	var height := _pts[best_i].y
+	for j in [best_i - 1, best_i]:
+		if j < 0 or j + 1 >= _pts.size():
+			continue
+		var a := _pts[j]
+		var b := _pts[j + 1]
+		var abx := b.x - a.x
+		var abz := b.z - a.z
+		var len2 := abx * abx + abz * abz
+		if len2 < 0.0001:
+			continue
+		var apx := x - a.x
+		var apz := z - a.z
+		var t := clampf((apx * abx + apz * abz) / len2, 0.0, 1.0)
+		var px := abx * t
+		var pz := abz * t
+		var ex := apx - px
+		var ez := apz - pz
+		var dist := ex * ex + ez * ez
+		if dist < best_d:
+			best_d = dist
+			height = lerpf(a.y, b.y, t)
+	return height
 
 
 func _build_road_mesh() -> void:

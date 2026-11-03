@@ -1,4 +1,4 @@
-[gd_scene load_steps=20 format=3 uid="uid://13fdlkxeccj1"]
+[gd_scene load_steps=24 format=3 uid="uid://13fdlkxeccj1"]
 
 [ext_resource type="Script" uid="uid://dmsj4ekbiqrvr" path="res://scripts/race.gd" id="1"]
 [ext_resource type="Script" uid="uid://lmu5w71pep8v" path="res://scripts/player_race_car.gd" id="2"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://scripts/rpm_meter.gd" id="8"]
 [ext_resource type="Script" path="res://scripts/engine_sound.gd" id="9"]
 [ext_resource type="Script" uid="uid://sw7j0jvrew0h" path="res://scripts/vehicle_dynamics.gd" id="10"]
+[ext_resource type="Script" path="res://scripts/rear_mirror.gd" id="11"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.25, 0.35, 0.55, 1)
@@ -50,6 +51,29 @@ size = Vector3(1.6, 0.5, 3.8)
 
 [sub_resource type="BoxShape3D" id="FinishShape"]
 size = Vector3(24, 8, 3)
+
+[sub_resource type="StyleBoxFlat" id="MirrorHousing"]
+bg_color = Color(0.06, 0.06, 0.07, 1)
+border_width_left = 8
+border_width_top = 8
+border_width_right = 8
+border_width_bottom = 12
+border_color = Color(0.62, 0.63, 0.66, 1)
+corner_radius_top_left = 14
+corner_radius_top_right = 14
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[sub_resource type="Shader" id="MirrorFlip"]
+code = "shader_type canvas_item;
+
+void fragment() {
+	COLOR = texture(TEXTURE, vec2(1.0 - UV.x, UV.y));
+}
+"
+
+[sub_resource type="ShaderMaterial" id="MirrorFlipMat"]
+shader = SubResource("MirrorFlip")
 
 [node name="Race" type="Node3D"]
 script = ExtResource("1")
@@ -131,12 +155,68 @@ shape = SubResource("FinishShape")
 
 [node name="RaceUI" type="CanvasLayer" parent="."]
 
+[node name="RearMirror" type="Control" parent="RaceUI"]
+layout_mode = 3
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -270.0
+offset_top = 10.0
+offset_right = 270.0
+offset_bottom = 156.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="Frame" type="Panel" parent="RaceUI/RearMirror"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_styles/panel = SubResource("MirrorHousing")
+
+[node name="Margin" type="MarginContainer" parent="RaceUI/RearMirror/Frame"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 16
+
+[node name="Glass" type="SubViewportContainer" parent="RaceUI/RearMirror/Frame/Margin"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+stretch = true
+mouse_filter = 2
+material = SubResource("MirrorFlipMat")
+script = ExtResource("11")
+
+[node name="RearView" type="SubViewport" parent="RaceUI/RearMirror/Frame/Margin/Glass"]
+handle_input_locally = false
+own_world_3d = false
+size = Vector2i(640, 180)
+render_target_update_mode = 4
+
+[node name="RearCamera" type="Camera3D" parent="RaceUI/RearMirror/Frame/Margin/Glass/RearView"]
+current = true
+fov = 52.0
+near = 0.15
+far = 1600.0
+
 [node name="TrafficLights" type="Control" parent="RaceUI"]
 layout_mode = 3
 anchors_preset = 10
 anchor_right = 1.0
-offset_top = 20.0
-offset_bottom = 104.0
+offset_top = 168.0
+offset_bottom = 252.0
 grow_horizontal = 2
 
 [node name="Center" type="CenterContainer" parent="RaceUI/TrafficLights"]

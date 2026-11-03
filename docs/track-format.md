@@ -12,9 +12,9 @@ The drag strip in `scenes/race.tscn` is still a separate, hardcoded layout. It d
 | --- | --- |
 | `x` | `X` (right) |
 | `y` | `Z` (forward when yaw is 0) |
-| (height) | always `Y = 0` |
+| `z` | `Y` (height). Omitted means `0`. |
 
-A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` to `(100, 0)` runs along world `+X`.
+A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` to `(100, 0)` runs along world `+X`. Height rises along world `+Y`.
 
 ## Root object
 
@@ -45,6 +45,7 @@ Unknown root fields are ignored.
 | `id` | yes | — | Unique integer. |
 | `x` | yes | — | Planar X in meters. |
 | `y` | yes | — | Planar Y in meters (world Z). |
+| `z` | no | `0` | Height in meters (world Y). Leave it out to stay on the ground. |
 | `type` | no | `"regular"` | `start`, `finish`, or `regular`. |
 
 ### Node types
@@ -114,7 +115,7 @@ If the walk cannot leave start, loading fails.
 {
   "nodes": [
     { "id": 1, "x": 0, "y": 0, "type": "start" },
-    { "id": 2, "x": 100, "y": 0 },
+    { "id": 2, "x": 100, "y": 0, "z": 4 },
     { "id": 3, "x": 100, "y": 80 },
     { "id": 4, "x": 0, "y": 80, "type": "finish" }
   ],
@@ -127,7 +128,7 @@ If the walk cannot leave start, loading fails.
 }
 ```
 
-This is a 400 m-ish rectangle. The last road is a circuit closer and is ignored for the start→finish race path.
+This is a 400 m-ish rectangle. Node 2 is 4 m above the ground. The others stay at 0 because `z` is left out. The last road is a circuit closer and is ignored for the start→finish race path.
 
 ## Shipping
 
