@@ -28,6 +28,11 @@ GameState="*res://scripts/game_state.gd"
 window/size/viewport_width=1280
 window/size/viewport_height=720
 
+[editor]
+
+movie_writer/movie_file="/Users/kgorecki/Projects/ChrisRod/tools/recording.avi"
+movie_writer/fps=30
+
 [rendering]
 
 textures/vram_compression/import_etc2_astc=true

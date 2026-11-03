@@ -1671,5 +1671,4 @@ func _sync_nav() -> void:
 func _on_back_pressed() -> void:
 	_forget_drive_in_visit()
 	GameState.drive_into_garage = true
-	GameState.current_scene_path = GameState.SCENE_GARAGE
-	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+	GameState.begin_cruise(GameState.POI_DRIVE_IN, GameState.POI_GARAGE, GameState.SCENE_GARAGE)

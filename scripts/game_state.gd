@@ -18,6 +18,11 @@ const SCENE_TRANSMISSION := "res://scenes/transmission.tscn"
 const SCENE_UNDER_CAR := "res://scenes/under_car.tscn"
 const SCENE_HOOD := "res://scenes/hood.tscn"
 const SCENE_TUNE := "res://scenes/tune.tscn"
+const SCENE_CRUISE := "res://scenes/cruise.tscn"
+
+const POI_GARAGE := "garage"
+const POI_DRIVE_IN := "drive-in"
+const POI_GAS_STATION := "gas-station"
 
 const MUSIC_GARAGE := "res://assets/music/garage.mp3"
 const MUSIC_RACE := "res://assets/music/race.mp3"
@@ -203,6 +208,10 @@ var cars_just_gone: bool = false
 ## The next garage visit rolls the car in from outside. Set by the drive-in, the gas
 ## station, and a car just bought from the paper. Not saved.
 var drive_into_garage: bool = false
+## Street cruise playing before `cruise_scene`. Not saved.
+var cruise_from_poi: String = ""
+var cruise_to_poi: String = ""
+var cruise_scene: String = ""
 ## A rival's engine on the hood screen. Empty when the bay is the player's car.
 ## Not saved. Keys: engine_id, hp, parts (hood slot to part id), car_name, color.
 var hood_peek: Dictionary = {}
@@ -754,6 +763,9 @@ func new_game() -> void:
 	race_pink_slips = false
 	cars_just_gone = false
 	drive_into_garage = false
+	cruise_from_poi = ""
+	cruise_to_poi = ""
+	cruise_scene = ""
 	hood_peek.clear()
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
@@ -913,6 +925,9 @@ func load_game(slot: int) -> bool:
 	race_pink_slips = bool(d.get("race_pink_slips", false))
 	cars_just_gone = false
 	drive_into_garage = false
+	cruise_from_poi = ""
+	cruise_to_poi = ""
+	cruise_scene = ""
 	hood_peek.clear()
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
@@ -3123,6 +3138,17 @@ func _string_array(value: Variant) -> Array[String]:
 	for item in value:
 		out.append(str(item))
 	return out
+
+
+## Play the short city drive from one place to another, then open `destination_scene`.
+func begin_cruise(from_poi: String, to_poi: String, destination_scene: String) -> void:
+	cruise_from_poi = from_poi
+	cruise_to_poi = to_poi
+	cruise_scene = destination_scene
+	current_scene_path = destination_scene
+	var tree := get_tree()
+	if tree != null:
+		tree.change_scene_to_file(SCENE_CRUISE)
 
 
 func go_to_saved_scene(tree: SceneTree) -> void:

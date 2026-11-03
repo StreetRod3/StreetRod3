@@ -1061,8 +1061,9 @@ func _start_drive_out(destination: String) -> void:
 	if not GameState.can_drive():
 		return
 	_dismiss_stall_bubble()
+	var poi := _poi_for_scene(destination)
 	if _door_left == null or _door_right == null:
-		get_tree().change_scene_to_file(destination)
+		_go_to_drive_destination(destination, poi)
 		return
 	_departing = true
 	_orbiting = false
@@ -1075,7 +1076,22 @@ func _start_drive_out(destination: String) -> void:
 	await _play_drive_out()
 	if not is_instance_valid(self):
 		return
-	get_tree().change_scene_to_file(destination)
+	_go_to_drive_destination(destination, poi)
+
+
+func _poi_for_scene(destination: String) -> String:
+	if destination == GameState.SCENE_DRIVE_IN:
+		return GameState.POI_DRIVE_IN
+	if destination == GameState.SCENE_GAS_STATION:
+		return GameState.POI_GAS_STATION
+	return ""
+
+
+func _go_to_drive_destination(destination: String, poi: String) -> void:
+	if poi.is_empty():
+		get_tree().change_scene_to_file(destination)
+		return
+	GameState.begin_cruise(GameState.POI_GARAGE, poi, destination)
 
 
 func _snap_calendar_home() -> void:

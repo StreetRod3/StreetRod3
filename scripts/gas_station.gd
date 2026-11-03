@@ -361,8 +361,7 @@ func _leave() -> void:
 	if not is_instance_valid(self):
 		return
 	GameState.drive_into_garage = true
-	GameState.current_scene_path = GameState.SCENE_GARAGE
-	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+	GameState.begin_cruise(GameState.POI_GAS_STATION, GameState.POI_GARAGE, GameState.SCENE_GARAGE)
 
 
 func _activate(kind: Variant) -> void:

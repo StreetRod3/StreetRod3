@@ -26,13 +26,17 @@ flowchart TD
   garage -->|Clock: quit| menu
   garage -->|Newspaper| paper
   paper -->|Back| garage
-  garage -->|Doors| select
+  garage -->|Doors or fuel| cruise[City cruise]
+  cruise -->|Drive-in| select
+  cruise -->|Gas station| gas[Gas station]
+  gas -->|Back| cruise
+  cruise -->|Garage| garage
   garage -->|Under the car| trans[Transmission]
   trans -->|Done| garage
   garage -->|Creeper| under[Under the car]
   under -->|Done| garage
   select -->|Pick rival| race
-  select -->|Back| garage
+  select -->|Back| cruise
   race -->|Garage or menu| garage
   race -->|Main menu| menu
 ```
@@ -48,6 +52,8 @@ flowchart TD
 | `scenes/hood.tscn` | `scripts/hood.gd` | Under the hood: engine, intake, carburetors, distributor, air cleaner, plug wires |
 | `scenes/tune.tscn` | `scripts/tune.gd` | Timing light on the balancer: advance or retard the distributor |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
+| `scenes/gas_station.tscn` | `scripts/gas_station.gd` | Fill the tank |
+| `scenes/cruise.tscn` | `scripts/cruise.gd` | Short automatic drive between the garage, drive-in, and gas station |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
 
@@ -217,7 +223,7 @@ flowchart LR
   query --> ai[Opponent placement]
 ```
 
-`TrackFile` (`class_name`, `RefCounted`) validates the graph and walks directed roads from the start node to the first finish node. `race_track.gd` fillets corners, bakes samples (position, yaw, width, surface, road type), and builds meshes plus narrow-road signs from `assets/signs/`. Surfaces (`wet`, `icy`, and so on) are stored on samples and do not change grip yet.
+`TrackFile` (`class_name`, `RefCounted`) validates the graph and walks directed roads from the start node to the first finish node. Optional `pois` are separate places, each attached to a street node with `at`. `assets/maps/city.trk` places the garage, the drive-in, and the gas station. Leaving any of those for one of the others plays `scenes/cruise.tscn`, a few seconds of automatic driving along that route, then opens the destination. `race_track.gd` fillets corners, bakes samples (position, yaw, width, surface, road type), and builds meshes plus narrow-road signs from `assets/signs/`. Surfaces (`wet`, `icy`, and so on) are stored on samples and do not change grip yet.
 
 ## File structure
 
@@ -233,6 +239,7 @@ Street Rod 3/
     music/               # garage.mp3, race.mp3
     signs/               # narrow-road mesh and textures
     tracks/              # track1.trk
+    maps/                # city.trk
   docs/                  # this documentation and track-format.md
   .github/workflows/     # headless Web export and GitHub Pages deploy
 ```

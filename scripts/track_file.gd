@@ -76,6 +76,8 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	result.name = str(root.get("name", ""))
 	_parse_nodes(root, result)
 	_parse_roads(root, result)
+	_parse_pois(root, result)
+	_parse_buildings(root, result)
 	if result.errors.is_empty():
 		_build_race_path(result)
 	return result
@@ -96,6 +98,9 @@ static func _empty_result() -> Dictionary:
 		"start_id": 0,
 		"finish_ids": [],
 		"path_ids": [],
+		"pois": {}, # poi id -> poi dict
+		"poi_order": [],
+		"buildings": [], # scenery boxes: x, y, w, d, h
 		"errors": [],
 		"warnings": [],
 	}
@@ -313,6 +318,167 @@ static func driveable_extents(full_width: float, rtype: String) -> Vector2:
 	if narrows_right(rtype):
 		right = maxf(half - inset, 0.4)
 	return Vector2(left, right)
+
+
+## World points from one point of interest to another: the driveway, the street nodes, then the destination driveway.
+## Empty when either id is missing or no directed roads connect their street nodes.
+static func cruise_route(result: Dictionary, from_poi: String, to_poi: String) -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	var pois: Dictionary = result.get("pois", {})
+	if not pois.has(from_poi) or not pois.has(to_poi):
+		return points
+	var origin: Dictionary = pois[from_poi]
+	var dest: Dictionary = pois[to_poi]
+	var street := _street_path(result, int(origin["at"]), int(dest["at"]))
+	if street.is_empty():
+		return points
+	_append_route_point(points, world_position(origin))
+	var nodes: Dictionary = result["nodes"]
+	for nid in street:
+		_append_route_point(points, world_position(nodes[nid]))
+	_append_route_point(points, world_position(dest))
+	return points
+
+
+static func _append_route_point(points: Array[Vector3], point: Vector3) -> void:
+	if points.is_empty() or points[points.size() - 1].distance_squared_to(point) > 0.04:
+		points.append(point)
+
+
+## Directed street nodes from `from_id` to `to_id`, including both ends. Empty when no road reaches.
+static func _street_path(result: Dictionary, from_id: int, to_id: int) -> Array[int]:
+	var path: Array[int] = []
+	var nodes: Dictionary = result.get("nodes", {})
+	if not nodes.has(from_id) or not nodes.has(to_id):
+		return path
+	if from_id == to_id:
+		path.append(from_id)
+		return path
+	var outgoing: Dictionary = {}
+	for road in result.get("roads", []):
+		var fid: int = int(road["from"])
+		if not outgoing.has(fid):
+			outgoing[fid] = []
+		(outgoing[fid] as Array).append(int(road["to"]))
+	var prev: Dictionary = {}
+	var queue: Array[int] = [from_id]
+	var seen := {from_id: true}
+	var head := 0
+	var found := false
+	while head < queue.size():
+		var current: int = queue[head]
+		head += 1
+		for nxt in outgoing.get(current, []):
+			var next_id := int(nxt)
+			if seen.has(next_id):
+				continue
+			seen[next_id] = true
+			prev[next_id] = current
+			if next_id == to_id:
+				found = true
+				break
+			queue.append(next_id)
+		if found:
+			break
+	if not found:
+		return path
+	var walk := to_id
+	while true:
+		path.append(walk)
+		if walk == from_id:
+			break
+		walk = int(prev[walk])
+	path.reverse()
+	return path
+
+
+static func _parse_pois(root: Dictionary, result: Dictionary) -> void:
+	if not root.has("pois"):
+		return
+	if typeof(root["pois"]) != TYPE_ARRAY:
+		result.errors.append("Track `pois` must be an array.")
+		return
+	for raw in root["pois"]:
+		if typeof(raw) != TYPE_DICTIONARY:
+			result.errors.append("Each point of interest must be a JSON object.")
+			continue
+		var poi: Dictionary = raw
+		var pid := str(poi.get("id", "")).strip_edges()
+		if pid.is_empty():
+			result.errors.append("Point of interest is missing `id`.")
+			continue
+		if result.pois.has(pid):
+			result.errors.append("Duplicate point of interest `%s`." % pid)
+			continue
+		if not poi.has("at"):
+			result.errors.append("Point of interest `%s` must name the street node it is attached to (`at`)." % pid)
+			continue
+		var at := int(poi["at"])
+		if not result.nodes.has(at):
+			result.errors.append("Point of interest `%s` is attached to unknown street node %d." % [pid, at])
+			continue
+		var street: Dictionary = result.nodes[at]
+		var px := float(street["x"])
+		var py := float(street["y"])
+		if poi.has("x") or poi.has("y"):
+			if not poi.has("x") or not poi.has("y"):
+				result.errors.append("Point of interest `%s` needs both `x` and `y`, or neither." % pid)
+				continue
+			px = float(poi["x"])
+			py = float(poi["y"])
+		var named := str(poi.get("name", pid)).strip_edges()
+		if named.is_empty():
+			named = pid
+		var parsed := {
+			"id": pid,
+			"name": named,
+			"at": at,
+			"x": px,
+			"y": py,
+			"z": _node_height(poi, at, result),
+		}
+		result.pois[pid] = parsed
+		result.poi_order.append(pid)
+
+
+static func _parse_buildings(root: Dictionary, result: Dictionary) -> void:
+	if not root.has("buildings"):
+		return
+	if typeof(root["buildings"]) != TYPE_ARRAY:
+		result.errors.append("Track `buildings` must be an array.")
+		return
+	var index := 0
+	for raw in root["buildings"]:
+		index += 1
+		if typeof(raw) != TYPE_DICTIONARY:
+			result.errors.append("Building %d must be a JSON object." % index)
+			continue
+		var building: Dictionary = raw
+		if not building.has("x") or not building.has("y"):
+			result.errors.append("Building %d must have numeric `x` and `y`." % index)
+			continue
+		var parsed := {
+			"x": float(building["x"]),
+			"y": float(building["y"]),
+			"w": _building_size(building, "w", 10.0, index, result),
+			"d": _building_size(building, "d", 8.0, index, result),
+			"h": _building_size(building, "h", 6.0, index, result),
+		}
+		if building.has("color") and typeof(building["color"]) == TYPE_ARRAY:
+			var rgb: Array = building["color"]
+			if rgb.size() >= 3:
+				parsed["color"] = Color(float(rgb[0]), float(rgb[1]), float(rgb[2]))
+		result.buildings.append(parsed)
+
+
+static func _building_size(building: Dictionary, key: String, fallback: float, index: int, result: Dictionary) -> float:
+	if not building.has(key):
+		return fallback
+	var value := float(building[key])
+	if value <= 0.0:
+		result.warnings.append("Building %d has non-positive `%s`; using %.1f." % [index, key, fallback])
+		return fallback
+	return value
 
 
 static func find_road(result: Dictionary, from_id: int, to_id: int) -> Dictionary:
