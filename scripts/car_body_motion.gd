@@ -95,7 +95,7 @@ func _lean_transform() -> Transform3D:
 	if _dynamics == null:
 		return Transform3D.IDENTITY
 	var turn := Basis(Vector3.RIGHT, -_dynamics.body_pitch()) * Basis(Vector3.BACK, _dynamics.body_roll())
-	var lift := Vector3(0.0, _dynamics.body_heave(), 0.0)
+	var lift := Vector3(0.0, _dynamics.body_heave() - _dynamics.ride_lower(), 0.0)
 	return Transform3D(Basis.IDENTITY, _lean_center + lift) * Transform3D(turn, Vector3.ZERO) * Transform3D(Basis.IDENTITY, -_lean_center)
 
 

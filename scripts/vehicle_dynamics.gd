@@ -68,9 +68,10 @@ class Config:
 
 	## Low-speed lock. At speed the rack stops at the angle for steer_full_lateral_accel.
 	var max_steer_rad: float = 0.52
-	## Steady lateral acceleration a full steering input asks for, in m/s².
+	## Steady lateral acceleration a full steering input asks for, in m/s², on tires of
+	## `grip_mu` with the body flat. Better grip asks for more, so it reaches the road.
 	## The road-wheel angle is atan(this * wheelbase / speed²), never past max_steer_rad.
-	var steer_full_lateral_accel: float = 9.0
+	var steer_full_lateral_accel: float = 10.0
 	## How fast the steering input is chased, in 1/seconds.
 	var steer_input_response: float = 8.0
 	## 1 is linear. Higher values keep a short press near center; holding still reaches full lock.
@@ -194,6 +195,8 @@ var _pitch_inertia: float = 2500.0
 var _roll_inertia: float = 600.0
 var _spring_rate: float = spring_stiffness
 var _shock_rate: float = damper_coefficient
+var _ride_lower: float = 0.0
+var _ride_grip: float = 1.0
 
 static var _road_noise: FastNoiseLite
 static var _swell_noise: FastNoiseLite
@@ -205,6 +208,15 @@ const _ROAD_SWELL_M := 0.014
 const _GRASS_ROUGHNESS_M := 0.045
 ## Acceleration past this moves the body no further.
 const _RIDE_ACCEL_LIMIT := 12.0
+## Grip lost with the body leaned over to `_LEAN_LIMIT_RAD`: the tires roll onto their edges.
+const _LEAN_GRIP_LOSS := 0.13
+## Grip lost per m/s the body is moving at its corners, up and down or swinging from side
+## to side, and the most that can cost. A car that wallows keeps loading and unloading its
+## tires, so this is what good shocks buy.
+const _WALLOW_GRIP_LOSS := 0.45
+const _WALLOW_GRIP_LOSS_MAX := 0.16
+## How quickly the grip follows the body, in 1/seconds.
+const _RIDE_GRIP_RESPONSE := 10.0
 const _WORLD_MASK := 1
 const _RAY_LENGTH_M := 2.5
 ## Hub height above the road for the race spawn, used when the first
@@ -257,9 +269,11 @@ func apply_setup(chassis: Dictionary, grip_rating: float) -> void:
 		var steer_deg := float(chassis.get("max_steer_deg", rad_to_deg(config.max_steer_rad)))
 		config.max_steer_rad = deg_to_rad(steer_deg)
 	# Same bounce on every car: a heavy car gets springs and shocks to match its weight.
+	# The parts on the car then set how stiff it is from there.
 	var mass_scale := config.mass_kg / _REFERENCE_MASS_KG
-	_spring_rate = spring_stiffness * mass_scale
-	_shock_rate = damper_coefficient * mass_scale
+	_spring_rate = spring_stiffness * mass_scale * float(chassis.get("spring_rate", 1.0))
+	_shock_rate = damper_coefficient * mass_scale * float(chassis.get("shock_rate", 1.0))
+	_ride_lower = float(chassis.get("ride_lower", 0.0))
 	var rating := grip_rating - config.grip_reference_rating
 	_tire_grip = maxf(config.grip_mu + rating * config.grip_mu_per_rating, 0.2)
 	_apply_grip_to_wheels()
@@ -334,6 +348,17 @@ func steer_input() -> float:
 ## Height of the body at the mass center over its ride height, in meters.
 func body_heave() -> float:
 	return _heave
+
+
+## How far the springs drop the body below where stock ones hold it, in meters.
+func ride_lower() -> float:
+	return _ride_lower
+
+
+## Share of the tires' grip the suspension leaves, 1 with the body flat and still. It is why
+## stiffer springs and better shocks hold the road better.
+func ride_grip() -> float:
+	return _ride_grip
 
 
 ## Radians. Positive lifts the nose.
@@ -581,7 +606,7 @@ func _steer_angle_limit() -> float:
 	var cap := config.max_steer_rad
 	if speed < 1.0:
 		return cap
-	var ay := maxf(config.steer_full_lateral_accel, 0.5)
+	var ay := maxf(config.steer_full_lateral_accel * _tire_grip / maxf(config.grip_mu, 0.01) * _ride_grip, 0.5)
 	var wheelbase := maxf(_wheelbase, 0.5)
 	return minf(cap, atan(ay * wheelbase / (speed * speed)))
 
@@ -630,7 +655,7 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 	wheel.slip_angle = slip
 
 	var blend := wheel.surface_blend
-	var mu := _tire_grip * _blended(blend, config.asphalt.grip_multiplier, config.grass.grip_multiplier)
+	var mu := _tire_grip * _blended(blend, config.asphalt.grip_multiplier, config.grass.grip_multiplier) * _ride_grip
 	wheel.grip = mu
 	var limit := mu * wheel.normal_load
 	var axle_share := config.brake_front_fraction if wheel.front else (1.0 - config.brake_front_fraction)
@@ -920,6 +945,10 @@ func _integrate_suspension(dt: float) -> void:
 	if absf(_roll) > _LEAN_LIMIT_RAD:
 		_roll = clampf(_roll, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
 		_roll_vel = 0.0
+	var lean_loss := absf(_roll) / _LEAN_LIMIT_RAD * _LEAN_GRIP_LOSS
+	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * config.wheelbase_m * 0.5 + absf(_roll_vel) * config.track_width_m * 0.5
+	var wallow_loss := minf(corner_speed * _WALLOW_GRIP_LOSS, _WALLOW_GRIP_LOSS_MAX)
+	_ride_grip = lerpf(_ride_grip, 1.0 - lean_loss - wallow_loss, 1.0 - exp(-_RIDE_GRIP_RESPONSE * dt))
 
 
 func _update_inertia() -> void:

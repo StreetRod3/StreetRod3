@@ -16,7 +16,7 @@ const MAX_STEER_RAD := 0.52
 const STEER_RESPONSE := 3.2
 ## Sideways acceleration full steering asks for at speed, in m/s². As in the simulation,
 ## the rack closes as speed rises, so a key press is not full lock at top speed.
-const STEER_FULL_LATERAL_ACCEL := 9.5
+const STEER_FULL_LATERAL_ACCEL := 10.5
 ## Extra angle at any speed, for the slip the front tires need to make that force.
 const STEER_SLIP_ALLOWANCE_RAD := 0.055
 ## How fast the steering input moves on and back off, per second, so a tap is a small turn.
@@ -61,6 +61,8 @@ var _wheel_grip: float = 3.0
 var _steer_input: float = 0.0
 ## Turning from a hit, in rad/s. It is not the driver's, so the yaw cap does not hold it.
 var _spin: float = 0.0
+## Share of the tires' grip the suspension leaves. The car's springs and shocks set it.
+var ride_grip: float = 1.0
 ## Swing from a barrier still to come, in radians.
 var _swing: float = 0.0
 
@@ -189,7 +191,7 @@ func hold(body: CharacterBody3D, delta: float, car_center: Vector3) -> void:
 ## The road-wheel angle full steering gives at this speed, never past the lock.
 func _steer_limit() -> float:
 	var speed := maxf(forward_speed, 1.0)
-	return minf(_max_steer_rad, atan(STEER_FULL_LATERAL_ACCEL * _wheelbase / (speed * speed)) + STEER_SLIP_ALLOWANCE_RAD)
+	return minf(_max_steer_rad, atan(STEER_FULL_LATERAL_ACCEL * ride_grip * _wheelbase / (speed * speed)) + STEER_SLIP_ALLOWANCE_RAD)
 
 
 static func grip_accel_scale(grip_rating: float) -> float:
@@ -203,7 +205,7 @@ func _grip_steer_scale() -> float:
 func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var axle_front := _wheelbase * _front_axle_fraction
 	var axle_rear := _wheelbase - axle_front
-	var mu := MU_OFFROAD if _off_road else MU_DRY
+	var mu := (MU_OFFROAD if _off_road else MU_DRY) * ride_grip
 	var weight := _mass_kg * GRAVITY
 	var transfer_accel := clampf(longitudinal_accel, -LOAD_TRANSFER_ACCEL_MAX, LOAD_TRANSFER_ACCEL_MAX)
 	var transfer := _mass_kg * transfer_accel * _cg_height / _wheelbase

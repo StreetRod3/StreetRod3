@@ -311,7 +311,7 @@ func _physics_arcade(delta: float) -> void:
 		return
 	var corner := _max_mps
 	if track != null and track.has_method(&"sample_at"):
-		corner = _corner_speed(track, forward_speed, ARCADE_CORNER_GRIP_USE)
+		corner = _corner_speed(track, forward_speed, ARCADE_CORNER_GRIP_USE * _dynamics.ride_grip())
 	if forward_speed > corner:
 		forward_speed = move_toward(forward_speed, corner, ARCADE_CORNER_BRAKE * delta)
 	elif _arcade_shift > 0.0:

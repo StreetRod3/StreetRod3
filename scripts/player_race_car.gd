@@ -465,6 +465,7 @@ func _physics_arcade(delta: float) -> void:
 
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)]) * GameState.final_drive_accel()
+	_arcade.ride_grip = _dynamics.ride_grip()
 	_arcade.step(
 		self,
 		delta,
