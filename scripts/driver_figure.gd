@@ -27,6 +27,8 @@ const EYE_TEXTURES := {
 	"HZL": preload("res://assets/driver/eye_HZL.jpg"),
 	"GRY": preload("res://assets/driver/eye_GRY.jpg"),
 }
+## In the order a click on the photo steps through them.
+const SKIN_TONES: Array[String] = ["LGT", "OLV", "BRN", "DRK"]
 const MODELS := {"M": "res://assets/driver/driver_m.glb", "F": "res://assets/driver/driver_f.glb"}
 const HAIR_STYLES := {"M": "Hair_short02", "F": "Hair_long01"}
 
@@ -61,6 +63,11 @@ func apply(traits: Dictionary) -> void:
 	if HAIR_COLORS.has(hair):
 		_material(style).albedo_color = HAIR_COLORS[hair]
 	_material("Brows").albedo_color = HAIR_COLORS.get(hair, HAIR_COLORS[BALD_BROWS])
+	_meshes["Glasses"].visible = bool(traits.get("glasses", false))
+	var tone := str(traits.get("skin", ""))
+	if not SKIN_TONES.has(tone):
+		tone = SKIN_TONES[0]
+	_material("Body").albedo_texture = load("res://assets/driver/skin_%s_%s.jpg" % [sex.to_lower(), tone])
 	_material("Eyes").albedo_texture = EYE_TEXTURES.get(str(traits.get("eyes", "")), EYE_TEXTURES["BRN"])
 
 

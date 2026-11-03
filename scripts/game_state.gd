@@ -231,7 +231,7 @@ var music_enabled: bool = true
 ## for the typed line, because McGee can be made from this and not from MCGEE.
 var driver_name: String = ""
 ## What the license says about the driver, as printed on it and clicked through there.
-const DRIVER_TRAITS_DEFAULT := {"sex": "M", "hair": "BRN", "eyes": "BRN", "height": "5-08", "weight": "165"}
+const DRIVER_TRAITS_DEFAULT := {"sex": "M", "hair": "BRN", "eyes": "BRN", "height": "5-08", "weight": "165", "skin": "LGT", "glasses": false}
 var driver_traits: Dictionary = DRIVER_TRAITS_DEFAULT.duplicate()
 ## Cash on hand for classifieds (parts and used cars).
 var money: int = 2500

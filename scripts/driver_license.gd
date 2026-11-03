@@ -26,6 +26,17 @@ const PORTRAIT_FRAME_HEIGHT := 0.46
 const PORTRAIT_CAMERA_DISTANCE := 1.6
 ## Where the camera looks, against the eyes of the figure.
 const PORTRAIT_LOOK_Y := -0.03
+## The backdrop the driver stands against, before the photo fades.
+const PORTRAIT_BACKDROP := Color("#8fa8c0")
+const PORTRAIT_FADE := preload("res://shaders/faded_photo.gdshader")
+
+## The MUST WEAR CORRECTIVE LENSES box. A click types an X in it, a little crooked.
+const LENSES_BOX := Rect2(892, 472, 24, 24)
+## The box is a small target, so clicks this close to it count.
+const LENSES_BOX_MARGIN := 6.0
+const LENSES_X_SIZE := 26
+const LENSES_X_OFFSET := Vector2(-2.5, 0.5)
+const LENSES_X_DEGREES := -7.0
 
 const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
 const SIGNATURE_SIZE := 30
@@ -75,6 +86,9 @@ var _signature := Label.new()
 var _typed_name := ""
 var _portrait_view := SubViewport.new()
 var _figure = _DriverFigure.new()
+## The one trait not printed on the card: a click on the photo changes it.
+var _skin: String = GameState.DRIVER_TRAITS_DEFAULT["skin"]
+var _lenses_x := Label.new()
 
 
 func _ready() -> void:
@@ -85,6 +99,7 @@ func _ready() -> void:
 		_add_value(value)
 	_setup_name_edit()
 	_setup_signature()
+	_setup_lenses_box()
 	_setup_portrait()
 	_continue_button.disabled = true
 	_name_edit.edit()
@@ -114,22 +129,45 @@ func _add_value(value: Dictionary) -> void:
 
 
 func _on_choice_input(event: InputEvent, label: Label) -> void:
-	var button := event as InputEventMouseButton
-	if button == null or not button.pressed:
+	var step := _choice_step(event)
+	if step == 0:
 		return
-	var step := 0
-	match button.button_index:
-		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP:
-			step = 1
-		MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_WHEEL_DOWN:
-			step = -1
-		_:
-			return
 	var choices: Array = _choices[label.name]
 	label.text = choices[wrapi(choices.find(label.text) + step, 0, choices.size())]
 	label.reset_size()
 	label.accept_event()
 	_update_portrait()
+
+
+func _on_portrait_input(event: InputEvent, frame: Control) -> void:
+	var step := _choice_step(event)
+	if step == 0:
+		return
+	var tones: Array[String] = _DriverFigure.SKIN_TONES
+	_skin = tones[wrapi(tones.find(_skin) + step, 0, tones.size())]
+	frame.accept_event()
+	_update_portrait()
+
+
+func _on_lenses_input(event: InputEvent, area: Control) -> void:
+	if _choice_step(event) == 0:
+		return
+	_lenses_x.visible = not _lenses_x.visible
+	area.accept_event()
+	_update_portrait()
+
+
+## 1 for the next choice, -1 for the previous one, 0 for an event that changes nothing.
+func _choice_step(event: InputEvent) -> int:
+	var button := event as InputEventMouseButton
+	if button == null or not button.pressed:
+		return 0
+	match button.button_index:
+		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP:
+			return 1
+		MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_WHEEL_DOWN:
+			return -1
+	return 0
 
 
 static func _height_choices() -> Array:
@@ -161,9 +199,30 @@ func _setup_name_edit() -> void:
 	_name_edit.size = Vector2(_card.size.x - NAME_POSITION.x, _typed_font.get_height(FONT_SIZE))
 
 
+func _setup_lenses_box() -> void:
+	var area := Control.new()
+	area.name = "lenses"
+	var target := LENSES_BOX.grow(LENSES_BOX_MARGIN)
+	area.position = target.position
+	area.size = target.size
+	area.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	area.gui_input.connect(_on_lenses_input.bind(area))
+	_lenses_x.text = "X"
+	_lenses_x.add_theme_font_override("font", _typed_font)
+	_lenses_x.add_theme_font_size_override("font_size", LENSES_X_SIZE)
+	_lenses_x.add_theme_color_override("font_color", INK)
+	_lenses_x.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_lenses_x.reset_size()
+	_lenses_x.pivot_offset = _lenses_x.size * 0.5
+	_lenses_x.rotation_degrees = LENSES_X_DEGREES
+	_lenses_x.position = LENSES_BOX.size * 0.5 + Vector2(LENSES_BOX_MARGIN, LENSES_BOX_MARGIN) - _lenses_x.size * 0.5 + LENSES_X_OFFSET
+	_lenses_x.visible = GameState.DRIVER_TRAITS_DEFAULT["glasses"]
+	area.add_child(_lenses_x)
+	_card.add_child(area)
+
+
 func _setup_portrait() -> void:
 	_portrait_view.size = Vector2i(PORTRAIT_RECT.size) * PORTRAIT_OVERSAMPLE
-	_portrait_view.transparent_bg = true
 	_portrait_view.own_world_3d = true
 	_portrait_view.msaa_3d = Viewport.MSAA_4X
 	_portrait_view.add_child(_figure)
@@ -171,6 +230,8 @@ func _setup_portrait() -> void:
 	camera.fov = rad_to_deg(2.0 * atan(PORTRAIT_FRAME_HEIGHT * 0.5 / PORTRAIT_CAMERA_DISTANCE))
 	camera.position = Vector3(0.0, PORTRAIT_LOOK_Y, PORTRAIT_CAMERA_DISTANCE)
 	var world := Environment.new()
+	world.background_mode = Environment.BG_COLOR
+	world.background_color = PORTRAIT_BACKDROP
 	world.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	world.ambient_light_color = Color.WHITE
 	world.ambient_light_energy = 0.42
@@ -188,7 +249,8 @@ func _setup_portrait() -> void:
 	frame.name = "Portrait"
 	frame.add_theme_stylebox_override("panel", corner)
 	frame.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	frame.gui_input.connect(_on_portrait_input.bind(frame))
 	frame.position = PORTRAIT_RECT.position
 	frame.size = PORTRAIT_RECT.size
 	var photo := TextureRect.new()
@@ -196,6 +258,9 @@ func _setup_portrait() -> void:
 	photo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	photo.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	photo.size = PORTRAIT_RECT.size
+	var fade := ShaderMaterial.new()
+	fade.shader = PORTRAIT_FADE
+	photo.material = fade
 	frame.add_child(photo)
 	_card.add_child(frame)
 	_update_portrait()
@@ -211,6 +276,8 @@ func _traits() -> Dictionary:
 	var traits := {}
 	for id in _choices:
 		traits[id] = (_card.get_node(id) as Label).text
+	traits["skin"] = _skin
+	traits["glasses"] = _lenses_x.visible
 	return traits
 
 
