@@ -18,9 +18,18 @@ const SIGNATURE_POSITION := Vector2(366, 552)
 ## Long names shrink to stop this far short of the right edge of the card.
 const SIGNATURE_MARGIN := 10.0
 
-## Values that change with a click on the card, by id in CARD_VALUES. The first is the default.
-const CARD_CHOICES := {
+## Inches for height, in the card's feet-inches form, and pounds for weight.
+const HEIGHT_RANGE := Vector2i(58, 80)
+const WEIGHT_RANGE := Vector2i(100, 300)
+const WEIGHT_STEP := 5
+
+## The values that change with a click on the card, by id in CARD_VALUES.
+var _choices := {
 	"sex": ["M", "F"],
+	"hair": ["BRN", "BLK", "BLN", "RED", "GRY", "WHI", "BAL"],
+	"eyes": ["BRN", "BLU", "GRN", "HZL", "GRY", "BLK"],
+	"height": _height_choices(),
+	"weight": _weight_choices(),
 }
 ## A letter alone is a small target, so a clickable value is at least this wide.
 const CHOICE_MIN_WIDTH := 34.0
@@ -30,11 +39,11 @@ const CARD_VALUES: Array[Dictionary] = [
 	{"id": "number", "x": 354, "y": 166, "text": "B2026327"},
 	{"id": "address", "x": 354, "y": 234, "text": "1104 SOUTH VICTORY BLVD"},
 	{"id": "city", "x": 354, "y": 266, "text": "BURBANK, CAL, 91502"},
-	{"id": "sex", "x": 354, "y": 336, "text": "M"},
-	{"id": "hair", "x": 392, "y": 336, "text": "BRN"},
-	{"id": "eyes", "x": 474, "y": 336, "text": "BRN"},
-	{"id": "height", "x": 554, "y": 336, "text": "5-08"},
-	{"id": "weight", "x": 674, "y": 336, "text": "165"},
+	{"id": "sex", "x": 354, "y": 336},
+	{"id": "hair", "x": 392, "y": 336},
+	{"id": "eyes", "x": 474, "y": 336},
+	{"id": "height", "x": 554, "y": 336},
+	{"id": "weight", "x": 674, "y": 336},
 	{"id": "prev_lic", "x": 794, "y": 336, "text": "72"},
 	{"id": "birth", "x": 354, "y": 400, "text": "03-19-55"},
 	{"id": "issued", "x": 674, "y": 400, "text": "03-19-72"},
@@ -70,13 +79,13 @@ func _input(event: InputEvent) -> void:
 func _add_value(value: Dictionary) -> void:
 	var label := Label.new()
 	label.name = str(value["id"])
-	label.text = str(value["text"])
+	label.text = str(value.get("text", GameState.DRIVER_TRAITS_DEFAULT.get(value["id"], "")))
 	label.add_theme_font_override("font", _typed_font)
 	label.add_theme_font_size_override("font_size", FONT_SIZE)
 	label.add_theme_color_override("font_color", INK)
 	label.position = Vector2(value["x"], value["y"] - _ascent())
 	_card.add_child(label)
-	if CARD_CHOICES.has(label.name):
+	if _choices.has(label.name):
 		label.custom_minimum_size.x = CHOICE_MIN_WIDTH
 		label.mouse_filter = Control.MOUSE_FILTER_STOP
 		label.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
@@ -85,11 +94,34 @@ func _add_value(value: Dictionary) -> void:
 
 func _on_choice_input(event: InputEvent, label: Label) -> void:
 	var button := event as InputEventMouseButton
-	if button == null or not button.pressed or button.button_index != MOUSE_BUTTON_LEFT:
+	if button == null or not button.pressed:
 		return
-	var choices: Array = CARD_CHOICES[label.name]
-	label.text = choices[wrapi(choices.find(label.text) + 1, 0, choices.size())]
+	var step := 0
+	match button.button_index:
+		MOUSE_BUTTON_LEFT, MOUSE_BUTTON_WHEEL_UP:
+			step = 1
+		MOUSE_BUTTON_RIGHT, MOUSE_BUTTON_WHEEL_DOWN:
+			step = -1
+		_:
+			return
+	var choices: Array = _choices[label.name]
+	label.text = choices[wrapi(choices.find(label.text) + step, 0, choices.size())]
+	label.reset_size()
 	label.accept_event()
+
+
+static func _height_choices() -> Array:
+	var heights := []
+	for inches in range(HEIGHT_RANGE.x, HEIGHT_RANGE.y + 1):
+		heights.append("%d-%02d" % [inches / 12, inches % 12])
+	return heights
+
+
+static func _weight_choices() -> Array:
+	var weights := []
+	for pounds in range(WEIGHT_RANGE.x, WEIGHT_RANGE.y + 1, WEIGHT_STEP):
+		weights.append(str(pounds))
+	return weights
 
 
 func _setup_name_edit() -> void:
@@ -164,10 +196,12 @@ func _on_continue_pressed() -> void:
 	if _driver_name().is_empty():
 		return
 	var driver_name := _driver_name()
-	var driver_sex: String = (_card.get_node("sex") as Label).text
+	var traits := {}
+	for id in _choices:
+		traits[id] = (_card.get_node(id) as Label).text
 	GameState.new_game()
 	GameState.driver_name = driver_name
-	GameState.driver_sex = driver_sex
+	GameState.driver_traits = traits
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 
