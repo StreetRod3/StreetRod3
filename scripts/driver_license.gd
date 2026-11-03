@@ -27,7 +27,7 @@ const WEIGHT_STEP := 5
 var _choices := {
 	"sex": ["M", "F"],
 	"hair": ["BRN", "BLK", "BLN", "RED", "GRY", "WHI", "BAL"],
-	"eyes": ["BRN", "BLU", "GRN", "HZL", "GRY", "BLK"],
+	"eyes": ["BRN", "BLU", "GRN", "HZL", "GRY"],
 	"height": _height_choices(),
 	"weight": _weight_choices(),
 }
