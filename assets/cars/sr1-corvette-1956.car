@@ -3,9 +3,9 @@
   "name": "Corvette 1956",
   "model": {
     "path": "res://assets/cars/sr1-c56.glb",
-    "position": [0.0, 0.08, 0.0],
-    "height": 1.372,
-    "ground_clearance": 0.08
+    "position": [0.0, 0.123, 0.0],
+    "height": 1.330,
+    "ground_clearance": 0.123
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
