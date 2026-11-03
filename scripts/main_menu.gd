@@ -23,9 +23,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _on_new_game_pressed() -> void:
-	GameState.new_game()
-	GameState.current_scene_path = GameState.SCENE_GARAGE
-	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+	get_tree().change_scene_to_file(GameState.SCENE_DRIVER_LICENSE)
 
 
 func _on_load_game_pressed() -> void:
