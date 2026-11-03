@@ -166,22 +166,15 @@ func _update_signature() -> void:
 
 
 ## People sign in upper and lower case, whatever the typed line says. Capitals typed
-## inside a word stay, as in McGee, unless the whole word is capitals.
+## inside a word stay, as in McGee, unless the whole name is capitals, which is caps lock.
 func _signed_name(driver_name: String) -> String:
-	var words := driver_name.split(" ")
-	for i in words.size():
-		words[i] = _signed_word(words[i])
-	return " ".join(words)
-
-
-func _signed_word(word: String) -> String:
-	if word == word.to_upper():
-		word = word.to_lower()
+	if driver_name == driver_name.to_upper():
+		driver_name = driver_name.to_lower()
 	var signed := ""
-	var starts_part := true
-	for letter in word:
-		signed += letter.to_upper() if starts_part else letter
-		starts_part = letter in "-'"
+	var starts_word := true
+	for letter in driver_name:
+		signed += letter.to_upper() if starts_word else letter
+		starts_word = letter in " -'"
 	return signed
 
 
