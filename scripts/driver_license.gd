@@ -22,10 +22,10 @@ const PORTRAIT_CORNER := 12
 ## Rendered larger than it shows, for smooth edges.
 const PORTRAIT_OVERSAMPLE := 2
 ## How much of the driver the frame shows, in meters, and how far off the camera stands.
-const PORTRAIT_FRAME_HEIGHT := 0.52
+const PORTRAIT_FRAME_HEIGHT := 0.46
 const PORTRAIT_CAMERA_DISTANCE := 1.6
 ## Where the camera looks, against the eyes of the figure.
-const PORTRAIT_LOOK_Y := -0.052
+const PORTRAIT_LOOK_Y := -0.03
 
 const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
 const SIGNATURE_SIZE := 30

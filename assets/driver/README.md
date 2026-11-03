@@ -1,0 +1,1 @@
+The driver models and eye textures here are baked from MakeHuman's base mesh, morph targets and system assets, all released under CC0 1.0, using its MPFB add-on for Blender. MakeHuman's AGPL and MPFB's GPL cover their program code, none of which is in the game; both projects state that exported characters are the user's own data.
