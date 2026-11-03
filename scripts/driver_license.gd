@@ -38,6 +38,10 @@ const LENSES_X_SIZE := 26
 const LENSES_X_OFFSET := Vector2(-2.5, 0.5)
 const LENSES_X_DEGREES := -7.0
 
+## Laid over everything on the card last, so it all ages together.
+const CARD_WEAR := preload("res://assets/ui/card_wear.jpg")
+const CARD_AGING := preload("res://shaders/aged_paper.gdshader")
+
 const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
 const SIGNATURE_SIZE := 30
 const SIGNATURE_INK := Color("#2a2d55")
@@ -101,6 +105,7 @@ func _ready() -> void:
 	_setup_signature()
 	_setup_lenses_box()
 	_setup_portrait()
+	_setup_aging()
 	_continue_button.disabled = true
 	_name_edit.edit()
 
@@ -264,6 +269,20 @@ func _setup_portrait() -> void:
 	frame.add_child(photo)
 	_card.add_child(frame)
 	_update_portrait()
+
+
+func _setup_aging() -> void:
+	var aging := ShaderMaterial.new()
+	aging.shader = CARD_AGING
+	aging.set_shader_parameter("wear_map", CARD_WEAR)
+	aging.set_shader_parameter("card_size", _card.size)
+	aging.set_shader_parameter("corner_radius", float(PORTRAIT_CORNER))
+	var cover := ColorRect.new()
+	cover.name = "Aging"
+	cover.material = aging
+	cover.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cover.size = _card.size
+	_card.add_child(cover)
 
 
 ## The photo only needs drawing when the driver changes.
