@@ -12,6 +12,7 @@ const _RacePark := preload("res://scripts/race_park.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
+const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -25,20 +26,6 @@ const CAM_FAR := 0
 const CAM_CLOSE := 1
 const CAM_COCKPIT := 2
 const CAM_BUMPER := 3
-## How quickly the chase camera swings round after the car, in 1/seconds. Lower lags more.
-const _CAM_YAW_FOLLOW := 3.2
-## The chase camera never falls further than this behind the car's heading, in radians.
-const _CAM_YAW_LAG_MAX := 0.42
-## How quickly the camera's drift follows acceleration, in 1/seconds.
-const _CAM_SWAY_RESPONSE := 2.6
-## Meters of camera drift per m/s² of acceleration, along the car and across it.
-const _CAM_SURGE_PER_ACCEL := 0.07
-const _CAM_SWAY_PER_ACCEL := 0.09
-const _CAM_SURGE_MAX := 1.1
-const _CAM_SWAY_MAX := 0.7
-## Meters the camera jumps per m/s a hit changes the car's speed, and how fast that dies away.
-const _CAM_JOLT_PER_HIT := 0.035
-const _CAM_JOLT_DECAY := 7.0
 
 @export var debug_dynamics: bool = false
 
@@ -59,13 +46,10 @@ var _shift_timer: float = 0.0
 var _overrev_time: float = 0.0
 var _engine_blown: bool = false
 var _damage: _CarDamage = _CarDamage.new()
-var _cam_jolt: float = 0.0
 var _arcade_active: bool = false
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _cam_rest := Transform3D.IDENTITY
-var _cam_yaw: float = 0.0
-var _cam_drift := Vector2.ZERO
-var _cam_last_velocity := Vector3.ZERO
+var _chase_cam: _ChaseCamera = _ChaseCamera.new()
 var _parking := false
 var _park_speed := 0.0
 var _park_slot := 0.0
@@ -89,7 +73,7 @@ func _ready() -> void:
 	_body_motion.setup(_visual, _dynamics)
 	_dynamics.yaw = rotation.y
 	heading_yaw = rotation.y
-	_cam_yaw = heading_yaw
+	_chase_cam.settle(heading_yaw)
 	_skids = _SkidMarks.new()
 	_skids.name = "SkidMarks"
 	add_child(_skids)
@@ -135,8 +119,7 @@ func _apply_camera_mode() -> void:
 			_cam.fov = 72.0
 	_cam.top_level = true
 	_cam.current = true
-	_cam_yaw = rotation.y
-	_cam_drift = Vector2.ZERO
+	_chase_cam.settle(rotation.y)
 	_place_camera(0.0)
 
 
@@ -145,9 +128,8 @@ func _camera_pose(pos: Vector3, pitch_deg: float) -> Transform3D:
 	return Transform3D(look, pos)
 
 
-## The chase cameras hang back from the car: they swing round after it in a turn and drift
-## with its acceleration, so the car moves in the frame. The cockpit and bumper cameras are
-## part of the body, so they ride its springs and the horizon tilts with it.
+## The chase cameras hang back from the car. The cockpit and bumper cameras are part of the
+## body, so they ride its springs and the horizon tilts with it.
 func _place_camera(delta: float) -> void:
 	if _cam == null:
 		return
@@ -155,24 +137,7 @@ func _place_camera(delta: float) -> void:
 		_cam.global_transform = global_transform * _body_motion.lean_in_car_space() * _cam_rest
 		return
 	var planar := _dynamics.cg_velocity if _parking else planar_velocity()
-	if delta > 0.0:
-		var accel := (planar - _cam_last_velocity) / delta
-		var yaw := rotation.y
-		var surge := accel.dot(Vector3(sin(yaw), 0.0, cos(yaw))) * _CAM_SURGE_PER_ACCEL
-		var sway := accel.dot(Vector3(cos(yaw), 0.0, -sin(yaw))) * _CAM_SWAY_PER_ACCEL
-		var target := Vector2(clampf(sway, -_CAM_SWAY_MAX, _CAM_SWAY_MAX), clampf(surge, -_CAM_SURGE_MAX, _CAM_SURGE_MAX))
-		_cam_drift = _cam_drift.lerp(target, 1.0 - exp(-_CAM_SWAY_RESPONSE * delta))
-		_cam_yaw = lerp_angle(_cam_yaw, yaw, 1.0 - exp(-_CAM_YAW_FOLLOW * delta))
-		_cam_yaw = yaw - clampf(wrapf(yaw - _cam_yaw, -PI, PI), -_CAM_YAW_LAG_MAX, _CAM_YAW_LAG_MAX)
-	_cam_last_velocity = planar
-	# Around the car's center, keeping the road's slope but none of the car's heading.
-	var center := global_transform * _car_center
-	var hang := Transform3D(Basis(Vector3.UP, _cam_yaw) * Basis(Vector3.RIGHT, rotation.x), center)
-	var pos := _cam_rest.origin - _car_center + Vector3(-_cam_drift.x, 0.0, -_cam_drift.y)
-	if _cam_jolt > 0.001:
-		pos += Vector3(randf_range(-_cam_jolt, _cam_jolt), randf_range(-_cam_jolt, _cam_jolt), 0.0)
-		_cam_jolt *= exp(-_CAM_JOLT_DECAY * delta)
-	_cam.global_transform = hang * Transform3D(_cam_rest.basis, pos)
+	_chase_cam.place(_cam, self, _car_center, _cam_rest, planar, delta)
 
 
 func get_forward_speed() -> float:
@@ -209,7 +174,7 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> 
 func take_hit(speed_change: float) -> bool:
 	if not _damage.take_hit(speed_change):
 		return false
-	_cam_jolt = minf(_cam_jolt + speed_change * _CAM_JOLT_PER_HIT, 0.6)
+	_chase_cam.jolt(speed_change)
 	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D)
 	return true
 
@@ -359,9 +324,7 @@ func _physics_process(delta: float) -> void:
 func _pose_body(delta: float) -> void:
 	var race := get_parent()
 	if race != null and race.has_method(&"is_race_started") and not race.is_race_started():
-		_cam_yaw = rotation.y
-		_cam_drift = Vector2.ZERO
-		_cam_last_velocity = Vector3.ZERO
+		_chase_cam.settle(rotation.y)
 		_place_camera(0.0)
 		return
 	_body_motion.capture()

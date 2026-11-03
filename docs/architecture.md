@@ -54,7 +54,7 @@ flowchart TD
 | `scenes/tune.tscn` | `scripts/tune.gd` | Timing light on the balancer: advance or retard the distributor |
 | `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
 | `scenes/gas_station.tscn` | `scripts/gas_station.gd` | Fill the tank |
-| `scenes/cruise.tscn` | `scripts/cruise.gd` | Short automatic drive between the garage, drive-in, and gas station |
+| `scenes/cruise.tscn` | `scripts/cruise.gd` | Short automatic drive between the garage, drive-in, and gas station: follows the route at speeds planned for its corners, riding on the car's own springs and shocks |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
 | `scenes/car_vehicle_visual.tscn` | `scripts/car_vehicle_visual.gd` | Shared body and wheel visuals, instanced by garage and both race cars |
 
@@ -205,7 +205,7 @@ Both cars are `CharacterBody3D` nodes with `MOTION_MODE_FLOATING` and a child in
 - `car_damage.gd` adds up hits on each car from nothing to totaled, by how suddenly the speed changed. Contact between the cars is all in `car_bump.gd`, which shares a hit by weight and turns a car hit off-center. The bodies do not collide with each other: on a slope they would touch before `car_bump.gd` saw a hit. Damage cuts power, a totaled player's car is lost, a totaled rival loses the race, and crash damage wears the parts on the car (`GameState.wear_parts_from_crashes`).
 - Manual boxes shift with Q/E (or touch paddles). Automatic boxes shift themselves. Over-rev is manual only.
 - `engine_sound.gd` is Street Rod 2's AdLib engine: `sr2_adlib.gd` (a port of its AdLib driver) plays the "motor" timbre from MSR.SND on `opl2.gd` (a YM3812 ported from ymfm, BSD 3-Clause), which fills an `AudioStreamGenerator` at the chip's 49,716 Hz. The RPM, laid onto SR2's 1500–5700 rev counter, sets the bend (`3 rpm - 4500`, the top of the bend at the redline) and the volume (`(rpm - 1500) / 128 + 0x50`), and a one-pole high-pass stands in for the card's output capacitor.
-- C cycles four cameras: far, close, cockpit, bumper. The camera is `top_level` and placed each step: the two chase cameras lag behind the heading and drift with acceleration, and the other two ride the body's lean.
+- C cycles four cameras: far, close, cockpit, bumper. The camera is `top_level` and placed each step: the two chase cameras lag behind the heading and drift with acceleration (`chase_camera.gd`, also used by the cruise), and the other two ride the body's lean.
 
 `opponent_race_car.gd` uses the same gear idea with a fixed 3-speed ratio set. Stats are the player’s effective vmax and 24 m/s² launch, scaled by the chosen `OPPONENTS` entry. On a road course it advances a path distance and is placed with `sample_at`. On the drag strip it drives straight on `+Z`.
 
