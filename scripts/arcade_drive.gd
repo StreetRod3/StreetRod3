@@ -38,6 +38,7 @@ var _cg_height: float = CG_HEIGHT_M
 var _front_axle_fraction: float = FRONT_AXLE_FRACTION
 var _max_steer_rad: float = MAX_STEER_RAD
 var _wheel_grip: float = 3.0
+var _steer_input: float = 0.0
 
 
 func apply_spec(chassis: Dictionary, grip_rating: float) -> void:
@@ -54,6 +55,11 @@ func reset() -> void:
 	forward_speed = 0.0
 	steer_angle = 0.0
 	_stop_slide()
+
+
+## How far the steering has been asked to turn, -1 to 1.
+func steer_input() -> float:
+	return _steer_input
 
 
 func planar_velocity() -> Vector3:
@@ -107,7 +113,8 @@ func step(
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
 
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
-	var steer_target := clampf(steer, -1.0, 1.0) * _max_steer_rad * _grip_steer_scale()
+	_steer_input = clampf(steer, -1.0, 1.0)
+	var steer_target := _steer_input * _max_steer_rad * _grip_steer_scale()
 	if absf(steer) < 0.01:
 		steer_target = 0.0
 	steer_angle = move_toward(steer_angle, steer_target, STEER_RESPONSE * delta)
@@ -131,6 +138,7 @@ func step(
 func hold(body: CharacterBody3D, delta: float, car_center: Vector3) -> void:
 	forward_speed = 0.0
 	_stop_slide()
+	_steer_input = 0.0
 	steer_angle = move_toward(steer_angle, 0.0, STEER_RESPONSE * delta)
 	body.velocity = Vector3.ZERO
 	_apply_heading(body, car_center)

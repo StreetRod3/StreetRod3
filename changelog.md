@@ -145,3 +145,9 @@ Pressing Esc at the drive-in with nothing open raised an error on the way out, w
 Clicking the speech bubble at the end of a game, when the money and the cars are gone, raised an error on the way back to the main menu, which stops the game when it is run from the editor. A speech bubble now marks the click as handled before telling anyone it was clicked.
 
 In the newspaper, the keys that move through the list stopped working after buying something, and each press raised an error. Buying rebuilds the list, and the keys were still set up with the old rows, which were freed a moment later. The old rows now leave the list before the new ones are picked up.
+
+The cars have real springs and shocks you can see, in both the arcade drive and the simulation. Before, the suspension was only worked out for the tire loads in the simulation, the arcade drive had none, and either way the body sat rigid on the car. Now each corner has a soft spring and a shock, scaled to the car's weight so that every car bounces about the same, and they move the body: it dives under braking, squats under power, leans a good 4 to 5 degrees through a hard corner, and bounces a time or two before it settles. The road has fine roughness and a slow swell for the shocks to work against, the front wheels meeting each bump before the rear ones, and grass is much rougher. The rival's car does all of this too.
+
+The wheels turn. They roll with the car's speed, the front ones steer, and each one rides up over the bumps while the body moves above it. At speed the steering hardly moves the real road-wheel angle, so the front wheels show at least 11 degrees at full steering input, so that you can see it being steered.
+
+The chase cameras hang back from the car instead of being bolted to it. They swing round after the car in a turn, and drift with its acceleration and cornering. The cockpit and bumper cameras are part of the body, so they ride its springs and the horizon tilts with it.

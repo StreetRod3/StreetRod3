@@ -7,6 +7,7 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
+const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
@@ -30,6 +31,8 @@ const STEER_YAW_DAMPING := 0.55
 ## Body slip speed where the driver stops steering at the line and catches the slide.
 const SLIDE_LATERAL_MPS := 4.0
 const LANE_EDGE_MARGIN_M := 1.8
+## Turn rate on the arcade rails that shows as a full steering input, in rad/s.
+const _RAIL_FULL_YAW_RATE := 0.5
 
 var forward_speed: float = 0.0
 
@@ -49,6 +52,9 @@ var _path_s: float = 0.0
 var _path_yaw: float = 0.0
 var _lateral: float = 0.0
 var _arcade_active: bool = false
+var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
+var _last_yaw: float = 0.0
+var _rail_yaw_rate: float = 0.0
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
 var _arcade_accel: float = 7.0
@@ -81,7 +87,9 @@ func _ready() -> void:
 	_lane_x = global_position.x
 	_apply_car_spec()
 	_layout_wheels()
+	_body_motion.setup(_visual, _dynamics)
 	_dynamics.yaw = rotation.y
+	_last_yaw = rotation.y
 	_skids = _SkidMarks.new()
 	_skids.name = "SkidMarks"
 	add_child(_skids)
@@ -136,12 +144,41 @@ func _physics_process(delta: float) -> void:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
 		_stick_to_road()
+		_body_motion.ride_from_motion(delta, _dynamics.cg_velocity, rotation.y)
+		_pose_body(delta)
 		return
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
+		_ride_rails(delta)
 	else:
 		_physics_simulation(delta)
+		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_stick_to_road()
+	_pose_body(delta)
+
+
+## On the arcade rails only the speed and the heading say how hard the body is being thrown.
+func _ride_rails(delta: float) -> void:
+	var track := _race_track(get_parent())
+	_dynamics.sample_surfaces(track, global_transform)
+	var turned := wrapf(rotation.y - _last_yaw, -PI, PI) / maxf(delta, 0.0001)
+	_last_yaw = rotation.y
+	_rail_yaw_rate = lerpf(_rail_yaw_rate, turned, 1.0 - exp(-8.0 * delta))
+	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	_body_motion.ride_from_motion(delta, forward * forward_speed, rotation.y)
+
+
+func _pose_body(delta: float) -> void:
+	var race := get_parent()
+	if race != null and race.has_method(&"is_race_started") and not race.is_race_started():
+		return
+	_body_motion.capture()
+	var steer := _dynamics.steer_angle()
+	var steer_input := _dynamics.steer_input()
+	if GameState.arcade_drive and not _parking:
+		steer = atan(_rail_yaw_rate * _dynamics.config.wheelbase_m / maxf(forward_speed, 1.0))
+		steer_input = clampf(_rail_yaw_rate / _RAIL_FULL_YAW_RATE, -1.0, 1.0)
+	_body_motion.pose(delta, forward_speed, steer, steer_input)
 
 
 func _physics_simulation(delta: float) -> void:
