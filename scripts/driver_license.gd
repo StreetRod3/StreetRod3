@@ -15,6 +15,18 @@ const NAME_MAX_LENGTH := 24
 const CHEAT_NAME := "UUDDLRLRBA"
 const CHEAT_MONEY := 10000
 
+## The photo fills the blue area of the card, and rounds off with the card's corner.
+const _DriverFigure := preload("res://scripts/driver_figure.gd")
+const PORTRAIT_RECT := Rect2(0, 280, 276, 342)
+const PORTRAIT_CORNER := 12
+## Rendered larger than it shows, for smooth edges.
+const PORTRAIT_OVERSAMPLE := 2
+## How much of the driver the frame shows, in meters, and how far off the camera stands.
+const PORTRAIT_FRAME_HEIGHT := 0.52
+const PORTRAIT_CAMERA_DISTANCE := 1.6
+## Where the camera looks, against the eyes of the figure.
+const PORTRAIT_LOOK_Y := -0.052
+
 const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
 const SIGNATURE_SIZE := 30
 const SIGNATURE_INK := Color("#2a2d55")
@@ -61,6 +73,8 @@ var _typed_font := FontVariation.new()
 var _signature := Label.new()
 ## The name as typed. The line shows it in capitals, the signature keeps its case.
 var _typed_name := ""
+var _portrait_view := SubViewport.new()
+var _figure = _DriverFigure.new()
 
 
 func _ready() -> void:
@@ -71,6 +85,7 @@ func _ready() -> void:
 		_add_value(value)
 	_setup_name_edit()
 	_setup_signature()
+	_setup_portrait()
 	_continue_button.disabled = true
 	_name_edit.edit()
 
@@ -114,6 +129,7 @@ func _on_choice_input(event: InputEvent, label: Label) -> void:
 	label.text = choices[wrapi(choices.find(label.text) + step, 0, choices.size())]
 	label.reset_size()
 	label.accept_event()
+	_update_portrait()
 
 
 static func _height_choices() -> Array:
@@ -143,6 +159,59 @@ func _setup_name_edit() -> void:
 	_name_edit.keep_editing_on_text_submit = true
 	_name_edit.position = NAME_POSITION - Vector2(0, _ascent())
 	_name_edit.size = Vector2(_card.size.x - NAME_POSITION.x, _typed_font.get_height(FONT_SIZE))
+
+
+func _setup_portrait() -> void:
+	_portrait_view.size = Vector2i(PORTRAIT_RECT.size) * PORTRAIT_OVERSAMPLE
+	_portrait_view.transparent_bg = true
+	_portrait_view.own_world_3d = true
+	_portrait_view.msaa_3d = Viewport.MSAA_4X
+	_portrait_view.add_child(_figure)
+	var camera := Camera3D.new()
+	camera.fov = rad_to_deg(2.0 * atan(PORTRAIT_FRAME_HEIGHT * 0.5 / PORTRAIT_CAMERA_DISTANCE))
+	camera.position = Vector3(0.0, PORTRAIT_LOOK_Y, PORTRAIT_CAMERA_DISTANCE)
+	var world := Environment.new()
+	world.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	world.ambient_light_color = Color.WHITE
+	world.ambient_light_energy = 0.42
+	camera.environment = world
+	_portrait_view.add_child(camera)
+	var flash := DirectionalLight3D.new()
+	flash.rotation_degrees = Vector3(-26.0, 24.0, 0.0)
+	flash.light_energy = 0.95
+	_portrait_view.add_child(flash)
+	add_child(_portrait_view)
+
+	var corner := StyleBoxFlat.new()
+	corner.corner_radius_bottom_left = PORTRAIT_CORNER
+	var frame := Panel.new()
+	frame.name = "Portrait"
+	frame.add_theme_stylebox_override("panel", corner)
+	frame.clip_children = CanvasItem.CLIP_CHILDREN_ONLY
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.position = PORTRAIT_RECT.position
+	frame.size = PORTRAIT_RECT.size
+	var photo := TextureRect.new()
+	photo.texture = _portrait_view.get_texture()
+	photo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	photo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	photo.size = PORTRAIT_RECT.size
+	frame.add_child(photo)
+	_card.add_child(frame)
+	_update_portrait()
+
+
+## The photo only needs drawing when the driver changes.
+func _update_portrait() -> void:
+	_figure.apply(_traits())
+	_portrait_view.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+func _traits() -> Dictionary:
+	var traits := {}
+	for id in _choices:
+		traits[id] = (_card.get_node(id) as Label).text
+	return traits
 
 
 func _setup_signature() -> void:
@@ -228,9 +297,7 @@ func _on_continue_pressed() -> void:
 	if _driver_name().is_empty():
 		return
 	var driver_name := _signed_name(_driver_name())
-	var traits := {}
-	for id in _choices:
-		traits[id] = (_card.get_node(id) as Label).text
+	var traits := _traits()
 	GameState.new_game()
 	GameState.driver_name = driver_name
 	GameState.driver_traits = traits

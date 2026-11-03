@@ -44,7 +44,7 @@ flowchart TD
 | Scene | Script | Role |
 | --- | --- | --- |
 | `scenes/main_menu.tscn` | `scripts/main_menu.gd` | New game, load (from the save slot list), settings, quit |
-| `scenes/driver_license.tscn` | `scripts/driver_license.gd` | Driver's Name screen between New Game and the garage: type a name on the license |
+| `scenes/driver_license.tscn` | `scripts/driver_license.gd` | Driver's Name screen between New Game and the garage: type a name and click through the traits on the license, with a live photo from `scripts/driver_figure.gd` |
 | `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle |
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
