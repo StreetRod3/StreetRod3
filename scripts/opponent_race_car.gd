@@ -6,6 +6,7 @@ extends CharacterBody3D
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
+const _RacePark := preload("res://scripts/race_park.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
@@ -51,6 +52,9 @@ var _arcade_active: bool = false
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
 var _arcade_accel: float = 7.0
+var _parking := false
+var _park_speed := 0.0
+var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
 var _road_base_y: float = 0.0
 const _ROAD_PITCH_SPAN := 8.0
@@ -118,7 +122,21 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3) -> void:
 	forward_speed = clampf(planar.dot(forward), 0.0, _max_mps)
 
 
+func begin_park(slot: float) -> void:
+	if _parking:
+		return
+	_parking = true
+	_park_slot = slot
+	_park_speed = maxf(forward_speed, 0.0)
+	_skids.end_strips()
+
+
 func _physics_process(delta: float) -> void:
+	if _parking:
+		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
+		forward_speed = _park_speed
+		_stick_to_road()
+		return
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
 	else:
