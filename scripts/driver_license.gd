@@ -11,6 +11,10 @@ const NAME_POSITION := Vector2(354, 200)
 ## The widest letters, a full line of M, still fit before the edge of the card.
 const NAME_MAX_LENGTH := 24
 
+## Up, up, down, down, left, right, left, right, B, A as a name starts the game with more cash.
+const CHEAT_NAME := "UUDDLRLRBA"
+const CHEAT_MONEY := 10000
+
 const SIGNATURE_FONT := preload("res://assets/fonts/HomemadeApple-Regular.ttf")
 const SIGNATURE_SIZE := 30
 const SIGNATURE_INK := Color("#2a2d55")
@@ -230,6 +234,8 @@ func _on_continue_pressed() -> void:
 	GameState.new_game()
 	GameState.driver_name = driver_name
 	GameState.driver_traits = traits
+	if driver_name.to_upper() == CHEAT_NAME:
+		GameState.money = CHEAT_MONEY
 	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 
