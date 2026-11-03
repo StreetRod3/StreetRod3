@@ -143,3 +143,5 @@ Picking a set of wheels on the tire board could crash the game outright. Choosin
 Pressing Esc at the drive-in with nothing open raised an error on the way out, which stops the game when it is run from the editor. The key is now marked as handled before leaving, the same way the hood, transmission, under-the-car and timing screens do it.
 
 Clicking the speech bubble at the end of a game, when the money and the cars are gone, raised an error on the way back to the main menu, which stops the game when it is run from the editor. A speech bubble now marks the click as handled before telling anyone it was clicked.
+
+In the newspaper, the keys that move through the list stopped working after buying something, and each press raised an error. Buying rebuilds the list, and the keys were still set up with the old rows, which were freed a moment later. The old rows now leave the list before the new ones are picked up.
