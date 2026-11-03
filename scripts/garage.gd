@@ -1514,7 +1514,9 @@ func _hide_parts_board() -> void:
 func _rebuild_parts_board() -> void:
 	for child in _parts_list.get_children():
 		_parts_list.remove_child(child)
-		child.free()
+		# Not free(): this can be the button whose click is being handled, which still uses
+		# itself after its signal, and freeing it now crashes the game.
+		child.queue_free()
 	var spares := false
 	if _parts_show_tires:
 		_rebuild_tires_list()
