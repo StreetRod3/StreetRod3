@@ -133,3 +133,5 @@ Clicking the license photo now changes your driver's skin tone, through four ton
 The MUST WEAR CORRECTIVE LENSES box can now be clicked. It types a slightly crooked X in the box and puts a pair of dark, heavy-framed glasses on your driver, and clicking again takes them off. This is saved too.
 
 The license photo now looks like a color print from the 1970s that has spent years in a wallet: soft focus, washed-out color, milky blacks, cream whites, a faint magenta cast, darkened corners, and a little grain. The driver stands against a backdrop that fades along with them.
+
+The stray line above DO NOT LAMINATE on the license is gone.
