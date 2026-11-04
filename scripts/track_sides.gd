@@ -34,6 +34,10 @@ const _SECTION_STEP := 2
 ## About 150 m each way, with the track's sample every 2 m.
 const _SLOW_SAMPLES := 75
 const _WALL_H := 2.5
+## A wall or rail starts this far out from its line and eases in over this far along the road, so a
+## car running wide scrapes along it instead of meeting its bare end head on.
+const _FLARE_OUT_M := MOUNTAIN_BANK_RUN
+const _FLARE_ALONG_M := 25.0
 const _RAIL_LOW := 0.42
 const _RAIL_HIGH := 0.78
 const _RAIL_POST_EVERY_M := 5.0
@@ -60,17 +64,23 @@ const _MOUNTAIN_GRAY := Color(0.34, 0.34, 0.36, 1)
 const _MOUNTAIN_SNOW := Color(0.66, 0.66, 0.68, 1)
 
 
-## Height over the road at `lateral`, with `side` the full height of a hillside (up) or drop (down)
-## on that side of the road.
-static func mountain_height(lateral: float, half_width: float, side: float) -> float:
-	if side == 0.0:
-		return 0.0
+## The ground's height at `lateral`, as `_mountain_section` draws it, with `side` the full height of
+## a hillside (up) or drop (down) on that side of the road. Near the road it goes with `road_y`, and
+## farther out it goes over to `far_y`, the road's height with the rises and dips averaged out.
+static func mountain_ground(lateral: float, half_width: float, side: float, road_y: float, far_y: float) -> float:
 	var out := absf(lateral) - half_width - MOUNTAIN_VERGE
 	if out <= 0.0:
-		return 0.0
-	if out >= MOUNTAIN_BANK_RUN:
-		return side
-	return side * out / MOUNTAIN_BANK_RUN
+		return road_y
+	if out < MOUNTAIN_BANK_RUN:
+		return road_y + side * out / MOUNTAIN_BANK_RUN
+	var far := far_y + _far_rise(side)
+	if out < MOUNTAIN_BANK_RUN + _HILL_TOP_M:
+		return lerpf(road_y + side, far, (out - MOUNTAIN_BANK_RUN) / _HILL_TOP_M)
+	return far
+
+
+static func _far_rise(side: float) -> float:
+	return side * _HILL_TOP_RISE if side > 0.0 else side
 
 
 static func aqueduct_height(lateral: float) -> float:
@@ -98,13 +108,13 @@ static func build_mountain(
 	left: PackedFloat32Array,
 	right: PackedFloat32Array,
 	rails: PackedByteArray,
+	far_y: PackedFloat32Array,
 	run_in_m: float
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
-	var far_y := _slow_heights(pts)
 	for side: float in [1.0, -1.0]:
 		var heights := left if side > 0.0 else right
 		_add_side_span(st, _mountain_section(back, yaws[0], side, half_ws[0], heights[0], far_y[0]), _mountain_section(pts[0], yaws[0], side, half_ws[0], heights[0], far_y[0]))
@@ -117,8 +127,14 @@ static func build_mountain(
 				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b])
 			)
 	_add_mesh(track, "Sides", st, _vertex_color_material())
-	_build_walls(track, pts, yaws, half_ws, types, left, right, rails, sections)
-	_build_rails(track, pts, yaws, half_ws, rails)
+	var railed := rails.duplicate()
+	var right_out := _rail_flares(pts, types, railed)
+	var left_out := _hill_flares(pts, left)
+	var hill_right := _hill_flares(pts, right)
+	for i in right_out.size():
+		right_out[i] = maxf(right_out[i], hill_right[i])
+	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections)
+	_build_rails(track, pts, yaws, half_ws, railed, right_out)
 	_build_trusses(track, pts, yaws, half_ws, types)
 	_build_under(track, pts, _GREEN.darkened(0.25))
 	_build_mountains(track, pts)
@@ -162,7 +178,7 @@ static func _behind_start(pts: PackedVector3Array, yaws: PackedFloat32Array, run
 
 
 ## The road's height with its rises and dips averaged out, for ground far from it to follow.
-static func _slow_heights(pts: PackedVector3Array) -> PackedFloat32Array:
+static func slow_heights(pts: PackedVector3Array) -> PackedFloat32Array:
 	var sums := PackedFloat32Array()
 	sums.resize(pts.size() + 1)
 	sums[0] = 0.0
@@ -186,7 +202,7 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 	var bank := _GREEN
 	if height > 0.0:
 		bank = _GREEN.lerp(_HILL_BROWN, clampf(height / HILL_MIN, 0.0, 1.0))
-	var top := height * _HILL_TOP_RISE if height > 0.0 else height
+	var top := _far_rise(height)
 	var far_center := Vector3(center.x, far_y, center.z)
 	return [
 		_column(center + across * half, 0.0, near),
@@ -272,13 +288,65 @@ static func _add_mesh(parent: Node3D, node_name: String, st: SurfaceTool, mat: M
 	parent.add_child(mi)
 
 
+## A guard rail comes in from the side before it reaches the road's verge, on the flat ground before
+## the drop. Marks those samples in `rails` and answers how far out each one is.
+static func _rail_flares(pts: PackedVector3Array, types: PackedStringArray, rails: PackedByteArray) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(pts.size())
+	out.fill(0.0)
+	var starts := PackedInt32Array()
+	for i in range(1, pts.size()):
+		if rails[i] != 0 and rails[i - 1] == 0:
+			starts.append(i)
+	for start: int in starts:
+		var along := 0.0
+		var j := start - 1
+		while j >= 0 and rails[j] == 0 and types[j] != TrackFile.ROAD_BRIDGE:
+			along += pts[j].distance_to(pts[j + 1])
+			if along >= _FLARE_ALONG_M:
+				break
+			rails[j] = 1
+			out[j] = _FLARE_OUT_M * along / _FLARE_ALONG_M
+			j -= 1
+	return out
+
+
+## A hillside's wall starts out on its slope, where the bank is still low, and comes in to the verge
+## as the bank rises. Answers how far out it is at each sample.
+static func _hill_flares(pts: PackedVector3Array, heights: PackedFloat32Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(pts.size())
+	out.fill(0.0)
+	for i in range(1, pts.size()):
+		if heights[i] < HILL_MIN or heights[i - 1] >= HILL_MIN:
+			continue
+		var along := 0.0
+		var j := i
+		while j < pts.size() and along < _FLARE_ALONG_M:
+			out[j] = _FLARE_OUT_M * (1.0 - along / _FLARE_ALONG_M)
+			if j + 1 < pts.size():
+				along += pts[j].distance_to(pts[j + 1])
+			j += 1
+	return out
+
+
 ## Where a car stops on this side of this sample, across, or zero with nothing there.
-static func _wall_at(i: int, side: float, half_ws: PackedFloat32Array, types: PackedStringArray, left: PackedFloat32Array, right: PackedFloat32Array, rails: PackedByteArray) -> float:
+static func _wall_at(
+	i: int,
+	side: float,
+	half_ws: PackedFloat32Array,
+	types: PackedStringArray,
+	left: PackedFloat32Array,
+	right: PackedFloat32Array,
+	rails: PackedByteArray,
+	left_out: PackedFloat32Array,
+	right_out: PackedFloat32Array
+) -> float:
 	if types[i] == TrackFile.ROAD_BRIDGE:
 		return half_ws[i]
 	var height := left[i] if side > 0.0 else right[i]
 	if height >= HILL_MIN or (side < 0.0 and rails[i] != 0):
-		return half_ws[i] + MOUNTAIN_VERGE
+		return half_ws[i] + MOUNTAIN_VERGE + (left_out[i] if side > 0.0 else right_out[i])
 	return 0.0
 
 
@@ -291,6 +359,8 @@ static func _build_walls(
 	left: PackedFloat32Array,
 	right: PackedFloat32Array,
 	rails: PackedByteArray,
+	left_out: PackedFloat32Array,
+	right_out: PackedFloat32Array,
 	sections: PackedInt32Array
 ) -> void:
 	var faces := PackedVector3Array()
@@ -298,8 +368,8 @@ static func _build_walls(
 		var a := sections[k]
 		var b := sections[k + 1]
 		for side: float in [1.0, -1.0]:
-			var wall_a := _wall_at(a, side, half_ws, types, left, right, rails)
-			var wall_b := _wall_at(b, side, half_ws, types, left, right, rails)
+			var wall_a := _wall_at(a, side, half_ws, types, left, right, rails, left_out, right_out)
+			var wall_b := _wall_at(b, side, half_ws, types, left, right, rails, left_out, right_out)
 			if wall_a > 0.0 and wall_b > 0.0:
 				_add_wall_quad(faces, pts[a], yaws[a], side * wall_a, pts[b], yaws[b], side * wall_b)
 			# Where a bridge starts or ends, a face across the road's old edge.
@@ -337,7 +407,7 @@ static func _add_wall_body(track: Node3D, faces: PackedVector3Array) -> void:
 
 
 ## Street Rod 2's guard rail: a low beam on posts at the verge, on the right only.
-static func _build_rails(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, half_ws: PackedFloat32Array, rails: PackedByteArray) -> void:
+static func _build_rails(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, half_ws: PackedFloat32Array, rails: PackedByteArray, right_out: PackedFloat32Array) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var posts: Array[Transform3D] = []
@@ -345,8 +415,8 @@ static func _build_rails(track: Node3D, pts: PackedVector3Array, yaws: PackedFlo
 	for i in range(pts.size() - 1):
 		if rails[i] == 0 or rails[i + 1] == 0:
 			continue
-		var a := _rail_foot(pts[i], yaws[i], half_ws[i])
-		var b := _rail_foot(pts[i + 1], yaws[i + 1], half_ws[i + 1])
+		var a := _rail_foot(pts[i], yaws[i], half_ws[i] + right_out[i])
+		var b := _rail_foot(pts[i + 1], yaws[i + 1], half_ws[i + 1] + right_out[i + 1])
 		_add_vertex(st, a + Vector3.UP * _RAIL_LOW, _RAIL_GRAY)
 		_add_vertex(st, b + Vector3.UP * _RAIL_LOW, _RAIL_GRAY)
 		_add_vertex(st, b + Vector3.UP * _RAIL_HIGH, _RAIL_GRAY)

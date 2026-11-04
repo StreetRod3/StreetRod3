@@ -91,6 +91,8 @@ var _scenery: Array[Dictionary] = []
 var _left_sides: PackedFloat32Array = PackedFloat32Array()
 var _right_sides: PackedFloat32Array = PackedFloat32Array()
 var _rails: PackedByteArray = PackedByteArray()
+## The road's height with its rises and dips averaged out, which ground far from it follows.
+var _far_ys: PackedFloat32Array = PackedFloat32Array()
 ## Where each node falls along the path.
 var _node_s: PackedFloat32Array = PackedFloat32Array()
 ## What a rival steers around, from the start: {s, to, low, high}, sorted by s.
@@ -169,17 +171,17 @@ func surface_height(world: Vector3) -> float:
 		if d < best_d:
 			best_d = d
 			height = lerpf(a.y, b.y, t)
-	return height + _side_height_at(i, world)
+	return _side_ground_at(i, world, height)
 
 
-## Height of a hillside, drop or bank at `world` over the road beside it, at sample `i`.
-func _side_height_at(i: int, world: Vector3) -> float:
+## The ground's height at `world`, at sample `i`, with `road_y` the road's beside it.
+func _side_ground_at(i: int, world: Vector3, road_y: float) -> float:
 	if _style == TrackFile.STYLE_AQUEDUCT:
-		return _TrackSides.aqueduct_height(_lateral_at(i, world))
+		return road_y + _TrackSides.aqueduct_height(_lateral_at(i, world))
 	if _style != TrackFile.STYLE_MOUNTAIN:
-		return 0.0
+		return road_y
 	var lateral := _lateral_at(i, world)
-	return _TrackSides.mountain_height(lateral, _half_ws[i], _left_sides[i] if lateral > 0.0 else _right_sides[i])
+	return _TrackSides.mountain_ground(lateral, _half_ws[i], _left_sides[i] if lateral > 0.0 else _right_sides[i], road_y, _far_ys[i])
 
 
 func _lateral_at(i: int, world: Vector3) -> float:
@@ -397,7 +399,7 @@ func build_road_course() -> void:
 	if _style == TrackFile.STYLE_AQUEDUCT:
 		_TrackSides.build_aqueduct(self, _pts, _yaws, _STREET_RUN_IN_M)
 	elif _style == TrackFile.STYLE_MOUNTAIN:
-		_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _STREET_RUN_IN_M)
+		_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _STREET_RUN_IN_M)
 		_build_road_mesh()
 	else:
 		_build_terrain()
@@ -543,6 +545,7 @@ func _fill_sides(data: Dictionary, path_ids: Array) -> void:
 	_rails.fill(0)
 	if _style != TrackFile.STYLE_MOUNTAIN:
 		return
+	_far_ys = _TrackSides.slow_heights(_pts)
 	var k := 0
 	for i in _pts.size():
 		var s := _dists[i]

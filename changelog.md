@@ -204,3 +204,5 @@ Sawhorses on Mulholland can be driven through now. Smashing one costs some damag
 
 Tire smoke no longer leaves two black discs behind the wheels when it stops. They showed most after a short slide, such as across grass or Mulholland's gravel. The smoke's material ignored each particle's size, so particles not in use were drawn full size and black at the emitter. Honoring the size also means puffs now grow as they rise, and are smaller on grass and gravel, as they were always meant to be.
 
+Driving off the road on Mulholland no longer sinks the car into the grass. Away from the road the ground was drawn smoothed out, while the car and the trees still went by the road's own rises and dips, up to about 7 m apart. Both now use the same height. Walls and guard rails there also start out to the side and ease in toward the road, because a car running wide could meet the bare end of one head on and be totaled.
+
