@@ -275,6 +275,9 @@ func _smoke_puff() -> QuadMesh:
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+		# Without this a particle's size is ignored. One not in use has none, and it would be drawn
+		# full size and black at the emitter.
+		mat.billboard_keep_scale = true
 		mat.albedo_texture = _soft_puff_texture()
 		_smoke_mesh.material = mat
 	return _smoke_mesh

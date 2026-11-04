@@ -38,6 +38,14 @@ const STEER_YAW_DAMPING := 0.55
 ## Body slip speed where the driver stops steering at the line and catches the slide.
 const SLIDE_LATERAL_MPS := 4.0
 const LANE_EDGE_MARGIN_M := 1.8
+## How a rival moves around something on the road: how early it looks, and how fast it goes across.
+const DODGE_LOOK_S := 2.2
+const DODGE_LOOK_M := 25.0
+const DODGE_MPS := 7.0
+## On a tight road: what share of the gap to its lane it closes in a second, and how fast at most.
+const TIGHT_CLOSE_RATE := 4.0
+const TIGHT_MAX_MPS := 4.5
+const TIGHT_EDGE_MARGIN_M := 1.0
 ## Turn rate on the arcade rails that shows as a full steering input, in rad/s.
 const _RAIL_FULL_YAW_RATE := 0.5
 ## How quickly a sideways shove on the arcade rails dies away, in 1/seconds.
@@ -61,6 +69,9 @@ var _drive_scale: float = 1.0
 var _power_hp: float = 280.0
 var _max_mps: float = 40.0
 var _lane_x: float = 0.0
+## The lane being held, which eases around what is on the road.
+var _dodge_lane: float = 0.0
+var _dodge_ready: bool = false
 var _lane_ready: bool = false
 var _path_s: float = 0.0
 var _path_yaw: float = 0.0
@@ -138,6 +149,17 @@ func take_hit(speed_change: float) -> bool:
 		return false
 	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D if _visual != null else null)
 	return true
+
+
+## Through a sawhorse: some damage by `harm` as a change of speed, and a little speed gone.
+func hit_sawhorse(harm: float, speed_lost: float) -> void:
+	take_hit(harm)
+	if GameState.arcade_drive:
+		forward_speed = maxf(forward_speed - speed_lost, 0.0)
+	else:
+		var speed := _dynamics.cg_velocity.length()
+		if speed > 0.01:
+			_dynamics.cg_velocity *= maxf(speed - speed_lost, 0.0) / speed
 
 
 func damage_amount() -> float:
@@ -289,6 +311,7 @@ func _physics_simulation(delta: float) -> void:
 		brake_input = 1.0
 	_dynamics.sample_surfaces(track, global_transform)
 	_dynamics.step(delta, steer, drive, brake_input)
+	_hold_tight_lane(track, delta)
 	_sync_motion_state()
 	_dynamics.pose_body(self, true)
 	var before := velocity
@@ -343,7 +366,11 @@ func _physics_arcade(delta: float) -> void:
 		var center: Vector3 = sample.get("position", global_position)
 		var left_ext := float(sample.get("left_ext", 8.0))
 		var right_ext := float(sample.get("right_ext", 8.0))
-		var lane := clampf(_lane_x, -(left_ext - 1.6), right_ext - 1.6)
+		var left_room := maxf(left_ext - 1.6, 0.0)
+		var right_room := maxf(right_ext - 1.6, 0.0)
+		var lane := clampf(_lane_x, -left_room, right_room)
+		if track.has_method(&"is_tight_road") and track.is_tight_road():
+			lane = clampf(_dodging_lane(track, lane, delta), -maxf(left_ext - TIGHT_EDGE_MARGIN_M, 0.0), maxf(right_ext - TIGHT_EDGE_MARGIN_M, 0.0))
 		var dest := center + right * lane
 		velocity = Vector3.ZERO
 		move_and_slide()
@@ -411,6 +438,8 @@ func _stick_to_road() -> void:
 	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
 	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
 	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
+	if track.has_method(&"surface_roll"):
+		rotation.z = track.surface_roll(global_position, rotation.y)
 
 
 func _race_track(race: Node) -> Node:
@@ -503,9 +532,41 @@ func _drive_command(track: Node) -> Vector3:
 	return Vector3(steer, 1.0 if throttle else 0.0, 1.0 if braking else 0.0)
 
 
+## On a road with walls beside it, the tires' model decides how fast this car goes, but not where.
+## Steering by it runs a meter off its lane in a bend, and an 8 m road has no meter to spare.
+func _hold_tight_lane(track: Node, delta: float) -> void:
+	if track == null or not track.has_method(&"is_tight_road") or not track.is_tight_road():
+		return
+	var here: Dictionary = track.sample_at(_path_s)
+	var left_ext := float(here.get("left_ext", 8.0))
+	var right_ext := float(here.get("right_ext", 8.0))
+	var left_room := maxf(left_ext - TIGHT_EDGE_MARGIN_M, 0.0)
+	var right_room := maxf(right_ext - TIGHT_EDGE_MARGIN_M, 0.0)
+	var lane := clampf(_dodging_lane(track, clampf(_lane_x, -left_room, right_room), delta), -left_room, right_room)
+	var speed := maxf(_dynamics.longitudinal_speed(), 0.0)
+	var yaw := float(here.get("yaw", _dynamics.yaw))
+	var across := clampf((lane - _lateral) * TIGHT_CLOSE_RATE, -TIGHT_MAX_MPS, TIGHT_MAX_MPS)
+	_dynamics.yaw = yaw + atan2(across, maxf(speed, 3.0))
+	_dynamics.cg_velocity = Vector3(sin(yaw), 0.0, cos(yaw)) * speed + Vector3(cos(yaw), 0.0, -sin(yaw)) * across
+
+
+## The lane to hold this step: the wanted one, eased around whatever is on the road ahead.
+func _dodging_lane(track: Node, wanted: float, delta: float) -> float:
+	var target: float = track.lane_around(_path_s, wanted, maxf(forward_speed, 0.0) * DODGE_LOOK_S + DODGE_LOOK_M)
+	if not _dodge_ready:
+		_dodge_lane = wanted
+		_dodge_ready = true
+	_dodge_lane = move_toward(_dodge_lane, target, DODGE_MPS * delta)
+	return _dodge_lane
+
+
 ## Fastest speed the tightest bend in the braking horizon allows.
 func _corner_speed(track: Node, planar: float, ay: float) -> float:
 	var horizon := clampf(planar * 2.8, 36.0, 110.0)
+	if track.has_method(&"gravel_limit"):
+		var gravel: float = track.gravel_limit(_path_s, horizon)
+		if gravel < _max_mps and not is_inf(gravel):
+			return gravel
 	var step := 6.0
 	var count := maxi(int(horizon / step), 1)
 	var prev: float = float(track.sample_at(_path_s).get("yaw", _dynamics.yaw))

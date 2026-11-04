@@ -367,7 +367,7 @@ func _update_surface(body: Node3D) -> void:
 				half = float(track.get_half_width())
 			var left_ext := float(sample.get("left_ext", sample.get("half_width", half)))
 			var right_ext := float(sample.get("right_ext", sample.get("half_width", half)))
-			_off_road = lat < -(left_ext - 1.0) or lat > (right_ext - 1.0)
+			_off_road = lat < -(left_ext - 1.0) or lat > (right_ext - 1.0) or bool(sample.get("gravel", false))
 			return
 	_off_road = absf(body.global_position.x) > TRACK_X_LIMIT
 

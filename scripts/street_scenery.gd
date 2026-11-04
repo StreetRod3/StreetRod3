@@ -159,7 +159,7 @@ static func _build_poles(track: Node3D, root: Node3D, spots: Array[Vector2]) -> 
 	_add_multimesh(root, "PoleCaps", cap_mesh, cap_xforms, false)
 
 
-## Flat pieces laid along +Z from each spot, pitched to the road. `outward` moves a piece away
+## Flat pieces laid along the road from each spot, pitched to it. `outward` moves a piece away
 ## from the road's middle, so a spot on the edge lays it on the shoulder.
 static func _build_paint(
 	track: Node3D,
@@ -182,11 +182,16 @@ static func _build_paint(
 	mesh.material = mat
 	var xforms: Array[Transform3D] = []
 	for spot: Vector2 in spots:
-		var x := spot.x + signf(spot.x) * outward
+		var yaw := float(track.closest_sample(Vector3(spot.x, 0.0, spot.y))["yaw"])
+		var along := Vector2(sin(yaw), cos(yaw))
+		var start := spot + Vector2(cos(yaw), -sin(yaw)) * (signf(spot.x) * outward)
+		var turn := Basis(Vector3.UP, yaw)
 		for i in pieces:
-			var near := _ground(track, x, spot.y + piece_length * float(i))
-			var far := _ground(track, x, spot.y + piece_length * float(i + 1))
-			var pitch := Basis(Vector3.RIGHT, -atan2(far.y - near.y, piece_length))
+			var near_at := start + along * (piece_length * float(i))
+			var far_at := start + along * (piece_length * float(i + 1))
+			var near := _ground(track, near_at.x, near_at.y)
+			var far := _ground(track, far_at.x, far_at.y)
+			var pitch := turn * Basis(Vector3.RIGHT, -atan2(far.y - near.y, piece_length))
 			xforms.append(Transform3D(pitch, (near + far) * 0.5 + Vector3(0.0, _PAINT_RISE, 0.0)))
 	_add_multimesh(root, node_name, mesh, xforms, false)
 

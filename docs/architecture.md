@@ -95,7 +95,7 @@ flowchart LR
 
 - Economy and garage: cash, owned cars, parts, gearboxes, equipped gearbox and its bolt turns, paint color.
 - Catalogs: `USED_CARS`, `PARTS`, `GEARBOXES`, `OPPONENTS` (static dictionaries, not resources).
-- Race selection: `selected_race_type` (`drag`, `street_drag`, or `road`) and `selected_opponent_id`.
+- Race selection: `selected_race_type` (`drag`, `road`, `street_drag`, `mulholland`, or `aqueduct`), `mulholland_course` (which of its ten courses this game has), and `selected_opponent_id`.
 - Derived stats: `refresh_car_stats()` rebuilds base vmax and horsepower from the current car plus owned parts. `get_effective_vmax_kmh()` then scales by the equipped gearbox `top_speed`.
 - Music: one `AudioStreamPlayer` on the autoload. Race uses `assets/music/race.mp3`; every other scene uses `assets/music/garage.mp3`.
 - Part condition and selling, below.
@@ -181,11 +181,15 @@ Tires stay on their wheels otherwise. Changing the wheels on a car puts the old 
 
 `race.gd` runs a three-phase start light (red, red+orange, green). Cars stay stopped until green. The HUD shows speed, gear, distance, time, and opponent name. `rpm_meter.gd` draws the tachometer. `race_touch_controls.gd` shows a wheel, pedals, and shift paddles on mobile, web-mobile, or viewports 900 px wide or narrower.
 
-Three layouts share `scenes/race.tscn`:
+Five layouts share `scenes/race.tscn`:
 
 - **Drag** (`GameState.RACE_DRAG`): a straight quarter mile (402.336 m) along `+Z`. `track_visuals.gd` builds curbs and a checkered gantry. The ground plane stays active. Finish is an `Area3D`.
 - **Street drag** (`GameState.RACE_STREET_DRAG`): Street Rod 2's cruise drag race, 900 m along `+Z` on `res://assets/tracks/street_drag.trk`, run by the same code as the road course. There are no start lights, as in Street Rod 2: "Get ready!" and then "Go!" a random 1.5 to 2.9 s later. The cars start in lanes either side of the middle. `race_track.gd` adds a gravel shoulder down each side, and `street_scenery.gd` builds the trees, poles, road marks, overhead sign, and yellow finish line from the file's `scenery` list. None of it has collision, because Street Rod 2 never tests a car against it in this race.
+- **Mulholland drive** (`GameState.RACE_MULHOLLAND`): Street Rod 2's mountain race, 2950 m on one of ten `.trk` courses. `track_sides.gd` builds its hillsides, drops, guard rail, and truss bridge, `course_scenery.gd` its signs, rocks, and road work, and `sawhorse.gd` the sawhorses a car can smash through. Walls and rocks stop a car, and going off an edge with no rail totals it. It has no start lights.
+- **Aqueduct race** (`GameState.RACE_AQUEDUCT`): Street Rod 2's race down a concrete channel, 1670 m along `+Z` on `res://assets/tracks/aqueduct.trk`. Cars lean on the banks and are pushed back toward the floor. It has no start lights.
 - **Road** (`GameState.RACE_ROAD`): `race_track.gd` hides the strip, loads `res://assets/tracks/track1.trk`, and builds the road mesh. The finish area is moved to the path end. Progress also ends the race when remaining distance is about 1 m, because the opponent is placed on the path rather than driven into the trigger.
+
+Street Rod 2's three races run at night, set by `_set_night()` in `race.gd`. The quarter mile and the road course run by day.
 
 A win is crossing the finish before the opponent. Holding a manual gearbox past critical RPM for 0.55 s blows the engine and ends the race.
 

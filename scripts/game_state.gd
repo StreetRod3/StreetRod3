@@ -58,6 +58,15 @@ const RACE_ROAD := "road"
 const RACE_STREET_DRAG := "street_drag"
 const STREET_DRAG_TRACK := "res://assets/tracks/street_drag.trk"
 const STREET_DRAG_LENGTH_M := 900.0
+## Street Rod 2's other two cruise races, at the same 5 m a line. Mulholland drive is lines 370 to
+## 960 of one of ten courses, picked when a game starts. The Aqueduct is lines 8 to 342 of its table.
+const RACE_MULHOLLAND := "mulholland"
+const MULHOLLAND_TRACK := "res://assets/tracks/mulholland_%d.trk"
+const MULHOLLAND_COURSES := 10
+const MULHOLLAND_LENGTH_M := 2950.0
+const RACE_AQUEDUCT := "aqueduct"
+const AQUEDUCT_TRACK := "res://assets/tracks/aqueduct.trk"
+const AQUEDUCT_LENGTH_M := 1670.0
 const QUARTER_MILE_M := 402.336
 const ROAD_RACE_LENGTH_M := QUARTER_MILE_M * 6.0
 const DRAG_STAKE_LOW := 10
@@ -217,8 +226,11 @@ var engine_tune: int = ENGINE_TUNE_DEFAULT
 var current_scene_path: String = SCENE_GARAGE
 ## Index into `opponents` for the next race.
 var selected_opponent_id: int = 0
-## `RACE_DRAG` (straight quarter mile), `RACE_STREET_DRAG` (Street Rod 2's) or `RACE_ROAD` (turning course).
+## `RACE_DRAG` (straight quarter mile), `RACE_ROAD` (turning course), or Street Rod 2's three:
+## `RACE_STREET_DRAG`, `RACE_MULHOLLAND` and `RACE_AQUEDUCT`.
 var selected_race_type: String = RACE_DRAG
+## Which of Mulholland's courses this game has. Street Rod 2 keeps one for a whole game too.
+var mulholland_course: int = 0
 ## Cash side bet for the next race. Zero is a race for nothing.
 var race_stake: int = 0
 ## Road race where the winner takes the loser's car.
@@ -789,6 +801,7 @@ func new_game() -> void:
 	selected_opponent_id = 0
 	opponents.clear()
 	selected_race_type = RACE_DRAG
+	mulholland_course = randi() % MULHOLLAND_COURSES
 	race_stake = 0
 	race_pink_slips = false
 	cars_just_gone = false
@@ -889,6 +902,7 @@ func save_game(slot: int) -> bool:
 		"selected_opponent_id": selected_opponent_id,
 		"opponents": _opponents_for_save(),
 		"selected_race_type": selected_race_type,
+		"mulholland_course": mulholland_course,
 		"race_stake": race_stake,
 		"race_pink_slips": race_pink_slips,
 		"driver_name": driver_name,
@@ -949,10 +963,11 @@ func load_game(slot: int) -> bool:
 	selected_opponent_id = int(d.get("selected_opponent_id", 0))
 	_load_saved_opponents(d)
 	var race_type := str(d.get("selected_race_type", RACE_DRAG))
-	if race_type == RACE_ROAD or race_type == RACE_STREET_DRAG:
+	if race_on_track(race_type):
 		selected_race_type = race_type
 	else:
 		selected_race_type = RACE_DRAG
+	mulholland_course = posmod(int(d.get("mulholland_course", randi())), MULHOLLAND_COURSES)
 	race_stake = maxi(int(d.get("race_stake", 0)), 0)
 	race_pink_slips = bool(d.get("race_pink_slips", false))
 	cars_just_gone = false
@@ -2462,13 +2477,35 @@ func race_length_m(race_type: String = "") -> float:
 		return ROAD_RACE_LENGTH_M
 	if kind == RACE_STREET_DRAG:
 		return STREET_DRAG_LENGTH_M
+	if kind == RACE_MULHOLLAND:
+		return MULHOLLAND_LENGTH_M
+	if kind == RACE_AQUEDUCT:
+		return AQUEDUCT_LENGTH_M
 	return QUARTER_MILE_M
 
 
 ## True for a race on a `.trk` course, false for the hardcoded quarter mile.
 func race_on_track(race_type: String = "") -> bool:
 	var kind := selected_race_type if race_type.is_empty() else race_type
-	return kind == RACE_ROAD or kind == RACE_STREET_DRAG
+	return kind == RACE_ROAD or race_from_sr2(kind)
+
+
+## True for Street Rod 2's cruise races, which start with no lights.
+func race_from_sr2(race_type: String = "") -> bool:
+	var kind := selected_race_type if race_type.is_empty() else race_type
+	return kind == RACE_STREET_DRAG or kind == RACE_MULHOLLAND or kind == RACE_AQUEDUCT
+
+
+## The course file for a race, or "" for the road course's default and the quarter mile.
+func race_track_path(race_type: String = "") -> String:
+	var kind := selected_race_type if race_type.is_empty() else race_type
+	if kind == RACE_STREET_DRAG:
+		return STREET_DRAG_TRACK
+	if kind == RACE_MULHOLLAND:
+		return MULHOLLAND_TRACK % mulholland_course
+	if kind == RACE_AQUEDUCT:
+		return AQUEDUCT_TRACK
+	return ""
 
 
 func race_fuel_liters(race_type: String = "") -> float:

@@ -14,3 +14,8 @@ Holding gas and brake with the car stopped is only for show so far: the rear whe
 - **Reward.** The crowd or the rival could react, or a good burnout could pay a little at the drive-in.
 - **A line lock part.** A part to buy that holds only the front brakes, which is what real drag cars use to do this.
 - **Look.** The patch of rubber under a stopped tire is a simple dark quad, and it could grow and blend better. Smoke could hang longer in still air and depend on the tires, with more from slicks.
+
+## Time of day
+
+Street Rod 2's three races run at night for now and the other two by day (`_set_night()` in `race.gd`). Time could become a factor in races later.
+

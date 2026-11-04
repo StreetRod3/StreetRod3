@@ -3,6 +3,8 @@ extends Node3D
 ## Builds a road course from a `.trk` graph and answers path queries.
 
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
+const _CourseScenery := preload("res://scripts/course_scenery.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
 
 @export_file("*.trk") var track_path: String = "res://assets/tracks/track1.trk"
 
@@ -42,6 +44,20 @@ const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const ROAD_COLOR := Color(0.18, 0.19, 0.2, 1)
 const TERRAIN_COLOR := Color(0.14, 0.16, 0.13, 1)
 const STREET_TERRAIN_COLOR := Color(0.16, 0.27, 0.11, 1)
+## Mulholland's road, black in Street Rod 2.
+const MOUNTAIN_ROAD_COLOR := Color(0.045, 0.045, 0.05, 1)
+const _GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
+## A rival holds to this over gravel: Street Rod 2's 59 mph.
+const GRAVEL_RIVAL_MPS := 59.0 * 0.44704
+## A car this close to the middle of a flat rock on the road has hit it.
+const ROAD_ROCK_REACH := 1.5
+## How far a rival stays from something on the road, from its own middle.
+const _RIVAL_CLEARANCE_M := 1.45
+const _RIVAL_EDGE_ROOM_M := 1.0
+## Things on the road this close together are gone around as one.
+const _BLOCK_GROUP_M := 12.0
+const _BRIDGE_LINE_UP_M := 30.0
+const _RIVAL_BRIDGE_ROOM_M := 1.3
 const SIGN_OBJ := "res://assets/signs/narrow.obj"
 const SIGN_TEX_BOTH := "res://assets/signs/narrow-both.png"
 const SIGN_TEX_LEFT := "res://assets/signs/narrow-left.png"
@@ -68,7 +84,20 @@ var _built: bool = false
 var _sign_mesh: ArrayMesh
 var _sign_textures: Dictionary = {}
 var _street: bool = false
+var _style: String = TrackFile.STYLE_CIRCUIT
 var _scenery: Array[Dictionary] = []
+## Each sample's hillside (up) or drop (down) on the driver's left and right, and whether the right
+## has a guard rail. Only Mulholland has these.
+var _left_sides: PackedFloat32Array = PackedFloat32Array()
+var _right_sides: PackedFloat32Array = PackedFloat32Array()
+var _rails: PackedByteArray = PackedByteArray()
+## The road's height with its rises and dips averaged out, which ground far from it follows.
+var _far_ys: PackedFloat32Array = PackedFloat32Array()
+## Where each node falls along the path.
+var _node_s: PackedFloat32Array = PackedFloat32Array()
+## What a rival steers around, from the start: {s, to, low, high}, sorted by s.
+var _blocks: Array[Dictionary] = []
+var _road_rocks: Array[Vector3] = []
 ## Squared distance from the last grass point to the road's middle, set by `_grass_height`.
 var _grass_dist_sq: float = 0.0
 
@@ -142,7 +171,195 @@ func surface_height(world: Vector3) -> float:
 		if d < best_d:
 			best_d = d
 			height = lerpf(a.y, b.y, t)
-	return height
+	return _side_ground_at(i, world, height)
+
+
+## The ground's height at `world`, at sample `i`, with `road_y` the road's beside it.
+func _side_ground_at(i: int, world: Vector3, road_y: float) -> float:
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		return road_y + _TrackSides.aqueduct_height(_lateral_at(i, world))
+	if _style != TrackFile.STYLE_MOUNTAIN:
+		return road_y
+	var lateral := _lateral_at(i, world)
+	return _TrackSides.mountain_ground(lateral, _half_ws[i], _left_sides[i] if lateral > 0.0 else _right_sides[i], road_y, _far_ys[i])
+
+
+func _lateral_at(i: int, world: Vector3) -> float:
+	return (world - _pts[i]).dot(Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i])))
+
+
+## How far a car at `world` leans across the road, by the height either side of it, in radians.
+func surface_roll(world: Vector3, yaw: float) -> float:
+	if _style != TrackFile.STYLE_AQUEDUCT and _style != TrackFile.STYLE_MOUNTAIN:
+		return 0.0
+	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
+	return atan2(surface_height(world + across) - surface_height(world - across), 1.6)
+
+
+## What the Aqueduct's banks do to a car at `world`: sideways, toward the floor, in m/s.
+func bank_push(world: Vector3) -> Vector3:
+	if _style != TrackFile.STYLE_AQUEDUCT or _pts.is_empty():
+		return Vector3.ZERO
+	var i := _nearest_index(world)
+	var across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+	return across * _TrackSides.aqueduct_push(_lateral_at(i, world))
+
+
+## True when a car at `world` has gone off an edge with nothing to stop it.
+func over_the_edge(world: Vector3) -> bool:
+	if _style != TrackFile.STYLE_MOUNTAIN or _pts.is_empty():
+		return false
+	var i := _nearest_index(world)
+	var lateral := _lateral_at(i, world)
+	var side := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+	if side > -_TrackSides.DROP_MIN:
+		return false
+	return absf(lateral) > _half_ws[i] + _TrackSides.MOUNTAIN_VERGE + _TrackSides.OVER_EDGE_PAST_VERGE
+
+
+## The lane a rival should hold at `s`, looking `look` meters ahead, given the one it wants: of the
+## gaps left by the next group of things on the road, the spot nearest that lane.
+func lane_around(s: float, lane: float, look: float) -> float:
+	var lows := PackedFloat32Array()
+	var highs := PackedFloat32Array()
+	var soft_lows := PackedFloat32Array()
+	var soft_highs := PackedFloat32Array()
+	var group_end := INF
+	var bridge: Dictionary = {}
+	for block: Dictionary in _blocks:
+		var from_s := float(block["s"])
+		if from_s > s + look or from_s > group_end:
+			break
+		if float(block["to"]) < s - 2.0:
+			continue
+		# Lining up for a bridge comes after whatever is in the way before it.
+		if block.has("bridge"):
+			bridge = block
+			continue
+		if is_inf(group_end):
+			group_end = float(block["to"]) + _BLOCK_GROUP_M
+		var low := float(block["low"]) - _RIVAL_CLEARANCE_M
+		var high := float(block["high"]) + _RIVAL_CLEARANCE_M
+		if block.has("soft"):
+			soft_lows.append(low)
+			soft_highs.append(high)
+		else:
+			lows.append(low)
+			highs.append(high)
+	var room := INF
+	var no_more := lows.is_empty() and soft_lows.is_empty()
+	if not bridge.is_empty() and (no_more or s >= float(bridge["s"])):
+		room = maxf(float(bridge["bridge"]) - _RIVAL_BRIDGE_ROOM_M, 0.0)
+	if no_more:
+		return clampf(lane, -room, room)
+	return clampf(_lane_through(lane, lows, highs, soft_lows, soft_highs), -room, room)
+
+
+## Around everything if it can, then through a sawhorse, then the best of what is left.
+func _lane_through(lane: float, lows: PackedFloat32Array, highs: PackedFloat32Array, soft_lows: PackedFloat32Array, soft_highs: PackedFloat32Array) -> float:
+	var all_lows := lows + soft_lows
+	var all_highs := highs + soft_highs
+	var spot := _clear_spot(lane, all_lows, all_highs)
+	if is_inf(spot):
+		spot = _clear_spot(lane, lows, highs)
+	if is_inf(spot):
+		spot = _middle_of_widest_gap(lows, highs, get_half_width() - _RIVAL_EDGE_ROOM_M)
+	return spot
+
+
+## Of the spots at the ends of the gaps, the one nearest `lane` that has room, or INF.
+func _clear_spot(lane: float, lows: PackedFloat32Array, highs: PackedFloat32Array) -> float:
+	var limit := get_half_width() - _RIVAL_EDGE_ROOM_M
+	var best := lane
+	var best_cost := INF
+	var spots := PackedFloat32Array([lane])
+	spots.append_array(lows)
+	spots.append_array(highs)
+	for spot: float in spots:
+		if absf(spot) > limit or _inside_any(spot, lows, highs):
+			continue
+		var cost := absf(spot - lane)
+		if cost < best_cost:
+			best_cost = cost
+			best = spot
+	return best if not is_inf(best_cost) else INF
+
+
+func _inside_any(spot: float, lows: PackedFloat32Array, highs: PackedFloat32Array) -> bool:
+	for k in lows.size():
+		if spot > lows[k] + 0.001 and spot < highs[k] - 0.001:
+			return true
+	return false
+
+
+## Things too close together to go between with room to spare: the best of what is left.
+func _middle_of_widest_gap(lows: PackedFloat32Array, highs: PackedFloat32Array, limit: float) -> float:
+	var order: Array[int] = []
+	for k in lows.size():
+		order.append(k)
+	order.sort_custom(func(a: int, b: int) -> bool: return lows[a] < lows[b])
+	var best := 0.0
+	var widest := -INF
+	var from_x := -limit - _RIVAL_CLEARANCE_M
+	for k: int in order:
+		var gap := lows[k] + _RIVAL_CLEARANCE_M - from_x
+		if gap > widest:
+			widest = gap
+			best = from_x + gap * 0.5
+		from_x = maxf(from_x, highs[k] - _RIVAL_CLEARANCE_M)
+	var last_gap := limit + _RIVAL_CLEARANCE_M - from_x
+	if last_gap > widest:
+		best = from_x + last_gap * 0.5
+	return clampf(best, -limit, limit)
+
+
+## A bridge is narrower than the road up to it, so a rival lines up for it well before.
+func _add_bridge_blocks() -> void:
+	var i := 0
+	while i < _pts.size():
+		if _road_types[i] != TrackFile.ROAD_BRIDGE:
+			i += 1
+			continue
+		var from_i := i
+		while i < _pts.size() and _road_types[i] == TrackFile.ROAD_BRIDGE:
+			i += 1
+		var half := _half_ws[from_i]
+		var from_s := _dists[from_i] - _BRIDGE_LINE_UP_M
+		var to_s := _dists[i - 1]
+		_blocks.append({"s": from_s, "to": to_s, "bridge": half})
+	_blocks.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["s"]) < float(b["s"]))
+
+
+## True on a road narrow enough, with walls beside it, that a rival has to hold its lane closely.
+func is_tight_road() -> bool:
+	return _style == TrackFile.STYLE_MOUNTAIN or _style == TrackFile.STYLE_AQUEDUCT
+
+
+## The most a rival should be going with gravel within `look` meters of `s`, or INF.
+func gravel_limit(s: float, look: float) -> float:
+	if _style != TrackFile.STYLE_MOUNTAIN:
+		return INF
+	var ahead := sample_at(s)
+	if str(ahead["road_type"]) == TrackFile.ROAD_GRAVEL:
+		return GRAVEL_RIVAL_MPS
+	var step := 10.0
+	var at := s + step
+	while at <= s + look:
+		if str(sample_at(at)["road_type"]) == TrackFile.ROAD_GRAVEL:
+			return GRAVEL_RIVAL_MPS
+		at += step
+	return INF
+
+
+## A road rock under a car at `world`: its place, removed from the list so it counts once, or
+## Vector3.INF with none there.
+func take_road_rock(world: Vector3) -> Vector3:
+	for k in _road_rocks.size():
+		var rock := _road_rocks[k]
+		if Vector2(world.x - rock.x, world.z - rock.z).length_squared() < ROAD_ROCK_REACH * ROAD_ROCK_REACH:
+			_road_rocks.remove_at(k)
+			return rock
+	return Vector3.INF
 
 
 ## Where a car at `world` must go when it sits in a barrier band just outside
@@ -179,9 +396,21 @@ func build_road_course() -> void:
 	_build_path()
 	if _pts.size() < 2:
 		return
-	_build_terrain()
-	_build_road_mesh()
-	if _street:
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		_TrackSides.build_aqueduct(self, _pts, _yaws, _STREET_RUN_IN_M)
+	elif _style == TrackFile.STYLE_MOUNTAIN:
+		_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _STREET_RUN_IN_M)
+		_build_road_mesh()
+	else:
+		_build_terrain()
+		_build_road_mesh()
+	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
+		_StreetScenery.build(self, _scenery, _half_ws[0] * 2.0)
+		var found: Dictionary = _CourseScenery.build(self, _scenery)
+		_blocks.assign(found["blocks"])
+		_road_rocks.assign(found["rocks"])
+		_add_bridge_blocks()
+	elif _street:
 		_StreetScenery.build(self, _scenery, get_half_width() * 2.0)
 	else:
 		_build_curbs()
@@ -192,8 +421,9 @@ func build_road_course() -> void:
 
 
 func _ready() -> void:
-	if GameState.selected_race_type == GameState.RACE_STREET_DRAG:
-		track_path = GameState.STREET_DRAG_TRACK
+	var course := GameState.race_track_path()
+	if not course.is_empty():
+		track_path = course
 	if GameState.race_on_track():
 		build_road_course()
 
@@ -225,6 +455,7 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 		"right_ext": extents.y,
 		"surface": surface,
 		"road_type": rtype,
+		"gravel": rtype == TrackFile.ROAD_GRAVEL,
 		"obstacle_left": TrackFile.obstacle_left(rtype),
 		"obstacle_right": TrackFile.obstacle_right(rtype),
 	}
@@ -249,7 +480,8 @@ func _build_path() -> void:
 		for error_text: String in data.errors:
 			push_error("[track] %s" % error_text)
 		return
-	_street = data.style == TrackFile.STYLE_STREET
+	_style = data.style
+	_street = _style != TrackFile.STYLE_CIRCUIT
 	_scenery.assign(data.scenery)
 	var path_ids: Array = data.path_ids
 	if path_ids.size() < 2:
@@ -299,7 +531,34 @@ func _build_path() -> void:
 	_smooth_path_heights(pts)
 	_race_length = _length
 	_append_runoff()
+	_fill_sides(data, path_ids)
 	_build_bins()
+
+
+## Each sample's side heights, running straight from node to node. Past the last node they hold.
+func _fill_sides(data: Dictionary, path_ids: Array) -> void:
+	_left_sides.resize(_pts.size())
+	_right_sides.resize(_pts.size())
+	_rails.resize(_pts.size())
+	_left_sides.fill(0.0)
+	_right_sides.fill(0.0)
+	_rails.fill(0)
+	if _style != TrackFile.STYLE_MOUNTAIN:
+		return
+	_far_ys = _TrackSides.slow_heights(_pts)
+	var k := 0
+	for i in _pts.size():
+		var s := _dists[i]
+		while k < _node_s.size() - 2 and s >= _node_s[k + 1]:
+			k += 1
+		var k1 := mini(k + 1, _node_s.size() - 1)
+		var a: Dictionary = data.nodes[int(path_ids[k])]
+		var b: Dictionary = data.nodes[int(path_ids[k1])]
+		var span := _node_s[k1] - _node_s[k]
+		var t := clampf((s - _node_s[k]) / span, 0.0, 1.0) if span > 0.0001 else 0.0
+		_left_sides[i] = lerpf(float(a["left"]), float(b["left"]), t)
+		_right_sides[i] = lerpf(float(a["right"]), float(b["right"]), t)
+		_rails[i] = 1 if bool(a["rail"]) else 0
 
 
 ## Replace the straight ramps between nodes with a smooth curve that still passes through each height.
@@ -323,6 +582,7 @@ func _smooth_path_heights(nodes: Array[Vector3]) -> void:
 	for i in range(1, knot_s.size()):
 		if knot_s[i] <= knot_s[i - 1]:
 			knot_s[i] = knot_s[i - 1] + 0.5
+	_node_s = knot_s
 	var slopes := _height_slopes(knot_s, knot_y)
 	var k := 0
 	for i in _pts.size():
@@ -687,14 +947,41 @@ func _build_road_mesh() -> void:
 		_add_tri(st, l0, rr1, l1, Vector2(0, v), Vector2(1, v1), Vector2(0, v1))
 	st.generate_normals()
 	var mesh := st.commit()
-	var mat := _make_mat(ROAD_COLOR, 0.85)
+	var mat := _make_mat(MOUNTAIN_ROAD_COLOR if _style == TrackFile.STYLE_MOUNTAIN else ROAD_COLOR, 0.85)
 	mesh.surface_set_material(0, mat)
 	_road_mi = MeshInstance3D.new()
 	_road_mi.name = "RoadMesh"
 	_road_mi.mesh = mesh
 	add_child(_road_mi)
-	if _street:
+	if _style == TrackFile.STYLE_STREET:
 		_build_street_shoulders()
+	elif _style == TrackFile.STYLE_MOUNTAIN:
+		_build_gravel()
+
+
+## Street Rod 2's road work: the pavement gone for a stretch, a gray patch the width of the road.
+func _build_gravel() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var lift := Vector3.UP * 0.02
+	for i in range(_pts.size() - 1):
+		if _road_types[i] != TrackFile.ROAD_GRAVEL and _road_types[i + 1] != TrackFile.ROAD_GRAVEL:
+			continue
+		var r0 := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i])) * _half_ws[i]
+		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1])) * _half_ws[i + 1]
+		var a := _pts[i] + lift
+		var b := _pts[i + 1] + lift
+		_add_tri(st, a - r0, a + r0, b + r1, Vector2.ZERO, Vector2.RIGHT, Vector2.ONE)
+		_add_tri(st, a - r0, b + r1, b - r1, Vector2.ZERO, Vector2.ONE, Vector2.UP)
+	st.generate_normals()
+	var mesh := st.commit()
+	if mesh == null or mesh.get_surface_count() == 0:
+		return
+	mesh.surface_set_material(0, _make_mat(_GRAVEL_COLOR, 0.98))
+	var mi := MeshInstance3D.new()
+	mi.name = "Gravel"
+	mi.mesh = mesh
+	add_child(mi)
 
 
 ## A gravel strip down each side of the road, over the run-in too.
