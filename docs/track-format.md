@@ -137,7 +137,7 @@ The cruise from one place to another drives from the origin's `x`/`y` onto its `
 Optional boxes for the city view. They do not affect the road graph or the cruise route.
 
 ```json
-{ "x": 20, "y": 16, "w": 12, "d": 9, "h": 7, "color": [0.45, 0.42, 0.38] }
+{ "x": 20, "y": 16, "w": 12, "d": 9, "h": 7, "color": [0.45, 0.42, 0.38], "sign": "MARKET" }
 ```
 
 | Field | Required | Default | Description |
@@ -147,6 +147,7 @@ Optional boxes for the city view. They do not affect the road graph or the cruis
 | `d` | no | `8` | Depth along world Z, in meters. |
 | `h` | no | `6` | Height in meters. |
 | `color` | no | a neutral gray | `[r, g, b]` from 0 to 1. |
+| `sign` | no | none | Shop name on the street sign, such as `MARKET`. Leave it out for a block of homes. |
 
 ## Example
 
