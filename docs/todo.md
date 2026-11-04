@@ -14,3 +14,12 @@ Holding gas and brake with the car stopped is only for show so far: the rear whe
 - **Reward.** The crowd or the rival could react, or a good burnout could pay a little at the drive-in.
 - **A line lock part.** A part to buy that holds only the front brakes, which is what real drag cars use to do this.
 - **Look.** The patch of rubber under a stopped tire is a simple dark quad, and it could grow and blend better. Smoke could hang longer in still air and depend on the tires, with more from slicks.
+
+## Put back Mulholland's left-out boulders
+
+The bake takes a boulder off the road where it would leave less than 3.2 m between it, a sawhorse, and fallen rocks (`keep_road_open()` in `tools/make_sr2_courses.py`). That is 1 or 2 a course, nearly always line 943, and each is recorded in its track's `left_out` list. Sawhorses are the reason: Street Rod 2 drives through them, and here they stop a car. To put the boulders back, a sawhorse could be knocked aside instead of stopping the car, or be made shorter at those spots. Sawhorses should not end up as the only solid thing on the road.
+
+## Time of day
+
+Street Rod 2's three races run at night for now and the other two by day (`_set_night()` in `race.gd`). Time could become a factor in races later.
+

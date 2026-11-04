@@ -1551,5 +1551,8 @@
     {"kind": "dash", "x": 513.55, "y": 2825.51},
     {"kind": "dash", "x": 512.74, "y": 2830.44},
     {"kind": "dash", "x": 511.93, "y": 2835.38}
+  ],
+  "left_out": [
+    {"kind": "road_boulder", "x": 551.92, "y": 2629.36, "sr2_line": 943, "lateral": -1.5, "gap": 2.15, "beside": ["barricade", "rockfall_left"]}
   ]
 }

@@ -152,7 +152,7 @@ func _setup_race_layout() -> void:
 	_ground.visible = false
 	_ground.collision_layer = 0
 	_ground.collision_mask = 0
-	if GameState.selected_race_type == GameState.RACE_MULHOLLAND or GameState.selected_race_type == GameState.RACE_AQUEDUCT:
+	if GameState.race_from_sr2():
 		_set_night()
 	if _track.has_method(&"finish_basis"):
 		_finish.global_transform = _track.finish_basis()
@@ -163,7 +163,7 @@ func _setup_race_layout() -> void:
 		col.shape = box
 
 
-## Street Rod 2 runs these two under a black sky, with everything on the ground bright and flat.
+## Street Rod 2 runs its cruise races under a black sky, with everything on the ground bright and flat.
 func _set_night() -> void:
 	var sky_mat := ProceduralSkyMaterial.new()
 	sky_mat.sky_top_color = Color(0.004, 0.005, 0.015)
