@@ -1473,8 +1473,6 @@ func _open_hood_peek() -> void:
 		return
 	var opp: Dictionary = GameState.opponents[_chosen_index]
 	var engine_id := str(opp.get("engine", ""))
-	if engine_id.is_empty():
-		return
 	GameState.drive_in_rival_index = _chosen_index
 	GameState.drive_in_hood_seen = true
 	GameState.hood_peek = {

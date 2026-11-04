@@ -212,3 +212,5 @@ In the simulation, one side of the car on the grass no longer pulls it off the r
 Every air cleaner now has its own wing nut. With dual quads or a tri-power there is one cleaner per carburetor, but only the front one had a nut on it, and the single nut took them all off. Now each has a nut, named front, middle, or rear when you point at it, and all of them have to come out before the cleaners lift off. Older saves load with the added nuts tight. The tray on the fender is longer to hold them, and a look under a rival's hood at the drive-in shows the right count whatever your own car runs.
 
 The look under a rival's hood no longer marks every part as tight, since a car that runs has nothing loose, and it reads nothing at all from your car now.
+
+If a rival's car ever turns up with an engine the game does not know, which would be a bug, the hood no longer guesses at it. Every part gets a random label like Mystery, Experimental, or Top secret, the power reads ??? hp, and the air cleaner lid says ??? V8.
