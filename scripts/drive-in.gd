@@ -77,7 +77,10 @@ var _opp_buttons: Array[Button] = []
 var _race_root: Control
 var _race_hint: Label
 var _drag_btn: Button
+var _street_drag_btn: Button
 var _road_btn: Button
+## The race the drag bets are on: the quarter mile or the street drag.
+var _stake_race_type: String = GameState.RACE_DRAG
 var _race_back: Button
 var _stake_root: Control
 var _stake_hint: Label
@@ -773,6 +776,9 @@ func _build_race_popup() -> void:
 	_drag_btn = _menu_button("Drag race")
 	_drag_btn.pressed.connect(_on_race_type_chosen.bind(GameState.RACE_DRAG))
 	box.add_child(_drag_btn)
+	_street_drag_btn = _menu_button("Street drag")
+	_street_drag_btn.pressed.connect(_on_race_type_chosen.bind(GameState.RACE_STREET_DRAG))
+	box.add_child(_street_drag_btn)
 	_road_btn = _menu_button("Road race")
 	_road_btn.pressed.connect(_on_race_type_chosen.bind(GameState.RACE_ROAD))
 	box.add_child(_road_btn)
@@ -1372,6 +1378,7 @@ func _refresh_race_popup() -> void:
 	if GameState.tires_worn_out():
 		_race_hint.text += "\nYour tires are worn out and will blow."
 	_drag_btn.text = "Drag race\nQuarter mile · %s" % GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_DRAG))
+	_street_drag_btn.text = "Street drag\n%s, rises and dips · %s" % [GameState.long_distance_text(GameState.STREET_DRAG_LENGTH_M / 1000.0), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_STREET_DRAG))]
 	_road_btn.text = "Road race\n%s with turns · %s" % [GameState.long_distance_text(2.4), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_ROAD))]
 
 
@@ -1379,14 +1386,16 @@ func _on_race_type_chosen(race_type: String) -> void:
 	if not GameState.has_fuel_for_race(race_type):
 		_show_fuel_monitor(race_type)
 		return
-	if race_type == GameState.RACE_DRAG:
-		_show_stake_menu()
+	if race_type == GameState.RACE_ROAD:
+		_show_road_stake_menu()
 		return
-	_show_road_stake_menu()
+	_stake_race_type = race_type
+	_show_stake_menu()
 
 
 func _show_stake_menu() -> void:
-	_stake_hint.text = "Side bet on the quarter mile.\nBankroll: $%d" % GameState.money
+	var race_name := "street drag" if _stake_race_type == GameState.RACE_STREET_DRAG else "quarter mile"
+	_stake_hint.text = "Side bet on the %s.\nBankroll: $%d" % [race_name, GameState.money]
 	_stake_low.disabled = GameState.money < GameState.DRAG_STAKE_LOW
 	_stake_high.disabled = GameState.money < GameState.DRAG_STAKE_HIGH
 	_race_root.visible = false
@@ -1397,7 +1406,7 @@ func _show_stake_menu() -> void:
 func _on_stake_chosen(amount: int) -> void:
 	if amount > GameState.money:
 		return
-	_start_race(GameState.RACE_DRAG, amount)
+	_start_race(_stake_race_type, amount)
 
 
 func _on_stake_back() -> void:
@@ -1695,7 +1704,7 @@ func _sync_nav() -> void:
 		_nav.setup([_road_stake_low, _road_stake_high, _road_stake_pink, _road_stake_back])
 		return
 	if _race_root.visible:
-		_nav.setup([_drag_btn, _road_btn, _race_back])
+		_nav.setup([_drag_btn, _street_drag_btn, _road_btn, _race_back])
 		return
 	if _opp_root.visible:
 		var items: Array = []
