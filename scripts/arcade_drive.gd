@@ -8,8 +8,6 @@ const ACCELERATION := 24.0
 const BRAKING := 14.0
 ## Speed kept per 1/60 s, lifted off the throttle. Engine braking and drag, no more.
 const COAST_FACTOR := 0.998
-## Speed kept per 1/60 s while a shift interrupts the throttle.
-const SHIFT_COAST_FACTOR := 0.985
 const REF_GEAR_RATIO := 2.80
 const WHEELBASE_M := 2.59
 const MAX_STEER_RAD := 0.52
@@ -142,9 +140,7 @@ func step(
 		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * delta
 	elif brake:
 		forward_speed -= BRAKING * delta
-	elif throttle:
-		forward_speed *= pow(SHIFT_COAST_FACTOR, delta * 60.0)
-	else:
+	elif not throttle:
 		forward_speed *= pow(COAST_FACTOR, delta * 60.0)
 	if blown:
 		forward_speed *= pow(0.96, delta * 60.0)
