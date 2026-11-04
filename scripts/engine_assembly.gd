@@ -247,7 +247,8 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.SLOT_DISTRIBUTOR:
 			out.append(Transform3D(Basis.IDENTITY, CLAMP_BOLT))
 		GameState.SLOT_AIR_CLEANER:
-			out.append(Transform3D(Basis.IDENTITY, carb_pad(GameState.SLOT_CARB) + Vector3(0.0, 0.0, _cleaner_top())))
+			for slot in _view_carb_slots():
+				out.append(Transform3D(Basis.IDENTITY, carb_pad(slot) + Vector3(0.0, 0.0, _cleaner_top())))
 		_:
 			if GameState.CARB_SLOTS.has(key):
 				# Two nuts on opposite corners of the base, front one first.

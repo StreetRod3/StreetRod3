@@ -152,7 +152,7 @@ const STOCK_SLOT_PARTS := {
 ## Key in `engine_bolts` for the engine's own mounts. The other keys are hood slots.
 const HOOD_ENGINE := "engine"
 ## Bolts holding each part under the hood. They turn like the bellhousing bolts, out
-## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each (`hood_bolt_count()`).
+## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each and the air cleaner one per carburetor (`hood_bolt_count()`).
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
 	SLOT_CAM: 2,
@@ -464,11 +464,13 @@ func engine_head_count(engine: Dictionary = {}) -> int:
 	return clampi(int(e.get("heads", 2)), 1, 2)
 
 
-## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, and
-## `HOOD_BOLT_COUNTS` for the rest.
+## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, a wing nut on
+## each carburetor's air cleaner, and `HOOD_BOLT_COUNTS` for the rest.
 func hood_bolt_count(key: String) -> int:
 	if key == SLOT_HEADS:
 		return HEAD_BOLTS * engine_head_count()
+	if key == SLOT_AIR_CLEANER:
+		return maxi(carb_slots().size(), 1)
 	return int(HOOD_BOLT_COUNTS.get(key, 0))
 
 

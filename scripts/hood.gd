@@ -71,7 +71,6 @@ const BOLT_NAMES := {
 	"carb_2": ["Front carburetor nut", "Rear carburetor nut"],
 	"carb_3": ["Front carburetor nut", "Rear carburetor nut"],
 	"distributor": ["Distributor hold-down bolt"],
-	"air_cleaner": ["Air cleaner wing nut"],
 }
 
 const _CREAM := Color(0.95, 0.9, 0.78, 1)
@@ -342,7 +341,8 @@ func _tray_xform(key: String, index: int) -> Transform3D:
 	for k in TOP_DOWN:
 		if k == key:
 			break
-		slot += GameState.hood_bolt_count(k)
+		# Room for every carburetor's wing nut, so how many are fitted moves no other bolt.
+		slot += GameState.CARB_SLOTS.size() if k == GameState.SLOT_AIR_CLEANER else GameState.hood_bolt_count(k)
 	slot += index
 	var basis := Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.RIGHT, PI * 0.5)
 	return Transform3D(basis.scaled(Vector3.ONE * _EngineAssembly.ENGINE_SCALE), TRAY + Vector3(TRAY_STEP * float(slot), 0.012, 0.0))
@@ -607,7 +607,7 @@ func _target_text(target: Array) -> String:
 			return "Plug wires — pull them off"
 		return "%s — %s" % [PART_NAMES[key], _part_name(key)]
 	var turns: int = GameState.hood_bolts(key)[index]
-	var label := str(BOLT_NAMES[key][index])
+	var label := _wing_nut_name(index) if key == GameState.SLOT_AIR_CLEANER else str(BOLT_NAMES[key][index])
 	if key == GameState.SLOT_HEADS and GameState.engine_head_count() == 1:
 		label = ["Head, front bolt", "Head, rear bolt"][index % 2]
 	if turns == 0:
@@ -615,6 +615,14 @@ func _target_text(target: Array) -> String:
 	if _loosening[key][index] or turns >= GameState.GEARBOX_BOLT_TIGHT:
 		return "%s — loosen" % label
 	return "%s — tighten" % label
+
+
+## One air cleaner's wing nut, front to back along the carburetors.
+func _wing_nut_name(index: int) -> String:
+	var nuts := GameState.hood_bolt_count(GameState.SLOT_AIR_CLEANER)
+	if nuts == 1:
+		return "Air cleaner wing nut"
+	return "%s air cleaner wing nut" % ("Front" if index == 0 else ("Rear" if index == nuts - 1 else "Middle"))
 
 
 func _part_name(key: String) -> String:
@@ -754,7 +762,7 @@ func _bolt_turns(key: String) -> Array[int]:
 	if not _peek:
 		return GameState.hood_bolts(key)
 	var turns: Array[int] = []
-	for _i in GameState.hood_bolt_count(key):
+	for _i in _engine.bolt_spots(key).size():
 		turns.append(GameState.GEARBOX_BOLT_TIGHT)
 	return turns
 
@@ -1112,7 +1120,7 @@ func _build_bay() -> void:
 	lining.position = Vector3(-0.78, -0.02, 0.0)
 	hood.add_child(lining)
 	# Parts tray on the left fender for the bolts that are out.
-	_box(Vector3(TRAY_STEP * 9.5, 0.012, 0.09), TRAY + Vector3(TRAY_STEP * 4.0, 0.0, 0.0), tray)
+	_box(Vector3(TRAY_STEP * 11.5, 0.012, 0.09), TRAY + Vector3(TRAY_STEP * 5.0, 0.0, 0.0), tray)
 
 
 func _body_color() -> Color:

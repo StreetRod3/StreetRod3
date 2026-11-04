@@ -208,3 +208,5 @@ Driving off the road on Mulholland no longer sinks the car into the grass. Away 
 
 In the simulation, one side of the car on the grass no longer pulls it off the road. Each wheel used to feel its own drag from the grass, so the side off the road slowed harder and turned the car toward the grass, 12 degrees and about 6 m in 4 seconds with no steering. Each axle now shares that drag, so the grass still slows the car but pulls it straight back. Grip is still per wheel, and a car fully on the grass slows as it did.
 
+
+Every air cleaner now has its own wing nut. With dual quads or a tri-power there is one cleaner per carburetor, but only the front one had a nut on it, and the single nut took them all off. Now each has a nut, named front, middle, or rear when you point at it, and all of them have to come out before the cleaners lift off. Older saves load with the added nuts tight. The tray on the fender is longer to hold them, and a look under a rival's hood at the drive-in shows the right count whatever your own car runs.
