@@ -952,6 +952,15 @@ func _is_reset_zoom_shortcut(event: InputEvent) -> bool:
 	return key.ctrl_pressed and not key.meta_pressed
 
 
+## `yaw_delta` positive turns the view the way a leftward drag does. `zoom_delta` positive moves out.
+func nudge_view(yaw_delta: float, zoom_delta: float) -> void:
+	if _departing:
+		return
+	_yaw += yaw_delta
+	_cam_distance_target = clampf(_cam_distance_target + zoom_delta, CAM_DISTANCE_MIN, CAM_DISTANCE_MAX)
+	_update_camera_transform()
+
+
 func _update_camera_transform() -> void:
 	_camera_pivot.rotation = Vector3.ZERO
 	_camera_pivot.rotate_y(_yaw)

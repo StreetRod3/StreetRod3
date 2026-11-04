@@ -108,7 +108,7 @@ static func _empty_result() -> Dictionary:
 		"path_ids": [],
 		"pois": {}, # poi id -> poi dict
 		"poi_order": [],
-		"buildings": [], # scenery boxes: x, y, w, d, h
+		"buildings": [], # scenery boxes: x, y, w, d, h, sign
 		"style": STYLE_CIRCUIT,
 		"scenery": [], # what stands beside a street track: kind, x, y
 		"errors": [],
@@ -478,7 +478,20 @@ static func _parse_buildings(root: Dictionary, result: Dictionary) -> void:
 			var rgb: Array = building["color"]
 			if rgb.size() >= 3:
 				parsed["color"] = Color(float(rgb[0]), float(rgb[1]), float(rgb[2]))
+		var sign := _building_sign(building, index, result)
+		if not sign.is_empty():
+			parsed["sign"] = sign
 		result.buildings.append(parsed)
+
+
+static func _building_sign(building: Dictionary, index: int, result: Dictionary) -> String:
+	if not building.has("sign"):
+		return ""
+	var raw: Variant = building["sign"]
+	if typeof(raw) != TYPE_STRING:
+		result.warnings.append("Building %d `sign` must be a string." % index)
+		return ""
+	return str(raw).strip_edges()
 
 
 static func _parse_scenery(root: Dictionary, result: Dictionary) -> void:

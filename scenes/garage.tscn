@@ -4,6 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://bqj8k2m4n5p6r" path="res://scenes/car_vehicle_visual.tscn" id="2"]
 [ext_resource type="Texture2D" uid="uid://b243jaowc1hjq" path="res://assets/icon.png" id="3"]
 [ext_resource type="PackedScene" uid="uid://ck08a73hu26r1" path="res://assets/locations/garage/us_jerry_can.glb" id="4"]
+[ext_resource type="Script" path="res://scripts/garage_view_controls.gd" id="5"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.2, 0.25, 0.35, 1)
@@ -1272,6 +1273,11 @@ theme_override_colors/font_color = Color(0.95, 0.9, 0.78, 1)
 theme_override_font_sizes/font_size = 22
 text = "Bankroll: $0"
 vertical_alignment = 1
+
+[node name="ViewControls" type="Control" parent="GarageUI"]
+layout_mode = 3
+mouse_filter = 2
+script = ExtResource("5")
 
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/SaveBtn" to="." method="_on_clock_save_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/LoadBtn" to="." method="_on_clock_load_pressed"]

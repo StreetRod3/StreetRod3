@@ -43,6 +43,31 @@ const _CURB_FROM_EDGE := 0.28
 const _CURB_HALF := 0.12
 const _GROUND_COLOR := Color(0.2, 0.28, 0.18, 1)
 const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
+const _LAMP_POLE := Color(0.3, 0.31, 0.33)
+const _LAMP_GLOW := Color(1.0, 0.86, 0.5)
+const _BUSH_DARK := Color(0.14, 0.32, 0.13)
+const _BUSH_MID := Color(0.24, 0.42, 0.17)
+## Past the curb, in meters. The lamp head reaches back over the gutter.
+const _LAMP_SETBACK := 0.95
+const _LAMP_REACH := 1.2
+const _LAMP_EVERY := 18.0
+const _BUSH_EVERY := 6.4
+const _FRAME_COLOR := Color(0.15, 0.14, 0.13)
+const _STOOP_COLOR := Color(0.58, 0.56, 0.52)
+const _DOOR_COLORS: Array[Color] = [
+	Color(0.34, 0.16, 0.12),
+	Color(0.15, 0.28, 0.42),
+	Color(0.2, 0.28, 0.22),
+	Color(0.42, 0.26, 0.14),
+	Color(0.3, 0.14, 0.18),
+]
+const _SIGN_COLORS: Array[Color] = [
+	Color(0.1, 0.24, 0.48),
+	Color(0.55, 0.08, 0.1),
+	Color(0.12, 0.34, 0.22),
+	Color(0.45, 0.2, 0.08),
+	Color(0.24, 0.14, 0.36),
+]
 ## Each place is built with its front on local z = 0. Local -Z faces the street.
 const _SHOP_WALL := Color(0.62, 0.58, 0.52)
 const _SHOP_DOOR := Color(0.4, 0.43, 0.48)
@@ -249,6 +274,7 @@ func _build_city(track: Dictionary) -> void:
 	add_child(lanes)
 	_build_places(track)
 	_build_blocks(track)
+	_build_streetscape(track)
 	_floor = ground
 
 
@@ -366,6 +392,182 @@ func _add_street(segments: Array[Dictionary], links: Dictionary, a_id: int, b_id
 	})
 	_note_link(links, a_id, dir, half)
 	_note_link(links, b_id, -dir, half)
+
+
+## Poles just outside the curb, and shrubs on the grass behind them.
+func _build_streetscape(track: Dictionary) -> void:
+	var blocks: Array = track.get("buildings", [])
+	var keep_out: Array[Vector3] = []
+	for pid: String in track["poi_order"]:
+		keep_out.append(TrackFile.world_position(track["pois"][pid]))
+	var poles: Array[Transform3D] = []
+	var bases: Array[Transform3D] = []
+	var arms: Array[Transform3D] = []
+	var housings: Array[Transform3D] = []
+	var lenses: Array[Transform3D] = []
+	var glows: Array[Vector3] = []
+	var dark_bush: Array[Transform3D] = []
+	var mid_bush: Array[Transform3D] = []
+	var lamp_cells := {}
+	var bush_cells := {}
+	for segment in _streets:
+		if int(segment["a_node"]) < 0:
+			continue
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		var half := float(segment["half"])
+		var span := Vector3(b.x - a.x, 0.0, b.z - a.z)
+		var length := span.length()
+		if length < 14.0:
+			continue
+		var dir := span / length
+		var side := dir.cross(Vector3.UP)
+		if side.length_squared() < 0.001:
+			continue
+		side = side.normalized()
+		var margin := half + 2.0
+		var usable := length - margin * 2.0
+		if usable < 4.0:
+			continue
+		var lamp_count := maxi(int(floor(usable / _LAMP_EVERY)) + 1, 1)
+		var lamp_step := usable / float(lamp_count)
+		for i in lamp_count:
+			var center := a + dir * (margin + lamp_step * (float(i) + 0.5))
+			for sign: float in [-1.0, 1.0]:
+				var outward := side * sign
+				var pos := center + outward * (half + _LAMP_SETBACK)
+				pos.y = 0.0
+				if not _claim_cell(lamp_cells, pos, 5.0):
+					continue
+				if _lot_blocked(Vector2(pos.x, pos.z), 0.5, blocks, keep_out):
+					continue
+				var toward := -outward
+				var stand := _basis_along(toward)
+				poles.append(Transform3D(Basis.IDENTITY, pos + Vector3(0.0, 2.35, 0.0)))
+				bases.append(Transform3D(Basis.IDENTITY, pos + Vector3(0.0, 0.04, 0.0)))
+				arms.append(Transform3D(stand, pos + Vector3(0.0, 4.62, 0.0) + toward * 0.52))
+				var head := pos + Vector3(0.0, 4.5, 0.0) + toward * _LAMP_REACH
+				housings.append(Transform3D(stand, head))
+				lenses.append(Transform3D(stand, head + Vector3(0.0, -0.07, 0.0)))
+				glows.append(head + Vector3(0.0, -0.15, 0.0))
+		var bush_count := maxi(int(floor(usable / _BUSH_EVERY)) + 1, 1)
+		var bush_step := usable / float(bush_count)
+		for i in bush_count:
+			var center := a + dir * (margin + bush_step * (float(i) + 0.5))
+			for sign_i in 2:
+				var sign := -1.0 if sign_i == 0 else 1.0
+				var outward := side * sign
+				for ring_i in 2:
+					if ring_i == 1 and (i + sign_i) % 2 == 1:
+						continue
+					var setback := 2.25 if ring_i == 0 else 4.15
+					var n := _facade_hash(int(center.x * 3.0) + sign_i, int(center.z * 3.0), ring_i, i)
+					var pos := center + outward * (half + setback) + dir * (float(n % 5) - 2.0) * 0.22
+					pos.y = 0.0
+					if not _claim_cell(bush_cells, pos, 2.2):
+						continue
+					var radius := 0.58 + float(n % 4) * 0.1
+					if _lot_blocked(Vector2(pos.x, pos.z), radius + 0.2, blocks, keep_out):
+						continue
+					var pile: Array[Transform3D] = dark_bush if n % 2 == 0 else mid_bush
+					pile.append(_bush_transform(pos, radius, 0.0))
+					pile.append(_bush_transform(pos + outward * 0.22 + dir * 0.28, radius * 0.72, 0.05))
+					pile.append(_bush_transform(pos - dir * 0.16, radius * 0.55, radius * 0.35))
+	var root := Node3D.new()
+	root.name = "Streetscape"
+	add_child(root)
+	var pole_mesh := CylinderMesh.new()
+	pole_mesh.top_radius = 0.065
+	pole_mesh.bottom_radius = 0.08
+	pole_mesh.height = 4.7
+	pole_mesh.radial_segments = 8
+	_add_multimesh(root, pole_mesh, _facade_material(_LAMP_POLE, 0.42, 0.55), poles, false)
+	var base_mesh := BoxMesh.new()
+	base_mesh.size = Vector3(0.36, 0.08, 0.36)
+	_add_multimesh(root, base_mesh, _facade_material(Color(0.22, 0.22, 0.24), 0.55, 0.35), bases, false)
+	var arm_mesh := BoxMesh.new()
+	arm_mesh.size = Vector3(_LAMP_REACH, 0.055, 0.055)
+	_add_multimesh(root, arm_mesh, _facade_material(_LAMP_POLE, 0.4, 0.5), arms, false)
+	var housing_mesh := BoxMesh.new()
+	housing_mesh.size = Vector3(0.4, 0.08, 0.22)
+	_add_multimesh(root, housing_mesh, _facade_material(Color(0.16, 0.16, 0.18), 0.45, 0.4), housings, false)
+	var lens_mesh := BoxMesh.new()
+	lens_mesh.size = Vector3(0.26, 0.035, 0.14)
+	var lens_mat := _facade_material(_LAMP_GLOW, 0.28, 0.0)
+	lens_mat.emission_enabled = true
+	lens_mat.emission = _LAMP_GLOW
+	lens_mat.emission_energy_multiplier = 1.6
+	_add_multimesh(root, lens_mesh, lens_mat, lenses, false)
+	for glow: Vector3 in glows:
+		var light := OmniLight3D.new()
+		light.position = glow
+		light.light_color = _LAMP_GLOW
+		light.light_energy = 0.28
+		light.omni_range = 8.0
+		light.omni_attenuation = 1.6
+		light.shadow_enabled = false
+		light.distance_fade_enabled = true
+		light.distance_fade_begin = 26.0
+		light.distance_fade_length = 16.0
+		root.add_child(light)
+	var shrub := SphereMesh.new()
+	shrub.radius = 1.0
+	shrub.height = 2.0
+	shrub.radial_segments = 8
+	shrub.rings = 5
+	_add_multimesh(root, shrub, _facade_material(_BUSH_DARK, 0.92, 0.0), dark_bush, false)
+	_add_multimesh(root, shrub, _facade_material(_BUSH_MID, 0.9, 0.0), mid_bush, false)
+
+
+func _basis_along(dir: Vector3) -> Basis:
+	var x := Vector3(dir.x, 0.0, dir.z)
+	if x.length_squared() < 0.001:
+		return Basis.IDENTITY
+	x = x.normalized()
+	var z := x.cross(Vector3.UP).normalized()
+	return Basis(x, Vector3.UP, z)
+
+
+func _bush_transform(pos: Vector3, radius: float, lift: float) -> Transform3D:
+	var basis := Basis.IDENTITY.scaled(Vector3(radius, radius * 0.78, radius))
+	return Transform3D(basis, pos + Vector3(0.0, radius * 0.5 + lift, 0.0))
+
+
+func _claim_cell(taken: Dictionary, pos: Vector3, cell: float) -> bool:
+	var key := "%d:%d" % [int(round(pos.x / cell)), int(round(pos.z / cell))]
+	if taken.has(key):
+		return false
+	taken[key] = true
+	return true
+
+
+func _lot_blocked(point: Vector2, pad: float, blocks: Array, keep_out: Array[Vector3]) -> bool:
+	for spot: Vector3 in keep_out:
+		if Vector2(spot.x, spot.z).distance_to(point) < 12.0:
+			return true
+	for raw: Dictionary in blocks:
+		var hx := float(raw["w"]) * 0.5 + pad
+		var hz := float(raw["d"]) * 0.5 + pad
+		if absf(point.x - float(raw["x"])) < hx and absf(point.y - float(raw["y"])) < hz:
+			return true
+	return false
+
+
+func _add_multimesh(parent: Node3D, mesh: Mesh, mat: Material, xforms: Array[Transform3D], shadow: bool) -> void:
+	if xforms.is_empty():
+		return
+	var multi := MultiMesh.new()
+	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.mesh = mesh
+	multi.instance_count = xforms.size()
+	for i in xforms.size():
+		multi.set_instance_transform(i, xforms[i])
+	var node := MultiMeshInstance3D.new()
+	node.multimesh = multi
+	node.material_override = mat
+	if not shadow:
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(node)
 
 
 func _note_link(links: Dictionary, node_id: int, dir: Vector3, half: float) -> void:
@@ -674,7 +876,7 @@ func _brick_material() -> StandardMaterial3D:
 	return mat
 
 
-func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough: float = 0.82, metal: float = 0.0, emission: Color = Color.BLACK, energy: float = 0.0, rot: Vector3 = Vector3.ZERO) -> void:
+func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough: float = 0.82, metal: float = 0.0, emission: Color = Color.BLACK, energy: float = 0.0, rot: Vector3 = Vector3.ZERO, shadow: bool = true) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = albedo
 	mat.roughness = rough
@@ -683,10 +885,10 @@ func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough:
 		mat.emission_enabled = true
 		mat.emission = emission
 		mat.emission_energy_multiplier = energy
-	_add_box_mat(parent, size, pos, mat, rot)
+	_add_box_mat(parent, size, pos, mat, rot, shadow)
 
 
-func _add_box_mat(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, rot: Vector3 = Vector3.ZERO) -> void:
+func _add_box_mat(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, rot: Vector3 = Vector3.ZERO, shadow: bool = true) -> void:
 	var mi := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
@@ -694,7 +896,7 @@ func _add_box_mat(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, ro
 	mi.material_override = mat
 	mi.position = pos
 	mi.rotation = rot
-	if size.y < 0.1:
+	if not shadow or size.y < 0.1:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
 
@@ -764,25 +966,324 @@ func _add_light(parent: Node3D, pos: Vector3, color: Color, energy: float, range
 
 
 func _build_blocks(track: Dictionary) -> void:
-	var blocks: Array = track.get("buildings", [])
-	for raw: Dictionary in blocks:
+	var glass := _glass_material(false)
+	var lit := _glass_material(true)
+	var frame := _facade_material(_FRAME_COLOR, 0.55, 0.2)
+	var doors: Array[Material] = []
+	for color in _DOOR_COLORS:
+		doors.append(_facade_material(color, 0.5, 0.04))
+	var signs: Array[Material] = []
+	for color in _SIGN_COLORS:
+		signs.append(_facade_material(color, 0.45, 0.0))
+	var index := 0
+	for raw: Dictionary in track.get("buildings", []):
 		var block: Dictionary = raw
-		var wide := float(block["w"])
-		var deep := float(block["d"])
-		var tall := float(block["h"])
-		var mesh := BoxMesh.new()
-		mesh.size = Vector3(wide, tall, deep)
-		var mat := StandardMaterial3D.new()
-		mat.roughness = 0.9
-		if block.has("color"):
-			mat.albedo_color = block["color"]
-		else:
-			mat.albedo_color = _BLOCK_COLOR
-		mesh.material = mat
-		var building := MeshInstance3D.new()
-		building.mesh = mesh
-		building.position = Vector3(float(block["x"]), tall * 0.5, float(block["y"]))
-		add_child(building)
+		_build_city_building(block, index, glass, lit, frame, doors, signs)
+		index += 1
+
+
+## A scenery box dressed as a building. One entrance on the nearest street, two on some lots.
+func _build_city_building(block: Dictionary, index: int, glass: Material, lit: Material, frame: Material, doors: Array[Material], signs: Array[Material]) -> void:
+	var wide := float(block["w"])
+	var deep := float(block["d"])
+	var tall := float(block["h"])
+	var wall := _BLOCK_COLOR
+	if block.has("color"):
+		wall = block["color"]
+	var sign := ""
+	if block.has("sign"):
+		sign = str(block["sign"])
+	var root := Node3D.new()
+	root.position = Vector3(float(block["x"]), 0.0, float(block["y"]))
+	add_child(root)
+	_add_box(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), wall, 0.9)
+	_add_box(root, Vector3(wide + 0.08, 0.72, deep + 0.08), Vector3(0.0, 0.36, 0.0), wall.darkened(0.24), 0.92)
+	var board := wall.darkened(0.16)
+	for side_x in 2:
+		for side_z in 2:
+			var sx := -1.0 if side_x == 0 else 1.0
+			var sz := -1.0 if side_z == 0 else 1.0
+			_add_facade_box(root, Vector3(0.22, tall, 0.22), Vector3(sx * wide * 0.5, tall * 0.5, sz * deep * 0.5), board, 0.88)
+	_add_city_roof(root, wide, deep, tall, wall, index, glass, frame)
+	var entrances := _entrance_faces(Vector2(root.position.x, root.position.z), wide * 0.5, deep * 0.5, index)
+	for face in 4:
+		_dress_facade(root, wide, deep, tall, face, entrances.has(face), index, sign, wall, glass, lit, frame, doors, signs)
+
+
+func _add_city_roof(root: Node3D, wide: float, deep: float, tall: float, wall: Color, index: int, glass: Material, frame: Material) -> void:
+	var parapet := wall.darkened(0.22)
+	var cap := wall.darkened(0.45)
+	_add_box(root, Vector3(wide + 0.5, 0.16, deep + 0.5), Vector3(0.0, tall + 0.04, 0.0), cap, 0.93)
+	var lip_y := tall + 0.34
+	_add_box(root, Vector3(wide + 0.1, 0.48, 0.14), Vector3(0.0, lip_y, deep * 0.5 - 0.05), parapet, 0.9)
+	_add_box(root, Vector3(wide + 0.1, 0.48, 0.14), Vector3(0.0, lip_y, -deep * 0.5 + 0.05), parapet, 0.9)
+	_add_box(root, Vector3(0.14, 0.48, deep - 0.1), Vector3(wide * 0.5 - 0.05, lip_y, 0.0), parapet, 0.9)
+	_add_box(root, Vector3(0.14, 0.48, deep - 0.1), Vector3(-wide * 0.5 + 0.05, lip_y, 0.0), parapet, 0.9)
+	if tall >= 10.0 and index % 2 == 0:
+		var hut := wall.darkened(0.08)
+		var hx := wide * 0.14
+		var hz := deep * 0.06
+		_add_box(root, Vector3(2.5, 1.65, 2.2), Vector3(hx, tall + 0.96, hz), hut, 0.88)
+		_add_box_mat(root, Vector3(0.9, 0.72, 0.05), Vector3(hx, tall + 1.08, hz + 1.14), frame, Vector3.ZERO, false)
+		_add_box_mat(root, Vector3(0.68, 0.5, 0.03), Vector3(hx, tall + 1.08, hz + 1.18), glass, Vector3.ZERO, false)
+		_add_box_mat(root, Vector3(0.05, 0.72, 0.9), Vector3(hx + 1.29, tall + 1.08, hz), frame, Vector3.ZERO, false)
+		_add_box_mat(root, Vector3(0.03, 0.5, 0.68), Vector3(hx + 1.33, tall + 1.08, hz), glass, Vector3.ZERO, false)
+	if tall >= 12.0 and index % 3 == 0:
+		var tank := Color(0.62, 0.64, 0.66)
+		_add_cylinder(root, 0.48, 1.05, Vector3(-wide * 0.22, tall + 0.7, -deep * 0.12), tank, 0.32)
+		_add_facade_box(root, Vector3(1.1, 0.07, 1.1), Vector3(-wide * 0.22, tall + 1.26, -deep * 0.12), tank.darkened(0.12), 0.4, 0.35)
+	if index % 5 == 2 and (tall < 12.0 or index % 3 != 0):
+		var metal := Color(0.32, 0.32, 0.34)
+		var ax := -wide * 0.28
+		var az := -deep * 0.18
+		_add_facade_box(root, Vector3(0.05, 1.7, 0.05), Vector3(ax, tall + 0.95, az), metal, 0.35, 0.7)
+		_add_facade_box(root, Vector3(1.25, 0.035, 0.035), Vector3(ax, tall + 1.65, az), metal, 0.35, 0.7)
+		_add_facade_box(root, Vector3(0.85, 0.035, 0.035), Vector3(ax, tall + 1.4, az), metal, 0.35, 0.7)
+
+
+## `face` is 0 +X, 1 -X, 2 +Z, 3 -Z. `entrance` is a side with the door, and the shop front when this building has a sign.
+func _dress_facade(root: Node3D, wide: float, deep: float, tall: float, face: int, entrance: bool, index: int, sign: String, wall: Color, glass: Material, lit: Material, frame: Material, doors: Array[Material], signs: Array[Material]) -> void:
+	var span := deep if face < 2 else wide
+	var cols := 3 if span < 9.2 else 5
+	var rows := _floor_count(tall)
+	var margin := clampf(span * 0.11, 0.5, 1.05)
+	var step := (span - margin * 2.0) / float(cols)
+	var win_w := minf(step * 0.58, 1.45)
+	var shop := entrance and not sign.is_empty()
+	var awning := shop and index % 3 != 2
+	for row in rows:
+		var ground := row == 0
+		var win_h := 1.5 if ground and shop else (1.12 if ground else 1.18)
+		var y := 1.68 if ground and shop else (1.72 if ground else _upper_window_y(tall, rows, row))
+		if y + win_h * 0.5 > tall - 0.4:
+			win_h = (tall - 0.4 - y) * 2.0
+		if win_h < 0.45:
+			continue
+		if not ground:
+			var band := wall.lightened(0.1)
+			_add_facade_box(root, _face_size(face, span + 0.04, 0.1, 0.06), _face_pos(wide, deep, face, 0.0, y - win_h * 0.5 - 0.16, 0.03), band, 0.8)
+		for col in cols:
+			var along := -span * 0.5 + margin + step * (float(col) + 0.5)
+			var door_gap := 0.72 if shop else 0.52
+			if entrance and ground and absf(along) < win_w * 0.5 + door_gap:
+				continue
+			var warm := _facade_hash(index, face, row, col) % 4 == 0
+			_add_window(root, wide, deep, face, along, y, win_w, win_h, frame, lit if warm else glass)
+			var shade_roll := 7 if shop else 3
+			if _facade_hash(index, face, row, col) % shade_roll == 0:
+				var shade := Color(0.72, 0.62, 0.46)
+				_add_facade_box(root, _face_size(face, win_w - 0.1, win_h * 0.36, 0.02), _face_pos(wide, deep, face, along, y + win_h * 0.2, 0.12), shade, 0.7)
+	if rows == 1 and tall >= 4.9:
+		var high_y := tall - 0.95
+		var high_h := 0.5
+		if high_y - high_h * 0.5 > 3.55:
+			for col in cols:
+				var along := -span * 0.5 + margin + step * (float(col) + 0.5)
+				var warm := _facade_hash(index, face, 9, col) % 4 == 0
+				_add_window(root, wide, deep, face, along, high_y, win_w * 0.85, high_h, frame, lit if warm else glass)
+	if entrance:
+		_add_street_door(root, wide, deep, face, tall, index, sign, awning, glass, frame, doors, signs)
+
+
+func _add_window(root: Node3D, wide: float, deep: float, face: int, along: float, y: float, win_w: float, win_h: float, frame: Material, glass: Material) -> void:
+	_add_box_mat(root, _face_size(face, win_w + 0.14, win_h + 0.14, 0.05), _face_pos(wide, deep, face, along, y, 0.03), frame, Vector3.ZERO, false)
+	_add_box_mat(root, _face_size(face, win_w, win_h, 0.03), _face_pos(wide, deep, face, along, y, 0.075), glass, Vector3.ZERO, false)
+	_add_box_mat(root, _face_size(face, 0.05, win_h, 0.03), _face_pos(wide, deep, face, along, y, 0.1), frame, Vector3.ZERO, false)
+	_add_box_mat(root, _face_size(face, win_w, 0.045, 0.03), _face_pos(wide, deep, face, along, y, 0.1), frame, Vector3.ZERO, false)
+
+
+func _add_street_door(root: Node3D, wide: float, deep: float, face: int, tall: float, index: int, sign: String, awning: bool, glass: Material, frame: Material, doors: Array[Material], signs: Array[Material]) -> void:
+	var home := sign.is_empty()
+	var door_w := 0.92 if home else 1.12
+	var door_h := 2.05 if home else 2.15
+	var y := 0.1 + door_h * 0.5
+	var leaf: Material = doors[index % doors.size()]
+	var door_color: Color = _DOOR_COLORS[index % _DOOR_COLORS.size()]
+	_add_box_mat(root, _face_size(face, door_w + 0.16, door_h + 0.1, 0.07), _face_pos(wide, deep, face, 0.0, y + 0.02, 0.03), frame, Vector3.ZERO, false)
+	_add_box_mat(root, _face_size(face, door_w, door_h, 0.06), _face_pos(wide, deep, face, 0.0, y, 0.06), leaf, Vector3.ZERO, false)
+	if home:
+		_add_facade_box(root, _face_size(face, door_w - 0.22, 0.62, 0.025), _face_pos(wide, deep, face, 0.0, 1.55, 0.095), door_color.lightened(0.1), 0.48)
+		_add_facade_box(root, _face_size(face, door_w - 0.22, 0.62, 0.025), _face_pos(wide, deep, face, 0.0, 0.72, 0.095), door_color.lightened(0.1), 0.48)
+	else:
+		_add_box_mat(root, _face_size(face, door_w - 0.26, 0.52, 0.025), _face_pos(wide, deep, face, 0.0, 1.68, 0.095), glass, Vector3.ZERO, false)
+		_add_facade_box(root, _face_size(face, door_w - 0.26, 0.7, 0.025), _face_pos(wide, deep, face, 0.0, 0.72, 0.095), door_color.lightened(0.12), 0.48)
+	var handle := 0.32 if home else 0.36
+	if index % 2 == 1:
+		handle = -handle
+	_add_facade_box(root, _face_size(face, 0.05, 0.16, 0.04), _face_pos(wide, deep, face, handle, 1.05, 0.11), Color(0.78, 0.66, 0.32), 0.28, 0.85)
+	var stoop_w := door_w + 0.35 if home else door_w + 0.55
+	_add_facade_box(root, _face_size(face, stoop_w, 0.1, 0.7 if home else 0.85), _face_pos(wide, deep, face, 0.0, 0.05, 0.4 if home else 0.48), _STOOP_COLOR, 0.92)
+	if home:
+		return
+	if not awning and tall >= 4.8:
+		_add_box_mat(root, _face_size(face, door_w, 0.28, 0.03), _face_pos(wide, deep, face, 0.0, 2.52, 0.07), glass, Vector3.ZERO, false)
+	var lamp := Color(1.0, 0.86, 0.55)
+	for side: float in [-1.0, 1.0]:
+		_add_box(root, _face_size(face, 0.1, 0.16, 0.07), _face_pos(wide, deep, face, side * 0.82, 2.02, 0.1), lamp, 0.3, 0.0, lamp, 0.7, Vector3.ZERO, false)
+	if awning:
+		_add_awning(root, wide, deep, face, deep if face < 2 else wide, 2.92, _SIGN_COLORS[index % _SIGN_COLORS.size()])
+	if tall < 4.6:
+		return
+	var sign_y := 3.35
+	if sign_y + 0.3 > tall - 0.35:
+		return
+	var board: Material = signs[index % signs.size()]
+	var board_color: Color = _SIGN_COLORS[index % _SIGN_COLORS.size()]
+	_add_box_mat(root, _face_size(face, 2.35, 0.5, 0.07), _face_pos(wide, deep, face, 0.0, sign_y, 0.1), board, Vector3.ZERO, false)
+	_add_facade_label(root, sign, _face_pos(wide, deep, face, 0.0, sign_y, 0.18), face, 52, 0.011, Color(0.98, 0.94, 0.86), board_color.darkened(0.45))
+
+
+func _add_awning(root: Node3D, wide: float, deep: float, face: int, span: float, y: float, color: Color) -> void:
+	var stripes := 7
+	var cloth := span - 0.9
+	var width := cloth / float(stripes)
+	var cream := Color(0.92, 0.88, 0.8)
+	var start := -cloth * 0.5 + width * 0.5
+	for i in stripes:
+		var shade: Color = color if i % 2 == 0 else cream
+		var along := start + width * float(i)
+		_add_facade_box(root, _face_size(face, width + 0.02, 0.05, 0.9), _face_pos(wide, deep, face, along, y, 0.52), shade, 0.62)
+	_add_facade_box(root, _face_size(face, cloth, 0.1, 0.05), _face_pos(wide, deep, face, 0.0, y - 0.1, 0.94), color.darkened(0.18), 0.55)
+
+
+func _floor_count(tall: float) -> int:
+	if tall < 5.6:
+		return 1
+	if tall < 8.6:
+		return 2
+	if tall < 11.6:
+		return 3
+	if tall < 14.6:
+		return 4
+	return 5
+
+
+func _upper_window_y(tall: float, rows: int, row: int) -> float:
+	var count := rows - 1
+	var y0 := 3.45
+	var y1 := tall - 0.8
+	if count <= 1:
+		return (y0 + y1) * 0.5
+	var t := (float(row - 1) + 0.5) / float(count)
+	return lerpf(y0, y1, t)
+
+
+## The nearest street face, plus the next street face on every fourth building.
+func _entrance_faces(center: Vector2, half_w: float, half_d: float, index: int) -> Array[int]:
+	var points: Array[Vector2] = [
+		Vector2(center.x + half_w, center.y),
+		Vector2(center.x - half_w, center.y),
+		Vector2(center.x, center.y + half_d),
+		Vector2(center.x, center.y - half_d),
+	]
+	var best := 0
+	var second := -1
+	var best_gap := 1000.0
+	var second_gap := 1000.0
+	for i in 4:
+		var gap := _nearest_curb(points[i])
+		if gap < best_gap:
+			second = best
+			second_gap = best_gap
+			best = i
+			best_gap = gap
+		elif gap < second_gap:
+			second = i
+			second_gap = gap
+	var faces: Array[int] = [best]
+	if second >= 0 and second_gap < 10.0 and index % 4 == 1:
+		faces.append(second)
+	return faces
+
+
+func _nearest_curb(point: Vector2) -> float:
+	var best := 80.0
+	for segment in _streets:
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		var gap := _gap_to_segment(point, Vector2(a.x, a.z), Vector2(b.x, b.z)) - float(segment["half"])
+		if gap < best:
+			best = gap
+	return best
+
+
+func _face_pos(wide: float, deep: float, face: int, along: float, up: float, out: float) -> Vector3:
+	match face:
+		0:
+			return Vector3(wide * 0.5 + out, up, along)
+		1:
+			return Vector3(-wide * 0.5 - out, up, along)
+		2:
+			return Vector3(along, up, deep * 0.5 + out)
+		_:
+			return Vector3(along, up, -deep * 0.5 - out)
+
+
+func _face_size(face: int, along: float, up: float, thick: float) -> Vector3:
+	if face < 2:
+		return Vector3(thick, up, along)
+	return Vector3(along, up, thick)
+
+
+func _facade_hash(index: int, face: int, row: int, col: int) -> int:
+	var n := index * 73856093 ^ face * 19349663 ^ row * 83492791 ^ col * 15485863
+	n = n ^ (n >> 13)
+	return absi(n)
+
+
+func _glass_material(lit: bool) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.metallic = 0.06
+	if lit:
+		mat.albedo_color = Color(1.0, 0.84, 0.5)
+		mat.roughness = 0.38
+		mat.emission_enabled = true
+		mat.emission = Color(1.0, 0.68, 0.28)
+		mat.emission_energy_multiplier = 0.38
+	else:
+		mat.albedo_color = Color(0.58, 0.74, 0.86)
+		mat.roughness = 0.14
+		mat.emission_enabled = true
+		mat.emission = Color(0.5, 0.68, 0.82)
+		mat.emission_energy_multiplier = 0.05
+	return mat
+
+
+func _facade_material(color: Color, rough: float, metal: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = rough
+	mat.metallic = metal
+	return mat
+
+
+func _add_facade_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough: float, metal: float = 0.0) -> void:
+	_add_box(parent, size, pos, albedo, rough, metal, Color.BLACK, 0.0, Vector3.ZERO, false)
+
+
+func _add_facade_label(parent: Node3D, text: String, pos: Vector3, face: int, font_size: int, pixel: float, color: Color, outline: Color) -> void:
+	var label := Label3D.new()
+	label.text = text
+	label.font_size = font_size
+	label.pixel_size = pixel
+	label.modulate = color
+	label.outline_modulate = outline
+	label.outline_size = 4
+	label.shaded = false
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.alpha_cut = Label3D.ALPHA_CUT_DISCARD
+	label.position = pos
+	match face:
+		0:
+			label.rotation.y = PI * 0.5
+		1:
+			label.rotation.y = -PI * 0.5
+		2:
+			label.rotation.y = 0.0
+		_:
+			label.rotation.y = PI
+	parent.add_child(label)
 
 
 func _build_car() -> void:
