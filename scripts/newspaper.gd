@@ -36,6 +36,7 @@ var _section: String = SECTION_INDEX
 var _nav := _MenuNav.new()
 var _preview_car_id: String = ""
 var _preview_part_id: String = ""
+var _preview_copy: int = -1
 var _preview_pivot: Node3D
 var _preview_subject: Node3D
 var _no_room: Control
@@ -178,7 +179,7 @@ func _make_part_card(part: Dictionary, index: int) -> Control:
 	if owned > 0:
 		box.add_child(_body("You have %d%s" % [owned, " · on this car" if equipped else ""]))
 	box.add_child(_buy_button("part", part_id, index))
-	_watch_part(box, part_id, "part")
+	_watch_part(box, part_id, "part", index)
 	return box
 
 
@@ -195,7 +196,7 @@ func _make_gearbox_card(box: Dictionary, index: int) -> Control:
 	card.add_child(_body(_with_wear("%d gears · %s · top speed %d%%" % [gear_count, kind, top_pct], "transmission", gearbox_id, index)))
 	card.add_child(_body("Ratios  %s" % GameState.gearbox_ratio_text(box)))
 	card.add_child(_buy_button("transmission", gearbox_id, index))
-	_watch_part(card, gearbox_id, "transmission")
+	_watch_part(card, gearbox_id, "transmission", index)
 	return card
 
 
@@ -235,6 +236,7 @@ func _show_car_preview(car_id: String) -> void:
 		return
 	_preview_car_id = car_id
 	_preview_part_id = ""
+	_preview_copy = -1
 	if _preview_subject != null:
 		_preview_subject.visible = false
 	_tint_preview_cards()
@@ -276,10 +278,11 @@ func _show_car_preview(car_id: String) -> void:
 	_preview_caption.text = car_name
 
 
-func _show_part_preview(part_id: String, kind: String) -> void:
-	if part_id == _preview_part_id and _preview_overlay.visible and _preview_frame.visible:
+func _show_part_preview(part_id: String, kind: String, index: int) -> void:
+	if part_id == _preview_part_id and index == _preview_copy and _preview_overlay.visible and _preview_frame.visible:
 		return
 	_preview_part_id = part_id
+	_preview_copy = index
 	_preview_car_id = ""
 	if _preview_pivot != null:
 		_preview_pivot.visible = false
@@ -294,6 +297,7 @@ func _show_part_preview(part_id: String, kind: String) -> void:
 		_preview_caption.text = "%s — no photograph with this ad." % part_name
 		return
 	_set_preview_subject(subject)
+	_PartPreview.apply_wear(subject, GameState.newspaper_wear_percent(kind, part_id, index))
 	_preview_mount.rotation = Vector3.ZERO
 	_frame_subject_camera()
 	_preview_frame.visible = true
@@ -396,13 +400,23 @@ func _close_car_preview() -> void:
 	_preview_overlay.visible = false
 	_preview_car_id = ""
 	_preview_part_id = ""
+	_preview_copy = -1
 	_tint_preview_cards()
 	_wire_menu()
 
 
 func _tint_preview_cards() -> void:
 	_tint_list(_cars_list, &"car_id", _preview_car_id)
-	_tint_list(_parts_list, &"part_id", _preview_part_id)
+	for child: Node in _parts_list.get_children():
+		if not child is Control:
+			continue
+		var card := child as Control
+		var id := str(card.get_meta(&"part_id", ""))
+		var copy := int(card.get_meta(&"copy_index", -1))
+		if id == _preview_part_id and copy == _preview_copy and not _preview_part_id.is_empty():
+			card.modulate = Color(0.96, 0.84, 0.58, 1)
+		else:
+			card.modulate = Color.WHITE
 
 
 func _tint_list(list: Node, meta_name: StringName, selected: String) -> void:
@@ -458,14 +472,14 @@ func _body(text: String) -> Label:
 func _make_engine_card(engine: Dictionary, index: int) -> Control:
 	var engine_id := str(engine.get("id", ""))
 	var card := _make_copy_card(engine, _with_wear("%.0f hp" % float(engine.get("hp", 0.0)), "engine", engine_id, index), "engine", index)
-	_watch_part(card, engine_id, "engine")
+	_watch_part(card, engine_id, "engine", index)
 	return card
 
 
 func _make_wheel_card(wheel: Dictionary, index: int) -> Control:
 	var wheel_id := str(wheel.get("id", ""))
 	var card := _make_copy_card(wheel, _with_wear(GameState.wheel_detail(wheel) + ", no tires", "wheels", wheel_id, index), "wheels", index)
-	_watch_part(card, wheel_id, "wheels")
+	_watch_part(card, wheel_id, "wheels", index)
 	return card
 
 
@@ -476,20 +490,21 @@ func _with_wear(detail: String, kind: String, part_id: String, index: int) -> St
 	return "%s   %s" % [detail, wear]
 
 
-func _watch_part(card: Control, part_id: String, kind: String) -> void:
+func _watch_part(card: Control, part_id: String, kind: String, index: int) -> void:
 	card.set_meta(&"part_id", part_id)
+	card.set_meta(&"copy_index", index)
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.gui_input.connect(_on_part_card_input.bind(part_id, kind))
-	if part_id == _preview_part_id:
+	card.gui_input.connect(_on_part_card_input.bind(part_id, kind, index))
+	if part_id == _preview_part_id and index == _preview_copy:
 		card.modulate = Color(0.96, 0.84, 0.58, 1)
 
 
-func _on_part_card_input(event: InputEvent, part_id: String, kind: String) -> void:
+func _on_part_card_input(event: InputEvent, part_id: String, kind: String, index: int) -> void:
 	if not event is InputEventMouseButton:
 		return
 	var mouse := event as InputEventMouseButton
 	if mouse.pressed and mouse.button_index == MOUSE_BUTTON_LEFT:
-		_show_part_preview(part_id, kind)
+		_show_part_preview(part_id, kind, index)
 
 
 func _make_copy_card(part: Dictionary, detail: String, kind: String, index: int) -> Control:
@@ -566,6 +581,7 @@ func _show_section(section: String) -> void:
 			_preview_pivot.visible = false
 	if section != SECTION_PARTS:
 		_preview_part_id = ""
+		_preview_copy = -1
 		if _preview_subject != null:
 			_preview_subject.visible = false
 	if _preview_car_id.is_empty() and _preview_part_id.is_empty():
