@@ -155,7 +155,7 @@ func _view_wires() -> bool:
 
 
 func _view_head_count() -> int:
-	return GameState.engine_head_count(_view_engine())
+	return GameState.heads_on(_view_engine())
 
 
 func _view_carb_slots() -> Array[String]:
@@ -574,7 +574,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		_cyl_z(rig, 0.02, 0.02, h + 0.02, at, steel, 8)
 	if pads.size() == 1:
 		var label := Label3D.new()
-		label.text = "%d V8" % GameState.engine_cid(_view_engine())
+		label.text = "%d V8" % GameState.cid_of(_view_engine())
 		label.font_size = 64
 		label.pixel_size = 0.004
 		label.modulate = Color(0.85, 0.12, 0.08) if not chrome else Color(0.15, 0.15, 0.15)

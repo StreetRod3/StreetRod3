@@ -460,8 +460,12 @@ func engine_trouble() -> String:
 
 ## How many cylinder heads the fitted engine has: two on a V engine, one on an inline.
 func engine_head_count(engine: Dictionary = {}) -> int:
-	var e := get_equipped_engine() if engine.is_empty() else engine
-	return clampi(int(e.get("heads", 2)), 1, 2)
+	return heads_on(get_equipped_engine() if engine.is_empty() else engine)
+
+
+## Heads on this engine and no other: an empty one does not mean the active car's.
+static func heads_on(engine: Dictionary) -> int:
+	return clampi(int(engine.get("heads", 2)), 1, 2)
 
 
 ## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, a wing nut on
@@ -686,10 +690,14 @@ func timing_degrees(step: int = -1) -> int:
 
 ## Displacement in cubic inches, from the register or the engine's name.
 func engine_cid(engine: Dictionary = {}) -> int:
-	var e := get_equipped_engine() if engine.is_empty() else engine
-	var cid := int(e.get("cid", 0))
+	return cid_of(get_equipped_engine() if engine.is_empty() else engine)
+
+
+## Displacement of this engine and no other: an empty one does not mean the active car's.
+static func cid_of(engine: Dictionary) -> int:
+	var cid := int(engine.get("cid", 0))
 	if cid <= 0:
-		cid = str(e.get("name", "")).to_int()
+		cid = str(engine.get("name", "")).to_int()
 	return cid if cid > 0 else 283
 
 

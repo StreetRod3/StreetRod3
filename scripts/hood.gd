@@ -342,7 +342,7 @@ func _tray_xform(key: String, index: int) -> Transform3D:
 		if k == key:
 			break
 		# Room for every carburetor's wing nut, so how many are fitted moves no other bolt.
-		slot += GameState.CARB_SLOTS.size() if k == GameState.SLOT_AIR_CLEANER else GameState.hood_bolt_count(k)
+		slot += GameState.CARB_SLOTS.size() if k == GameState.SLOT_AIR_CLEANER else _engine.bolt_spots(k).size()
 	slot += index
 	var basis := Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.RIGHT, PI * 0.5)
 	return Transform3D(basis.scaled(Vector3.ONE * _EngineAssembly.ENGINE_SCALE), TRAY + Vector3(TRAY_STEP * float(slot), 0.012, 0.0))
@@ -879,12 +879,12 @@ func _refresh_ui() -> void:
 func _refresh_peek_ui() -> void:
 	var has_engine := not _peek_engine.is_empty()
 	_engine_label.text = "%s · %.0f hp" % [str(_peek_engine.get("name", "Engine")), _peek_hp] if has_engine else "No engine"
-	var lines: Array[String] = ["Engine: %s (tight)" % str(_peek_engine.get("name", "Engine")) if has_engine else "Engine: none"]
+	var lines: Array[String] = ["Engine: %s" % str(_peek_engine.get("name", "Engine")) if has_engine else "Engine: none"]
 	for key in GameState.HOOD_SLOTS:
 		var part: Variant = _peek_slots.get(key, {})
 		if not part is Dictionary or (part as Dictionary).is_empty():
 			continue
-		lines.append("%s: %s (tight)" % [PART_NAMES[key], str((part as Dictionary).get("name", "none"))])
+		lines.append("%s: %s" % [PART_NAMES[key], str((part as Dictionary).get("name", "none"))])
 	if has_engine:
 		lines.append("Plug wires: on")
 	_parts_label.text = "\n".join(lines)
