@@ -202,3 +202,5 @@ The street drag now runs at night too, like Mulholland and the Aqueduct, as all 
 
 Sawhorses on Mulholland can be driven through now. Smashing one costs some damage and a little speed, more the faster the car is going, and its broken bar, legs, and splinters fly and stay on the road. A rival goes around one if it can. Since sawhorses no longer close the road, the boulders that came off to keep it passable are back, 6 on every course.
 
+Tire smoke no longer leaves two black discs behind the wheels when it stops. They showed most after a short slide, such as across grass or Mulholland's gravel. The smoke's material ignored each particle's size, so particles not in use were drawn full size and black at the emitter. Honoring the size also means puffs now grow as they rise, and are smaller on grass and gravel, as they were always meant to be.
+

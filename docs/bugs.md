@@ -99,8 +99,3 @@ This needs a decision between these:
 - Raise `_DRIVE_ACCEL` and `_DRIVE_BRAKE`. This does not get far, because there is so little straight road: on the garage to drive-in route, raising acceleration, braking, and corner grip together from 3.6, 5.5, and 7 m/s to 7, 8.5, and 9.5 per second only took it from 24.6 s to 20.0 s.
 - Widen the corners with `_TURN_RADIUS`. Its 14 m is set to stay inside the width of the street, so this also needs wider streets on the map.
 - Keep it as it is.
-
-## Tire smoke turns black as a car comes off grass or gravel
-
-When a sliding car's smoke stops on grass, two soft black half-discs show at the back wheels for a moment, then vanish. Mulholland's gravel handles like grass, so it shows there too. It happens on main in daylight, leaving the grass beside the street drag in the arcade drive. Night and the road surface's look are not the cause: smoke on asphalt stays gray. Hiding the `TireSmoke` particles in `skid_marks.gd` removes the discs. Seen through the `opengl3` driver under xvfb, and not yet checked on a real graphics card.
-
