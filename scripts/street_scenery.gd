@@ -10,7 +10,6 @@ const _INSULATOR := Color(0.78, 0.78, 0.76, 1)
 const _STRIPE := Color(0.92, 0.92, 0.88, 1)
 ## Street Rod 2 fills its finish line with color 15, which its race palette shows as yellow.
 const _FINISH := Color(0.95, 0.85, 0.15, 1)
-const _STREAK := Color(0.3, 0.3, 0.29, 1)
 const _DARK_STREAK := Color(0.03, 0.03, 0.03, 1)
 const _SIGN_BLUE := Color(0.03, 0.05, 0.55, 1)
 const _SIGN_WHITE := Color(0.95, 0.95, 0.95, 1)
@@ -21,8 +20,6 @@ const _PAINT_THICK := 0.03
 const _PAINT_PIECE := 2.5
 const _DASH_WIDTH := 0.22
 const _DASH_LENGTH := 5.0
-const _STREAK_WIDTH := 0.3
-const _STREAK_LENGTH := 4.0
 const _DARK_STREAK_WIDTH := 0.5
 const _DARK_STREAK_LENGTH := 2.0
 const _FINISH_LENGTH := 5.0
@@ -49,7 +46,6 @@ static func build(track: Node3D, items: Array[Dictionary], road_width: float) ->
 	_build_poles(track, root, _spots_of(spots, "pole"))
 	_build_paint(track, root, "Dashes", _spots_of(spots, "dash"), _DASH_WIDTH, _DASH_LENGTH, 0.0, _STRIPE)
 	_build_paint(track, root, "Finish", _spots_of(spots, "finish"), road_width, _FINISH_LENGTH, 0.0, _FINISH)
-	_build_paint(track, root, "Streaks", _spots_of(spots, "streak"), _STREAK_WIDTH, _STREAK_LENGTH, _STREAK_WIDTH * 0.5, _STREAK)
 	_build_paint(track, root, "DarkStreaks", _spots_of(spots, "dark_streak"), _DARK_STREAK_WIDTH, _DARK_STREAK_LENGTH, _DARK_STREAK_WIDTH * 0.5, _DARK_STREAK)
 	for spot: Vector2 in _spots_of(spots, "gantry"):
 		_build_gantry(track, root, spot, road_width)

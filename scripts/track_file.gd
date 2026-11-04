@@ -27,7 +27,7 @@ const DEFAULT_WIDTH := 8.0
 
 const STYLE_CIRCUIT := "circuit"
 const STYLE_STREET := "street"
-const SCENERY_KINDS := ["tree", "big_tree", "bare_tree", "pole", "gantry", "dash", "finish", "streak", "dark_streak"]
+const SCENERY_KINDS := ["tree", "big_tree", "bare_tree", "pole", "gantry", "dash", "finish", "dark_streak"]
 
 const _NODE_TYPES := [NODE_START, NODE_FINISH, NODE_REGULAR]
 const _ROAD_TYPES := [

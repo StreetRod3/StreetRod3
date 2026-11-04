@@ -34,7 +34,7 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `roads` | yes | — | Directed edges between street nodes. |
 | `pois` | no | none | Points of interest. Each one is its own node, attached to a street node. |
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
-| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, and pavement that runs back behind the start. |
+| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. |
 | `scenery` | no | none | What stands beside a `street` track. See [Scenery](#scenery). |
 
 Unknown root fields are ignored. A race course can leave `pois` out.
@@ -170,15 +170,16 @@ A `street` track lists what stands beside it. Each entry has no collision. Heigh
 | `gantry` | An overhead highway sign across the road. |
 | `dash` | A 5 m road mark starting at `y`. |
 | `finish` | The yellow finish line, 5 m long, starting at `y`. |
-| `streak`, `dark_streak` | Gray and black marks on the shoulder, starting at `y`. |
+| `dark_streak` | A black mark on the shoulder, starting at `y`. |
 
 ## Street drag
 
-`street_drag.trk` is baked from Street Rod 2's cruise drag race (race kind 1, lines 200 to 380 of its road), using the SR2 port's own road builder from the EXE's starting seed. Its fixed parts are the same in every Street Rod 2 game: the straight road, the two rises and dips, the road marks, the shoulder marks, the telephone poles, and the finish. Its trees, its black marks, and the sign's position are random in Street Rod 2, rolled once per game. This file holds one such roll, and it is the same in every game here.
+`street_drag.trk` is baked from Street Rod 2's cruise drag race (race kind 1, lines 200 to 380 of its road), using the SR2 port's own road builder from the EXE's starting seed. Its fixed parts are the same in every Street Rod 2 game: the straight road, the two rises and dips, the road marks, the shoulder, the telephone poles, and the finish. Its trees, its black marks, and the sign's position are random in Street Rod 2, rolled once per game. This file holds one such roll, and it is the same in every game here.
 
 | Street Rod 2 | Here | Why |
 | --- | --- | --- |
 | One line | 5 m | From its mph, its speed table, and its road frame's pace: 15.5 to 17 ft a line, or about 900 m for the race. |
+| Gray sprites at the road's edge, every fourth line | A continuous gravel shoulder, 0.75 m wide | They stand for a shoulder, drawn as strips only because of what the game could draw. |
 | Road width 1800 | 8 m | The car's size in the same units suggests 5.4 to 7 m. 8 m is the format's default and leaves room to steer. |
 | One height word | 0.4 m | Set by eye. Street Rod 2's height only shifts the view up and down, so it has no real size. |
 
