@@ -1499,6 +1499,7 @@
     {"kind": "narrows_sign", "x": 570.04, "y": 2661.95},
     {"kind": "barricade", "x": 586.24, "y": 2667.12},
     {"kind": "dash", "x": 586.86, "y": 2673.5},
+    {"kind": "road_boulder", "x": 585.78, "y": 2674.54},
     {"kind": "narrows_sign", "x": 583.99, "y": 2676.29},
     {"kind": "dash", "x": 600.8, "y": 2687.83},
     {"kind": "finish", "x": 642.64, "y": 2730.84},
@@ -1510,8 +1511,5 @@
     {"kind": "dash", "x": 726.31, "y": 2816.86},
     {"kind": "dash", "x": 729.79, "y": 2820.45},
     {"kind": "dash", "x": 733.28, "y": 2824.03}
-  ],
-  "left_out": [
-    {"kind": "road_boulder", "x": 585.78, "y": 2674.54, "sr2_line": 943, "lateral": -1.5, "gap": 2.15, "beside": ["barricade"]}
   ]
 }

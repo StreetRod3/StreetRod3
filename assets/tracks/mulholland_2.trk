@@ -1366,6 +1366,7 @@
     {"kind": "road_work_sign", "x": 117.44, "y": 1862.14},
     {"kind": "dash", "x": 128.53, "y": 1873.01},
     {"kind": "barricade", "x": 130.19, "y": 1883.65},
+    {"kind": "road_boulder", "x": 135.78, "y": 1880.33},
     {"kind": "dash", "x": 159.13, "y": 1924.62},
     {"kind": "chevron_right", "x": 155.69, "y": 1926.66},
     {"kind": "chevron_right", "x": 163.34, "y": 1939.56},
@@ -1501,6 +1502,7 @@
     {"kind": "barricade", "x": 448.8, "y": 2707.41},
     {"kind": "dash", "x": 449.49, "y": 2713.77},
     {"kind": "rockfall_left", "x": 452.29, "y": 2710.91},
+    {"kind": "road_boulder", "x": 448.45, "y": 2714.84},
     {"kind": "dash", "x": 453.07, "y": 2717.27},
     {"kind": "dash", "x": 456.69, "y": 2720.72},
     {"kind": "dash", "x": 460.35, "y": 2724.12},
@@ -1541,9 +1543,5 @@
     {"kind": "dash", "x": 610.54, "y": 2831.88},
     {"kind": "dash", "x": 614.67, "y": 2834.7},
     {"kind": "dash", "x": 618.8, "y": 2837.52}
-  ],
-  "left_out": [
-    {"kind": "road_boulder", "x": 135.78, "y": 1880.33, "sr2_line": 761, "lateral": 2.5, "gap": 3.15, "beside": ["barricade"]},
-    {"kind": "road_boulder", "x": 448.45, "y": 2714.84, "sr2_line": 943, "lateral": -1.5, "gap": 2.15, "beside": ["barricade", "rockfall_left"]}
   ]
 }

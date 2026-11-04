@@ -1520,6 +1520,7 @@
     {"kind": "barricade", "x": -1880.56, "y": 1437.41},
     {"kind": "dash", "x": -1885.37, "y": 1441.64},
     {"kind": "rockfall_left", "x": -1881.44, "y": 1442.38},
+    {"kind": "road_boulder", "x": -1886.84, "y": 1441.36},
     {"kind": "dash", "x": -1886.29, "y": 1446.55},
     {"kind": "dash", "x": -1887.28, "y": 1451.45},
     {"kind": "dash", "x": -1888.33, "y": 1456.34},
@@ -1559,8 +1560,5 @@
     {"kind": "dash", "x": -1946.16, "y": 1610.6},
     {"kind": "dash", "x": -1953.91, "y": 1629.03},
     {"kind": "chevron_left", "x": -1957.6, "y": 1627.48}
-  ],
-  "left_out": [
-    {"kind": "road_boulder", "x": -1886.84, "y": 1441.36, "sr2_line": 943, "lateral": -1.5, "gap": 2.15, "beside": ["barricade", "rockfall_left"]}
   ]
 }

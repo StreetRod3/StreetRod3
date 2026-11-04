@@ -189,6 +189,12 @@ func take_hit(speed_change: float) -> bool:
 	return true
 
 
+## Through a sawhorse: a jolt, some damage by `harm` as a change of speed, and a little speed gone.
+func hit_sawhorse(harm: float, speed_lost: float) -> void:
+	take_hit(harm)
+	scrape_road(speed_lost)
+
+
 ## A flat rock under the car: a jolt and some speed gone, with no damage, as in Street Rod 2.
 func scrape_road(speed_lost: float) -> void:
 	_chase_cam.jolt(speed_lost)

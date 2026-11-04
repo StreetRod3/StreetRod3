@@ -220,6 +220,8 @@ func over_the_edge(world: Vector3) -> bool:
 func lane_around(s: float, lane: float, look: float) -> float:
 	var lows := PackedFloat32Array()
 	var highs := PackedFloat32Array()
+	var soft_lows := PackedFloat32Array()
+	var soft_highs := PackedFloat32Array()
 	var group_end := INF
 	var bridge: Dictionary = {}
 	for block: Dictionary in _blocks:
@@ -234,18 +236,37 @@ func lane_around(s: float, lane: float, look: float) -> float:
 			continue
 		if is_inf(group_end):
 			group_end = float(block["to"]) + _BLOCK_GROUP_M
-		lows.append(float(block["low"]) - _RIVAL_CLEARANCE_M)
-		highs.append(float(block["high"]) + _RIVAL_CLEARANCE_M)
+		var low := float(block["low"]) - _RIVAL_CLEARANCE_M
+		var high := float(block["high"]) + _RIVAL_CLEARANCE_M
+		if block.has("soft"):
+			soft_lows.append(low)
+			soft_highs.append(high)
+		else:
+			lows.append(low)
+			highs.append(high)
 	var room := INF
-	if not bridge.is_empty() and (lows.is_empty() or s >= float(bridge["s"])):
+	var no_more := lows.is_empty() and soft_lows.is_empty()
+	if not bridge.is_empty() and (no_more or s >= float(bridge["s"])):
 		room = maxf(float(bridge["bridge"]) - _RIVAL_BRIDGE_ROOM_M, 0.0)
-	if lows.is_empty():
+	if no_more:
 		return clampf(lane, -room, room)
-	return clampf(_lane_through(lane, lows, highs), -room, room)
+	return clampf(_lane_through(lane, lows, highs, soft_lows, soft_highs), -room, room)
 
 
-## Of the spots at the ends of the gaps, the one nearest `lane` that has room.
-func _lane_through(lane: float, lows: PackedFloat32Array, highs: PackedFloat32Array) -> float:
+## Around everything if it can, then through a sawhorse, then the best of what is left.
+func _lane_through(lane: float, lows: PackedFloat32Array, highs: PackedFloat32Array, soft_lows: PackedFloat32Array, soft_highs: PackedFloat32Array) -> float:
+	var all_lows := lows + soft_lows
+	var all_highs := highs + soft_highs
+	var spot := _clear_spot(lane, all_lows, all_highs)
+	if is_inf(spot):
+		spot = _clear_spot(lane, lows, highs)
+	if is_inf(spot):
+		spot = _middle_of_widest_gap(lows, highs, get_half_width() - _RIVAL_EDGE_ROOM_M)
+	return spot
+
+
+## Of the spots at the ends of the gaps, the one nearest `lane` that has room, or INF.
+func _clear_spot(lane: float, lows: PackedFloat32Array, highs: PackedFloat32Array) -> float:
 	var limit := get_half_width() - _RIVAL_EDGE_ROOM_M
 	var best := lane
 	var best_cost := INF
@@ -259,9 +280,7 @@ func _lane_through(lane: float, lows: PackedFloat32Array, highs: PackedFloat32Ar
 		if cost < best_cost:
 			best_cost = cost
 			best = spot
-	if not is_inf(best_cost):
-		return best
-	return _middle_of_widest_gap(lows, highs, limit)
+	return best if not is_inf(best_cost) else INF
 
 
 func _inside_any(spot: float, lows: PackedFloat32Array, highs: PackedFloat32Array) -> bool:

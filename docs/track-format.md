@@ -36,7 +36,7 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
 | `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. `mountain` is Mulholland: no grass grid, hillsides and drops from each node's `left` and `right`, a guard rail, and truss bridges. `aqueduct` is a concrete channel with sloped banks, where the road's width takes in the floor and both banks. |
 | `scenery` | no | none | What stands on and beside a `street`, `mountain`, or `aqueduct` track. See [Scenery](#scenery). |
-| `left_out` | no | none | Things baked from Street Rod 2 but not put on the track. The game does not read this. See [Mulholland drive](#mulholland-drive). |
+| `left_out` | no | none | Things baked from Street Rod 2 but not put on the track, with where they were and why. The game does not read this. No track has one at the moment. |
 
 Unknown root fields are ignored. A race course can leave `pois` out.
 
@@ -182,7 +182,7 @@ A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. 
 | `rockfall_left`, `rockfall_right` | Solid. Rocks reaching 2 m into the road from its edge, on that side. |
 | `road_boulder` | Solid. A boulder on the road. |
 | `road_rock` | A flat rock on the road. Going over it jolts the car and costs some speed. |
-| `barricade` | Solid. A sawhorse reaching 2.6 m into the road from its edge. |
+| `barricade` | A sawhorse reaching 2.6 m into the road from its edge. A car smashes through it, which costs some damage and a little speed, and the broken bits stay on the road. A rival goes around it if it can. |
 | `road_work_sign`, `speed_sign`, `narrows_sign`, `curves_sign`, `curves_back_sign`, `chevron_left`, `chevron_right` | Signs. |
 | `joint` | A seam across the Aqueduct's floor and banks. |
 | `gutter` | The Aqueduct's dark middle, from `y` to `to`. |
@@ -214,10 +214,10 @@ A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. 
 | Touching a hillside, a barrier at speed, or a rock ends the race | A wall or solid object, with damage by how hard the car hits | Street Rod 3's own crash model. |
 | Going off a drop with no barrier ends the race | The car is totaled | Only the left has no rail, as in Street Rod 2. |
 | Over 60 mph on road work ends the race | The gravel handles like grass | A wreck totals a car here, and nothing in the 3D view says why. |
-| The sawhorse is a sprite the car drives through | Solid | A car passing through it looks wrong in 3D. Where that and Street Rod 2's rolls would close the road, leaving under 3.2 m, the boulder is left out. |
+| The sawhorse is a sprite the car drives through | A car smashes through it, at 3 to 11% damage by speed and up to 3 m/s, and leaves debris | Driving through one untouched looks wrong in 3D. |
 | Narrow road 800 across, with posts and bars | A 3.56 m truss bridge, 4.6 m high | Street Rod 2's bars are only 1.8 m up, under the car's own height. |
 
-Each file's `left_out` list records the boulders taken off the road that way, 1 or 2 a course and nearly always at line 943, so they can go back. Each entry has the boulder's `x` and `y`, its Street Rod 2 line as `sr2_line`, its `lateral` place on the road, the `gap` it would have left in meters, and what it stood `beside`. The other 4 or 5 boulders on each course are on the road.
+The bake takes a boulder off the road only where it and fallen rocks would leave less than 2.6 m, and records it in the track's `left_out` list. None comes to that, so all of Street Rod 2's boulders are on the road. Sawhorses don't count, since a car can go through them.
 
 Oncoming traffic is not built.
 

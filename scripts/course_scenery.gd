@@ -7,6 +7,7 @@ extends RefCounted
 
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
+const _Sawhorse := preload("res://scripts/sawhorse.gd")
 
 const _LEAVES := Color(0.16, 0.5, 0.13, 1)
 const _BUSH := Color(0.08, 0.36, 0.08, 1)
@@ -17,7 +18,6 @@ const _SIGN_YELLOW := Color(0.95, 0.8, 0.1, 1)
 const _SIGN_WHITE := Color(0.95, 0.95, 0.93, 1)
 const _SIGN_BLACK := Color(0.03, 0.03, 0.03, 1)
 const _SIGN_POST := Color(0.6, 0.6, 0.6, 1)
-const _BARRICADE_LEG := Color(0.45, 0.45, 0.45, 1)
 const _GRAVEL := Color(0.36, 0.36, 0.34, 1)
 const _JOINT := Color(0.08, 0.08, 0.08, 1)
 const _GUTTER := Color(0.2, 0.2, 0.2, 1)
@@ -29,8 +29,6 @@ const _LINE_M := 5.0
 const _SIGN_OUT_M := 0.6
 const _SIGN_HIGH := 2.3
 const _SIGN_SIZE := 1.15
-const _BARRICADE_REACH := 2.6
-const _BARRICADE_H := 1.05
 const _ROAD_BOULDER_W := 1.5
 const _ROAD_BOULDER_H := 0.95
 const _ROCKFALL_REACH := 2.0
@@ -95,7 +93,7 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 				rock_boxes.append(Transform3D(turn.scaled(Vector3(1.0, 0.18, 0.7)), ground + Vector3.UP * 0.08))
 				rocks.append(ground)
 			"barricade":
-				_add_barricade(root, body, ground, yaw, lateral, s, blocks)
+				_add_sawhorse(track, root, ground, yaw, lateral, s, blocks)
 			"road_work_sign", "speed_sign", "narrows_sign", "curves_sign", "curves_back_sign", "chevron_left", "chevron_right":
 				signs.append({"kind": kind, "foot": ground, "yaw": yaw, "lateral": lateral})
 			"joint":
@@ -210,30 +208,15 @@ static func _add_rockfall(
 	blocks.append({"s": s, "to": s + _LINE_M, "low": minf(lateral, inner), "high": maxf(lateral, inner)})
 
 
-## Street Rod 2's sawhorse with its yellow and black bar, standing out from the road's edge.
-static func _add_barricade(root: Node3D, body: StaticBody3D, ground: Vector3, yaw: float, lateral: float, s: float, blocks: Array[Dictionary]) -> void:
+## A sawhorse can be driven through, at a price, so a rival goes around it only if it can.
+static func _add_sawhorse(track: Node3D, root: Node3D, ground: Vector3, yaw: float, lateral: float, s: float, blocks: Array[Dictionary]) -> void:
 	var inward := -signf(lateral)
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw))
-	var turn := Basis(Vector3.UP, yaw)
-	var middle := ground + across * (inward * _BARRICADE_REACH * 0.5)
-	var bar := _StreetScenery._material(_SIGN_YELLOW)
-	var dark := _StreetScenery._material(_SIGN_BLACK)
-	var leg := _StreetScenery._material(_BARRICADE_LEG)
-	var horse := Node3D.new()
-	horse.name = "Barricade"
-	horse.transform = Transform3D(turn, middle)
+	var horse: Node3D = _Sawhorse.new()
 	root.add_child(horse)
-	_StreetScenery._add_box(horse, Vector3(_BARRICADE_REACH, 0.26, 0.08), bar, Vector3(0.0, _BARRICADE_H, 0.0))
-	var stripes := 5
-	for k in stripes:
-		var x := (float(k) + 0.5) / float(stripes) * _BARRICADE_REACH - _BARRICADE_REACH * 0.5
-		_StreetScenery._add_box(horse, Vector3(0.24, 0.27, 0.09), dark, Vector3(x, _BARRICADE_H, 0.0))
-	for end: float in [-1.0, 1.0]:
-		_StreetScenery._add_box(horse, Vector3(0.1, _BARRICADE_H, 0.1), leg, Vector3(end * _BARRICADE_REACH * 0.42, _BARRICADE_H * 0.5, 0.0))
-		_StreetScenery._add_box(horse, Vector3(0.1, 0.1, 0.9), leg, Vector3(end * _BARRICADE_REACH * 0.42, 0.05, 0.0))
-	_add_hit_box(body, Vector3(_BARRICADE_REACH, _OBSTACLE_HIT_H, 0.5), Transform3D(turn, middle + Vector3.UP * (_OBSTACLE_HIT_H * 0.5)))
-	var inner := lateral + inward * _BARRICADE_REACH
-	blocks.append({"s": s - 1.0, "to": s + 1.0, "low": minf(lateral, inner), "high": maxf(lateral, inner)})
+	horse.setup(track, ground + across * (inward * _Sawhorse.REACH * 0.5), yaw)
+	var inner := lateral + inward * _Sawhorse.REACH
+	blocks.append({"s": s - 1.0, "to": s + 1.0, "low": minf(lateral, inner), "high": maxf(lateral, inner), "soft": true})
 
 
 ## A seam across the floor and up both banks.

@@ -151,6 +151,17 @@ func take_hit(speed_change: float) -> bool:
 	return true
 
 
+## Through a sawhorse: some damage by `harm` as a change of speed, and a little speed gone.
+func hit_sawhorse(harm: float, speed_lost: float) -> void:
+	take_hit(harm)
+	if GameState.arcade_drive:
+		forward_speed = maxf(forward_speed - speed_lost, 0.0)
+	else:
+		var speed := _dynamics.cg_velocity.length()
+		if speed > 0.01:
+			_dynamics.cg_velocity *= maxf(speed - speed_lost, 0.0) / speed
+
+
 func damage_amount() -> float:
 	return _damage.amount
 

@@ -200,3 +200,5 @@ Street Rod 2's other two cruise races are at the drive-in, Mulholland drive and 
 
 The street drag now runs at night too, like Mulholland and the Aqueduct, as all three do in Street Rod 2. The boulders that come off Mulholland's road to keep it passable, 1 or 2 a course, are now recorded in each track's `left_out` list so they can go back later.
 
+Sawhorses on Mulholland can be driven through now. Smashing one costs some damage and a little speed, more the faster the car is going, and its broken bar, legs, and splinters fly and stay on the road. A rival goes around one if it can. Since sawhorses no longer close the road, the boulders that came off to keep it passable are back, 6 on every course.
+
