@@ -214,3 +214,5 @@ Every air cleaner now has its own wing nut. With dual quads or a tri-power there
 The look under a rival's hood no longer marks every part as tight, since a car that runs has nothing loose, and it reads nothing at all from your car now.
 
 If a rival's car ever turns up with an engine the game does not know, which would be a bug, the hood no longer guesses at it. Every part gets a random label like Mystery, Experimental, or Top secret, the power reads ??? hp, and the air cleaner lid says ??? V8.
+
+The spot to click for under the hood in the garage is bigger and farther forward. It was a thin strip that began at the windshield and stopped short of the nose, and now it takes in the whole front of the car from the cowl to the nose, across its full width and down the fender, about 1.7 to 2 times the area on screen.
