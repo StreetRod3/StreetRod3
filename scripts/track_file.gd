@@ -25,6 +25,10 @@ const SURFACE_ICY := "icy"
 
 const DEFAULT_WIDTH := 8.0
 
+const STYLE_CIRCUIT := "circuit"
+const STYLE_STREET := "street"
+const SCENERY_KINDS := ["tree", "big_tree", "bare_tree", "pole", "gantry", "dash", "finish", "dark_streak"]
+
 const _NODE_TYPES := [NODE_START, NODE_FINISH, NODE_REGULAR]
 const _ROAD_TYPES := [
 	ROAD_REGULAR,
@@ -74,10 +78,14 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 		return result
 	var root: Dictionary = json.data
 	result.name = str(root.get("name", ""))
+	result.style = str(root.get("style", STYLE_CIRCUIT))
+	if result.style != STYLE_CIRCUIT and result.style != STYLE_STREET:
+		result.errors.append("Unknown track style `%s`." % result.style)
 	_parse_nodes(root, result)
 	_parse_roads(root, result)
 	_parse_pois(root, result)
 	_parse_buildings(root, result)
+	_parse_scenery(root, result)
 	if result.errors.is_empty():
 		_build_race_path(result)
 	return result
@@ -101,6 +109,8 @@ static func _empty_result() -> Dictionary:
 		"pois": {}, # poi id -> poi dict
 		"poi_order": [],
 		"buildings": [], # scenery boxes: x, y, w, d, h
+		"style": STYLE_CIRCUIT,
+		"scenery": [], # what stands beside a street track: kind, x, y
 		"errors": [],
 		"warnings": [],
 	}
@@ -469,6 +479,29 @@ static func _parse_buildings(root: Dictionary, result: Dictionary) -> void:
 			if rgb.size() >= 3:
 				parsed["color"] = Color(float(rgb[0]), float(rgb[1]), float(rgb[2]))
 		result.buildings.append(parsed)
+
+
+static func _parse_scenery(root: Dictionary, result: Dictionary) -> void:
+	if not root.has("scenery"):
+		return
+	if typeof(root["scenery"]) != TYPE_ARRAY:
+		result.errors.append("Track `scenery` must be an array.")
+		return
+	var index := 0
+	for raw: Variant in root["scenery"]:
+		index += 1
+		if typeof(raw) != TYPE_DICTIONARY:
+			result.errors.append("Scenery %d must be a JSON object." % index)
+			continue
+		var item: Dictionary = raw
+		if not item.has("x") or not item.has("y"):
+			result.errors.append("Scenery %d must have numeric `x` and `y`." % index)
+			continue
+		var kind := str(item.get("kind", ""))
+		if not SCENERY_KINDS.has(kind):
+			result.warnings.append("Scenery %d has unknown kind `%s`; leaving it out." % [index, kind])
+			continue
+		result.scenery.append({ "kind": kind, "x": float(item["x"]), "y": float(item["y"]) })
 
 
 static func _building_size(building: Dictionary, key: String, fallback: float, index: int, result: Dictionary) -> float:

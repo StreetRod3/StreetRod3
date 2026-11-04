@@ -54,6 +54,10 @@ const INCHES_PER_CM := 0.393701
 const FEET_PER_M := 3.28084
 const RACE_DRAG := "drag"
 const RACE_ROAD := "road"
+## Street Rod 2's cruise drag race: 180 of its road lines, at about 5 m a line.
+const RACE_STREET_DRAG := "street_drag"
+const STREET_DRAG_TRACK := "res://assets/tracks/street_drag.trk"
+const STREET_DRAG_LENGTH_M := 900.0
 const QUARTER_MILE_M := 402.336
 const ROAD_RACE_LENGTH_M := QUARTER_MILE_M * 6.0
 const DRAG_STAKE_LOW := 10
@@ -213,7 +217,7 @@ var engine_tune: int = ENGINE_TUNE_DEFAULT
 var current_scene_path: String = SCENE_GARAGE
 ## Index into `opponents` for the next race.
 var selected_opponent_id: int = 0
-## `RACE_DRAG` (straight quarter mile) or `RACE_ROAD` (turning course).
+## `RACE_DRAG` (straight quarter mile), `RACE_STREET_DRAG` (Street Rod 2's) or `RACE_ROAD` (turning course).
 var selected_race_type: String = RACE_DRAG
 ## Cash side bet for the next race. Zero is a race for nothing.
 var race_stake: int = 0
@@ -945,8 +949,8 @@ func load_game(slot: int) -> bool:
 	selected_opponent_id = int(d.get("selected_opponent_id", 0))
 	_load_saved_opponents(d)
 	var race_type := str(d.get("selected_race_type", RACE_DRAG))
-	if race_type == RACE_ROAD:
-		selected_race_type = RACE_ROAD
+	if race_type == RACE_ROAD or race_type == RACE_STREET_DRAG:
+		selected_race_type = race_type
 	else:
 		selected_race_type = RACE_DRAG
 	race_stake = maxi(int(d.get("race_stake", 0)), 0)
@@ -2456,7 +2460,15 @@ func race_length_m(race_type: String = "") -> float:
 	var kind := selected_race_type if race_type.is_empty() else race_type
 	if kind == RACE_ROAD:
 		return ROAD_RACE_LENGTH_M
+	if kind == RACE_STREET_DRAG:
+		return STREET_DRAG_LENGTH_M
 	return QUARTER_MILE_M
+
+
+## True for a race on a `.trk` course, false for the hardcoded quarter mile.
+func race_on_track(race_type: String = "") -> bool:
+	var kind := selected_race_type if race_type.is_empty() else race_type
+	return kind == RACE_ROAD or kind == RACE_STREET_DRAG
 
 
 func race_fuel_liters(race_type: String = "") -> float:
