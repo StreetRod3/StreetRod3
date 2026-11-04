@@ -1,6 +1,6 @@
 # Architecture
 
-Street Rod 3 is a single-player Godot 4.6 game. The player builds a car in a garage, buys parts from a newspaper, then races one opponent on either a straight drag strip or a road course loaded from a `.trk` file.
+Street Rod 3 is a single-player Godot 4.6 game. The player builds a car in a garage, buys parts from a newspaper, then races one opponent on a straight drag strip or on a course loaded from a `.trk` file: a street drag or a road course.
 
 There is no server, database, or external API. All state lives in the `GameState` autoload and is written to the local `user://` directory.
 
@@ -52,7 +52,7 @@ flowchart TD
 | `scenes/under_car.tscn` | `scripts/under_car.gd` | On the creeper: exhaust manifolds, muffler, and rear end |
 | `scenes/hood.tscn` | `scripts/hood.gd` | Under the hood: engine, intake, carburetors, distributor, air cleaner, plug wires |
 | `scenes/tune.tscn` | `scripts/tune.gd` | Timing light on the balancer: advance or retard the distributor |
-| `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Drag vs road, then pick a rival |
+| `scenes/drive-in.tscn` | `scripts/drive-in.gd` | Which race, then pick a rival |
 | `scenes/gas_station.tscn` | `scripts/gas_station.gd` | Fill the tank |
 | `scenes/cruise.tscn` | `scripts/cruise.gd` | Short automatic drive between the garage, drive-in, and gas station: follows the route at speeds planned for its corners, riding on the car's own springs and shocks |
 | `scenes/race.tscn` | `scripts/race.gd` | Countdown, HUD, finish, results |
@@ -95,7 +95,7 @@ flowchart LR
 
 - Economy and garage: cash, owned cars, parts, gearboxes, equipped gearbox and its bolt turns, paint color.
 - Catalogs: `USED_CARS`, `PARTS`, `GEARBOXES`, `OPPONENTS` (static dictionaries, not resources).
-- Race selection: `selected_race_type` (`drag` or `road`) and `selected_opponent_id`.
+- Race selection: `selected_race_type` (`drag`, `street_drag`, or `road`) and `selected_opponent_id`.
 - Derived stats: `refresh_car_stats()` rebuilds base vmax and horsepower from the current car plus owned parts. `get_effective_vmax_kmh()` then scales by the equipped gearbox `top_speed`.
 - Music: one `AudioStreamPlayer` on the autoload. Race uses `assets/music/race.mp3`; every other scene uses `assets/music/garage.mp3`.
 - Part condition and selling, below.
@@ -181,9 +181,10 @@ Tires stay on their wheels otherwise. Changing the wheels on a car puts the old 
 
 `race.gd` runs a three-phase start light (red, red+orange, green). Cars stay stopped until green. The HUD shows speed, gear, distance, time, and opponent name. `rpm_meter.gd` draws the tachometer. `race_touch_controls.gd` shows a wheel, pedals, and shift paddles on mobile, web-mobile, or viewports 900 px wide or narrower.
 
-Two layouts share `scenes/race.tscn`:
+Three layouts share `scenes/race.tscn`:
 
 - **Drag** (`GameState.RACE_DRAG`): a straight quarter mile (402.336 m) along `+Z`. `track_visuals.gd` builds curbs and a checkered gantry. The ground plane stays active. Finish is an `Area3D`.
+- **Street drag** (`GameState.RACE_STREET_DRAG`): Street Rod 2's cruise drag race, 900 m along `+Z` on `res://assets/tracks/street_drag.trk`, run by the same code as the road course. There are no start lights, as in Street Rod 2: "Get ready!" and then "Go!" a random 1.5 to 2.9 s later. The cars start in lanes either side of the middle. `street_scenery.gd` builds the trees, poles, road marks, overhead sign, and yellow finish line from the file's `scenery` list. None of it has collision, because Street Rod 2 never tests a car against it in this race.
 - **Road** (`GameState.RACE_ROAD`): `race_track.gd` hides the strip, loads `res://assets/tracks/track1.trk`, and builds the road mesh. The finish area is moved to the path end. Progress also ends the race when remaining distance is about 1 m, because the opponent is placed on the path rather than driven into the trigger.
 
 A win is crossing the finish before the opponent. Holding a manual gearbox past critical RPM for 0.55 s blows the engine and ends the race.

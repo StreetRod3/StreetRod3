@@ -1,6 +1,6 @@
 # Street Rod 3
 
-A single-player garage and street-racing game built with Godot 4.6. Buy parts, paint the car, then race a rival on a quarter-mile drag strip or a road course.
+A single-player garage and street-racing game built with Godot 4.6. Buy parts, paint the car, then race a rival on a quarter-mile drag strip, a street drag taken from Street Rod 2, or a road course.
 
 **Play in the browser:** [https://streetrod3.github.io/StreetRod3/](https://streetrod3.github.io/StreetRod3/)
 

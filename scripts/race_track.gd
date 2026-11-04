@@ -2,6 +2,8 @@ extends Node3D
 
 ## Builds a road course from a `.trk` graph and answers path queries.
 
+const _StreetScenery := preload("res://scripts/street_scenery.gd")
+
 @export_file("*.trk") var track_path: String = "res://assets/tracks/track1.trk"
 
 const ROAD_HALF_W := 20.0
@@ -12,6 +14,11 @@ const BAKE_STEP := 2.0
 const _TERRAIN_PAD := 400.0
 const _TERRAIN_STEP := 12.0
 const _TERRAIN_SINK := 0.08
+## A street track's rises are short, so its grass needs more points to stay under the road.
+const _STREET_TERRAIN_PAD := 300.0
+const _STREET_TERRAIN_STEP := 6.0
+## How far a street track's pavement runs back behind the start, so it doesn't begin under the cars.
+const _STREET_RUN_IN_M := 60.0
 ## Cell size for the nearest-sample lookup used while shaping the grass.
 const _BIN_CELL := 64.0
 const FILLET_MIN_ANGLE := 0.06 ## ~3.5 degrees; smaller turns stay as a sharp join
@@ -29,6 +36,7 @@ const CHECK_WHITE := Color(0.94, 0.94, 0.92, 1)
 const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const ROAD_COLOR := Color(0.18, 0.19, 0.2, 1)
 const TERRAIN_COLOR := Color(0.14, 0.16, 0.13, 1)
+const STREET_TERRAIN_COLOR := Color(0.16, 0.27, 0.11, 1)
 const SIGN_OBJ := "res://assets/signs/narrow.obj"
 const SIGN_TEX_BOTH := "res://assets/signs/narrow-both.png"
 const SIGN_TEX_LEFT := "res://assets/signs/narrow-left.png"
@@ -54,6 +62,8 @@ var _road_mi: MeshInstance3D
 var _built: bool = false
 var _sign_mesh: ArrayMesh
 var _sign_textures: Dictionary = {}
+var _street: bool = false
+var _scenery: Array[Dictionary] = []
 
 
 func is_road_course() -> bool:
@@ -164,15 +174,20 @@ func build_road_course() -> void:
 		return
 	_build_terrain()
 	_build_road_mesh()
-	_build_curbs()
-	_build_obstacles()
-	_build_narrow_signs()
-	_build_finish_line()
+	if _street:
+		_StreetScenery.build(self, _scenery, get_half_width() * 2.0)
+	else:
+		_build_curbs()
+		_build_obstacles()
+		_build_narrow_signs()
+		_build_finish_line()
 	_built = true
 
 
 func _ready() -> void:
-	if GameState.selected_race_type == GameState.RACE_ROAD:
+	if GameState.selected_race_type == GameState.RACE_STREET_DRAG:
+		track_path = GameState.STREET_DRAG_TRACK
+	if GameState.race_on_track():
 		build_road_course()
 
 
@@ -227,6 +242,8 @@ func _build_path() -> void:
 		for error_text: String in data.errors:
 			push_error("[track] %s" % error_text)
 		return
+	_street = data.style == TrackFile.STYLE_STREET
+	_scenery.assign(data.scenery)
 	var path_ids: Array = data.path_ids
 	if path_ids.size() < 2:
 		push_error("[track] Race path is too short.")
@@ -547,12 +564,14 @@ func _build_terrain() -> void:
 		max_x = maxf(max_x, p.x)
 		min_z = minf(min_z, p.z)
 		max_z = maxf(max_z, p.z)
-	var origin_x := min_x - _TERRAIN_PAD
-	var origin_z := min_z - _TERRAIN_PAD
-	var span_x := max_x - min_x + _TERRAIN_PAD * 2.0
-	var span_z := max_z - min_z + _TERRAIN_PAD * 2.0
-	var cols := maxi(int(ceil(span_x / _TERRAIN_STEP)), 1)
-	var rows := maxi(int(ceil(span_z / _TERRAIN_STEP)), 1)
+	var pad := _STREET_TERRAIN_PAD if _street else _TERRAIN_PAD
+	var grid := _STREET_TERRAIN_STEP if _street else _TERRAIN_STEP
+	var origin_x := min_x - pad
+	var origin_z := min_z - pad
+	var span_x := max_x - min_x + pad * 2.0
+	var span_z := max_z - min_z + pad * 2.0
+	var cols := maxi(int(ceil(span_x / grid)), 1)
+	var rows := maxi(int(ceil(span_z / grid)), 1)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for row in rows + 1:
@@ -577,7 +596,7 @@ func _build_terrain() -> void:
 			st.add_index(i01)
 	st.generate_normals()
 	var mesh := st.commit()
-	mesh.surface_set_material(0, _make_mat(TERRAIN_COLOR, 0.95))
+	mesh.surface_set_material(0, _make_mat(STREET_TERRAIN_COLOR if _street else TERRAIN_COLOR, 0.95))
 	var mi := MeshInstance3D.new()
 	mi.name = "Terrain"
 	mi.mesh = mesh
@@ -635,6 +654,8 @@ func _grass_height(x: float, z: float) -> float:
 func _build_road_mesh() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	if _street:
+		_add_run_in(st)
 	for i in range(_pts.size() - 1):
 		var yaw0: float = _yaws[i]
 		var yaw1: float = _yaws[i + 1]
@@ -662,6 +683,15 @@ func _build_road_mesh() -> void:
 	_road_mi.name = "RoadMesh"
 	_road_mi.mesh = mesh
 	add_child(_road_mi)
+
+
+func _add_run_in(st: SurfaceTool) -> void:
+	var yaw: float = _yaws[0]
+	var side := Vector3(cos(yaw), 0.0, -sin(yaw)) * _half_ws[0]
+	var back := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _STREET_RUN_IN_M
+	var v := -_STREET_RUN_IN_M * 0.15
+	_add_tri(st, back - side, back + side, _pts[0] + side, Vector2(0, v), Vector2(1, v), Vector2(1, 0))
+	_add_tri(st, back - side, _pts[0] + side, _pts[0] - side, Vector2(0, v), Vector2(1, 0), Vector2(0, 0))
 
 
 func _add_tri(

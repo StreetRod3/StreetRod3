@@ -19,7 +19,7 @@ const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 
 
 func _ready() -> void:
-	if GameState.selected_race_type == GameState.RACE_ROAD:
+	if GameState.race_on_track():
 		return
 	_build_curbs()
 	_build_finish_line()

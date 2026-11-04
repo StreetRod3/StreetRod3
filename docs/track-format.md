@@ -1,6 +1,6 @@
 # Track file format (`.trk`)
 
-Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race.
+Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race and `res://assets/tracks/street_drag.trk` for the street drag.
 
 The drag strip in `scenes/race.tscn` is still a separate, hardcoded layout. It does not use this format yet.
 
@@ -34,6 +34,8 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `roads` | yes | — | Directed edges between street nodes. |
 | `pois` | no | none | Points of interest. Each one is its own node, attached to a street node. |
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
+| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, and pavement that runs back behind the start. |
+| `scenery` | no | none | What stands beside a `street` track. See [Scenery](#scenery). |
 
 Unknown root fields are ignored. A race course can leave `pois` out.
 
@@ -147,6 +149,38 @@ Optional boxes for the city view. They do not affect the road graph or the cruis
 | `d` | no | `8` | Depth along world Z, in meters. |
 | `h` | no | `6` | Height in meters. |
 | `color` | no | a neutral gray | `[r, g, b]` from 0 to 1. |
+
+## Scenery
+
+A `street` track lists what stands beside it. Each entry has no collision. Height comes from the road at that spot.
+
+```json
+{ "kind": "tree", "x": 5.78, "y": 120 }
+```
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `kind` | yes | One of the kinds below. An unknown kind gives a warning and is left out. |
+| `x`, `y` | yes | Planar position in meters. The driver heading along `+Y` has their right at `-X`. |
+
+| Kind | What it is |
+| --- | --- |
+| `tree`, `big_tree`, `bare_tree` | A round tree, a larger one, and a sparse one. |
+| `pole` | A telephone pole. |
+| `gantry` | An overhead highway sign across the road. |
+| `dash` | A 5 m road mark starting at `y`. |
+| `finish` | The yellow finish line, 5 m long, starting at `y`. |
+| `streak`, `dark_streak` | Gray and black marks on the shoulder, starting at `y`. |
+
+## Street drag
+
+`street_drag.trk` is baked from Street Rod 2's cruise drag race (race kind 1, lines 200 to 380 of its road), using the SR2 port's own road builder from the EXE's starting seed. Its fixed parts are the same in every Street Rod 2 game: the straight road, the two rises and dips, the road marks, the shoulder marks, the telephone poles, and the finish. Its trees, its black marks, and the sign's position are random in Street Rod 2, rolled once per game. This file holds one such roll, and it is the same in every game here.
+
+| Street Rod 2 | Here | Why |
+| --- | --- | --- |
+| One line | 5 m | From its mph, its speed table, and its road frame's pace: 15.5 to 17 ft a line, or about 900 m for the race. |
+| Road width 1800 | 8 m | The car's size in the same units suggests 5.4 to 7 m. 8 m is the format's default and leaves room to steer. |
+| One height word | 0.4 m | Set by eye. Street Rod 2's height only shifts the view up and down, so it has no real size. |
 
 ## Example
 

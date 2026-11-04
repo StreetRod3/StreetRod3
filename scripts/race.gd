@@ -11,6 +11,12 @@ const QUARTER_MILE_M := 402.336
 const COUNTDOWN_RED_S := 1.2
 const COUNTDOWN_RED_ORANGE_S := 1.0
 const COUNTDOWN_GREEN_VISIBLE_S := 0.55
+## Street Rod 2's cruise races have no lights: "Get ready !", then "Go !" 110 to 212 ticks of its
+## 72.8 Hz timer later.
+const STREET_START_MIN_S := 110.0 / 72.8
+const STREET_START_MAX_S := 212.0 / 72.8
+## Across the middle of the road, each in its own lane. The driver's right is -X.
+const STREET_LANE_X := 2.0
 
 ## 0 = red only, 1 = red + orange, 2 = green (race running), 3 = lights hidden
 var _countdown_phase: int = 0
@@ -53,6 +59,9 @@ var _car_bump: _CarBump = _CarBump.new()
 var _fuel_used: bool = false
 var _opponent_finished: bool = false
 var _is_road: bool = false
+var _street_start: bool = false
+var _street_wait_s: float = 0.0
+var _start_word: Label
 var _elapsed: float = 0.0
 ## How far from the finish the player's tires blow out, or below zero if they will last.
 var _tire_blowout_m: float = -1.0
@@ -70,6 +79,13 @@ const _ON_ORANGE := Color(1.0, 0.58, 0.08, 1)
 const _ON_GREEN := Color(0.2, 0.95, 0.28, 1)
 
 
+func _enter_tree() -> void:
+	# Before the cars' own _ready, which reads where they stand.
+	if GameState.selected_race_type == GameState.RACE_STREET_DRAG:
+		$PlayerCar.position.x = -STREET_LANE_X
+		$OpponentCar.position.x = STREET_LANE_X
+
+
 func _ready() -> void:
 	# After both cars have moved, so a bump sees this frame's positions.
 	process_priority = 1
@@ -80,7 +96,8 @@ func _ready() -> void:
 	_pause_menu.process_mode = Node.PROCESS_MODE_WHEN_PAUSED
 	GameState.current_scene_path = GameState.SCENE_RACE
 	GameState.update_music()
-	_is_road = GameState.selected_race_type == GameState.RACE_ROAD
+	_is_road = GameState.race_on_track()
+	_street_start = GameState.selected_race_type == GameState.RACE_STREET_DRAG
 	_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
 	_setup_race_layout()
 	_result.visible = false
@@ -99,6 +116,8 @@ func _ready() -> void:
 	else:
 		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera · W+S: burnout"
 	_traffic.visible = true
+	if _street_start:
+		_build_start_word()
 	_refresh_traffic_lights()
 
 	# Apply the player's selected paint color to the shared car visuals.
@@ -231,6 +250,8 @@ func _process(delta: float) -> void:
 		if _phase_time >= COUNTDOWN_GREEN_VISIBLE_S:
 			_countdown_phase = 3
 			_traffic.visible = false
+			if _start_word != null:
+				_start_word.visible = false
 
 	_elapsed += delta
 	_hud_time.text = "Time: %.2f s" % _elapsed
@@ -242,8 +263,38 @@ func _process(delta: float) -> void:
 	_maybe_finish_by_progress()
 
 
+func _build_start_word() -> void:
+	_street_wait_s = randf_range(STREET_START_MIN_S, STREET_START_MAX_S)
+	_countdown_phase = 1
+	_traffic.visible = false
+	_start_word = Label.new()
+	_start_word.add_theme_font_size_override(&"font_size", 56)
+	_start_word.add_theme_color_override(&"font_outline_color", Color.BLACK)
+	_start_word.add_theme_constant_override(&"outline_size", 10)
+	_start_word.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_start_word.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_start_word.anchor_right = 1.0
+	_start_word.anchor_top = 0.3
+	_start_word.anchor_bottom = 0.45
+	$RaceUI.add_child(_start_word)
+
+
+func _start_race() -> void:
+	_countdown_phase = 2
+	_phase_time = 0.0
+	_race_started = true
+	if not _fuel_used:
+		_fuel_used = true
+		GameState.consume_race_fuel()
+	_refresh_traffic_lights()
+
+
 func _advance_countdown(delta: float) -> void:
 	_phase_time += delta
+	if _street_start:
+		if _phase_time >= _street_wait_s:
+			_start_race()
+		return
 	if _countdown_phase == 0:
 		if _phase_time >= COUNTDOWN_RED_S:
 			_countdown_phase = 1
@@ -251,16 +302,12 @@ func _advance_countdown(delta: float) -> void:
 			_refresh_traffic_lights()
 	elif _countdown_phase == 1:
 		if _phase_time >= COUNTDOWN_RED_ORANGE_S:
-			_countdown_phase = 2
-			_phase_time = 0.0
-			_race_started = true
-			if not _fuel_used:
-				_fuel_used = true
-				GameState.consume_race_fuel()
-			_refresh_traffic_lights()
+			_start_race()
 
 
 func _refresh_traffic_lights() -> void:
+	if _start_word != null:
+		_start_word.text = "Go!" if _race_started else "Get ready!"
 	match _countdown_phase:
 		0:
 			_light_red.color = _ON_RED
