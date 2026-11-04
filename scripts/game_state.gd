@@ -165,8 +165,9 @@ const HOOD_BOLT_COUNTS := {
 	SLOT_AIR_CLEANER: 1,
 }
 const HEAD_BOLTS := 2
-## Condition of a part, 0 to 1. Parts from the paper are new; parts that come with a car
-## start somewhere in the used range; everything on the car wears a little each race.
+## Condition of a part, 0 to 1. Parts from the paper are 0 to 50 percent worn; parts that
+## come with a car start somewhere in the used range; everything on the car wears a little
+## each race.
 const CONDITION_USED_MIN := 0.5
 const CONDITION_USED_MAX := 0.9
 const CONDITION_WEAR_MIN := 0.01
@@ -306,6 +307,11 @@ var _last_offers: Dictionary = {}
 var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
 var newspaper_colors: Dictionary = {}
+## Wear of each copy the paper is selling, by "kind:id". One copy is 0 to 50 percent
+## worn. Half the time there are two: the first 0 to 15, the second 15 to 50.
+var newspaper_wear: Dictionary = {}
+## Chance a part is listed twice when the paper is made up.
+const NEWSPAPER_PAIR_CHANCE := 0.5
 
 ## Rivals met so far. A car is assigned the first time they are called and kept for the game.
 var opponents: Array[Dictionary] = []
@@ -836,6 +842,7 @@ func new_game() -> void:
 	_install_car(current_car_id)
 	set_fuel(_starting_fuel())
 	_sync_record_from_active()
+	roll_newspaper_wear()
 
 
 func save_slot_path(slot: int) -> String:
@@ -1018,6 +1025,7 @@ func load_game(slot: int) -> bool:
 		car_spec = {}
 		car_name = "No car"
 	save_slot = slot
+	roll_newspaper_wear()
 	return true
 
 
@@ -1028,6 +1036,115 @@ func roll_newspaper_colors() -> void:
 		if car_id.is_empty():
 			continue
 		newspaper_colors[car_id] = _random_paint()
+
+
+func roll_newspaper_wear() -> void:
+	newspaper_wear.clear()
+	_roll_wear_list("engine", ENGINES)
+	_roll_wear_list("transmission", GEARBOXES)
+	_roll_wear_list("wheels", WHEELS)
+	_roll_wear_list("part", PARTS)
+
+
+func _roll_wear_list(kind: String, list: Array[Dictionary]) -> void:
+	for item: Dictionary in list:
+		var id := str(item.get("id", ""))
+		if id.is_empty():
+			continue
+		var copies: Array[int] = []
+		if randf() < NEWSPAPER_PAIR_CHANCE:
+			copies.append(randi_range(0, 15))
+			copies.append(randi_range(15, 50))
+		else:
+			copies.append(randi_range(0, 50))
+		newspaper_wear[_condition_key(kind, id)] = copies
+
+
+## Wear percents of the copies still for sale, the less worn one first.
+func newspaper_copies(kind: String, id: String) -> Array[int]:
+	var out: Array[int] = []
+	var raw: Variant = newspaper_wear.get(_condition_key(kind, id), [])
+	if typeof(raw) != TYPE_ARRAY:
+		return out
+	for worn: Variant in raw:
+		out.append(clampi(int(worn), 0, 50))
+	return out
+
+
+## `23% worn`, for the line under a part's name.
+func newspaper_wear_line(kind: String, id: String, index: int) -> String:
+	return "%d%% worn" % newspaper_wear_percent(kind, id, index)
+
+
+func newspaper_wear_percent(kind: String, id: String, index: int) -> int:
+	var copies := newspaper_copies(kind, id)
+	if index < 0 or index >= copies.size():
+		return 0
+	return copies[index]
+
+
+## List price scaled by condition, 1 when new. A free part stays free.
+func condition_price(list_price: int, condition: float) -> int:
+	if list_price <= 0:
+		return 0
+	return maxi(roundi(float(list_price) * clampf(condition, 0.0, 1.0)), 1)
+
+
+## What the paper charges for copy `index`. Each percent worn takes a percent off.
+func newspaper_price(kind: String, id: String, index: int) -> int:
+	var list_price := int(listing_for(kind, id).get("price", 0))
+	var condition := 1.0 - float(newspaper_wear_percent(kind, id, index)) / 100.0
+	return condition_price(list_price, condition)
+
+
+## The wear on copy `index`, kept on the copy just bought. That ad comes off the page.
+func claim_newspaper_condition(kind: String, id: String, index: int) -> void:
+	var copies := newspaper_copies(kind, id)
+	if index < 0 or index >= copies.size():
+		return
+	var worn := copies[index]
+	_push_spare_condition(kind, id, 1.0 - float(worn) / 100.0)
+	copies.remove_at(index)
+	newspaper_wear[_condition_key(kind, id)] = copies
+
+
+## Buys one advertised copy into spare parts. A second copy of the same part can be bought too.
+func buy_newspaper_copy(kind: String, id: String, index: int) -> String:
+	if listing_for(kind, id).is_empty():
+		return _paper_missing(kind)
+	var copies := newspaper_copies(kind, id)
+	if index < 0 or index >= copies.size():
+		return "That one is already sold."
+	var price := newspaper_price(kind, id, index)
+	if money < price:
+		return "Not enough cash."
+	money -= price
+	match kind:
+		"engine":
+			owned_engine_ids.append(id)
+		"transmission":
+			owned_gearbox_ids.append(id)
+		"wheels":
+			owned_wheel_ids.append(id)
+		"part":
+			owned_part_ids.append(id)
+		_:
+			money += price
+			return _paper_missing(kind)
+	claim_newspaper_condition(kind, id, index)
+	return ""
+
+
+func _paper_missing(kind: String) -> String:
+	match kind:
+		"engine":
+			return "That engine is not in the paper."
+		"transmission":
+			return "That gearbox is not in the paper."
+		"wheels":
+			return "Those wheels are not in the paper."
+		_:
+			return "That part is not in the paper."
 
 
 func newspaper_color(car_id: String) -> Color:
@@ -1690,18 +1807,8 @@ func engine_tune_scale(tune: int, sweet: int) -> float:
 	return lerpf(1.0, 0.68, t * t)
 
 
-func buy_part(part_id: String) -> String:
-	var part: Dictionary = listing_by_id(PARTS, part_id)
-	if part.is_empty():
-		return "That part is not in the paper."
-	# Any number of a part can be bought, one for each car or each side of a dual
-	# exhaust, stock parts too: one sold has to be bought back.
-	var price := int(part.get("price", 0))
-	if money < price:
-		return "Not enough cash."
-	money -= price
-	owned_part_ids.append(part_id)
-	return ""
+func buy_part(part_id: String, index: int = 0) -> String:
+	return buy_newspaper_copy("part", part_id, index)
 
 
 ## Copies of a part that are owned, on a car or not.
@@ -1930,14 +2037,15 @@ func sell_trouble(kind: String, id: String) -> String:
 
 
 ## A buyer's offer for the most worn spare copy, in dollars: between `SELL_OFFER_MIN`
-## and `SELL_OFFER_MAX` of the paper's price, likelier high the better its condition,
-## and never the same as the last offer for it.
+## and `SELL_OFFER_MAX` of what that copy is worth in its condition, likelier high the
+## better its condition, and never the same as the last offer for it.
 func sell_offer(kind: String, id: String) -> int:
 	var price := int(listing_for(kind, id).get("price", 0))
 	if kind == "wheels":
 		price += int(tires_sold_with_wheels(id).get("price", 0))
 	var list := spare_condition_list(kind, id)
 	var c := list[list.size() - 1] if not list.is_empty() else 1.0
+	price = condition_price(price, c)
 	var key := _condition_key(kind, id)
 	var last := int(_last_offers.get(key, -1))
 	var offer := last
@@ -2036,20 +2144,8 @@ func equip_part(part_id: String) -> String:
 
 
 ## A bought gearbox goes to spare parts. It is fitted under the car (`fit_gearbox`).
-func buy_gearbox(gearbox_id: String) -> String:
-	var box: Dictionary = listing_by_id(GEARBOXES, gearbox_id)
-	if box.is_empty():
-		return "That gearbox is not in the paper."
-	if equipped_gearbox_id == gearbox_id:
-		return "Already on the car."
-	if free_spare_count("transmission", gearbox_id) > 0:
-		return "Already in spare parts."
-	var price := int(box.get("price", 0))
-	if money < price:
-		return "Not enough cash."
-	money -= price
-	owned_gearbox_ids.append(gearbox_id)
-	return ""
+func buy_gearbox(gearbox_id: String, index: int = 0) -> String:
+	return buy_newspaper_copy("transmission", gearbox_id, index)
 
 
 ## Owned gearboxes that are in no car, in register order.
@@ -2434,12 +2530,7 @@ func _buy_or_equip(list: Array[Dictionary], owned: Array[String], part_id: Strin
 		return "Already on the car."
 	# What is on another car stays there, so a copy here has to be a spare.
 	if free_spare_count("engine" if label == "engine" else "wheels", part_id) <= 0:
-		var price := int(part.get("price", 0))
-		if money < price:
-			return "Not enough cash."
-		money -= price
-		owned.append(part_id)
-		return ""
+		return buy_newspaper_copy("engine" if label == "engine" else "wheels", part_id, 0)
 	if label == "engine":
 		equipped_engine_id = part_id
 	else:

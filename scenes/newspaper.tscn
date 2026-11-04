@@ -54,7 +54,7 @@ theme_override_constants/separation = 10
 [node name="Masthead" type="Label" parent="Margin/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.45, 0.08, 0.08, 1)
-theme_override_font_sizes/font_size = 40
+theme_override_font_sizes/font_size = 52
 text = "THE ROD TIMES"
 horizontal_alignment = 1
 
@@ -66,6 +66,7 @@ color = Color(0.18, 0.14, 0.1, 1)
 [node name="Tagline" type="Label" parent="Margin/VBox"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.2, 0.16, 0.12, 1)
+theme_override_font_sizes/font_size = 22
 text = "Classifieds  ·  Used cars  ·  Auto parts  ·  Cash only"
 horizontal_alignment = 1
 
@@ -73,7 +74,7 @@ horizontal_alignment = 1
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
-theme_override_font_sizes/font_size = 18
+theme_override_font_sizes/font_size = 24
 text = "Cash on hand: $0"
 horizontal_alignment = 1
 
@@ -98,7 +99,8 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_hover_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_pressed_color = Color(0.08, 0.07, 0.06, 1)
-theme_override_font_sizes/font_size = 28
+theme_override_colors/font_focus_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_font_sizes/font_size = 36
 text = "USED CARS
 Coupes, rods, and shop specials"
 
@@ -110,7 +112,8 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_hover_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_pressed_color = Color(0.08, 0.07, 0.06, 1)
-theme_override_font_sizes/font_size = 28
+theme_override_colors/font_focus_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_font_sizes/font_size = 36
 text = "AUTO PARTS
 Engines, boxes, wheels, bolt-ons"
 
@@ -124,7 +127,7 @@ theme_override_constants/separation = 8
 [node name="CarsTitle" type="Label" parent="Margin/VBox/CarsSection"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 32
 text = "USED CARS"
 horizontal_alignment = 1
 
@@ -136,7 +139,7 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 14
+theme_override_constants/separation = 22
 
 [node name="PartsSection" type="VBoxContainer" parent="Margin/VBox"]
 unique_name_in_owner = true
@@ -148,7 +151,7 @@ theme_override_constants/separation = 8
 [node name="PartsTitle" type="Label" parent="Margin/VBox/PartsSection"]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 32
 text = "AUTO PARTS"
 horizontal_alignment = 1
 
@@ -160,21 +163,24 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
-theme_override_constants/separation = 14
+theme_override_constants/separation = 22
 
 [node name="StatusLabel" type="Label" parent="Margin/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_font_sizes/font_size = 22
 horizontal_alignment = 1
 
 [node name="BackButton" type="Button" parent="Margin/VBox"]
-custom_minimum_size = Vector2(220, 40)
+custom_minimum_size = Vector2(280, 52)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_hover_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_pressed_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_colors/font_focus_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_font_sizes/font_size = 22
 text = "Fold it up — back to garage"
 
 [node name="PreviewOverlay" type="Control" parent="."]
@@ -194,7 +200,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 72.0
-offset_top = 48.0
+offset_top = 168.0
 offset_right = -72.0
 offset_bottom = -96.0
 grow_horizontal = 2
@@ -208,7 +214,7 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_left = 72.0
-offset_top = 48.0
+offset_top = 168.0
 offset_right = -72.0
 offset_bottom = -96.0
 grow_horizontal = 2
@@ -223,7 +229,7 @@ theme_override_constants/separation = 10
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
-theme_override_font_sizes/font_size = 22
+theme_override_font_sizes/font_size = 28
 text = ""
 horizontal_alignment = 1
 
@@ -269,12 +275,14 @@ unique_name_in_owner = true
 
 [node name="PreviewBack" type="Button" parent="PreviewOverlay/PreviewPanel/PreviewCard"]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 40)
+custom_minimum_size = Vector2(220, 52)
 layout_mode = 2
 size_flags_horizontal = 4
 theme_override_colors/font_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_hover_color = Color(0.08, 0.07, 0.06, 1)
 theme_override_colors/font_pressed_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_colors/font_focus_color = Color(0.08, 0.07, 0.06, 1)
+theme_override_font_sizes/font_size = 22
 text = "Back"
 
 [connection signal="pressed" from="PreviewOverlay/PreviewPanel/PreviewCard/PreviewBack" to="." method="_close_car_preview"]

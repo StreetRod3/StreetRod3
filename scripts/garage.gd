@@ -1859,9 +1859,15 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 		btn.text = "Fit"
 		btn.pressed.connect(_on_fit_part.bind(kind, part_id))
 	else:
-		btn.text = "Buy $%d" % int(item.get("price", 0))
-		btn.disabled = GameState.money < int(item.get("price", 0))
-		btn.pressed.connect(_on_fit_part.bind(kind, part_id))
+		var copies := GameState.newspaper_copies(kind, part_id)
+		if copies.is_empty():
+			btn.text = "Sold"
+			btn.disabled = true
+		else:
+			var price := GameState.newspaper_price(kind, part_id, 0)
+			btn.text = "Buy $%d" % price
+			btn.disabled = GameState.money < price
+			btn.pressed.connect(_on_fit_part.bind(kind, part_id))
 	row.add_child(btn)
 	return row
 
