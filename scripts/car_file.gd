@@ -88,7 +88,7 @@ static func _parse_wheels(root: Dictionary, result: Dictionary) -> void:
 		result.errors.append("Car wheels need at least one mount.")
 		mounts = []
 	var parsed: Array[Dictionary] = []
-	for item in mounts:
+	for item: Variant in mounts:
 		if typeof(item) != TYPE_DICTIONARY:
 			result.errors.append("A wheel mount must be an object.")
 			continue
@@ -125,7 +125,7 @@ static func _parse_parts(root: Dictionary, result: Dictionary) -> void:
 	var register: Dictionary = _PartsRegister.load_path(register_path)
 	var register_errors: Variant = register.get("errors", [])
 	if typeof(register_errors) == TYPE_ARRAY:
-		for err in register_errors:
+		for err: String in register_errors:
 			result.errors.append(str(err))
 	if typeof(register_errors) == TYPE_ARRAY and not (register_errors as Array).is_empty():
 		return

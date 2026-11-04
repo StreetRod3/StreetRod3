@@ -100,7 +100,7 @@ func _ready() -> void:
 	if errors.is_empty():
 		route = TrackFile.cruise_route(track, from_poi, to_poi)
 	if route.size() < 2:
-		for err in errors:
+		for err: String in errors:
 			push_error(str(err))
 		if errors.is_empty():
 			push_error("No city route from %s to %s." % [from_poi, to_poi])
@@ -262,9 +262,9 @@ func _build_ground(track: Dictionary) -> MeshInstance3D:
 	var max_z := 0.0
 	var first := true
 	var points: Array[Vector3] = []
-	for id in track["nodes"]:
+	for id: int in track["nodes"]:
 		points.append(TrackFile.world_position(track["nodes"][id]))
-	for pid in track["poi_order"]:
+	for pid: String in track["poi_order"]:
 		points.append(TrackFile.world_position(track["pois"][pid]))
 	for point in points:
 		if first:
@@ -302,7 +302,7 @@ func _road_meshes(track: Dictionary) -> Array:
 	var links: Dictionary = {}
 	var seen := {}
 	var nodes: Dictionary = track["nodes"]
-	for road in track["roads"]:
+	for road: Dictionary in track["roads"]:
 		var a_id := int(road["from"])
 		var b_id := int(road["to"])
 		var key := "%d-%d" % [mini(a_id, b_id), maxi(a_id, b_id)]
@@ -311,7 +311,7 @@ func _road_meshes(track: Dictionary) -> Array:
 		seen[key] = true
 		var half := maxf(float(road["width"]) * 0.5, 1.0)
 		_add_street(segments, links, a_id, b_id, TrackFile.world_position(nodes[a_id]), TrackFile.world_position(nodes[b_id]), half)
-	for pid in track["poi_order"]:
+	for pid: String in track["poi_order"]:
 		var poi: Dictionary = track["pois"][pid]
 		var stop := TrackFile.world_position(poi)
 		var at_id := int(poi["at"])
@@ -382,7 +382,7 @@ func _curb_trim(links: Dictionary, node_id: int, side_dir: Vector3) -> float:
 		return 0.0
 	var widest := 0.0
 	var found := false
-	for raw in links[node_id]:
+	for raw: Dictionary in links[node_id]:
 		var entry: Dictionary = raw
 		var dir: Vector3 = entry["dir"]
 		if dir.dot(side_dir) <= 0.5:
@@ -403,7 +403,7 @@ func _junction_half(links: Dictionary, node_id: int, along: Vector3) -> float:
 		return 0.0
 	along_flat = along_flat.normalized()
 	var widest := 0.0
-	for raw in links[node_id]:
+	for raw: Dictionary in links[node_id]:
 		var entry: Dictionary = raw
 		var dir: Vector3 = entry["dir"]
 		if absf(dir.dot(along_flat)) > 0.85:
@@ -452,7 +452,7 @@ func _add_ribbon(st: SurfaceTool, a: Vector3, b: Vector3, half_w: float, lift: f
 
 func _build_places(track: Dictionary) -> void:
 	var nodes: Dictionary = track["nodes"]
-	for pid in track["poi_order"]:
+	for pid: String in track["poi_order"]:
 		var poi: Dictionary = track["pois"][pid]
 		var stop := TrackFile.world_position(poi)
 		var join := TrackFile.world_position(nodes[int(poi["at"])])
@@ -765,7 +765,7 @@ func _add_light(parent: Node3D, pos: Vector3, color: Color, energy: float, range
 
 func _build_blocks(track: Dictionary) -> void:
 	var blocks: Array = track.get("buildings", [])
-	for raw in blocks:
+	for raw: Dictionary in blocks:
 		var block: Dictionary = raw
 		var wide := float(block["w"])
 		var deep := float(block["d"])

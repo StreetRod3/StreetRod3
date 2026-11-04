@@ -26,7 +26,7 @@ static func find(register: Dictionary, category: String, part_id: String) -> Dic
 	var rows: Variant = register.get(category, [])
 	if typeof(rows) != TYPE_ARRAY:
 		return {}
-	for item in rows:
+	for item: Variant in rows:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
 		var part: Dictionary = item
@@ -72,7 +72,7 @@ static func _rows(value: Variant, category: String, result: Dictionary) -> Array
 		result.errors.append("Parts register '%s' must be a list." % category)
 		return rows
 	var seen: Dictionary = {}
-	for item in value:
+	for item: Variant in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			result.errors.append("A %s entry must be an object." % category)
 			continue

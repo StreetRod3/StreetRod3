@@ -63,7 +63,7 @@ const _PARKED: Array[Dictionary] = [
 @onready var _camera: Camera3D = $Camera3D
 @onready var _ui: CanvasLayer = $UI
 
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 var _cash: Label
 var _hover_prompt: Label
 var _back: Button
@@ -159,7 +159,7 @@ func _exit_tree() -> void:
 func _plant_wheels(car: Node3D) -> void:
 	var lowest := INF
 	var wheels: Array[Node3D] = []
-	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+	for wname: String in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
 		var wheel := car.get_node_or_null(wname) as Node3D
 		if wheel == null or not wheel.visible:
 			continue
@@ -1100,7 +1100,7 @@ func _present_rival(parked: bool = false) -> void:
 
 func _collect_rival_wheels(car: Node) -> void:
 	_rival_wheels.clear()
-	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+	for wname: String in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
 		var wheel := car.get_node_or_null(wname) as Node3D
 		if wheel != null and wheel.visible:
 			_rival_wheels.append(wheel)

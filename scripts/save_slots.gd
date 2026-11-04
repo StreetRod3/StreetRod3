@@ -20,7 +20,7 @@ var _rows: Array[Button] = []
 var _back: Button
 var _hint: Label
 var _confirm_slot: int = 0
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 
 
 func _ready() -> void:

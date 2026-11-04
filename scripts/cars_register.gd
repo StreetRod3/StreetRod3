@@ -53,7 +53,7 @@ static func _rows(value: Variant, result: Dictionary) -> Array[Dictionary]:
 		result.errors.append("Cars register '%s' must be a list." % CARS)
 		return rows
 	var seen: Dictionary = {}
-	for item in value:
+	for item: Variant in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			result.errors.append("A car entry must be an object.")
 			continue

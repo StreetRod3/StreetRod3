@@ -110,7 +110,7 @@ func surface_height(world: Vector3) -> float:
 	var i := _nearest_index(world)
 	var height := _pts[i].y
 	var best_d := INF
-	for j in [i - 1, i]:
+	for j: int in [i - 1, i]:
 		if j < 0 or j + 1 >= _pts.size():
 			continue
 		var a := _pts[j]
@@ -221,10 +221,10 @@ func _build_path() -> void:
 	_length = 0.0
 	_race_length = 0.0
 	var data := TrackFile.load_path(track_path)
-	for warning in data.warnings:
+	for warning: String in data.warnings:
 		push_warning("[track] %s" % warning)
 	if not data.errors.is_empty():
-		for error_text in data.errors:
+		for error_text: String in data.errors:
 			push_error("[track] %s" % error_text)
 		return
 	var path_ids: Array = data.path_ids
@@ -608,7 +608,7 @@ func _grass_height(x: float, z: float) -> float:
 			best_d = d
 			best_i = index
 	var height := _pts[best_i].y
-	for j in [best_i - 1, best_i]:
+	for j: int in [best_i - 1, best_i]:
 		if j < 0 or j + 1 >= _pts.size():
 			continue
 		var a := _pts[j]

@@ -96,7 +96,7 @@ var _calendar_home: Transform3D
 var _calendar_blend: float = 0.0
 var _calendar_inspecting: bool = false
 var _calendar_tween: Tween
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
@@ -1379,7 +1379,7 @@ func _build_offer_panel(parent: Control) -> void:
 	var panel := PanelContainer.new()
 	center.add_child(panel)
 	var margin := MarginContainer.new()
-	for side in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
 		margin.add_theme_constant_override(side, 18)
 	panel.add_child(margin)
 	var box := VBoxContainer.new()
@@ -1681,9 +1681,9 @@ func _rebuild_spares_list() -> void:
 		[GameState.WHEELS, "wheels"],
 		[GameState.PARTS, "part"],
 	]
-	for catalog in catalogs:
+	for catalog: Array in catalogs:
 		var kind := str(catalog[1])
-		for item in catalog[0]:
+		for item: Dictionary in catalog[0]:
 			var part: Dictionary = item
 			if GameState.free_spare_count(kind, str(part.get("id", ""))) <= 0:
 				continue
@@ -2566,8 +2566,8 @@ func _build_creeper() -> void:
 	_prop_box(_creeper, Vector3(0.78, 0.03, 0.36), Vector3(-0.08, 0.127, 0.0), pad)
 	# Headrest at the head end, toward the front of the car.
 	_prop_box(_creeper, Vector3(0.16, 0.05, 0.3), Vector3(0.4, 0.137, 0.0), pad)
-	for cx in [-0.42, 0.0, 0.42]:
-		for cz in [-0.17, 0.17]:
+	for cx: float in [-0.42, 0.0, 0.42]:
+		for cz: float in [-0.17, 0.17]:
 			_prop_box(_creeper, Vector3(0.04, 0.03, 0.04), Vector3(cx, 0.075, cz), steel)
 			var wheel := MeshInstance3D.new()
 			var mesh := CylinderMesh.new()
@@ -2607,7 +2607,7 @@ func _build_tire_machine() -> void:
 	_prop_box(_tire_machine, Vector3(0.42, 0.07, 0.07), Vector3(0.15, 1.3, 0.0), dark)
 	_prop_box(_tire_machine, Vector3(0.05, 0.3, 0.05), Vector3(-0.03, 1.15, 0.0), steel)
 	_prop_box(_tire_machine, Vector3(0.09, 0.04, 0.09), Vector3(-0.03, 0.99, 0.0), dark)
-	for cz in [-0.14, 0.0, 0.14]:
+	for cz: float in [-0.14, 0.0, 0.14]:
 		_prop_box(_tire_machine, Vector3(0.16, 0.025, 0.08), Vector3(-0.42, 0.04, cz), steel)
 	_tire_machine.position = _TIRE_MACHINE_SPOT
 	# The column to the wall, the pedals to the room.

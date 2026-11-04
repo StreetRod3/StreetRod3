@@ -86,7 +86,7 @@ var _orbiting: bool = false
 var _yaw: float = 0.5
 var _pitch: float = 0.3
 var _distance: float = 1.55
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 
 var _box_label: Label
 var _bolt_labels: Array[Label] = []
@@ -716,7 +716,7 @@ func _build_bay() -> void:
 	add_child(floor)
 	# Floor pan, frame rails, and the rocker panels in the car's paint.
 	_box(self, Vector3(4.2, 0.03, 1.6), Vector3(0.1, DRIVELINE_Y + 0.34, 0.0), under)
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_box(self, Vector3(4.0, 0.1, 0.07), Vector3(0.1, DRIVELINE_Y + 0.17, 0.42 * side), frame)
 		_box(self, Vector3(4.2, 0.16, 0.04), Vector3(0.1, DRIVELINE_Y + 0.27, 0.8 * side), paint)
 		# Posts of the two-post lift, well out to the sides.
@@ -764,8 +764,8 @@ func _build_jack() -> void:
 	_jack.name = "TransmissionJack"
 	add_child(_jack)
 	_box(_jack, Vector3(0.5, 0.05, 0.36), Vector3(0.0, 0.075, 0.0), red)
-	for cx in [-0.21, 0.21]:
-		for cz in [-0.15, 0.15]:
+	for cx: float in [-0.21, 0.21]:
+		for cz: float in [-0.15, 0.15]:
 			var wheel := _cylinder_x(_jack, 0.035, 0.035, 0.03, 0.0, rubber)
 			wheel.position = Vector3(cx, 0.035, cz)
 	_post = MeshInstance3D.new()
@@ -780,8 +780,8 @@ func _build_jack() -> void:
 	_cradle.name = "Cradle"
 	_jack.add_child(_cradle)
 	_box(_cradle, Vector3(0.34, 0.025, 0.2), Vector3(0.0, -0.0125, 0.0), red)
-	for fx in [-0.16, 0.16]:
-		for fz in [-0.09, 0.09]:
+	for fx: float in [-0.16, 0.16]:
+		for fz: float in [-0.09, 0.09]:
 			_box(_cradle, Vector3(0.02, 0.07, 0.02), Vector3(fx, 0.02, fz), red)
 	_jack.position = JACK_PARK
 	_set_cradle(JACK_LOW)

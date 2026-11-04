@@ -8,7 +8,7 @@ var index: int = 0
 
 func setup(list: Array) -> void:
 	_unwire()
-	for entry in list:
+	for entry: Variant in list:
 		if entry is Control:
 			items.append(entry)
 	_wire()
@@ -120,7 +120,7 @@ func _unwire() -> void:
 
 
 func _connect_self(sig: Signal, cb: Callable) -> void:
-	for conn in sig.get_connections():
+	for conn: Dictionary in sig.get_connections():
 		var existing: Callable = conn.callable
 		if existing.get_object() == self:
 			return
@@ -128,7 +128,7 @@ func _connect_self(sig: Signal, cb: Callable) -> void:
 
 
 func _disconnect_self(sig: Signal) -> void:
-	for conn in sig.get_connections():
+	for conn: Dictionary in sig.get_connections():
 		var cb: Callable = conn.callable
 		if cb.get_object() == self:
 			sig.disconnect(cb)

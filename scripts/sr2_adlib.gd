@@ -23,7 +23,7 @@ const MOTOR: Array[int] = [
 
 enum { _KSL, _MULT, _FB, _AR, _SL, _EG, _DR, _RR, _TL, _AM, _VIB, _KSR, _CNT, _WS }
 
-var chip = _Opl2.new()
+var chip := _Opl2.new()
 
 var _fnum: Array[PackedInt32Array] = []
 var _pitch_step := 25
@@ -59,7 +59,7 @@ func _warm_init() -> void:
 	for v in 9:
 		chip.write(0xa0 + v, 0)
 		chip.write(0xb0 + v, 0)
-	for slot in [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21]:
+	for slot: int in [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12, 13, 16, 17, 18, 19, 20, 21]:
 		chip.write(0xe0 + slot, 0)
 	chip.write(0x01, 0x20)
 	_volume.fill(0x7f)

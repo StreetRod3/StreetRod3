@@ -89,7 +89,7 @@ var _signature := Label.new()
 ## The name as typed. The line shows it in capitals, the signature keeps its case.
 var _typed_name := ""
 var _portrait_view := SubViewport.new()
-var _figure = _DriverFigure.new()
+var _figure := _DriverFigure.new()
 ## The one trait not printed on the card: a click on the photo changes it.
 var _skin: String = GameState.DRIVER_TRAITS_DEFAULT["skin"]
 var _lenses_x := Label.new()
@@ -191,7 +191,7 @@ static func _weight_choices() -> Array:
 
 func _setup_name_edit() -> void:
 	var blank := StyleBoxEmpty.new()
-	for style in ["normal", "focus", "read_only"]:
+	for style: String in ["normal", "focus", "read_only"]:
 		_name_edit.add_theme_stylebox_override(style, blank)
 	_name_edit.add_theme_font_override("font", _typed_font)
 	_name_edit.add_theme_font_size_override("font_size", FONT_SIZE)
@@ -293,7 +293,7 @@ func _update_portrait() -> void:
 
 func _traits() -> Dictionary:
 	var traits := {}
-	for id in _choices:
+	for id: String in _choices:
 		traits[id] = (_card.get_node(id) as Label).text
 	traits["skin"] = _skin
 	traits["glasses"] = _lenses_x.visible

@@ -29,7 +29,7 @@ const _NO_ROOM_LINES: Array[String] = [
 @onready var _preview_back: Button = %PreviewBack
 
 var _section: String = SECTION_INDEX
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 var _preview_car_id: String = ""
 var _preview_pivot: Node3D
 var _no_room: Control
