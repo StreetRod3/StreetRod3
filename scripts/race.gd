@@ -231,9 +231,9 @@ func _process(delta: float) -> void:
 
 	_elapsed += delta
 	_hud_time.text = "Time: %.2f s" % _elapsed
-	_hud_dist.text = "To finish: %.1f m" % _distance_to_finish()
+	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
 	var spd: float = _player.get_forward_speed()
-	_hud_speed.text = "Speed: %.0f km/h" % (spd * 3.6)
+	_hud_speed.text = "Speed: %s" % GameState.speed_text(spd * 3.6)
 	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
 		_show_tire_blowout()

@@ -45,7 +45,7 @@ flowchart TD
 | --- | --- | --- |
 | `scenes/main_menu.tscn` | `scripts/main_menu.gd` | New game, load (from the save slot list), settings, quit |
 | `scenes/driver_license.tscn` | `scripts/driver_license.gd` | Driver's Name screen between New Game and the garage: type a name and click through the traits on the license, with a live photo from `scripts/driver_figure.gd`, which sets the baked MakeHuman models in `assets/driver` from the traits, shown through `shaders/faded_photo.gdshader`; clicking the photo steps the skin tone and the lenses box adds glasses; `shaders/aged_paper.gdshader` with the wear map `assets/ui/card_wear.jpg` ages the whole card |
-| `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle |
+| `scenes/settings.tscn` | `scripts/settings.gd` | Fullscreen, master volume, music toggle, arcade driving, imperial units. Values stay metric in the code and saves; `GameState.speed_text()` and the helpers beside it do the display. |
 | `scenes/garage.tscn` | `scripts/garage.gd` | Orbit camera, clickable props, paint, stats |
 | `scenes/newspaper.tscn` | `scripts/newspaper.gd` | Buy parts, gearboxes, and used cars |
 | `scenes/transmission.tscn` | `scripts/transmission.gd` | Under the car: bellhousing bolts, gearbox out and in on a jack |

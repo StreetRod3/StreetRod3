@@ -1538,10 +1538,10 @@ func _rebuild_fitted_list() -> void:
 	var engine := GameState.get_equipped_engine()
 	var box: Dictionary = GameState.get_equipped_gearbox()
 	var wheel := GameState.get_equipped_wheel()
-	_parts_status.text = "%s\n%.0f hp · %.0f km/h" % [
+	_parts_status.text = "%s\n%.0f hp · %s" % [
 		GameState.car_name,
 		GameState.engine_power_hp,
-		GameState.get_effective_vmax_kmh(),
+		GameState.speed_text(GameState.get_effective_vmax_kmh()),
 	]
 	if not engine.is_empty():
 		_parts_list.add_child(_mounted_line("Engine", _parts_row_text(engine, "engine") + _condition_text("engine")))
@@ -2693,15 +2693,15 @@ func _show_stats() -> void:
 	if box.is_empty():
 		kind = "not fitted"
 	var rear_end := GameState.slot_part(GameState.SLOT_DIFFERENTIAL)
-	var t := "Car: %s\n\nTop speed: %.0f km/h\nEngine power: %.0f hp\nGearbox: %s\n%s, %d gears\nRear end: %s\nFuel: %.0f L" % [
+	var t := "Car: %s\n\nTop speed: %s\nEngine power: %.0f hp\nGearbox: %s\n%s, %d gears\nRear end: %s\nFuel: %s" % [
 		GameState.car_name,
-		GameState.get_effective_vmax_kmh(),
+		GameState.speed_text(GameState.get_effective_vmax_kmh()),
 		GameState.engine_power_hp,
 		str(box.get("name", "—")),
 		kind,
 		gear_count,
 		str(rear_end.get("name", "—")),
-		GameState.fuel,
+		GameState.fuel_text(GameState.fuel),
 	]
 	_stats_label.text = t
 	_stats_panel.visible = true

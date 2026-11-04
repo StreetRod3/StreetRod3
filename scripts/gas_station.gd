@@ -895,9 +895,9 @@ func _pour_fuel(delta: float) -> void:
 		GameState.money -= pay
 		_pour_banked -= float(pay) / price
 	if _cash != null:
-		_cash.text = "Bankroll: $%d    Tank: %.1f / %.0f L" % [GameState.money, GameState.fuel, GameState.DEFAULT_TANK_L]
-	var filling := "Full service... %.1f L" if _service_pour else "Filling up... %.1f L"
-	_status = filling % GameState.fuel
+		_cash.text = "Bankroll: $%d    Tank: %s" % [GameState.money, GameState.tank_text(true)]
+	var filling := "Full service... %s" if _service_pour else "Filling up... %s"
+	_status = filling % GameState.fuel_fine_text(GameState.fuel)
 	_status_until = _time + 0.35
 	if GameState.fuel >= GameState.DEFAULT_TANK_L - 0.05:
 		_end_pour("Tank is full.")
@@ -1268,7 +1268,7 @@ func _build_hud() -> void:
 func _refresh_cash() -> void:
 	if _cash == null:
 		return
-	_cash.text = "Bankroll: $%d    Tank: %.0f / %.0f L" % [GameState.money, GameState.fuel, GameState.DEFAULT_TANK_L]
+	_cash.text = "Bankroll: $%d    Tank: %s" % [GameState.money, GameState.tank_text()]
 
 
 func _build_environment() -> void:

@@ -17,7 +17,7 @@ Local data is created by the game under Godot’s `user://` directory (OS-specif
 | File | Format | Contents |
 | --- | --- | --- |
 | `user://saves/slot_1.json` … `slot_8.json` | JSON, `version` 2 | One save slot each: car, cash, ownership, every car's parts and their condition, the condition of spares on no car (`spare_conditions`), paint, opponents, race type, scene to resume, and `saved_at` (Unix time) for the slot list |
-| `user://settings.cfg` | Godot `ConfigFile` | `display/fullscreen`, `audio/master_db`, `audio/music_enabled` |
+| `user://settings.cfg` | Godot `ConfigFile` | `display/fullscreen`, `audio/master_db`, `audio/music_enabled`, `game/arcade_drive`, `game/imperial_units` |
 
 Delete those files to reset a profile. They are not in the repository. A `user://savegame.json` from before save slots is moved into slot 1 the first time the slots are listed.
 
