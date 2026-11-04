@@ -3,7 +3,7 @@ extends Control
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
 
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 
 
 func _ready() -> void:

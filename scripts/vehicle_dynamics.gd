@@ -289,7 +289,7 @@ func set_wheel_positions(local_positions: Array) -> void:
 	# enough for the suspension to find the road, or the tires never touch it.
 	var car := get_parent() as Node3D
 	var car_y := car.global_position.y if car != null else 0.0
-	for point in local_positions:
+	for point: Vector3 in local_positions:
 		var hub := point as Vector3
 		if hub.y + car_y > _MAX_RIDE_DROP_M:
 			hub.y = _DEFAULT_RIDE_DROP_M - car_y

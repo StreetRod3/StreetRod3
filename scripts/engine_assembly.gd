@@ -172,7 +172,7 @@ func _view_carb_slots() -> Array[String]:
 
 ## Builds every part the active car has.
 func build() -> void:
-	for key in rigs.keys():
+	for key: String in rigs.keys():
 		(rigs[key] as Node3D).queue_free()
 	rigs.clear()
 	balancer = null
@@ -239,7 +239,7 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 			var z := HEAD_DECK_IN.y + slope.y * (HEAD_BOLT_Y - HEAD_DECK_IN.x) / slope.x
 			for side in head_sides():
 				var normal := Vector3(0.0, -slope.y * side, slope.x).normalized()
-				for x in [-HEAD_BOLT_X, HEAD_BOLT_X]:
+				for x: float in [-HEAD_BOLT_X, HEAD_BOLT_X]:
 					out.append(Transform3D(_axis_basis(normal), Vector3(x, HEAD_BOLT_Y * side, z)))
 		GameState.SLOT_INTAKE:
 			for p in INTAKE_BOLTS:
@@ -253,7 +253,7 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 				# Two nuts on opposite corners of the base, front one first.
 				var four := int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
 				var nut := Vector3(0.25, 0.2, 0.25) if four else Vector3(0.15, 0.21, 0.09)
-				for corner in [Vector3(-nut.x, -nut.y, nut.z), nut]:
+				for corner: Vector3 in [Vector3(-nut.x, -nut.y, nut.z), nut]:
 					out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + corner))
 	return out
 
@@ -295,7 +295,7 @@ static func mark_angle(degrees: float) -> float:
 
 func _build_engine(rig: Node3D) -> void:
 	var leave: Array[String] = []
-	for nodes in [_NODES_HEADS, _NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
+	for nodes: Array[String] in [_NODES_HEADS, _NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
 		leave.append_array(nodes)
 	_add_model_nodes(rig, leave, false)
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
@@ -339,7 +339,7 @@ func _build_engine(rig: Node3D) -> void:
 	_box(rig, Vector3(0.04, 0.3, 0.08), Vector3(-1.56, 0.82, 0.62), dark)
 	# Fan belt around the three pulleys.
 	var hull := PackedVector2Array()
-	for c in [[Vector2(0.0, CRANK_Z), 0.3], [PUMP_CENTER, 0.3], [ALTERNATOR_CENTER, 0.14]]:
+	for c: Array in [[Vector2(0.0, CRANK_Z), 0.3], [PUMP_CENTER, 0.3], [ALTERNATOR_CENTER, 0.14]]:
 		for k in 24:
 			var a := TAU * float(k) / 24.0
 			hull.append((c[0] as Vector2) + Vector2(cos(a), sin(a)) * (float(c[1]) + 0.025))
@@ -401,7 +401,7 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 	_cyl_x(rig, 0.045, CAM_BACK_X - CAM_FRONT_X, CAM_BACK_X, metal, 12, 0.0, CAM_Z)
 	var phase := 0.0
 	for bore in BORES_X:
-		for offset in [-0.21, -0.07, 0.07, 0.21]:
+		for offset: float in [-0.21, -0.07, 0.07, 0.21]:
 			var turned := Node3D.new()
 			turned.position = Vector3(bore + offset, 0.0, CAM_Z)
 			turned.rotation.x = phase
@@ -457,7 +457,7 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	var top := pads[0].z
 	var floor_z := INTAKE_FLOOR
 	# Runners from the plenum out to each port on the heads, four a side.
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		for bx in BORES_X:
 			var port := Vector3(bx + 0.1 * side, PORT_Y * side, PORT_Z)
 			var root := Vector3(clampf(bx * 0.55, front + 0.12, back - 0.12), INTAKE_WIDTH * 0.3 * side, top - 0.14)
@@ -510,7 +510,7 @@ func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
 	# Float bowl on the front, air horn on top with its two throats.
 	_box(rig, Vector3(0.12, 0.28, 0.2), pad + Vector3(-0.2, 0.0, 0.18), zinc)
 	_cyl_z(rig, 0.17, 0.17, 0.07, pad + Vector3(0.0, 0.0, 0.29), zinc, 20)
-	for y in [-0.075, 0.075]:
+	for y: float in [-0.075, 0.075]:
 		_cyl_z(rig, 0.055, 0.055, 0.005, pad + Vector3(0.0, y, 0.36), dark, 14)
 	# Throttle shaft and lever.
 	_cyl_x(rig, 0.018, 0.4, pad.x - 0.2, steel, 8, pad.y + 0.17, pad.z + 0.21)
@@ -589,7 +589,7 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 ## Where each spark plug stands out of its head, as a boot end and the direction it points.
 static func plug_spots() -> Array[Transform3D]:
 	var out: Array[Transform3D] = []
-	for side in [1.0, -1.0]:
+	for side: float in [1.0, -1.0]:
 		for i in BORES_X.size():
 			var x: float = BORES_X[i] + (0.08 if side > 0.0 else -0.08)
 			var dir := Vector3(0.0, side, -0.5).normalized()
@@ -782,7 +782,7 @@ static func sweep_mesh(points: PackedVector3Array, radius: float, sides: int, cl
 		var j := (i + 1) % n
 		for k in sides:
 			var k2 := (k + 1) % sides
-			for v in [[i, k], [j, k], [j, k2], [i, k], [j, k2], [i, k2]]:
+			for v: Array in [[i, k], [j, k], [j, k2], [i, k], [j, k2], [i, k2]]:
 				var dir: Vector3 = rings[v[0]][v[1]]
 				st.set_normal(dir)
 				st.add_vertex(points[v[0]] + dir * radius)

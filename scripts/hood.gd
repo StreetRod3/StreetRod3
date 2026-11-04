@@ -96,7 +96,7 @@ var _orbiting: bool = false
 var _yaw: float = -0.95
 var _pitch: float = -0.75
 var _distance: float = 1.55
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 
 var _engine_label: Label
 var _parts_label: Label
@@ -350,9 +350,9 @@ func _tray_xform(key: String, index: int) -> Transform3D:
 
 ## Makes the bolts for a part as the car has it, in or out of their holes.
 func _build_bolts(key: String) -> void:
-	for bolt in _bolts.get(key, []):
+	for bolt: Node3D in _bolts.get(key, []):
 		(bolt as Node3D).queue_free()
-	for body in _hole_bodies.get(key, []):
+	for body: Node3D in _hole_bodies.get(key, []):
 		(body as Node3D).queue_free()
 	_bolts.erase(key)
 	_bolt_mats.erase(key)
@@ -408,7 +408,7 @@ func _make_bolt(key: String, mat: Material) -> Node3D:
 	_cyl(bolt, 0.1, 0.015, 0.0, mat, 16)
 	if key == GameState.SLOT_AIR_CLEANER:
 		_cyl(bolt, 0.055, 0.09, 0.015, mat, 12)
-		for side in [-1.0, 1.0]:
+		for side: float in [-1.0, 1.0]:
 			var ear := MeshInstance3D.new()
 			var box := BoxMesh.new()
 			box.size = Vector3(0.12, 0.025, 0.1)
@@ -586,7 +586,7 @@ func _update_hover() -> void:
 		target = _target_at(vp.get_mouse_position())
 	if target != _hover:
 		_hover = target
-		for key in _bolt_mats.keys():
+		for key: String in _bolt_mats.keys():
 			var mats: Array = _bolt_mats[key]
 			for i in mats.size():
 				(mats[i] as StandardMaterial3D).emission_enabled = _hover.size() == 2 and str(_hover[0]) == key and int(_hover[1]) == i
@@ -625,11 +625,11 @@ func _part_name(key: String) -> String:
 
 ## Click boxes around each part, from its meshes' bounds.
 func _refresh_part_bodies() -> void:
-	for bodies in _part_bodies.values():
-		for body in bodies:
+	for bodies: Array in _part_bodies.values():
+		for body: Node3D in bodies:
 			(body as Node3D).queue_free()
 	_part_bodies.clear()
-	for key in _engine.rigs.keys():
+	for key: String in _engine.rigs.keys():
 		var rig: Node3D = _engine.rigs[key]
 		if not is_instance_valid(rig):
 			continue
@@ -637,7 +637,7 @@ func _refresh_part_bodies() -> void:
 		# whole top of the engine between them.
 		var pieces: Array = rig.get_children() if key == GameState.SLOT_HEADS else [rig]
 		var bodies: Array[Node3D] = []
-		for piece in pieces:
+		for piece: Node in pieces:
 			var box := _world_bounds(piece)
 			if box.size == Vector3.ZERO:
 				continue
@@ -846,7 +846,7 @@ func _refresh_ui() -> void:
 	else:
 		_engine_label.text = "No engine"
 	var lines: Array[String] = []
-	for key in ["engine", "cam", "heads", "intake", "carb", "carb_2", "carb_3", "distributor", "air_cleaner"]:
+	for key: String in ["engine", "cam", "heads", "intake", "carb", "carb_2", "carb_3", "distributor", "air_cleaner"]:
 		if not GameState.is_hood_part_fitted(key):
 			if key == GameState.HOOD_ENGINE or (GameState.has_engine() and (not GameState.CARB_SLOTS.has(key) or GameState.carb_slots().has(key))):
 				lines.append("%s: none" % PART_NAMES[key])
@@ -859,7 +859,7 @@ func _refresh_ui() -> void:
 		lines.append("Plug wires: %s" % ("on" if GameState.plug_wires else "off"))
 	_parts_label.text = "\n".join(lines)
 	_wires_btn.text = "Wires off (W)" if GameState.plug_wires else "Wires on (W)"
-	for b in [_parts_btn, _wires_btn, _tune_btn, _done_btn]:
+	for b: Button in [_parts_btn, _wires_btn, _tune_btn, _done_btn]:
 		(b as Button).disabled = _busy
 	if _busy:
 		return
@@ -1080,7 +1080,7 @@ func _build_bay() -> void:
 	floor.mesh = plane
 	floor.material_override = concrete
 	add_child(floor)
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_box(Vector3(2.4, 0.12, 0.08), Vector3(0.1, 0.32, 0.46 * side), frame)
 		# Inner fender, the fender top, and the wheel well below it.
 		_box(Vector3(1.6, 0.5, 0.03), Vector3(-0.1, 0.62, 0.66 * side), under)

@@ -415,7 +415,7 @@ func _apply_car_spec() -> void:
 func _layout_wheels() -> void:
 	var points: Array[Vector3] = []
 	if _visual != null:
-		for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+		for wname: String in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
 			var wheel := _visual.get_node_or_null(wname) as Node3D
 			if wheel == null:
 				points.clear()

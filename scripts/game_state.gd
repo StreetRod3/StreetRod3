@@ -333,7 +333,7 @@ func load_parts_register() -> void:
 	var register: Dictionary = _PartsRegister.load_path(PARTS_REGISTER)
 	var errors: Variant = register.get("errors", [])
 	if typeof(errors) == TYPE_ARRAY:
-		for err in errors:
+		for err: String in errors:
 			push_error(str(err))
 	PARTS = _dict_list(register.get("parts", []))
 	GEARBOXES = _dict_list(register.get("transmissions", []))
@@ -345,7 +345,7 @@ func load_cars_register() -> void:
 	var register: Dictionary = _CarsRegister.load_path(CARS_REGISTER)
 	var errors: Variant = register.get("errors", [])
 	if typeof(errors) == TYPE_ARRAY:
-		for err in errors:
+		for err: String in errors:
 			push_error(str(err))
 	USED_CARS = _dict_list(register.get("cars", []))
 
@@ -354,7 +354,7 @@ func _dict_list(value: Variant) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	if typeof(value) != TYPE_ARRAY:
 		return rows
-	for item in value:
+	for item: Variant in value:
 		if typeof(item) == TYPE_DICTIONARY:
 			var row: Dictionary = item
 			rows.append(row)
@@ -729,7 +729,7 @@ func load_player_car() -> void:
 	car_spec = _CarFile.load_path(current_car_file_path())
 	var errors: Variant = car_spec.get("errors", [])
 	if typeof(errors) == TYPE_ARRAY:
-		for err in errors:
+		for err: String in errors:
 			push_error(str(err))
 	_ensure_stock_fitment()
 
@@ -1180,7 +1180,7 @@ func _add_rival_parts(build: Dictionary, slots: Dictionary) -> void:
 	var intake := listing_by_id(PARTS, str(slots.get(SLOT_INTAKE, NO_PART_ID)))
 	var carb_share := 1.0 / float(clampi(int(intake.get("carbs", 1)), 1, CARB_SLOTS.size()))
 	var muffler_share := 0.5 if str(slots.get(SLOT_MUFFLER_LEFT, NO_PART_ID)) != NO_PART_ID else 1.0
-	for slot in slots:
+	for slot: String in slots:
 		if slot == SLOT_TIRES:
 			continue
 		var part := listing_by_id(PARTS, str(slots[slot]))
@@ -1200,7 +1200,7 @@ func _rival_hood_parts(listed: Variant) -> Dictionary:
 		hood[slot] = str(STOCK_SLOT_PARTS[slot])
 	if typeof(listed) != TYPE_DICTIONARY:
 		return hood
-	for slot in hood.keys():
+	for slot: String in hood.keys():
 		var part_id := str((listed as Dictionary).get(slot, hood[slot]))
 		if part_id == NO_PART_ID or not listing_by_id(PARTS, part_id).is_empty():
 			hood[slot] = part_id
@@ -1256,7 +1256,7 @@ func _load_opponent_names() -> Array[String]:
 	_opponent_heads.clear()
 	_opponent_genders.clear()
 	_rival_ladder = _dict_list(root.get("ladder", []))
-	for item in listed:
+	for item: Variant in listed:
 		var name := ""
 		var skin := Color(0.76, 0.58, 0.44)
 		var head := DEFAULT_OPPONENT_HEAD
@@ -1322,7 +1322,7 @@ func _load_saved_opponents(d: Dictionary) -> void:
 	if typeof(saved) != TYPE_ARRAY:
 		return
 	var i := 0
-	for item in saved:
+	for item: Variant in saved:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
 		var row: Dictionary = item
@@ -1575,7 +1575,7 @@ func gearbox_ratio_text(box: Dictionary) -> String:
 	if typeof(ratios) != TYPE_ARRAY:
 		return ""
 	var bits: Array[String] = []
-	for ratio in ratios:
+	for ratio: Variant in ratios:
 		bits.append("%.2f" % float(ratio))
 	return " · ".join(bits)
 
@@ -1718,12 +1718,12 @@ func _settle_conditions(rec: Dictionary) -> void:
 	var old: Dictionary = rec.get("conditions", {})
 	var mounts := _active_mounts()
 	var now := {}
-	for mount in old.keys():
+	for mount: String in old.keys():
 		var entry: Dictionary = old[mount]
 		var fitted: Variant = mounts.get(mount, null)
 		if fitted == null or str(fitted[1]) != str(entry.get("id", "")):
 			_push_spare_condition(str(entry.get("kind", "")), str(entry.get("id", "")), float(entry.get("c", 1.0)))
-	for mount in mounts.keys():
+	for mount: String in mounts.keys():
 		var kind := str(mounts[mount][0])
 		var id := str(mounts[mount][1])
 		var entry: Variant = old.get(mount, null)
@@ -1764,12 +1764,12 @@ func _pop_spare_condition(kind: String, id: String) -> float:
 ## from when stock parts did not run out, or two cars shared one engine, are missing.
 func _own_fitted_parts() -> void:
 	var fitted := {}
-	for stored in car_records.values():
+	for stored: Variant in car_records.values():
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
-		for mount in _record_mounts(stored):
+		for mount: Array in _record_mounts(stored):
 			fitted[mount] = int(fitted.get(mount, 0)) + 1
-	for mount in fitted.keys():
+	for mount: Array in fitted.keys():
 		var owned := _owned_list(mount[0])
 		while owned.count(mount[1]) < int(fitted[mount]):
 			owned.append(mount[1])
@@ -1792,7 +1792,7 @@ func free_spare_count(kind: String, id: String) -> int:
 			owned = owned_wheel_ids.count(id)
 			key = "wheel_id"
 	var mounted := 0
-	for raw_id in car_records.keys():
+	for raw_id: String in car_records.keys():
 		var stored: Variant = car_records[raw_id]
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
@@ -1805,8 +1805,8 @@ func free_spare_count(kind: String, id: String) -> int:
 		elif str(rec.get(key, "")) == id:
 			mounted += 1
 	if kind == "part":
-		for sets in spare_wheel_tires.values():
-			for tires in sets:
+		for sets: Array in spare_wheel_tires.values():
+			for tires: Dictionary in sets:
 				if str(tires.get("id", "")) == id:
 					mounted += 1
 	return maxi(owned - mounted, 0)
@@ -1817,8 +1817,8 @@ func free_spare_count(kind: String, id: String) -> int:
 func _trim_spare_conditions() -> void:
 	var lists := {"part": PARTS, "engine": ENGINES, "transmission": GEARBOXES, "wheels": WHEELS}
 	var kept := {}
-	for kind in lists.keys():
-		for item in lists[kind]:
+	for kind: String in lists.keys():
+		for item: Dictionary in lists[kind]:
 			var id := str(item.get("id", ""))
 			var key := _condition_key(kind, id)
 			var pool: Array = spare_conditions.get(key, [])
@@ -1836,7 +1836,7 @@ func _trim_spare_conditions() -> void:
 ## Conditions of the spare copies on no car, best first.
 func spare_condition_list(kind: String, id: String) -> Array[float]:
 	var out: Array[float] = []
-	for c in spare_conditions.get(_condition_key(kind, id), []):
+	for c: float in spare_conditions.get(_condition_key(kind, id), []):
 		out.append(float(c))
 	out.sort()
 	out.reverse()
@@ -1860,7 +1860,7 @@ func wear_parts_after_race() -> void:
 	_sync_record_from_active()
 	var rec: Dictionary = car_records.get(current_car_id, {})
 	var conditions: Dictionary = rec.get("conditions", {})
-	for mount in conditions.keys():
+	for mount: String in conditions.keys():
 		var entry: Dictionary = conditions[mount]
 		entry["c"] = maxf(float(entry.get("c", 1.0)) - randf_range(CONDITION_WEAR_MIN, CONDITION_WEAR_MAX), CONDITION_FLOOR)
 
@@ -1873,7 +1873,7 @@ func wear_parts_from_crashes(damage: float) -> void:
 	_sync_record_from_active()
 	var rec: Dictionary = car_records.get(current_car_id, {})
 	var conditions: Dictionary = rec.get("conditions", {})
-	for mount in conditions.keys():
+	for mount: String in conditions.keys():
 		var entry: Dictionary = conditions[mount]
 		var wear := damage * CRASH_WEAR_MAX * randf_range(0.5, 1.0)
 		entry["c"] = maxf(float(entry.get("c", 1.0)) - wear, CONDITION_FLOOR)
@@ -1971,7 +1971,7 @@ func _mount_conditions_from(value: Variant) -> Dictionary:
 	var out := {}
 	if typeof(value) != TYPE_DICTIONARY:
 		return out
-	for mount in (value as Dictionary).keys():
+	for mount: String in (value as Dictionary).keys():
 		var entry: Variant = value[mount]
 		if typeof(entry) != TYPE_DICTIONARY:
 			continue
@@ -1987,10 +1987,10 @@ func _conditions_pool_from(value: Variant) -> Dictionary:
 	var out := {}
 	if typeof(value) != TYPE_DICTIONARY:
 		return out
-	for key in (value as Dictionary).keys():
+	for key: String in (value as Dictionary).keys():
 		var pool: Array = []
 		if typeof(value[key]) == TYPE_ARRAY:
-			for c in value[key]:
+			for c: Variant in value[key]:
 				pool.append(clampf(float(c), CONDITION_FLOOR, 1.0))
 		out[str(key)] = pool
 	return out
@@ -2387,11 +2387,11 @@ func _spare_wheel_tires_from(value: Variant) -> Dictionary:
 	var out := {}
 	if typeof(value) != TYPE_DICTIONARY:
 		return out
-	for wheel_id in (value as Dictionary).keys():
+	for wheel_id: String in (value as Dictionary).keys():
 		if typeof(value[wheel_id]) != TYPE_ARRAY:
 			continue
 		var sets: Array = []
-		for tires in value[wheel_id]:
+		for tires: Variant in value[wheel_id]:
 			if typeof(tires) == TYPE_DICTIONARY and part_slot(str(tires.get("id", ""))) == SLOT_TIRES:
 				sets.append({"id": str(tires["id"]), "c": clampf(float(tires.get("c", 1.0)), CONDITION_FLOOR, 1.0)})
 		if not sets.is_empty():
@@ -2767,14 +2767,14 @@ func sell_car(instance_id: String, price: int) -> String:
 ## How many spares there are now of each thing on a car about to go.
 func _spares_beside(instance_id: String) -> Dictionary:
 	var spares := {}
-	for mount in _record_mounts(car_records.get(instance_id, {})):
+	for mount: Array in _record_mounts(car_records.get(instance_id, {})):
 		spares[mount] = free_spare_count(mount[0], mount[1])
 	return spares
 
 
 ## With the car gone, what was on it no longer counts as owned.
 func _drop_copies_beyond(spares: Dictionary) -> void:
-	for mount in spares.keys():
+	for mount: Array in spares.keys():
 		while free_spare_count(mount[0], mount[1]) > int(spares[mount]):
 			_owned_list(mount[0]).erase(mount[1])
 	_trim_spare_conditions()
@@ -2794,7 +2794,7 @@ func _record_mounts(rec: Dictionary) -> Array:
 		out.append(["wheels", wheel_id])
 	var slots: Variant = rec.get("slot_parts", {})
 	if typeof(slots) == TYPE_DICTIONARY:
-		for part_id in (slots as Dictionary).values():
+		for part_id: Variant in (slots as Dictionary).values():
 			if str(part_id) != NO_PART_ID and not str(part_id).is_empty():
 				out.append(["part", str(part_id)])
 	for part_id in _string_array(rec.get("part_ids", [])):
@@ -2815,7 +2815,7 @@ func _stock_mounts(model_id: String) -> Array:
 
 func _mounts_price(mounts: Array) -> int:
 	var total := 0
-	for mount in mounts:
+	for mount: Array in mounts:
 		total += int(listing_for(mount[0], mount[1]).get("price", 0))
 	return total
 
@@ -2841,7 +2841,7 @@ func _add_owned_record(rec: Dictionary) -> String:
 	_next_car_serial += 1
 	owned_car_ids.append(instance_id)
 	car_records[instance_id] = rec
-	for mount in _record_mounts(rec):
+	for mount: Array in _record_mounts(rec):
 		_owned_list(mount[0]).append(mount[1])
 	return instance_id
 
@@ -2940,11 +2940,11 @@ func _hood_bolts_from(value: Variant) -> Dictionary:
 	if typeof(value) != TYPE_DICTIONARY:
 		return out
 	var saved: Dictionary = value
-	for key in HOOD_BOLT_COUNTS.keys():
+	for key: String in HOOD_BOLT_COUNTS.keys():
 		if typeof(saved.get(key, null)) != TYPE_ARRAY:
 			continue
 		var bolts: Array[int] = []
-		for turns in saved[key]:
+		for turns: Variant in saved[key]:
 			bolts.append(clampi(int(turns), 0, GEARBOX_BOLT_TIGHT))
 		out[key] = bolts
 	return out
@@ -3062,7 +3062,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 func _cars_for_save() -> Dictionary:
 	_sync_record_from_active()
 	var out := {}
-	for raw_id in car_records.keys():
+	for raw_id: String in car_records.keys():
 		var stored: Variant = car_records[raw_id]
 		if typeof(stored) != TYPE_DICTIONARY:
 			continue
@@ -3099,7 +3099,7 @@ func _load_saved_cars(d: Dictionary) -> void:
 	var saved: Variant = d.get("cars", null)
 	if typeof(saved) == TYPE_DICTIONARY:
 		var rows: Dictionary = saved
-		for key in rows.keys():
+		for key: String in rows.keys():
 			var row: Variant = rows[key]
 			if typeof(row) != TYPE_DICTIONARY:
 				continue
@@ -3204,7 +3204,7 @@ func _string_array(value: Variant) -> Array[String]:
 	var out: Array[String] = []
 	if typeof(value) != TYPE_ARRAY:
 		return out
-	for item in value:
+	for item: Variant in value:
 		out.append(str(item))
 	return out
 

@@ -138,7 +138,7 @@ var _busy: bool = false
 var _hover: String = ""
 ## Part rigs by slot. Built in world space under a node that only moves to animate.
 var _rigs := {}
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 
 var _part_labels := {}
 var _stats_label: Label
@@ -650,7 +650,7 @@ func _build_world() -> void:
 	world_env.environment = env
 	add_child(world_env)
 	# Trouble lights down on the floor under each part, and the shop lights beyond.
-	for spot in [_engine_rear - 0.3, _muffler_x, _rear_x]:
+	for spot: float in [_engine_rear - 0.3, _muffler_x, _rear_x]:
 		var lamp := OmniLight3D.new()
 		lamp.position = Vector3(spot, 0.3, -0.45)
 		lamp.light_color = Color(1.0, 0.86, 0.66)
@@ -658,7 +658,7 @@ func _build_world() -> void:
 		lamp.omni_range = 1.7
 		lamp.shadow_enabled = true
 		add_child(lamp)
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		var fill := OmniLight3D.new()
 		fill.position = Vector3(0.0, 0.5, 2.4 * side)
 		fill.light_color = Color(0.7, 0.78, 0.95)
@@ -690,16 +690,16 @@ func _build_chassis() -> void:
 	_box(self, Vector3(length, 0.03, BODY_HALF * 2.0), Vector3(mid, PAN_Y, 0.0), under)
 	# Transmission tunnel down the middle of the pan.
 	_box(self, Vector3(_rear_x - _engine_rear, 0.06, 0.3), Vector3((_engine_rear + _rear_x) * 0.5, PAN_Y - 0.04, 0.0), under)
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_box(self, Vector3(length - 0.5, 0.1, 0.08), Vector3(mid, FRAME_Y, FRAME_HALF * side), frame)
 		# Rocker: undercoated inside, the paint only on its outer skin.
 		_box(self, Vector3(length, 0.2, 0.04), Vector3(mid, PAN_Y - 0.06, BODY_HALF * side), under)
 		_box(self, Vector3(length, 0.24, 0.01), Vector3(mid, PAN_Y - 0.06, (BODY_HALF + 0.025) * side), paint)
-		for axle_x in [_front_x, _rear_x]:
+		for axle_x: float in [_front_x, _rear_x]:
 			_cylinder_z(self, WHEEL_R, 0.2, Vector3(axle_x, AXLE_Y, TRACK_HALF * side), rubber)
 			_cylinder_z(self, WHEEL_R * 0.62, 0.205, Vector3(axle_x, AXLE_Y, TRACK_HALF * side), rim)
 		# Jack stands under the frame, behind each axle.
-		for stand_x in [_front_x + 0.35, _rear_x + 0.5]:
+		for stand_x: float in [_front_x + 0.35, _rear_x + 0.5]:
 			var post := MeshInstance3D.new()
 			var cone := CylinderMesh.new()
 			cone.top_radius = 0.025
@@ -719,7 +719,7 @@ func _build_chassis() -> void:
 	# Gas tank behind the axle.
 	_box(self, Vector3(0.42, 0.18, 0.9), Vector3(_rear_x + 0.72, PAN_Y - 0.12, 0.0), _mat(Color(0.18, 0.18, 0.17), 0.5, 0.5))
 	# Front suspension: lower control arms out to the spindles.
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_tube(self, Vector3(_front_x + 0.15, FRAME_Y - 0.06, FRAME_HALF * 0.7 * side), Vector3(_front_x, AXLE_Y - 0.08, (TRACK_HALF - 0.12) * side), 0.025, frame)
 		_tube(self, Vector3(_front_x - 0.15, FRAME_Y - 0.06, FRAME_HALF * 0.7 * side), Vector3(_front_x, AXLE_Y - 0.08, (TRACK_HALF - 0.12) * side), 0.025, frame)
 
@@ -759,7 +759,7 @@ func _build_driveline() -> void:
 	var pinion := Vector3(_rear_x - 0.31, AXLE_Y + 0.02, 0.0)
 	_tube(self, Vector3(tail, CRANK_Y, 0.0), pinion, 0.038, steel)
 	# Axle tubes out to the brake drums. The center section is the rear end part.
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_tube(self, Vector3(_rear_x, AXLE_Y, 0.1 * side), Vector3(_rear_x, AXLE_Y, (TRACK_HALF - 0.12) * side), 0.042, iron)
 		_cylinder_z(self, 0.15, 0.08, Vector3(_rear_x, AXLE_Y, (TRACK_HALF - 0.12) * side), iron)
 
@@ -769,7 +769,7 @@ func _build_driveline() -> void:
 func _build_springs(rig: Node3D, style: String) -> void:
 	var mat := _mat(_SPRING_COLORS.get(style, _SPRING_COLORS["stock"]), 0.5, 0.45)
 	var leaves := int(_SPRING_LEAVES.get(style, 2))
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_build_coil(rig, Vector3(_front_x, FRAME_Y - 0.04, FRAME_HALF * 0.95 * side), AXLE_Y - 0.06, mat)
 		for leaf in leaves:
 			var length := 1.2 - 0.3 * float(leaf)
@@ -790,8 +790,8 @@ func _build_coil(rig: Node3D, center: Vector3, bottom_y: float, mat: Material) -
 func _build_shocks(rig: Node3D, style: String) -> void:
 	var body := _mat(_SHOCK_COLORS.get(style, _SHOCK_COLORS["stock"]), 0.4, 0.45)
 	var rod := _mat(_CHROME, 0.9, 0.2)
-	for side in [-1.0, 1.0]:
-		for axle_x in [_front_x, _rear_x]:
+	for side: float in [-1.0, 1.0]:
+		for axle_x: float in [_front_x, _rear_x]:
 			var top := Vector3(axle_x + 0.16, FRAME_Y + 0.02, _SHOCK_Z * 0.86 * side)
 			var bottom := Vector3(axle_x + 0.03, AXLE_Y - 0.05, _SHOCK_Z * side)
 			var middle := top.lerp(bottom, 0.45)
@@ -850,7 +850,7 @@ func _pipe_start(side: float) -> Vector3:
 
 ## Static hot spots for each slot, so an empty one can still be clicked.
 func _build_zones() -> void:
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_zone(GameState.SLOT_MANIFOLD, Vector3(0.82, 0.3, 0.16), Vector3(_engine_rear - 0.18, CRANK_Y - 0.05, 0.3 * side))
 	_zone(GameState.SLOT_MUFFLER, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, MUFFLER_Z * RIGHT))
 	_zone(GameState.SLOT_MUFFLER_LEFT, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, -MUFFLER_Z * RIGHT))
@@ -859,10 +859,10 @@ func _build_zones() -> void:
 	var pipes_to := _muffler_x - MUFFLER_LEN * 0.5 - 0.08
 	_zone(GameState.SLOT_EXHAUST, Vector3(pipes_to - pipes_from, 0.14, MUFFLER_Z * 2.0 + 0.12), Vector3((pipes_from + pipes_to) * 0.5, PIPE_Y, 0.0))
 	_zone(GameState.SLOT_DIFFERENTIAL, Vector3(0.62, 0.34, 0.4), Vector3(_rear_x - 0.06, AXLE_Y, 0.0))
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_zone(GameState.SLOT_SPRINGS, Vector3(0.24, 0.3, 0.2), Vector3(_front_x, (FRAME_Y + AXLE_Y) * 0.5 - 0.04, FRAME_HALF * 0.95 * side))
 		_zone(GameState.SLOT_SPRINGS, Vector3(1.24, 0.12, 0.1), Vector3(_rear_x, AXLE_Y - 0.08, FRAME_HALF * side))
-		for axle_x in [_front_x, _rear_x]:
+		for axle_x: float in [_front_x, _rear_x]:
 			_zone(GameState.SLOT_SHOCKS, Vector3(0.26, 0.4, 0.12), Vector3(axle_x + 0.1, (FRAME_Y + AXLE_Y) * 0.5, _SHOCK_Z * 0.95 * side))
 
 
@@ -894,7 +894,7 @@ func _rebuild_rig(slot: String) -> Node3D:
 	var style := str(part.get("style", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
-			for side in [-1.0, 1.0]:
+			for side: float in [-1.0, 1.0]:
 				_build_manifold(rig, style, side)
 		GameState.SLOT_EXHAUST:
 			_build_exhaust(rig, bool(part.get("dual", false)))
@@ -963,7 +963,7 @@ func _build_muffler(rig: Node3D, style: String, z: float) -> void:
 			_cylinder_x(rig, 0.03, 0.058, 0.08, inlet - 0.08, shell, PIPE_Y, z, 20)
 			_cylinder_x(rig, 0.058, 0.058, MUFFLER_LEN, inlet, shell, PIPE_Y, z, 24)
 			_cylinder_x(rig, 0.058, 0.03, 0.08, outlet, shell, PIPE_Y, z, 20)
-			for at in [0.12, MUFFLER_LEN - 0.14]:
+			for at: float in [0.12, MUFFLER_LEN - 0.14]:
 				_cylinder_x(rig, 0.061, 0.061, 0.02, inlet + at, band, PIPE_Y, z, 24)
 		"turbo":
 			var shell := _mat(_ALUMINIZED, 0.7, 0.4)
@@ -1019,7 +1019,7 @@ func _build_rear_end(rig: Node3D, style: String, ratio: float) -> void:
 			_box(rig, Vector3(0.03, 0.012, 0.2), Vector3(_rear_x + 0.17, fy, 0.0), cover)
 	elif style == "girdle":
 		var bolt := _mat(_STEEL, 0.8, 0.3)
-		for side in [-1.0, 1.0]:
+		for side: float in [-1.0, 1.0]:
 			_box(rig, Vector3(0.025, 0.04, 0.24), Vector3(_rear_x + 0.17, AXLE_Y + 0.045 * side, 0.0), cover)
 		for i in 10:
 			var a := TAU * float(i) / 10.0

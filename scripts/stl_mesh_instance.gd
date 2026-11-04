@@ -16,7 +16,7 @@ extends MeshInstance3D
 ## Used for cars with baked-in wheels. Overlay-wheel cars keep their authored offset.
 @export var snap_to_ground: bool = false
 
-signal stl_loaded(mesh_or_node)
+signal stl_loaded(mesh_or_node: Object)
 
 static var _mesh_cache: Dictionary = {} # key -> ArrayMesh
 
@@ -142,12 +142,12 @@ func load_stl_into_mesh() -> void:
 # ---------------------- GLB Loading ----------------------
 
 func load_glb_scene() -> void:
-	var glb_res = load(stl_path)
+	var glb_res := load(stl_path) as PackedScene
 	if glb_res == null:
 		push_warning("[GLB] Failed to load: " + stl_path)
 		return
 
-	var inst = glb_res.instantiate()
+	var inst := glb_res.instantiate()
 	if inst == null:
 		push_warning("[GLB] Failed to instance: " + stl_path)
 		return

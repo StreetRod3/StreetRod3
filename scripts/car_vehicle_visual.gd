@@ -173,7 +173,7 @@ func _apply_car_file() -> void:
 		return
 	var wheel_path := str(wheel_dict.get("path", ""))
 	var wheel_height := float(wheel_dict.get("height", 0.5))
-	for item in mounts:
+	for item: Variant in mounts:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
 		var mount: Dictionary = item
@@ -182,7 +182,7 @@ func _apply_car_file() -> void:
 
 
 func _set_overlay_wheels_visible(show: bool) -> void:
-	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+	for wname: String in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
 		var wheel := get_node_or_null(wname) as Node3D
 		if wheel != null:
 			wheel.visible = show
@@ -207,7 +207,7 @@ func _reload_preview_models() -> void:
 	if not _overlay_wheels_enabled():
 		_set_overlay_wheels_visible(false)
 		return
-	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+	for wname: String in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
 		_reload_mount(get_node_or_null(wname) as Node3D)
 
 
@@ -242,7 +242,7 @@ func _overlay_wheels_enabled() -> bool:
 func apply_wheel_set(wheel: Dictionary) -> void:
 	if wheel.is_empty():
 		return
-	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
+	for wname: String in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
 		apply_wheel_to_mount(get_node_or_null(wname) as Node3D, wheel)
 
 
@@ -271,7 +271,7 @@ func apply_wheel_to_mount(mount: Node3D, wheel: Dictionary) -> void:
 
 func _apply_wheel_scale() -> void:
 	var wheel_names := ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]
-	for wname in wheel_names:
+	for wname: String in wheel_names:
 		var wheel := get_node_or_null(wname) as MeshInstance3D
 		if wheel != null:
 			wheel.scale = Vector3.ONE * wheel_scale
@@ -413,15 +413,15 @@ func align_wheels_to_floor(floor_mesh_instance: MeshInstance3D) -> void:
 	var minp := faabb.position
 	var maxp := faabb.position + faabb.size
 	var floor_top_y := -INF
-	for x in [minp.x, maxp.x]:
-		for y in [minp.y, maxp.y]:
-			for z in [minp.z, maxp.z]:
+	for x: float in [minp.x, maxp.x]:
+		for y: float in [minp.y, maxp.y]:
+			for z: float in [minp.z, maxp.z]:
 				var corner := Vector3(x, y, z)
 				var world := floor_mesh_instance.global_transform * corner
 				floor_top_y = maxf(floor_top_y, world.y)
 
 	var wheel_names := ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]
-	for wname in wheel_names:
+	for wname: String in wheel_names:
 		_snap_node_bottom_to_y(get_node_or_null(wname) as Node3D, floor_top_y)
 	_snap_node_bottom_to_y(get_node_or_null("CarBody") as Node3D, floor_top_y + _ground_clearance())
 	fit_parent_collision()
@@ -517,9 +517,9 @@ func _mesh_bottom_y(node: Node3D) -> float:
 		var aabb := (node as MeshInstance3D).get_aabb()
 		var wmin := aabb.position
 		var wmax := wmin + aabb.size
-		for wx in [wmin.x, wmax.x]:
-			for wy in [wmin.y, wmax.y]:
-				for wz in [wmin.z, wmax.z]:
+		for wx: float in [wmin.x, wmax.x]:
+			for wy: float in [wmin.y, wmax.y]:
+				for wz: float in [wmin.z, wmax.z]:
 					var world := node.global_transform * Vector3(wx, wy, wz)
 					bottom_y = minf(bottom_y, world.y)
 	for child in node.get_children():

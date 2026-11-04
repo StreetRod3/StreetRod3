@@ -53,7 +53,7 @@ var _is_road: bool = false
 var _elapsed: float = 0.0
 ## How far from the finish the player's tires blow out, or below zero if they will last.
 var _tire_blowout_m: float = -1.0
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
 var _result_scene: String = ""
@@ -159,7 +159,7 @@ func _debug_car_mesh_resource_load() -> void:
 func _align_race_cars_to_ground() -> void:
 	# Wheels sit on height 0. A road course then lifts the whole car by the track's z.
 	var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
-	for car in [_player, _opponent]:
+	for car: CharacterBody3D in [_player, _opponent]:
 		var pivot: Node = car.get_node_or_null("CarPivot")
 		if pivot != null and pivot.has_method(&"align_wheels_to_floor"):
 			pivot.align_wheels_to_floor(floor_mi)

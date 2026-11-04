@@ -39,7 +39,7 @@ const GAIN := 6.0
 ## takes the offset away as the card does.
 const DC_CORNER_HZ := 5.0
 
-var _driver = _Sr2Adlib.new()
+var _driver := _Sr2Adlib.new()
 var _playback: AudioStreamGeneratorPlayback
 var _rpm: float = 600.0
 var _blown: bool = false

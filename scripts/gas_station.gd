@@ -68,7 +68,7 @@ const _TOOLTIPS := {
 @onready var _camera: Camera3D = $Camera3D
 @onready var _ui: CanvasLayer = $UI
 
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 var _world: Node3D
 var _car: Node3D
 var _engine: AudioStreamPlayer
@@ -1082,7 +1082,7 @@ func _nozzle(id: String) -> Node3D:
 
 
 func _aim_hoses() -> void:
-	for id in _hoses.keys():
+	for id: String in _hoses.keys():
 		var hose := _hoses[id] as MeshInstance3D
 		var nozzle := _nozzle(String(id))
 		if hose == null or nozzle == null or not _outlets.has(id):
@@ -1094,7 +1094,7 @@ func _aim_nozzles() -> void:
 	if _car == null:
 		return
 	var aim := _filler_global()
-	for id in _nozzles.keys():
+	for id: String in _nozzles.keys():
 		var nozzle := _nozzles[id] as Node3D
 		if nozzle == null or not _homes.has(id):
 			continue
@@ -1684,8 +1684,8 @@ func _sitter(pos: Vector3) -> void:
 	var shirt := Color(0.16, 0.32, 0.55)
 	var pants := Color(0.2, 0.18, 0.16)
 	var shoes := Color(0.1, 0.08, 0.07)
-	for side in [-0.2, 0.2]:
-		for depth in [-0.16, 0.16]:
+	for side: float in [-0.2, 0.2]:
+		for depth: float in [-0.16, 0.16]:
 			_box(root, Vector3(0.04, 0.46, 0.04), Vector3(side, 0.23, depth), wood, 0.72)
 	_box(root, Vector3(0.48, 0.045, 0.4), Vector3(0.0, 0.46, 0.0), wood, 0.68)
 	_box(root, Vector3(0.48, 0.42, 0.04), Vector3(0.0, 0.68, -0.18), wood, 0.68)
@@ -1698,7 +1698,7 @@ func _sitter(pos: Vector3) -> void:
 	person.add_child(top)
 	_sleeper_top = top
 	_box(top, Vector3(0.34, 0.14, 0.22), Vector3(0.0, 0.58, 0.0), pants, 0.75)
-	for side in [-0.09, 0.09]:
+	for side: float in [-0.09, 0.09]:
 		var thigh := _box(person, Vector3(0.12, 0.1, 0.28), Vector3(side, 0.56, 0.22), pants, 0.75)
 		var shin := _box(person, Vector3(0.1, 0.32, 0.1), Vector3(side, 0.28, 0.34), pants, 0.75)
 		var foot := _box(person, Vector3(0.11, 0.05, 0.16), Vector3(side, 0.08, 0.38), shoes, 0.6)

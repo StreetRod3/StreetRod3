@@ -110,7 +110,7 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 	if not root.has("nodes") or typeof(root["nodes"]) != TYPE_ARRAY:
 		result.errors.append("Track must contain a `nodes` array.")
 		return
-	for raw in root["nodes"]:
+	for raw: Variant in root["nodes"]:
 		if typeof(raw) != TYPE_DICTIONARY:
 			result.errors.append("Each node must be a JSON object.")
 			continue
@@ -173,7 +173,7 @@ static func _parse_roads(root: Dictionary, result: Dictionary) -> void:
 	if not root.has("roads") or typeof(root["roads"]) != TYPE_ARRAY:
 		result.errors.append("Track must contain a `roads` array.")
 		return
-	for raw in root["roads"]:
+	for raw: Variant in root["roads"]:
 		if typeof(raw) != TYPE_DICTIONARY:
 			result.errors.append("Each road must be a JSON object.")
 			continue
@@ -228,13 +228,13 @@ static func _parse_roads(root: Dictionary, result: Dictionary) -> void:
 
 static func _build_race_path(result: Dictionary) -> void:
 	var outgoing: Dictionary = {}
-	for road in result.roads:
+	for road: Dictionary in result.roads:
 		var from_id: int = road["from"]
 		if not outgoing.has(from_id):
 			outgoing[from_id] = []
 		outgoing[from_id].append(road)
 	var finish_set: Dictionary = {}
-	for fid in result.finish_ids:
+	for fid: int in result.finish_ids:
 		finish_set[int(fid)] = true
 	var path: Array[int] = []
 	var used: Dictionary = {}
@@ -247,7 +247,7 @@ static func _build_race_path(result: Dictionary) -> void:
 			break
 		var choices: Array = outgoing.get(current, [])
 		var next_road: Dictionary = {}
-		for road in choices:
+		for road: Dictionary in choices:
 			var key := "%d>%d" % [road["from"], road["to"]]
 			if used.has(key):
 				continue
@@ -355,7 +355,7 @@ static func _street_path(result: Dictionary, from_id: int, to_id: int) -> Array[
 		path.append(from_id)
 		return path
 	var outgoing: Dictionary = {}
-	for road in result.get("roads", []):
+	for road: Dictionary in result.get("roads", []):
 		var fid: int = int(road["from"])
 		if not outgoing.has(fid):
 			outgoing[fid] = []
@@ -368,7 +368,7 @@ static func _street_path(result: Dictionary, from_id: int, to_id: int) -> Array[
 	while head < queue.size():
 		var current: int = queue[head]
 		head += 1
-		for nxt in outgoing.get(current, []):
+		for nxt: int in outgoing.get(current, []):
 			var next_id := int(nxt)
 			if seen.has(next_id):
 				continue
@@ -398,7 +398,7 @@ static func _parse_pois(root: Dictionary, result: Dictionary) -> void:
 	if typeof(root["pois"]) != TYPE_ARRAY:
 		result.errors.append("Track `pois` must be an array.")
 		return
-	for raw in root["pois"]:
+	for raw: Variant in root["pois"]:
 		if typeof(raw) != TYPE_DICTIONARY:
 			result.errors.append("Each point of interest must be a JSON object.")
 			continue
@@ -448,7 +448,7 @@ static func _parse_buildings(root: Dictionary, result: Dictionary) -> void:
 		result.errors.append("Track `buildings` must be an array.")
 		return
 	var index := 0
-	for raw in root["buildings"]:
+	for raw: Variant in root["buildings"]:
 		index += 1
 		if typeof(raw) != TYPE_DICTIONARY:
 			result.errors.append("Building %d must be a JSON object." % index)
@@ -482,7 +482,7 @@ static func _building_size(building: Dictionary, key: String, fallback: float, i
 
 
 static func find_road(result: Dictionary, from_id: int, to_id: int) -> Dictionary:
-	for road in result.roads:
+	for road: Dictionary in result.roads:
 		if int(road["from"]) == from_id and int(road["to"]) == to_id:
 			return road
 	return {}

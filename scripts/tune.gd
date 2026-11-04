@@ -34,7 +34,7 @@ var _strobe: SpotLight3D
 var _env: Environment
 var _sound: AudioStreamPlayer
 var _click: AudioStreamPlayer
-var _nav = _MenuNav.new()
+var _nav := _MenuNav.new()
 var _since_flash: float = 0.0
 var _flashing: bool = false
 var _rng := RandomNumberGenerator.new()
@@ -182,7 +182,7 @@ func _build_world() -> void:
 	paint.metallic = 0.3
 	paint.roughness = 0.4
 	# Frame rail and inner fender either side, the fender top on the near side.
-	for side in [-1.0, 1.0]:
+	for side: float in [-1.0, 1.0]:
 		_box(Vector3(2.0, 0.12, 0.08), Vector3(0.0, 0.32, 0.46 * side), dark)
 		_box(Vector3(1.6, 0.5, 0.03), Vector3(-0.1, 0.62, 0.66 * side), dark)
 	_box(Vector3(1.9, 0.05, 0.24), Vector3(-0.15, 0.95, 0.8), paint)
@@ -254,7 +254,7 @@ func _build_pointer() -> void:
 
 ## The balancer's mark glows a moment after each flash.
 func _find_mark() -> void:
-	for mi in _engine.balancer.find_children("Mark*", "MeshInstance3D", true, false):
+	for mi: MeshInstance3D in _engine.balancer.find_children("Mark*", "MeshInstance3D", true, false):
 		var mat := ((mi as MeshInstance3D).material_override as StandardMaterial3D).duplicate() as StandardMaterial3D
 		mat.emission_enabled = true
 		mat.emission = Color(1.0, 1.0, 0.92)
@@ -385,7 +385,7 @@ func _build_ui() -> void:
 	_ui.add_child(sticker)
 	var lines := VBoxContainer.new()
 	sticker.add_child(lines)
-	for text in ["ENGINE TUNE-UP", "%d CU. IN. V8" % GameState.engine_cid(), "Timing  %d° BTDC" % GameState.timing_degrees(GameState.engine_sweet_tune()), "at idle"]:
+	for text: String in ["ENGINE TUNE-UP", "%d CU. IN. V8" % GameState.engine_cid(), "Timing  %d° BTDC" % GameState.timing_degrees(GameState.engine_sweet_tune()), "at idle"]:
 		var label := Label.new()
 		label.text = text
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
