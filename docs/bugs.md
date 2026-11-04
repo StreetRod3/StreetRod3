@@ -76,3 +76,26 @@ Likely cause, not proven: an `AudioStreamPlayer` playing an `AudioStreamGenerato
 Possible fix, not tested: keep the generator alive after its player goes, for example with one shared generator held in a static variable.
 
 If it does turn up in play, note what was on screen and what was just pressed. On Linux, `top -H` shows whether a thread is spinning, and `SIGABRT` leaves a core dump for `gdb`.
+
+## The drive between places takes longer than it did
+
+Since the drive between places got real ride physics, it takes longer. It has not been decided whether that is acceptable. Space still skips the drive.
+
+| Route | Length | Before | Now |
+| --- | --- | --- | --- |
+| Garage to drive-in | 235 m | 13 s | 21.0 s |
+| Drive-in to garage | about 235 m | 13 s | 21.3 s |
+| Gas station to garage | 232 m | 13 s | 20.8 s |
+| Drive-in to gas station | 399 m | 16 s | 33.8 s |
+
+Cause: the old drive ran at up to 27 m/s through corners of 14 m radius, which would take about 5 g. The driver in `scripts/cruise.gd` now brakes for each corner, as hard as the tires allow. The city map in `assets/maps/city.trk` is a 40 m grid, so these routes are nearly all corners, and the average speed comes out at about 12 m/s. Matching the old 13 s would take about 18 m/s on average, or roughly 2.3 g through those corners.
+
+The car's parts make little difference. Slicks bring the garage to drive-in route down to 19.8 s, and racing springs and shocks leave it at 21.0 s, because the planned corner speed comes from tire grip only.
+
+This needs a decision between these:
+
+- Rework the city map, with fewer turns and longer straights. This keeps the physics honest and is the suggested choice, but the map and the places on it have to be redone.
+- Allow faster corners by raising `_CORNER_GRIP_USE`. This is quick, but above about 1 the car corners harder than its tires could hold, and each corner only gets faster by the square root of the change.
+- Raise `_DRIVE_ACCEL` and `_DRIVE_BRAKE`. This does not get far, because there is so little straight road: on the garage to drive-in route, raising acceleration, braking, and corner grip together from 3.6, 5.5, and 7 m/s to 7, 8.5, and 9.5 per second only took it from 24.6 s to 20.0 s.
+- Widen the corners with `_TURN_RADIUS`. Its 14 m is set to stay inside the width of the street, so this also needs wider streets on the map.
+- Keep it as it is.
