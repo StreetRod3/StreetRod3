@@ -27,6 +27,10 @@ const LOAD_TRANSFER_ACCEL_MAX := 11.0
 ## How far the nose may turn past what the tires can hold the path to. A little lets
 ## the car rotate into a corner; more and it slides on until steering cannot catch it.
 const YAW_GRIP_MARGIN := 1.15
+## Share of the sideways grip in use before cornering starts to take power away.
+const CORNER_POWER_FADE_FROM := 0.5
+## The power left when cornering takes all the grip the tires have.
+const CORNER_POWER_MIN := 0.2
 ## How quickly the tires stop a car turning after a hit, in 1/seconds.
 const SPIN_DECAY := 2.8
 ## How fast a barrier swings the nose round, in rad/s.
@@ -144,7 +148,7 @@ func step(
 	var speed_before := forward_speed
 	var accel_scale := OFFROAD_ACCEL_SCALE if _off_road else 1.0
 	if throttle and not shifting:
-		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * delta
+		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * _corner_power() * delta
 	elif brake:
 		forward_speed -= BRAKING * delta
 	elif not throttle:
@@ -202,6 +206,12 @@ func _steer_limit() -> float:
 
 static func grip_accel_scale(grip_rating: float) -> float:
 	return 1.0 + (grip_rating - 3.0) * 0.04
+
+
+## How much of the engine's pull the tires can pass on while they are also cornering.
+func _corner_power() -> float:
+	var grip_used := absf(forward_speed * _yaw_rate) / maxf(_lateral_grip, 0.1)
+	return clampf((1.0 - grip_used) / (1.0 - CORNER_POWER_FADE_FROM), CORNER_POWER_MIN, 1.0)
 
 
 func _grip_steer_scale() -> float:
