@@ -19,6 +19,7 @@ const _SaveSlots := preload("res://scripts/save_slots.gd")
 @onready var _clock_master: HSlider = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _clock_music: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _clock_arcade: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck
+@onready var _clock_imperial: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck
 @onready var _stats_panel: Control = $GarageUI/StatsPanel
 @onready var _spray_menu: Control = $GarageUI/ColorPickerMenu
 @onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/VBox/ColorPicker
@@ -906,6 +907,7 @@ func _sync_menu_nav() -> void:
 			_clock_master,
 			_clock_music,
 			_clock_arcade,
+			_clock_imperial,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _clock_menu.visible:
@@ -2798,6 +2800,7 @@ func _refresh_clock_settings() -> void:
 	_clock_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_clock_music.set_pressed_no_signal(GameState.music_enabled)
 	_clock_arcade.set_pressed_no_signal(GameState.arcade_drive)
+	_clock_imperial.set_pressed_no_signal(GameState.imperial_units)
 
 
 func _on_clock_fullscreen_toggled(pressed: bool) -> void:
@@ -2816,6 +2819,10 @@ func _on_clock_music_toggled(pressed: bool) -> void:
 
 func _on_clock_arcade_toggled(pressed: bool) -> void:
 	GameState.set_arcade_drive(pressed)
+
+
+func _on_clock_imperial_toggled(pressed: bool) -> void:
+	GameState.set_imperial_units(pressed)
 
 
 func _start_wheel_change(wheel_id: String) -> void:

@@ -44,6 +44,7 @@ var _race_started: bool = false
 @onready var _pause_master: HSlider = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _pause_music: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _pause_arcade: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck
+@onready var _pause_imperial: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck
 
 var _race_over: bool = false
 var _car_bump: _CarBump = _CarBump.new()
@@ -231,9 +232,7 @@ func _process(delta: float) -> void:
 
 	_elapsed += delta
 	_hud_time.text = "Time: %.2f s" % _elapsed
-	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
-	var spd: float = _player.get_forward_speed()
-	_hud_speed.text = "Speed: %s" % GameState.speed_text(spd * 3.6)
+	_show_speed_and_distance()
 	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
 		_show_tire_blowout()
@@ -555,6 +554,7 @@ func _sync_pause_nav() -> void:
 			_pause_master,
 			_pause_music,
 			_pause_arcade,
+			_pause_imperial,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _pause_menu.visible:
@@ -595,6 +595,7 @@ func _refresh_pause_settings() -> void:
 	_pause_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_pause_music.set_pressed_no_signal(GameState.music_enabled)
 	_pause_arcade.set_pressed_no_signal(GameState.arcade_drive)
+	_pause_imperial.set_pressed_no_signal(GameState.imperial_units)
 
 
 func _on_pause_fullscreen_toggled(pressed: bool) -> void:
@@ -613,6 +614,16 @@ func _on_pause_music_toggled(pressed: bool) -> void:
 
 func _on_pause_arcade_toggled(pressed: bool) -> void:
 	GameState.set_arcade_drive(pressed)
+
+
+func _on_pause_imperial_toggled(pressed: bool) -> void:
+	GameState.set_imperial_units(pressed)
+	_show_speed_and_distance()
+
+
+func _show_speed_and_distance() -> void:
+	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
+	_hud_speed.text = "Speed: %s" % GameState.speed_text(_player.get_forward_speed() * 3.6)
 
 
 func _on_pause_exit_pressed() -> void:
