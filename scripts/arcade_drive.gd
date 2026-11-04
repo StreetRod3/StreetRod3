@@ -31,6 +31,15 @@ const YAW_GRIP_MARGIN := 1.25
 const CORNER_POWER_FADE_FROM := 0.5
 ## The power left when cornering takes all the grip the tires have.
 const CORNER_POWER_MIN := 0.2
+## Share of the rear tires' grip left with the hand brake locking them.
+const HANDBRAKE_REAR_GRIP := 0.25
+## How hard the locked rear wheels slow the car, in m/s².
+const HANDBRAKE_DECEL := 6.5
+## Sideways speed as a share of forward speed: the most a car slides, and the most it
+## slides on the hand brake, and how fast it comes back from that, per second.
+const SLIDE_LIMIT := 0.45
+const HANDBRAKE_SLIDE_LIMIT := 1.2
+const SLIDE_LIMIT_RETURN := 1.5
 ## How quickly the tires stop a car turning after a hit, in 1/seconds.
 const SPIN_DECAY := 2.8
 ## How fast a barrier swings the nose round, in rad/s.
@@ -81,6 +90,10 @@ var ride_grip: float = 1.0
 var _swing: float = 0.0
 ## Sideways acceleration the tires can hold right now, in m/s².
 var _lateral_grip: float = MU_DRY * GRAVITY
+var _handbrake: bool = false
+var _slide_limit: float = SLIDE_LIMIT
+## Turning the hand brake has allowed past what the tires can hold, in rad/s.
+var _handbrake_yaw: float = 0.0
 
 
 func apply_spec(chassis: Dictionary, grip_rating: float) -> void:
@@ -136,6 +149,8 @@ func _stop_slide() -> void:
 	_yaw_rate = 0.0
 	_spin = 0.0
 	_swing = 0.0
+	_slide_limit = SLIDE_LIMIT
+	_handbrake_yaw = 0.0
 
 
 ## Gear acceleration is already scaled by ratio, power, and headroom.
@@ -145,6 +160,7 @@ func step(
 	steer: float,
 	throttle: bool,
 	brake: bool,
+	handbrake: bool,
 	shifting: bool,
 	blown: bool,
 	gear_accel: float,
@@ -152,9 +168,12 @@ func step(
 	car_center: Vector3
 ) -> void:
 	_update_surface(body)
+	_handbrake = handbrake
 	var speed_before := forward_speed
 	var accel_scale := OFFROAD_ACCEL_SCALE if _off_road else 1.0
-	if throttle and not shifting:
+	if handbrake:
+		forward_speed -= HANDBRAKE_DECEL * delta
+	if throttle and not shifting and not handbrake:
 		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * _corner_power() * delta
 	elif brake:
 		forward_speed -= BRAKING * delta
@@ -184,8 +203,14 @@ func step(
 	if absf(_yaw_rate) > steered_yaw:
 		_yaw_rate = move_toward(_yaw_rate, signf(_yaw_rate) * steered_yaw, YAW_SETTLE_RATE * delta)
 	var grip_yaw := YAW_GRIP_MARGIN * _lateral_grip / maxf(forward_speed, GRIP_FADE_SPEED)
+	_handbrake_yaw = steered_yaw if handbrake else move_toward(_handbrake_yaw, 0.0, YAW_SETTLE_RATE * delta)
+	grip_yaw = maxf(grip_yaw, _handbrake_yaw)
 	_yaw_rate = clampf(_yaw_rate, -grip_yaw, grip_yaw)
-	_lateral_speed = clampf(_lateral_speed, -forward_speed * 0.45, forward_speed * 0.45)
+	_slide_limit = HANDBRAKE_SLIDE_LIMIT if handbrake else move_toward(_slide_limit, SLIDE_LIMIT, SLIDE_LIMIT_RETURN * delta)
+	# Past the usual slide the car really is going sideways, so turning trades forward speed for it.
+	if _slide_limit > SLIDE_LIMIT:
+		forward_speed = maxf(forward_speed + _lateral_speed * _yaw_rate * delta, 0.0)
+	_lateral_speed = clampf(_lateral_speed, -forward_speed * _slide_limit, forward_speed * _slide_limit)
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
 	var swung := clampf(_swing, -SWING_RATE * delta, SWING_RATE * delta)
 	_swing -= swung
@@ -260,12 +285,13 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var front_slip := atan2(_lateral_speed + _yaw_rate * axle_front, speed) - steer_angle
 	var rear_slip := atan2(_lateral_speed - _yaw_rate * axle_rear, speed)
 	var front_force := _tire_force(front_slip, CORNERING_FRONT * steer_grip, fz_front, long_front, mu)
-	var rear_force := _tire_force(rear_slip, CORNERING_REAR * steer_grip, fz_rear, long_rear, mu)
+	var rear_mu := mu * HANDBRAKE_REAR_GRIP if _handbrake else mu
+	var rear_force := _tire_force(rear_slip, CORNERING_REAR * steer_grip, fz_rear, long_rear, rear_mu)
 	var rolling := clampf(forward_speed / GRIP_FADE_SPEED, 0.0, 1.0)
 	front_force *= rolling
 	rear_force *= rolling
 
-	_lateral_grip = (_lateral_limit(fz_front, long_front, mu) + _lateral_limit(fz_rear, long_rear, mu)) / _mass_kg
+	_lateral_grip = (_lateral_limit(fz_front, long_front, mu) + _lateral_limit(fz_rear, long_rear, rear_mu)) / _mass_kg
 	var steer_cos := cos(steer_angle)
 	var steer_sin := sin(steer_angle)
 	var lateral_force := front_force * steer_cos + rear_force

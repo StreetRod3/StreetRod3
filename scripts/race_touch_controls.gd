@@ -7,6 +7,7 @@ const _NARROW_WIDTH := 900.0
 var _wheel: _SteeringWheel
 var _accel: _Pedal
 var _brake: _Pedal
+var _handbrake: _Pedal
 var _shift_up: _ShiftPaddle
 var _shift_down: _ShiftPaddle
 var _shift_up_queued: bool = false
@@ -34,6 +35,10 @@ func is_throttle_down() -> bool:
 
 func is_brake_down() -> bool:
 	return visible and _brake != null and _brake.is_held()
+
+
+func is_handbrake_down() -> bool:
+	return visible and _handbrake != null and _handbrake.is_held()
 
 
 func pop_shift_up() -> bool:
@@ -89,6 +94,11 @@ func _build_controls() -> void:
 	_brake.setup("BRAKE", Color(0.72, 0.16, 0.14, 1.0))
 	add_child(_brake)
 
+	_handbrake = _Pedal.new()
+	_handbrake.name = "HandbrakePedal"
+	_handbrake.setup("HAND", Color(0.72, 0.55, 0.18, 1.0))
+	add_child(_handbrake)
+
 	_accel = _Pedal.new()
 	_accel.name = "AccelPedal"
 	_accel.setup("GAS", Color(0.18, 0.62, 0.28, 1.0))
@@ -127,6 +137,9 @@ func _refresh_layout() -> void:
 	_accel.size = Vector2(accel_w, accel_h)
 	_brake.position = Vector2(vs.x - margin - accel_w - gap - pedal_w, vs.y - margin - pedal_h)
 	_brake.size = Vector2(pedal_w, pedal_h)
+	var handbrake_h := 72.0 * scale
+	_handbrake.position = Vector2(_brake.position.x, _brake.position.y - gap - handbrake_h)
+	_handbrake.size = Vector2(pedal_w, handbrake_h)
 
 	var paddle := 56.0 * scale
 	var paddle_gap := 10.0 * scale

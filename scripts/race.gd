@@ -5,6 +5,7 @@ const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
+const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
 
 const COUNTDOWN_RED_S := 1.2
@@ -47,6 +48,7 @@ var _race_started: bool = false
 @onready var _pause_imperial: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck
 
 var _race_over: bool = false
+var _result_shown_ms: int = 0
 var _car_bump: _CarBump = _CarBump.new()
 var _fuel_used: bool = false
 var _opponent_finished: bool = false
@@ -93,9 +95,9 @@ func _ready() -> void:
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	if _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · A/D or arrows: steer · C: camera"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · C: camera"
 	else:
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · A/D or arrows: steer · Q/E: shift · C: camera"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera"
 	_traffic.visible = true
 	_refresh_traffic_lights()
 
@@ -411,6 +413,7 @@ func _show_rival_wreck() -> void:
 
 
 func _show_result(player_won: bool) -> void:
+	_result_shown_ms = Time.get_ticks_msec()
 	_park_cars()
 	_end_race_ui()
 	if player_won:
@@ -491,6 +494,9 @@ func _leave_result() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _result.visible:
+		# Space is the hand brake a moment ago, so it does not skip past the result.
+		if event is InputEventKey and (event as InputEventKey).keycode == KEY_SPACE and Time.get_ticks_msec() - _result_shown_ms < RESULT_SPACE_GUARD_MS:
+			return
 		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
 			get_viewport().set_input_as_handled()
 			_leave_result()

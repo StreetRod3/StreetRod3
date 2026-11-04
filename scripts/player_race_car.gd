@@ -289,6 +289,12 @@ func _brake_down() -> bool:
 	return _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down()
 
 
+func _handbrake_down() -> bool:
+	if Input.is_key_pressed(KEY_SPACE):
+		return true
+	return _touch != null and _touch.has_method(&"is_handbrake_down") and _touch.is_handbrake_down()
+
+
 func begin_park(slot: float) -> void:
 	if _parking:
 		return
@@ -369,9 +375,11 @@ func _physics_simulation(delta: float) -> void:
 		_update_debug_draw()
 		return
 
+	var handbrake := _handbrake_down()
+	_dynamics.handbrake_input = 1.0 if handbrake else 0.0
 	var drive := 0.0
 	var brake_input := 0.0
-	if throttle and _shift_timer <= 0.0:
+	if throttle and _shift_timer <= 0.0 and not handbrake:
 		drive = _requested_drive_force()
 	elif brake:
 		brake_input = 1.0
@@ -435,6 +443,7 @@ func _physics_arcade(delta: float) -> void:
 		steer,
 		throttle,
 		brake,
+		_handbrake_down(),
 		_shift_timer > 0.0,
 		_engine_blown,
 		_ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * GameState.wheel_weight_accel() * _damage.power_left(),
