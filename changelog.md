@@ -206,3 +206,5 @@ Tire smoke no longer leaves two black discs behind the wheels when it stops. The
 
 Driving off the road on Mulholland no longer sinks the car into the grass. Away from the road the ground was drawn smoothed out, while the car and the trees still went by the road's own rises and dips, up to about 7 m apart. Both now use the same height. Walls and guard rails there also start out to the side and ease in toward the road, because a car running wide could meet the bare end of one head on and be totaled.
 
+In the simulation, one side of the car on the grass no longer pulls it off the road. Each wheel used to feel its own drag from the grass, so the side off the road slowed harder and turned the car toward the grass, 12 degrees and about 6 m in 4 seconds with no steering. Each axle now shares that drag, so the grass still slows the car but pulls it straight back. Grip is still per wheel, and a car fully on the grass slows as it did.
+

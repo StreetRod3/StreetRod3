@@ -145,6 +145,9 @@ class Wheel:
 	var force_body: Vector3 = Vector3.ZERO
 	## 0 is asphalt, 1 is fully on grass.
 	var surface_blend: float = 0.0
+	## The same, shared by this wheel's axle. What slows a wheel goes by this, so that one side
+	## on the grass slows the car without steering it toward the grass.
+	var axle_blend: float = 0.0
 	var surface_name: String = "asphalt"
 	## True when `long_slip` is on the peak curve, where 1 is the grip peak.
 	## False when it is demand over the grip limit.
@@ -521,6 +524,20 @@ func set_surface_blends(blends: Array) -> void:
 		var wheel := _wheels[i]
 		wheel.surface_blend = blend
 		wheel.surface_name = "grass" if blend > 0.5 else "asphalt"
+	var front := _axle_average(true)
+	var rear := _axle_average(false)
+	for wheel in _wheels:
+		wheel.axle_blend = front if wheel.front else rear
+
+
+func _axle_average(front: bool) -> float:
+	var total := 0.0
+	var count := 0
+	for wheel in _wheels:
+		if wheel.front == front:
+			total += wheel.surface_blend
+			count += 1
+	return total / float(count) if count > 0 else 0.0
 
 
 ## The springs and shocks alone, for a car the tires are not moving (the arcade drive and
@@ -678,18 +695,18 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 	if not wheel.front:
 		brake_n += handbrake_input * config.handbrake_force_n * 0.5
 	var along := _smooth_sign(v_long)
-	var rolling := _blended(blend, config.asphalt.rolling_resistance, config.grass.rolling_resistance)
+	var rolling := _blended(wheel.axle_blend, config.asphalt.rolling_resistance, config.grass.rolling_resistance)
 	var long_request := -brake_n * along
 	long_request -= rolling * wheel.normal_load * along
 	if wheel.driven:
-		var drive_scale := _blended(blend, config.asphalt.drive_multiplier, config.grass.drive_multiplier)
+		var drive_scale := _blended(wheel.axle_blend, config.asphalt.drive_multiplier, config.grass.drive_multiplier)
 		long_request += drive_each * drive_scale
 	if limit <= 1.0:
 		wheel.long_slip = 0.0
 		wheel.long_force = 0.0
 		wheel.lat_force = 0.0
 		wheel.grip_utilization = 0.0
-		var unloaded := _surface_drag(blend, contact_body)
+		var unloaded := _surface_drag(wheel.axle_blend, contact_body)
 		wheel.force_body = unloaded
 		return unloaded
 
@@ -711,7 +728,7 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 	wheel.lat_force = combined.y
 	wheel.grip_utilization = combined.length() / limit
 	var force := fwd * combined.x + right * combined.y
-	force += _surface_drag(blend, contact_body)
+	force += _surface_drag(wheel.axle_blend, contact_body)
 	wheel.force_body = force
 	return force
 
