@@ -50,6 +50,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_frame_car_camera()
 	GameState.roll_newspaper_colors()
+	GameState.roll_newspaper_wear()
 	_build_no_room_bubble()
 	_show_section(SECTION_INDEX)
 	_refresh()
@@ -111,37 +112,52 @@ func _rebuild_parts() -> void:
 		_parts_list.remove_child(child)
 		child.queue_free()
 	_parts_list.add_child(_heading("ENGINES"))
-	for engine in GameState.ENGINES:
-		_parts_list.add_child(_make_engine_card(engine))
+	for engine: Dictionary in GameState.ENGINES:
+		_add_part_ads(engine, "engine")
 	_parts_list.add_child(_heading("TRANSMISSIONS"))
-	for box in GameState.GEARBOXES:
-		_parts_list.add_child(_make_gearbox_card(box))
+	for box: Dictionary in GameState.GEARBOXES:
+		_add_part_ads(box, "transmission")
 	_parts_list.add_child(_heading("WHEELS"))
-	for wheel in GameState.WHEELS:
-		_parts_list.add_child(_make_wheel_card(wheel))
+	for wheel: Dictionary in GameState.WHEELS:
+		_add_part_ads(wheel, "wheels")
 	_parts_list.add_child(_heading("TIRES"))
-	for part in GameState.PARTS:
+	for part: Dictionary in GameState.PARTS:
 		if str(part.get("slot", "")) == GameState.SLOT_TIRES:
-			_parts_list.add_child(_make_part_card(part))
+			_add_part_ads(part, "part")
 	var bolt_ons: Array[Dictionary] = []
-	for part in GameState.PARTS:
+	for part: Dictionary in GameState.PARTS:
 		if str(part.get("slot", "")).is_empty():
 			bolt_ons.append(part)
 	if not bolt_ons.is_empty():
 		_parts_list.add_child(_heading("ENGINE & CHASSIS"))
-	for part in bolt_ons:
-		_parts_list.add_child(_make_part_card(part))
+	for part: Dictionary in bolt_ons:
+		_add_part_ads(part, "part")
 	_parts_list.add_child(_heading("UNDER THE HOOD"))
-	for part in GameState.PARTS:
+	for part: Dictionary in GameState.PARTS:
 		if not GameState.is_hood_kind(str(part.get("slot", ""))):
 			continue
-		_parts_list.add_child(_make_part_card(part))
+		_add_part_ads(part, "part")
 	_parts_list.add_child(_heading("UNDER THE CAR"))
-	for part in GameState.PARTS:
+	for part: Dictionary in GameState.PARTS:
 		var slot := str(part.get("slot", ""))
 		if slot.is_empty() or slot == GameState.SLOT_TIRES or GameState.is_hood_kind(slot):
 			continue
-		_parts_list.add_child(_make_part_card(part))
+		_add_part_ads(part, "part")
+
+
+func _add_part_ads(item: Dictionary, kind: String) -> void:
+	var id := str(item.get("id", ""))
+	var count := GameState.newspaper_copies(kind, id).size()
+	for index: int in count:
+		match kind:
+			"engine":
+				_parts_list.add_child(_make_engine_card(item, index))
+			"transmission":
+				_parts_list.add_child(_make_gearbox_card(item, index))
+			"wheels":
+				_parts_list.add_child(_make_wheel_card(item, index))
+			_:
+				_parts_list.add_child(_make_part_card(item, index))
 
 
 func _rebuild_cars() -> void:
@@ -152,31 +168,22 @@ func _rebuild_cars() -> void:
 		_cars_list.add_child(_make_car_card(car))
 
 
-func _make_part_card(part: Dictionary) -> Control:
+func _make_part_card(part: Dictionary, index: int) -> Control:
 	var part_id := str(part.get("id", ""))
 	var owned := GameState.part_count(part_id)
 	var equipped := GameState.is_part_equipped(part_id)
-	var price := int(part.get("price", 0))
 	var box := _card()
 	box.add_child(_heading(str(part.get("name", "Part"))))
-	box.add_child(_body(GameState.part_detail(part)))
-	var btn := _ink_button()
+	box.add_child(_body(_with_wear(GameState.part_detail(part), "part", part_id, index)))
 	if owned > 0:
 		box.add_child(_body("You have %d%s" % [owned, " · on this car" if equipped else ""]))
-	# Buy as many as you like: one for each car, or each side of a dual exhaust.
-	btn.text = ("Buy another — $%d" if owned > 0 else "Buy — $%d") % price
-	btn.disabled = GameState.money < price
-	btn.pressed.connect(_on_buy_part.bind(part_id))
-	box.add_child(btn)
+	box.add_child(_buy_button("part", part_id, index))
 	_watch_part(box, part_id, "part")
 	return box
 
 
-func _make_gearbox_card(box: Dictionary) -> Control:
+func _make_gearbox_card(box: Dictionary, index: int) -> Control:
 	var gearbox_id := str(box.get("id", ""))
-	var equipped := GameState.equipped_gearbox_id == gearbox_id
-	var owned := GameState.free_spare_count("transmission", gearbox_id) > 0
-	var price := int(box.get("price", 0))
 	var gears: Variant = box.get("ratios", [])
 	var gear_count := 0
 	if typeof(gears) == TYPE_ARRAY:
@@ -185,20 +192,9 @@ func _make_gearbox_card(box: Dictionary) -> Control:
 	var top_pct := int(round(float(box.get("top_speed", 1.0)) * 100.0))
 	var card := _card()
 	card.add_child(_heading(str(box.get("name", "Gearbox"))))
-	card.add_child(_body("%d gears · %s · top speed %d%%" % [gear_count, kind, top_pct]))
+	card.add_child(_body(_with_wear("%d gears · %s · top speed %d%%" % [gear_count, kind, top_pct], "transmission", gearbox_id, index)))
 	card.add_child(_body("Ratios  %s" % GameState.gearbox_ratio_text(box)))
-	var btn := _ink_button()
-	if equipped:
-		btn.text = "On the car"
-		btn.disabled = true
-	elif owned:
-		btn.text = "In spare parts"
-		btn.disabled = true
-	else:
-		btn.text = "Buy — $%d" % price
-		btn.disabled = price > 0 and GameState.money < price
-		btn.pressed.connect(_on_buy_gearbox.bind(gearbox_id))
-	card.add_child(btn)
+	card.add_child(_buy_button("transmission", gearbox_id, index))
 	_watch_part(card, gearbox_id, "transmission")
 	return card
 
@@ -459,17 +455,25 @@ func _body(text: String) -> Label:
 	return label
 
 
-func _make_engine_card(engine: Dictionary) -> Control:
-	var card := _make_swap_card(engine, GameState.equipped_engine_id, GameState.free_spare_count("engine", str(engine.get("id", ""))) > 0, "%.0f hp" % float(engine.get("hp", 0.0)), _on_buy_engine)
-	_watch_part(card, str(engine.get("id", "")), "engine")
+func _make_engine_card(engine: Dictionary, index: int) -> Control:
+	var engine_id := str(engine.get("id", ""))
+	var card := _make_copy_card(engine, _with_wear("%.0f hp" % float(engine.get("hp", 0.0)), "engine", engine_id, index), "engine", index)
+	_watch_part(card, engine_id, "engine")
 	return card
 
 
-func _make_wheel_card(wheel: Dictionary) -> Control:
+func _make_wheel_card(wheel: Dictionary, index: int) -> Control:
 	var wheel_id := str(wheel.get("id", ""))
-	var card := _make_swap_card(wheel, GameState.equipped_wheel_id, GameState.free_spare_count("wheels", wheel_id) > 0, GameState.wheel_detail(wheel) + ", no tires", _on_buy_wheel)
+	var card := _make_copy_card(wheel, _with_wear(GameState.wheel_detail(wheel) + ", no tires", "wheels", wheel_id, index), "wheels", index)
 	_watch_part(card, wheel_id, "wheels")
 	return card
+
+
+func _with_wear(detail: String, kind: String, part_id: String, index: int) -> String:
+	var wear := GameState.newspaper_wear_line(kind, part_id, index)
+	if detail.is_empty():
+		return wear
+	return "%s   %s" % [detail, wear]
 
 
 func _watch_part(card: Control, part_id: String, kind: String) -> void:
@@ -488,56 +492,37 @@ func _on_part_card_input(event: InputEvent, part_id: String, kind: String) -> vo
 		_show_part_preview(part_id, kind)
 
 
-func _make_swap_card(part: Dictionary, equipped_id: String, owned: bool, detail: String, handler: Callable) -> Control:
+func _make_copy_card(part: Dictionary, detail: String, kind: String, index: int) -> Control:
 	var part_id := str(part.get("id", ""))
-	var price := int(part.get("price", 0))
 	var card := _card()
 	card.add_child(_heading(str(part.get("name", "Part"))))
 	card.add_child(_body(detail))
-	var btn := _ink_button()
-	if part_id == equipped_id:
-		btn.text = "On the car"
-		btn.disabled = true
-	elif owned:
-		btn.text = "In spare parts"
-		btn.disabled = true
-	else:
-		btn.text = "Buy — $%d" % price
-		btn.disabled = GameState.money < price
-		btn.pressed.connect(handler.bind(part_id))
-	card.add_child(btn)
+	card.add_child(_buy_button(kind, part_id, index))
 	return card
 
 
-func _on_buy_engine(engine_id: String) -> void:
-	var err := GameState.buy_or_equip_engine(engine_id)
+func _buy_button(kind: String, part_id: String, index: int) -> Button:
+	var price := GameState.newspaper_price(kind, part_id, index)
+	var btn := _ink_button()
+	btn.text = "Buy — $%d" % price
+	btn.disabled = GameState.money < price
+	btn.pressed.connect(_on_buy_copy.bind(kind, part_id, index))
+	return btn
+
+
+func _on_buy_copy(kind: String, part_id: String, index: int) -> void:
+	var err := GameState.buy_newspaper_copy(kind, part_id, index)
 	if _finish_if_ruined():
 		return
-	_status.text = "Engine is in the spare parts folder." if err.is_empty() else err
-	_refresh()
-
-
-func _on_buy_wheel(wheel_id: String) -> void:
-	var err := GameState.buy_or_equip_wheel(wheel_id)
-	if _finish_if_ruined():
-		return
-	_status.text = "Wheels are in the spare parts folder." if err.is_empty() else err
-	_refresh()
-
-
-func _on_buy_gearbox(gearbox_id: String) -> void:
-	var err := GameState.buy_gearbox(gearbox_id)
-	if _finish_if_ruined():
-		return
-	_status.text = "Gearbox is in the spare parts folder." if err.is_empty() else err
-	_refresh()
-
-
-func _on_buy_part(part_id: String) -> void:
-	var err := GameState.buy_part(part_id)
-	if _finish_if_ruined():
-		return
-	_status.text = "Part is in the spare parts folder." if err.is_empty() else err
+	var bought := "Part is in the spare parts folder."
+	match kind:
+		"engine":
+			bought = "Engine is in the spare parts folder."
+		"transmission":
+			bought = "Gearbox is in the spare parts folder."
+		"wheels":
+			bought = "Wheels are in the spare parts folder."
+	_status.text = bought if err.is_empty() else err
 	_refresh()
 
 
