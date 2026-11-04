@@ -24,6 +24,9 @@ const STEER_INPUT_RETURN := 7.0
 const LONG_GRIP_SHARE_MAX := 0.72
 ## Acceleration past this shifts no more weight between the axles, in m/s².
 const LOAD_TRANSFER_ACCEL_MAX := 11.0
+## How far the nose may turn past what the tires can hold the path to. A little lets
+## the car rotate into a corner; more and it slides on until steering cannot catch it.
+const YAW_GRIP_MARGIN := 1.15
 ## How quickly the tires stop a car turning after a hit, in 1/seconds.
 const SPIN_DECAY := 2.8
 ## How fast a barrier swings the nose round, in rad/s.
@@ -31,7 +34,7 @@ const SWING_RATE := 5.0
 const MASS_KG := 1360.0
 const CG_HEIGHT_M := 0.48
 const GRAVITY := 9.81
-const MU_DRY := 1.02
+const MU_DRY := 1.25
 ## Loose surface. Still well under dry grip, but the nose can come around.
 const MU_OFFROAD := 0.78
 const FRONT_AXLE_FRACTION := 0.46
@@ -42,6 +45,8 @@ const TRACK_X_LIMIT := 18.0
 const OFFROAD_ACCEL_SCALE := 0.42
 const OFFROAD_DRAG := 0.993
 const OFFROAD_MAX_SPEED_SCALE := 0.5
+## How hard the loose surface slows a car that arrives above that speed, in m/s².
+const OFFROAD_SLOWDOWN := 20.0
 
 var forward_speed: float = 0.0
 var heading_yaw: float = 0.0
@@ -63,6 +68,8 @@ var _spin: float = 0.0
 var ride_grip: float = 1.0
 ## Swing from a barrier still to come, in radians.
 var _swing: float = 0.0
+## Sideways acceleration the tires can hold right now, in m/s².
+var _lateral_grip: float = MU_DRY * GRAVITY
 
 
 func apply_spec(chassis: Dictionary, grip_rating: float) -> void:
@@ -146,7 +153,9 @@ func step(
 		forward_speed *= pow(0.96, delta * 60.0)
 	if _off_road:
 		forward_speed *= pow(OFFROAD_DRAG, delta * 60.0)
-		forward_speed = minf(forward_speed, max_mps * OFFROAD_MAX_SPEED_SCALE)
+		var offroad_max := max_mps * OFFROAD_MAX_SPEED_SCALE
+		if forward_speed > offroad_max:
+			forward_speed = move_toward(forward_speed, offroad_max, OFFROAD_SLOWDOWN * delta)
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
 
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
@@ -161,6 +170,7 @@ func step(
 		_yaw_rate = lerpf(_yaw_rate, 0.0, straighten)
 		_lateral_speed = lerpf(_lateral_speed, 0.0, straighten)
 	var yaw_cap := absf(forward_speed * tan(steer_angle) / _wheelbase) * 1.2 * _grip_steer_scale() + 0.08
+	yaw_cap = minf(yaw_cap, YAW_GRIP_MARGIN * _lateral_grip / maxf(forward_speed, GRIP_FADE_SPEED))
 	_yaw_rate = clampf(_yaw_rate, -yaw_cap, yaw_cap)
 	_lateral_speed = clampf(_lateral_speed, -forward_speed * 0.45, forward_speed * 0.45)
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
@@ -201,7 +211,8 @@ func _grip_steer_scale() -> float:
 func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var axle_front := _wheelbase * _front_axle_fraction
 	var axle_rear := _wheelbase - axle_front
-	var mu := (MU_OFFROAD if _off_road else MU_DRY) * ride_grip
+	var steer_grip := _grip_steer_scale()
+	var mu := (MU_OFFROAD if _off_road else MU_DRY) * ride_grip * steer_grip
 	var weight := _mass_kg * GRAVITY
 	var transfer_accel := clampf(longitudinal_accel, -LOAD_TRANSFER_ACCEL_MAX, LOAD_TRANSFER_ACCEL_MAX)
 	var transfer := _mass_kg * transfer_accel * _cg_height / _wheelbase
@@ -216,13 +227,13 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var speed := maxf(forward_speed, 0.35)
 	var front_slip := atan2(_lateral_speed + _yaw_rate * axle_front, speed) - steer_angle
 	var rear_slip := atan2(_lateral_speed - _yaw_rate * axle_rear, speed)
-	var steer_grip := _grip_steer_scale()
 	var front_force := _tire_force(front_slip, CORNERING_FRONT * steer_grip, fz_front, long_front, mu)
 	var rear_force := _tire_force(rear_slip, CORNERING_REAR * steer_grip, fz_rear, long_rear, mu)
 	var rolling := clampf(forward_speed / GRIP_FADE_SPEED, 0.0, 1.0)
 	front_force *= rolling
 	rear_force *= rolling
 
+	_lateral_grip = (_lateral_limit(fz_front, long_front, mu) + _lateral_limit(fz_rear, long_rear, mu)) / _mass_kg
 	var steer_cos := cos(steer_angle)
 	var steer_sin := sin(steer_angle)
 	var lateral_force := front_force * steer_cos + rear_force
@@ -238,10 +249,14 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 
 
 func _tire_force(slip: float, stiffness: float, normal: float, longitudinal: float, mu: float) -> float:
+	var lat_limit := _lateral_limit(normal, longitudinal, mu)
+	return clampf(-stiffness * slip, -lat_limit, lat_limit)
+
+
+func _lateral_limit(normal: float, longitudinal: float, mu: float) -> float:
 	var limit := mu * normal
 	var long_used := clampf(absf(longitudinal) / maxf(limit, 1.0), 0.0, LONG_GRIP_SHARE_MAX)
-	var lat_limit := limit * sqrt(maxf(0.0, 1.0 - long_used * long_used))
-	return clampf(-stiffness * slip, -lat_limit, lat_limit)
+	return limit * sqrt(maxf(0.0, 1.0 - long_used * long_used))
 
 
 func gear_acceleration(ratio: float, gear_top: float, speed: float, power_hp: float) -> float:

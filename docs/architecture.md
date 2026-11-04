@@ -197,8 +197,9 @@ Both cars are `CharacterBody3D` nodes with `MOTION_MODE_FLOATING` and a child in
 - Throttle, brake, and coast change `forward_speed`.
 - Gear ratios from the equipped gearbox set each gear’s top speed and acceleration. Horsepower scales acceleration against a 280 hp reference.
 - Steering uses a bicycle model (`tan(steer) / wheelbase`). Lock tightens with speed.
+- The nose can only turn a little faster than the tires can hold the path to (`YAW_GRIP_MARGIN`), so a car over its grip runs wide and the steering can still catch it. Tire grip, ride grip, and what braking or power takes all set that limit.
 - Heading 0 points along world `+Z`.
-- Leaving the pavement cuts acceleration and caps speed.
+- Leaving the pavement cuts acceleration and slows the car to a capped speed.
 - Touching a barrier goes through `wall_scrape.gd`: only the speed going into it is lost, plus some scraping, and the car is turned back along the road.
 - `car_body_motion.gd` shows the springs and shocks. Both drives run the same four-corner suspension in `vehicle_dynamics.gd`: the simulation's tires do it as they go, and the arcade drive and a parking car call `ride()` with the acceleration measured from the car's velocity. Only the visuals move: `CarBody` leans, dives, and bounces over the wheels, and the wheels roll, steer, and ride over bumps. The collision box and the car's place on the road do not move.
 - Springs and shocks are slots (`SLOT_SPRINGS`, `SLOT_SHOCKS`), changed on the under-car screen. `GameState.race_chassis()` and `opponent_chassis()` turn the parts into `spring_rate`, `shock_rate`, and `ride_lower`, and a worn part does less. `VehicleDynamics.ride_grip()` is the share of grip the suspension leaves, lowered by lean and by how fast the body is moving at its corners. Both drives multiply their tire grip and their steering limit by it, so a stiffer, better damped car corners harder.
