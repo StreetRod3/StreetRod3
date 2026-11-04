@@ -189,6 +189,18 @@ func take_hit(speed_change: float) -> bool:
 	return true
 
 
+## A flat rock under the car: a jolt and some speed gone, with no damage, as in Street Rod 2.
+func scrape_road(speed_lost: float) -> void:
+	_chase_cam.jolt(speed_lost)
+	if GameState.arcade_drive:
+		_arcade.forward_speed = maxf(_arcade.forward_speed - speed_lost, 0.0)
+		forward_speed = _arcade.forward_speed
+	else:
+		var speed := _dynamics.cg_velocity.length()
+		if speed > 0.01:
+			_dynamics.cg_velocity *= maxf(speed - speed_lost, 0.0) / speed
+
+
 func damage_amount() -> float:
 	return _damage.amount
 
@@ -612,6 +624,10 @@ func _stick_to_road() -> void:
 	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
 	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
 	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
+	if track.has_method(&"surface_roll"):
+		rotation.z = track.surface_roll(global_position, rotation.y)
+	if track.has_method(&"bank_push") and not _parking:
+		global_position += track.bank_push(global_position) * get_physics_process_delta_time()
 
 
 func _race_track() -> Node:

@@ -79,7 +79,9 @@ var _race_hint: Label
 var _drag_btn: Button
 var _street_drag_btn: Button
 var _road_btn: Button
-## The race the drag bets are on: the quarter mile or the street drag.
+var _mulholland_btn: Button
+var _aqueduct_btn: Button
+## The race the next bet is on.
 var _stake_race_type: String = GameState.RACE_DRAG
 var _race_back: Button
 var _stake_root: Control
@@ -782,6 +784,12 @@ func _build_race_popup() -> void:
 	_road_btn = _menu_button("Road race")
 	_road_btn.pressed.connect(_on_race_type_chosen.bind(GameState.RACE_ROAD))
 	box.add_child(_road_btn)
+	_mulholland_btn = _menu_button("Mulholland drive")
+	_mulholland_btn.pressed.connect(_on_race_type_chosen.bind(GameState.RACE_MULHOLLAND))
+	box.add_child(_mulholland_btn)
+	_aqueduct_btn = _menu_button("Aqueduct race")
+	_aqueduct_btn.pressed.connect(_on_race_type_chosen.bind(GameState.RACE_AQUEDUCT))
+	box.add_child(_aqueduct_btn)
 	_race_back = _menu_button("Back")
 	_race_back.pressed.connect(_show_opponents)
 	box.add_child(_race_back)
@@ -1380,17 +1388,19 @@ func _refresh_race_popup() -> void:
 	_drag_btn.text = "Drag race\nQuarter mile · %s" % GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_DRAG))
 	_street_drag_btn.text = "Street drag\n%s, rises and dips · %s" % [GameState.long_distance_text(GameState.STREET_DRAG_LENGTH_M / 1000.0), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_STREET_DRAG))]
 	_road_btn.text = "Road race\n%s with turns · %s" % [GameState.long_distance_text(2.4), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_ROAD))]
+	_mulholland_btn.text = "Mulholland drive\n%s, cliffs and a narrow bridge · %s" % [GameState.long_distance_text(GameState.MULHOLLAND_LENGTH_M / 1000.0), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_MULHOLLAND))]
+	_aqueduct_btn.text = "Aqueduct race\n%s in a concrete channel · %s" % [GameState.long_distance_text(GameState.AQUEDUCT_LENGTH_M / 1000.0), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_AQUEDUCT))]
 
 
 func _on_race_type_chosen(race_type: String) -> void:
 	if not GameState.has_fuel_for_race(race_type):
 		_show_fuel_monitor(race_type)
 		return
-	if race_type == GameState.RACE_ROAD:
-		_show_road_stake_menu()
-		return
 	_stake_race_type = race_type
-	_show_stake_menu()
+	if race_type == GameState.RACE_DRAG or race_type == GameState.RACE_STREET_DRAG:
+		_show_stake_menu()
+		return
+	_show_road_stake_menu()
 
 
 func _show_stake_menu() -> void:
@@ -1420,7 +1430,12 @@ func _show_road_stake_menu() -> void:
 	if _chosen_index >= 0 and _chosen_index < GameState.opponents.size():
 		opp = GameState.opponents[_chosen_index]
 	var car_name := str(opp.get("car_name", "their car"))
-	_road_stake_hint.text = "Side bet on the road course.\n%s car: %s\nBankroll: $%d" % [GameState.opponent_pronoun(opp, "possessive").capitalize(), car_name, GameState.money]
+	var race_name := "the road course"
+	if _stake_race_type == GameState.RACE_MULHOLLAND:
+		race_name = "Mulholland drive"
+	elif _stake_race_type == GameState.RACE_AQUEDUCT:
+		race_name = "the Aqueduct"
+	_road_stake_hint.text = "Side bet on %s.\n%s car: %s\nBankroll: $%d" % [race_name, GameState.opponent_pronoun(opp, "possessive").capitalize(), car_name, GameState.money]
 	_road_stake_low.disabled = GameState.money < GameState.ROAD_STAKE_LOW
 	_road_stake_high.disabled = GameState.money < GameState.ROAD_STAKE_HIGH
 	_road_stake_pink.disabled = false
@@ -1432,14 +1447,14 @@ func _show_road_stake_menu() -> void:
 func _on_road_stake_chosen(amount: int) -> void:
 	if amount > GameState.money:
 		return
-	_start_race(GameState.RACE_ROAD, amount, false)
+	_start_race(_stake_race_type, amount, false)
 
 
 func _on_pink_slips_chosen() -> void:
 	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
 		_show_full_garage_line()
 		return
-	_start_race(GameState.RACE_ROAD, 0, true)
+	_start_race(_stake_race_type, 0, true)
 
 
 func _no_room_line() -> String:
@@ -1704,7 +1719,7 @@ func _sync_nav() -> void:
 		_nav.setup([_road_stake_low, _road_stake_high, _road_stake_pink, _road_stake_back])
 		return
 	if _race_root.visible:
-		_nav.setup([_drag_btn, _street_drag_btn, _road_btn, _race_back])
+		_nav.setup([_drag_btn, _street_drag_btn, _road_btn, _mulholland_btn, _aqueduct_btn, _race_back])
 		return
 	if _opp_root.visible:
 		var items: Array = []

@@ -17,6 +17,11 @@ const STREET_START_MIN_S := 110.0 / 72.8
 const STREET_START_MAX_S := 212.0 / 72.8
 ## Across the middle of the road, each in its own lane. The driver's right is -X.
 const STREET_LANE_X := 2.0
+const NIGHT_AMBIENT := Color(0.78, 0.8, 0.9, 1)
+const NIGHT_AMBIENT_ENERGY := 0.85
+const NIGHT_LIGHT_SCALE := 0.45
+## What one of Mulholland's flat rocks costs a car, in m/s. Street Rod 2 takes off about 10 mph.
+const ROAD_ROCK_LOSS_MPS := 3.5
 
 ## 0 = red only, 1 = red + orange, 2 = green (race running), 3 = lights hidden
 var _countdown_phase: int = 0
@@ -81,7 +86,7 @@ const _ON_GREEN := Color(0.2, 0.95, 0.28, 1)
 
 func _enter_tree() -> void:
 	# Before the cars' own _ready, which reads where they stand.
-	if GameState.selected_race_type == GameState.RACE_STREET_DRAG:
+	if GameState.race_from_sr2():
 		$PlayerCar.position.x = -STREET_LANE_X
 		$OpponentCar.position.x = STREET_LANE_X
 
@@ -97,7 +102,7 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_RACE
 	GameState.update_music()
 	_is_road = GameState.race_on_track()
-	_street_start = GameState.selected_race_type == GameState.RACE_STREET_DRAG
+	_street_start = GameState.race_from_sr2()
 	_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
 	_setup_race_layout()
 	_result.visible = false
@@ -147,6 +152,8 @@ func _setup_race_layout() -> void:
 	_ground.visible = false
 	_ground.collision_layer = 0
 	_ground.collision_mask = 0
+	if GameState.selected_race_type == GameState.RACE_MULHOLLAND or GameState.selected_race_type == GameState.RACE_AQUEDUCT:
+		_set_night()
 	if _track.has_method(&"finish_basis"):
 		_finish.global_transform = _track.finish_basis()
 	var col := _finish.get_node_or_null("CollisionShape3D") as CollisionShape3D
@@ -154,6 +161,27 @@ func _setup_race_layout() -> void:
 		var box := BoxShape3D.new()
 		box.size = Vector3(42, 8, 5)
 		col.shape = box
+
+
+## Street Rod 2 runs these two under a black sky, with everything on the ground bright and flat.
+func _set_night() -> void:
+	var sky_mat := ProceduralSkyMaterial.new()
+	sky_mat.sky_top_color = Color(0.004, 0.005, 0.015)
+	sky_mat.sky_horizon_color = Color(0.03, 0.035, 0.07)
+	sky_mat.ground_bottom_color = Color(0.01, 0.01, 0.02)
+	sky_mat.ground_horizon_color = Color(0.03, 0.035, 0.07)
+	sky_mat.sun_angle_max = 0.0
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
+	var world_env: WorldEnvironment = $WorldEnvironment
+	var env: Environment = world_env.environment.duplicate()
+	env.sky = sky
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = NIGHT_AMBIENT
+	env.ambient_light_energy = NIGHT_AMBIENT_ENERGY
+	world_env.environment = env
+	var moon: DirectionalLight3D = $DirectionalLight3D
+	moon.light_energy *= NIGHT_LIGHT_SCALE
 
 
 func _debug_car_mesh_instances() -> void:
@@ -242,6 +270,8 @@ func _process(delta: float) -> void:
 		return
 	if _race_started and _check_wrecks():
 		return
+	if _race_started:
+		_scrape_road_rocks()
 	if not _race_started:
 		_advance_countdown(delta)
 		return
@@ -382,10 +412,22 @@ func _check_wrecks() -> bool:
 	if _player.is_wrecked():
 		_show_wreck()
 		return true
+	if _is_road and _track.has_method(&"over_the_edge") and _track.over_the_edge(_player.global_position):
+		_show_wreck()
+		return true
 	if _opponent.is_wrecked():
 		_show_rival_wreck()
 		return true
 	return false
+
+
+## Street Rod 2's flat rocks on the road: a car over one is jolted and loses some speed.
+func _scrape_road_rocks() -> void:
+	if not _is_road or not _track.has_method(&"take_road_rock"):
+		return
+	if _track.take_road_rock(_player.global_position) != Vector3.INF:
+		_player.scrape_road(ROAD_ROCK_LOSS_MPS)
+		_play_crunch(ROAD_ROCK_LOSS_MPS)
 
 
 func _play_crunch(speed_change: float) -> void:

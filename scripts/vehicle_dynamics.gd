@@ -468,6 +468,8 @@ func sample_surfaces(track: Object, body: Transform3D) -> void:
 				float(sample.get("left_ext", 0.0)),
 				float(sample.get("right_ext", 0.0))
 			)
+			if bool(sample.get("gravel", false)):
+				amount = 1.0
 		if track != null and track.has_method(&"surface_height"):
 			road_y = float(track.surface_height(world))
 		wheel.road_y = road_y

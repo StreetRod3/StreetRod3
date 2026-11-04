@@ -1,6 +1,6 @@
 # Track file format (`.trk`)
 
-Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race and `res://assets/tracks/street_drag.trk` for the street drag.
+Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race, `res://assets/tracks/street_drag.trk` for the street drag, `res://assets/tracks/mulholland_0.trk` to `mulholland_9.trk` for Mulholland drive, and `res://assets/tracks/aqueduct.trk` for the Aqueduct race.
 
 The drag strip in `scenes/race.tscn` is still a separate, hardcoded layout. It does not use this format yet.
 
@@ -34,8 +34,8 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `roads` | yes | — | Directed edges between street nodes. |
 | `pois` | no | none | Points of interest. Each one is its own node, attached to a street node. |
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
-| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. |
-| `scenery` | no | none | What stands beside a `street` track. See [Scenery](#scenery). |
+| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. `mountain` is Mulholland: no grass grid, hillsides and drops from each node's `left` and `right`, a guard rail, and truss bridges. `aqueduct` is a concrete channel with sloped banks, where the road's width takes in the floor and both banks. |
+| `scenery` | no | none | What stands on and beside a `street`, `mountain`, or `aqueduct` track. See [Scenery](#scenery). |
 
 Unknown root fields are ignored. A race course can leave `pois` out.
 
@@ -52,6 +52,8 @@ Unknown root fields are ignored. A race course can leave `pois` out.
 | `y` | yes | — | Planar Y in meters (world Z). |
 | `z` | no | `0` | Height in meters (world Y). Leave it out to stay on the ground. |
 | `type` | no | `"regular"` | `start`, `finish`, or `regular`. |
+| `left`, `right` | no | `0` | On a `mountain` track, the full height of a hillside (above 0) or drop (below 0) on the driver's left or right, in meters. It runs straight from node to node. |
+| `rail` | no | `false` | On a `mountain` track, a guard rail on the driver's right from this node to the next. |
 
 ### Node types
 
@@ -92,6 +94,8 @@ A narrow side loses **one third of the full road width** from that edge. Left / 
 | `narrow-left-obstacle` | Same cut as `narrow-left`. | Construction barriers on the closed left strip |
 | `narrow-right-obstacle` | Same cut as `narrow-right`. | Construction barriers on the closed right strip |
 | `narrow-both-obstacle` | Same cut as `narrow-both`. | Barriers on both closed strips |
+| `bridge` | `width` as given, on a `mountain` track | Truss sides that stop a car |
+| `gravel` | Full width, gray, handled like grass. A rival holds to 59 mph over it. | No |
 
 Hitting a `-obstacle` barrier sets the car’s speed to **0** immediately.
 
@@ -152,7 +156,7 @@ Optional boxes for the city view. They do not affect the road graph or the cruis
 
 ## Scenery
 
-A `street` track lists what stands beside it. Each entry has no collision. Height comes from the road at that spot.
+A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. Height comes from the ground at that spot. On a `street` track nothing has collision. The kinds marked solid below stop a car, and a rival steers around them.
 
 ```json
 { "kind": "tree", "x": 5.78, "y": 120 }
@@ -171,6 +175,20 @@ A `street` track lists what stands beside it. Each entry has no collision. Heigh
 | `dash` | A 5 m road mark starting at `y`. |
 | `finish` | The yellow finish line, 5 m long, starting at `y`. |
 | `dark_streak` | A black mark on the shoulder, starting at `y`. |
+| `shrub`, `bush` | A low shrub and a big bush. |
+| `post` | A white roadside post with a blue band. |
+| `rock`, `boulder_side` | Rocks beside the road. |
+| `rockfall_left`, `rockfall_right` | Solid. Rocks reaching 2 m into the road from its edge, on that side. |
+| `road_boulder` | Solid. A boulder on the road. |
+| `road_rock` | A flat rock on the road. Going over it jolts the car and costs some speed. |
+| `barricade` | Solid. A sawhorse reaching 2.6 m into the road from its edge. |
+| `road_work_sign`, `speed_sign`, `narrows_sign`, `curves_sign`, `curves_back_sign`, `chevron_left`, `chevron_right` | Signs. |
+| `joint` | A seam across the Aqueduct's floor and banks. |
+| `gutter` | The Aqueduct's dark middle, from `y` to `to`. |
+| `drain` | Solid. A dark block on the bank on that side of the Aqueduct, 5 m long. |
+| `stain` | A black patch on the floor. |
+| `slab` | Solid. A low block 5.4 m wide and 5 m long across the middle of the floor. |
+| `fin` | Solid. A wall 1.5 m high and 5 m long, standing along the floor. |
 
 ## Street drag
 
@@ -183,6 +201,34 @@ A `street` track lists what stands beside it. Each entry has no collision. Heigh
 | Road width 1800 | 8 m | The car's size in the same units suggests 5.4 to 7 m. 8 m is the format's default and leaves room to steer. |
 | One height word | 0.4 m | Set by eye. Street Rod 2's height only shifts the view up and down, so it has no real size. |
 | Heights running straight to a point | Nodes only at the tops, the bottoms, and where a rise leaves level road | The tops and bottoms stay at Street Rod 2's lines and heights, but the track's curve rounds them. In 3D the points looked and felt sharp. |
+
+## Mulholland drive
+
+`mulholland_0.trk` to `mulholland_9.trk` are baked from Street Rod 2's road race (race kind 0x10, lines 370 to 960) by the SR2 port's own road builder, one file for each of its ten courses. As in Street Rod 2, a new game picks one and keeps it, and the save holds which. What is random in Street Rod 2, such as the trees and rocks, is one roll from the EXE's starting seed. It differs a little between the files, because the courses clear different lines.
+
+| Street Rod 2 | Here | Why |
+| --- | --- | --- |
+| One heading unit | 0.102 degrees | How far its car moves sideways for pointing off the road: 2 across per unit per line. So a turn is about 32 degrees over 225 m, a radius of 400 m. |
+| A kind word above 0 or below 0 | A hillside or a drop, up to 17.8 m, on the same 1800 across to 8 m scale | The road race draws them as banks reaching full height in 600 across. |
+| Touching a hillside, a barrier at speed, or a rock ends the race | A wall or solid object, with damage by how hard the car hits | Street Rod 3's own crash model. |
+| Going off a drop with no barrier ends the race | The car is totaled | Only the left has no rail, as in Street Rod 2. |
+| Over 60 mph on road work ends the race | The gravel handles like grass | A wreck totals a car here, and nothing in the 3D view says why. |
+| The sawhorse is a sprite the car drives through | Solid | A car passing through it looks wrong in 3D. Where that and Street Rod 2's rolls would close the road, leaving under 3.2 m, the boulder is left out. |
+| Narrow road 800 across, with posts and bars | A 3.56 m truss bridge, 4.6 m high | Street Rod 2's bars are only 1.8 m up, under the car's own height. |
+
+Oncoming traffic is not built.
+
+## Aqueduct race
+
+`aqueduct.trk` is baked from the same table Street Rod 2 builds for race kind 8, lines 8 to 342, at 5 m a line. It is all constants, so it is the same in every game.
+
+| Street Rod 2 | Here | Why |
+| --- | --- | --- |
+| Strip 1480 to 3320 across, banks out to 1080 and 3720, tops at height 1660 against 2000 | Floor 8.2 m wide, banks 1.8 m across and 1.5 m high | Same scale as the road. |
+| View turned as the car climbs a bank, and the car pushed back | The car rolls with the bank and is pushed back at 0.8 m/s, then 2.1 m/s high up | From its 15 and 25 across a frame. |
+| Going over the top of a bank ends the race | A wall at the top, with damage by how hard the car hits | Street Rod 3's own crash model. |
+| Fins 33 across wide | 0.3 m wide | At Street Rod 2's 0.15 m they are hard to see. |
+| Touching the middle costs speed | Painted only | Not built yet. |
 
 ## Example
 

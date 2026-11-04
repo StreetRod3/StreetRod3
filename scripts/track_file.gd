@@ -17,6 +17,8 @@ const ROAD_NARROW_OBSTACLE := "narrow-obstacle"
 const ROAD_NARROW_LEFT_OBSTACLE := "narrow-left-obstacle"
 const ROAD_NARROW_RIGHT_OBSTACLE := "narrow-right-obstacle"
 const ROAD_NARROW_BOTH_OBSTACLE := "narrow-both-obstacle"
+const ROAD_BRIDGE := "bridge"
+const ROAD_GRAVEL := "gravel"
 
 const SURFACE_REGULAR := "regular"
 const SURFACE_DRY := "dry"
@@ -27,7 +29,15 @@ const DEFAULT_WIDTH := 8.0
 
 const STYLE_CIRCUIT := "circuit"
 const STYLE_STREET := "street"
-const SCENERY_KINDS := ["tree", "big_tree", "bare_tree", "pole", "gantry", "dash", "finish", "dark_streak"]
+const STYLE_MOUNTAIN := "mountain"
+const STYLE_AQUEDUCT := "aqueduct"
+const _STYLES := [STYLE_CIRCUIT, STYLE_STREET, STYLE_MOUNTAIN, STYLE_AQUEDUCT]
+const SCENERY_KINDS := [
+	"tree", "big_tree", "bare_tree", "pole", "gantry", "dash", "finish", "dark_streak",
+	"shrub", "bush", "post", "rock", "boulder_side", "rockfall_left", "rockfall_right", "road_boulder", "road_rock",
+	"road_work_sign", "barricade", "speed_sign", "narrows_sign", "curves_sign", "curves_back_sign", "chevron_left", "chevron_right",
+	"joint", "gutter", "drain", "stain", "slab", "fin",
+]
 
 const _NODE_TYPES := [NODE_START, NODE_FINISH, NODE_REGULAR]
 const _ROAD_TYPES := [
@@ -40,6 +50,8 @@ const _ROAD_TYPES := [
 	ROAD_NARROW_LEFT_OBSTACLE,
 	ROAD_NARROW_RIGHT_OBSTACLE,
 	ROAD_NARROW_BOTH_OBSTACLE,
+	ROAD_BRIDGE,
+	ROAD_GRAVEL,
 ]
 const _SURFACES := [SURFACE_REGULAR, SURFACE_DRY, SURFACE_WET, SURFACE_ICY]
 
@@ -79,7 +91,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	var root: Dictionary = json.data
 	result.name = str(root.get("name", ""))
 	result.style = str(root.get("style", STYLE_CIRCUIT))
-	if result.style != STYLE_CIRCUIT and result.style != STYLE_STREET:
+	if not _STYLES.has(result.style):
 		result.errors.append("Unknown track style `%s`." % result.style)
 	_parse_nodes(root, result)
 	_parse_roads(root, result)
@@ -147,6 +159,9 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 			"y": float(node["y"]),
 			"z": _node_height(node, id, result),
 			"type": ntype,
+			"left": float(node.get("left", 0.0)),
+			"right": float(node.get("right", 0.0)),
+			"rail": bool(node.get("rail", false)),
 		}
 		result.nodes[id] = parsed
 		result.node_order.append(id)
@@ -501,7 +516,10 @@ static func _parse_scenery(root: Dictionary, result: Dictionary) -> void:
 		if not SCENERY_KINDS.has(kind):
 			result.warnings.append("Scenery %d has unknown kind `%s`; leaving it out." % [index, kind])
 			continue
-		result.scenery.append({ "kind": kind, "x": float(item["x"]), "y": float(item["y"]) })
+		var parsed := { "kind": kind, "x": float(item["x"]), "y": float(item["y"]) }
+		if item.has("to"):
+			parsed["to"] = float(item["to"])
+		result.scenery.append(parsed)
 
 
 static func _building_size(building: Dictionary, key: String, fallback: float, index: int, result: Dictionary) -> float:
