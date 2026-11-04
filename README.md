@@ -22,6 +22,6 @@ New Game asks for your name on a driver's license, then starts you in the garage
 
 ## Run locally
 
-Install [Godot 4.6.1](https://godotengine.org/download) (standard build, not .NET), open this folder, and press F5. The main scene is `scenes/main_menu.tscn`.
+Install [Git LFS](https://git-lfs.com) and run `git lfs install` before you clone, because most of the models and the music are stored in it. Then install [Godot 4.6.1](https://godotengine.org/download) (standard build, not .NET), open this folder, and press F5. The main scene is `scenes/main_menu.tscn`.
 
 Setup, Web export, and save-file locations are in [docs/setup.md](docs/setup.md). Architecture and the track file format are in [docs/architecture.md](docs/architecture.md) and [docs/track-format.md](docs/track-format.md). Known bugs are in [docs/bugs.md](docs/bugs.md).

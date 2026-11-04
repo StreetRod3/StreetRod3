@@ -3,7 +3,7 @@
 ## Requirements
 
 - [Godot 4.6.1](https://godotengine.org/download) standard build (GDScript). The .NET build is not required.
-- Git and [Git LFS](https://git-lfs.com), to clone the repo. Without LFS, the car models that are stored in it come down as small pointer files and those cars will not load.
+- Git and [Git LFS](https://git-lfs.com), to clone the repo. Most of the game's models and its music are stored in LFS. Without it they come down as small pointer files and the game will not run properly.
 - A desktop OpenGL 3 / Vulkan / Metal capable machine for the editor. The game is exported for the Web, Windows, macOS, and Linux.
 
 No language runtime, package install, or `.env` file is required.
@@ -24,13 +24,41 @@ Delete those files to reset a profile. They are not in the repository. A `user:/
 ## Get the project
 
 ```bash
+git lfs install
 git clone <repo-url> "Street Rod 3"
 cd "Street Rod 3"
 ```
 
+`git lfs install` is only needed once per machine. Clone rather than downloading a ZIP from GitHub, which can contain the pointer files instead of the real ones.
+
 Open the folder in Godot 4.6 (**Import** or **Open**). The editor imports GLB, PNG, MP3, and OBJ on first load and writes caches under `.godot/` (safe to delete; Godot regenerates them).
 
 Main scene: `res://scenes/main_menu.tscn`.
+
+### If you cloned without LFS
+
+Godot reports `Error importing` and `Failed loading resource` for the models and music, and the game then stops on errors such as `Cannot call method 'instantiate' on a null value`. To confirm it, check the size of `assets/driver/driver_m.glb`: 132 bytes is a pointer file, and the real model is about 1.9 MB.
+
+Getting the real files is not enough on its own, because the failed import wrote `valid=false` into the tracked `.import` files and Godot will not retry them, even with `.godot/` deleted. Close Godot, restore them as well, and reopen the project:
+
+```bash
+git lfs install
+git lfs pull
+git checkout -- "*.import"
+```
+
+This also discards any import settings you changed yourself and have not committed.
+
+### If `git pull` refuses to overwrite models or music
+
+Eleven models and music files were once committed as plain files, and moved into LFS later. In a checkout from before that, with LFS installed, they can show as modified when nobody has touched them, and Git then refuses to pull or switch to a branch that has the move. `git stash` does not help. Git does not count a missing file as a change, so delete them and run the command again:
+
+```bash
+git ls-files -m -- "*.glb" "*.mp3" | xargs rm
+git pull
+```
+
+Commit any model or music file you really did change first, because this deletes it. Your other uncommitted work is left alone. You will meet this again each time you switch back from an older branch that does not have the move yet.
 
 ## Run
 
