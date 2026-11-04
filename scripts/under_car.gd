@@ -883,6 +883,52 @@ func _zone(slot: String, size: Vector3, pos: Vector3) -> void:
 # --- Parts ---------------------------------------------------------------------
 
 
+## One part on its own, for a photograph. It is not added to this scene.
+func build_preview(part: Dictionary) -> Node3D:
+	var rig := Node3D.new()
+	var style := str(part.get("style", ""))
+	var slot := str(part.get("slot", ""))
+	match slot:
+		GameState.SLOT_MANIFOLD:
+			for side: float in [-1.0, 1.0]:
+				_build_manifold(rig, style, side)
+		GameState.SLOT_EXHAUST:
+			_build_exhaust(rig, bool(part.get("dual", false)))
+		GameState.SLOT_MUFFLER:
+			_build_muffler(rig, style, MUFFLER_Z * RIGHT)
+			_build_tailpipe(rig, RIGHT)
+		GameState.SLOT_DIFFERENTIAL:
+			_build_rear_end(rig, style, float(part.get("ratio", 3.08)))
+		GameState.SLOT_SPRINGS:
+			_preview_springs(rig, style)
+		GameState.SLOT_SHOCKS:
+			_preview_shock(rig, style)
+	return rig
+
+
+## A coil and a leaf pack, drawn with the same pieces as the car and set side by side.
+func _preview_springs(rig: Node3D, style: String) -> void:
+	var mat := _mat(_SPRING_COLORS.get(style, _SPRING_COLORS["stock"]), 0.5, 0.45)
+	var leaves := int(_SPRING_LEAVES.get(style, 2))
+	_build_coil(rig, Vector3(-0.28, 0.32, 0.0), 0.0, mat)
+	for leaf: int in leaves:
+		var length := 0.72 - 0.12 * float(leaf)
+		_box(rig, Vector3(length, 0.022, 0.07), Vector3(0.22, 0.03 + 0.024 * float(leaf), 0.0), mat)
+
+
+## One shock, standing, drawn with the same pieces as the car.
+func _preview_shock(rig: Node3D, style: String) -> void:
+	var body := _mat(_SHOCK_COLORS.get(style, _SHOCK_COLORS["stock"]), 0.4, 0.45)
+	var rod := _mat(_CHROME, 0.9, 0.2)
+	var top := Vector3(0.0, 0.48, 0.0)
+	var bottom := Vector3(0.06, 0.0, 0.0)
+	var middle := top.lerp(bottom, 0.45)
+	_tube(rig, top, middle, 0.012, rod)
+	_tube(rig, middle, bottom, 0.03, body)
+	if style == "racing":
+		_cylinder_x(rig, 0.024, 0.024, 0.1, middle.x + 0.03, body, middle.y, middle.z + 0.05, 14)
+
+
 ## Builds the rig for what is in `slot` now, or nothing for an empty slot.
 func _rebuild_rig(slot: String) -> Node3D:
 	var part := GameState.slot_part(slot)

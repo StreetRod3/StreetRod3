@@ -816,6 +816,11 @@ func _build_bolts() -> void:
 		add_child(spot)
 
 
+## The gearbox on its own, for a photograph. It is not added to this scene.
+func build_preview(box: Dictionary) -> Node3D:
+	return _build_gearbox(box)
+
+
 ## A gearbox for `box`: bellhousing, case, tail housing. Automatics are iron with a
 ## pan, manuals aluminum with a rib per gear and a shifter, racing boxes black and red.
 func _build_gearbox(box: Dictionary) -> Node3D:
