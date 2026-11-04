@@ -21,6 +21,14 @@ const RPM_REDLINE := 6500.0
 const RPM_CRITICAL := 6700.0
 const RPM_METER_MAX := 7000.0
 const OVERREV_HOLD_S := 0.55
+## Slower than this, gas and brake together are a burnout, in m/s.
+const BURNOUT_MAX_SPEED := 2.0
+## How fast a burnout comes on and dies away, per second.
+const BURNOUT_RISE := 3.0
+const BURNOUT_FALL := 6.0
+const BURNOUT_RPM := 5000.0
+## How fast the rear tires turn in a burnout at full strength, in m/s.
+const BURNOUT_WHEEL_SPEED := 30.0
 
 const CAM_FAR := 0
 const CAM_CLOSE := 1
@@ -43,6 +51,8 @@ var _touch: Node = null
 var _gearbox: Dictionary = {}
 var _gear: int = 0
 var _shift_timer: float = 0.0
+## How far into a burnout the car is, 0 to 1.
+var _burnout: float = 0.0
 var _overrev_time: float = 0.0
 var _engine_blown: bool = false
 var _damage: _CarDamage = _CarDamage.new()
@@ -209,6 +219,7 @@ func get_rpm() -> float:
 	if top <= 0.05:
 		return RPM_IDLE
 	var rpm := RPM_IDLE + (RPM_REDLINE - RPM_IDLE) * (forward_speed / top)
+	rpm = lerpf(rpm, maxf(rpm, BURNOUT_RPM), _burnout)
 	return clampf(rpm, RPM_IDLE_MIN, RPM_METER_MAX)
 
 
@@ -289,6 +300,35 @@ func _brake_down() -> bool:
 	return _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down()
 
 
+## Gas and brake together with the car all but stopped, which is how a burnout starts.
+func _burnout_held() -> bool:
+	return _throttle_down() and _brake_down() and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
+
+
+## Only for show so far: the wheels spin, the engine revs, and the tires smoke and mark the
+## road, but it does nothing for the launch or the tires. See docs/todo.md.
+func _update_burnout(delta: float) -> void:
+	if _burnout_held():
+		_burnout = move_toward(_burnout, 1.0, BURNOUT_RISE * delta)
+	else:
+		_burnout = move_toward(_burnout, 0.0, BURNOUT_FALL * delta)
+	if _burnout <= 0.0:
+		return
+	var track := _race_track()
+	var wheels := _dynamics.wheels()
+	var forward := global_transform.basis.z.normalized()
+	for i in wheels.size():
+		var wheel: _VehicleDynamics.Wheel = wheels[i]
+		if wheel.front:
+			continue
+		var world: Vector3 = global_transform * wheel.local_position
+		var ground_y := wheel.road_y
+		if track != null and track.has_method(&"surface_height"):
+			ground_y = float(track.surface_height(world))
+		_skids.burn(i, world, ground_y, forward, _burnout)
+	_skids.flush()
+
+
 func _handbrake_down() -> bool:
 	if Input.is_key_pressed(KEY_SPACE):
 		return true
@@ -300,6 +340,7 @@ func begin_park(slot: float) -> void:
 		return
 	_parking = true
 	_park_slot = slot
+	_burnout = 0.0
 	_park_speed = maxf(forward_speed, 0.0)
 	_skids.end_strips()
 
@@ -323,6 +364,7 @@ func _physics_process(delta: float) -> void:
 	else:
 		_physics_simulation(delta)
 		_body_motion.note_velocity(_dynamics.cg_velocity)
+	_update_burnout(delta)
 	_stick_to_road()
 	_pose_body(delta)
 
@@ -337,7 +379,7 @@ func _pose_body(delta: float) -> void:
 	var on_arcade := GameState.arcade_drive and not _parking
 	var steer: float = _arcade.steer_angle if on_arcade else _dynamics.steer_angle()
 	var steer_input: float = _arcade.steer_input() if on_arcade else _dynamics.steer_input()
-	_body_motion.pose(delta, forward_speed, steer, steer_input)
+	_body_motion.pose(delta, forward_speed, steer, steer_input, _burnout * BURNOUT_WHEEL_SPEED)
 	_place_camera(delta)
 
 
@@ -355,7 +397,7 @@ func _physics_simulation(delta: float) -> void:
 		_update_debug_draw()
 		return
 
-	var throttle := _throttle_down()
+	var throttle := _throttle_down() and not _burnout_held()
 	var brake := _brake_down()
 	var steer := _steer_input()
 	if _shift_timer > 0.0:
@@ -414,7 +456,7 @@ func _physics_arcade(delta: float) -> void:
 		_update_engine_sound(false)
 		return
 
-	var throttle := _throttle_down()
+	var throttle := _throttle_down() and not _burnout_held()
 	var brake := _brake_down()
 	var steer := _steer_input()
 	if _shift_timer > 0.0:
@@ -452,10 +494,23 @@ func _physics_arcade(delta: float) -> void:
 	)
 	var before := velocity
 	move_and_slide()
-	_scrape_barrier(before, delta)
+	if _scrape_barrier(before, delta):
+		_skids.end_strips()
+	else:
+		_skids.record_axles(
+			_dynamics.wheels(),
+			global_transform,
+			_race_track(),
+			_arcade.forward_speed,
+			_arcade.front_grip_use,
+			_arcade.front_slip_angle,
+			_arcade.front_long_slip,
+			_arcade.rear_grip_use,
+			_arcade.rear_slip_angle,
+			_arcade.rear_long_slip
+		)
 	forward_speed = _arcade.forward_speed
 	heading_yaw = _arcade.heading_yaw
-	_skids.end_strips()
 	_update_overrev(delta)
 	_update_engine_sound(throttle)
 

@@ -40,6 +40,8 @@ const HANDBRAKE_DECEL := 6.5
 const SLIDE_LIMIT := 0.45
 const HANDBRAKE_SLIDE_LIMIT := 1.2
 const SLIDE_LIMIT_RETURN := 1.5
+## Hard braking above this speed leaves marks from the front tires, in m/s.
+const BRAKE_MARK_SPEED := 15.0
 ## How quickly the tires stop a car turning after a hit, in 1/seconds.
 const SPIN_DECAY := 2.8
 ## How fast a barrier swings the nose round, in rad/s.
@@ -94,6 +96,14 @@ var _handbrake: bool = false
 var _slide_limit: float = SLIDE_LIMIT
 ## Turning the hand brake has allowed past what the tires can hold, in rad/s.
 var _handbrake_yaw: float = 0.0
+## What each axle is doing, for the marks and smoke it leaves: the share of its grip in
+## use, its slip angle in radians, and its pull or braking over what it can pass on.
+var front_grip_use: float = 0.0
+var front_slip_angle: float = 0.0
+var front_long_slip: float = 0.0
+var rear_grip_use: float = 0.0
+var rear_slip_angle: float = 0.0
+var rear_long_slip: float = 0.0
 
 
 func apply_spec(chassis: Dictionary, grip_rating: float) -> void:
@@ -195,6 +205,12 @@ func step(
 	var steer_target := _steer_input * _steer_limit() * _grip_steer_scale()
 	steer_angle = move_toward(steer_angle, steer_target, STEER_RESPONSE * delta)
 	_step_chassis(delta, longitudinal_accel)
+	if brake and speed_before > BRAKE_MARK_SPEED:
+		front_grip_use = maxf(front_grip_use, 1.0)
+		front_long_slip = -1.0
+	if handbrake and speed_before > GRIP_FADE_SPEED:
+		rear_grip_use = maxf(rear_grip_use, 1.0)
+		rear_long_slip = -1.0
 	if absf(_steer_input) < 0.02 and absf(steer_angle) < 0.02:
 		var straighten := clampf(STRAIGHTEN_RATE * delta, 0.0, 1.0)
 		_yaw_rate = lerpf(_yaw_rate, 0.0, straighten)
@@ -291,6 +307,14 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	front_force *= rolling
 	rear_force *= rolling
 
+	var front_limit := maxf(mu * fz_front, 1.0)
+	var rear_limit := maxf(rear_mu * fz_rear, 1.0)
+	front_grip_use = Vector2(front_force, long_front).length() / front_limit
+	rear_grip_use = Vector2(rear_force, long_rear).length() / rear_limit
+	front_slip_angle = front_slip
+	rear_slip_angle = rear_slip
+	front_long_slip = long_front / front_limit
+	rear_long_slip = long_rear / rear_limit
 	_lateral_grip = (_lateral_limit(fz_front, long_front, mu) + _lateral_limit(fz_rear, long_rear, rear_mu)) / _mass_kg
 	var steer_cos := cos(steer_angle)
 	var steer_sin := sin(steer_angle)

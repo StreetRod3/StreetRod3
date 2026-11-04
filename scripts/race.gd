@@ -95,9 +95,9 @@ func _ready() -> void:
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	if _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · C: camera"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · C: camera · W+S: burnout"
 	else:
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera · W+S: burnout"
 	_traffic.visible = true
 	_refresh_traffic_lights()
 

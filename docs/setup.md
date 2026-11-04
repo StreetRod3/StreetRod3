@@ -94,4 +94,4 @@ Local export and CI use the same preset name (`Web`) and the same output checks 
 3. Choose **Drag race** (quarter mile) or **Road race** (course in `assets/tracks/track1.trk`), then a rival.
 4. **Save** from the garage clock into one of eight slots. **Load** (main menu or garage clock) lists the slots with each one's car, cash, number of cars and save time, and returns to the saved scene.
 
-Controls during a race: **W / Up** throttle, **S / Down** brake, **Space** hand brake, **A / D** or arrows steer, **Q / E** shift on a manual gearbox, **C** cycle camera. Narrow or touch viewports replace the keyboard hint with on-screen controls.
+Controls during a race: **W / Up** throttle, **S / Down** brake, **Space** hand brake, **W + S** with the car stopped for a burnout, **A / D** or arrows steer, **Q / E** shift on a manual gearbox, **C** cycle camera. Narrow or touch viewports replace the keyboard hint with on-screen controls.

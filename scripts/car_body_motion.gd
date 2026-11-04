@@ -100,8 +100,9 @@ func _lean_transform() -> Transform3D:
 
 
 ## Moves the body and wheels to match. `steer` is the road-wheel angle in radians, and
-## `steer_input` the driver's input, -1 to 1.
-func pose(dt: float, speed: float, steer: float, steer_input: float) -> void:
+## `steer_input` the driver's input, -1 to 1. `rear_spin` is how much faster than the car
+## the rear wheels are turning, in m/s.
+func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: float = 0.0) -> void:
 	if not _captured:
 		return
 	if _body != null:
@@ -112,7 +113,8 @@ func pose(dt: float, speed: float, steer: float, steer_input: float) -> void:
 		var wheel: Dictionary = _wheels[i]
 		if wheel.is_empty():
 			continue
-		wheel["rolled"] = wrapf(float(wheel["rolled"]) + speed / float(wheel["radius"]) * dt, -TAU, TAU)
+		var wheel_speed := speed if bool(wheel["front"]) else speed + rear_spin
+		wheel["rolled"] = wrapf(float(wheel["rolled"]) + wheel_speed / float(wheel["radius"]) * dt, -TAU, TAU)
 		var turn := Basis(Vector3.RIGHT, float(wheel["rolled"]))
 		if bool(wheel["front"]):
 			turn = Basis(Vector3.UP, shown) * turn

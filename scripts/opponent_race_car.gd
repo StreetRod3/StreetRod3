@@ -18,6 +18,8 @@ const ARCADE_DRIVER_PULL := 46.0 / 24.0
 const ARCADE_RATIOS: Array[float] = [2.52, 1.52, 1.00]
 ## How far ahead the arcade rails read the road's curve for the tires' share of power, in meters.
 const _ARCADE_CURVE_STEP_M := 6.0
+## The rear tires' share of a car's grip while it is pulling away.
+const _ARCADE_REAR_GRIP_SHARE := 0.6
 
 ## Opponent preset `accel_scale` that matches the player's drive force.
 const PRESET_ACCEL_REF := 0.30
@@ -313,7 +315,9 @@ func _physics_arcade(delta: float) -> void:
 	var corner := _max_mps
 	if track != null and track.has_method(&"sample_at"):
 		corner = _corner_speed(track, forward_speed, _ArcadeDrive.dry_grip_accel(_arcade_grip, _dynamics.ride_grip()) * ARCADE_CORNER_GRIP_USE)
-	if forward_speed > corner:
+	var braking := forward_speed > corner
+	var pull := 0.0
+	if braking:
 		forward_speed = move_toward(forward_speed, corner, _ArcadeDrive.BRAKING * delta)
 	elif _arcade_shift > 0.0:
 		_arcade_shift = maxf(0.0, _arcade_shift - delta)
@@ -323,8 +327,10 @@ func _physics_arcade(delta: float) -> void:
 			_arcade_gear += 1
 			_arcade_shift = _shift_time
 		else:
-			forward_speed = minf(forward_speed + _arcade_gear_accel(track) * _damage.power_left() * delta, maxf(corner, forward_speed))
+			pull = _arcade_gear_accel(track)
+			forward_speed = minf(forward_speed + pull * _damage.power_left() * delta, maxf(corner, forward_speed))
 	forward_speed = minf(forward_speed, _max_mps)
+	_mark_arcade_tires(track, braking, pull)
 	if track != null and track.has_method(&"sample_at"):
 		_path_s += forward_speed * delta
 		_lane_x += _rail_shove * delta
@@ -347,6 +353,25 @@ func _physics_arcade(delta: float) -> void:
 		return
 	velocity = Vector3(0.0, velocity.y, forward_speed)
 	move_and_slide()
+
+
+## Marks and smoke off the line and under hard braking. On the rails a rival never slides.
+func _mark_arcade_tires(track: Node, braking: bool, pull: float) -> void:
+	var hard_braking := braking and forward_speed > _ArcadeDrive.BRAKE_MARK_SPEED
+	var rear_grip := _ArcadeDrive.dry_grip_accel(_arcade_grip, _dynamics.ride_grip()) * _ARCADE_REAR_GRIP_SHARE
+	var rear_long := pull / maxf(rear_grip, 0.1)
+	_skids.record_axles(
+		_dynamics.wheels(),
+		global_transform,
+		track,
+		forward_speed,
+		1.0 if hard_braking else 0.0,
+		0.0,
+		-1.0 if hard_braking else 0.0,
+		rear_long,
+		0.0,
+		rear_long
+	)
 
 
 func _arcade_gear_top(gear_index: int) -> float:
