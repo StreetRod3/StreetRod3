@@ -18,10 +18,12 @@ extends Node
 @export_group("Suspension")
 ## Off uses the instant, filtered load-transfer formula on a flat body.
 @export var use_spring_suspension: bool = true
-## Newtons per meter of spring compression at each wheel.
-@export var spring_stiffness: float = 52000.0
-## Newtons per meter per second. Resists bump and rebound.
-@export var damper_coefficient: float = 7000.0
+## Newtons per meter of spring compression at each wheel, on a car of `_REFERENCE_MASS_KG`.
+## Soft like an old road car: about 1.3 bounces a second, and plenty of lean in a corner.
+@export var spring_stiffness: float = 24000.0
+## Newtons per meter per second at each shock, on a car of `_REFERENCE_MASS_KG`. Resists
+## bump and rebound, and lets the body settle after a bounce or two.
+@export var damper_coefficient: float = 2100.0
 @export_group("Tires")
 ## Off uses the saturating slip curve, where force never falls past the limit.
 @export var use_peak_slip_curve: bool = true
@@ -66,9 +68,10 @@ class Config:
 
 	## Low-speed lock. At speed the rack stops at the angle for steer_full_lateral_accel.
 	var max_steer_rad: float = 0.52
-	## Steady lateral acceleration a full steering input asks for, in m/s².
+	## Steady lateral acceleration a full steering input asks for, in m/s², on tires of
+	## `grip_mu` with the body flat. Better grip asks for more, so it reaches the road.
 	## The road-wheel angle is atan(this * wheelbase / speed²), never past max_steer_rad.
-	var steer_full_lateral_accel: float = 9.0
+	var steer_full_lateral_accel: float = 10.0
 	## How fast the steering input is chased, in 1/seconds.
 	var steer_input_response: float = 8.0
 	## 1 is linear. Higher values keep a short press near center; holding still reaches full lock.
@@ -156,6 +159,10 @@ class Wheel:
 	var suspension_ready: bool = false
 	## Road height under this wheel. 0 is the flat ground.
 	var road_y: float = 0.0
+	## How rough the road is under this wheel, in meters above its smooth surface.
+	var road_bump: float = 0.0
+	## How far the wheel sits above where it rests: over a bump, or hanging with the body up.
+	var hub_lift: float = 0.0
 
 
 var config := Config.new()
@@ -186,7 +193,30 @@ var _roll: float = 0.0
 var _roll_vel: float = 0.0
 var _pitch_inertia: float = 2500.0
 var _roll_inertia: float = 600.0
+var _spring_rate: float = spring_stiffness
+var _shock_rate: float = damper_coefficient
+var _ride_lower: float = 0.0
+var _ride_grip: float = 1.0
 
+static var _road_noise: FastNoiseLite
+static var _swell_noise: FastNoiseLite
+
+const _REFERENCE_MASS_KG := 1360.0
+## Tallest bumps in the road, in meters. They are what the shocks work against.
+const _ROAD_ROUGHNESS_M := 0.009
+const _ROAD_SWELL_M := 0.014
+const _GRASS_ROUGHNESS_M := 0.045
+## Acceleration past this moves the body no further.
+const _RIDE_ACCEL_LIMIT := 12.0
+## Grip lost with the body leaned over to `_LEAN_LIMIT_RAD`: the tires roll onto their edges.
+const _LEAN_GRIP_LOSS := 0.13
+## Grip lost per m/s the body is moving at its corners, up and down or swinging from side
+## to side, and the most that can cost. A car that wallows keeps loading and unloading its
+## tires, so this is what good shocks buy.
+const _WALLOW_GRIP_LOSS := 0.45
+const _WALLOW_GRIP_LOSS_MAX := 0.16
+## How quickly the grip follows the body, in 1/seconds.
+const _RIDE_GRIP_RESPONSE := 10.0
 const _WORLD_MASK := 1
 const _RAY_LENGTH_M := 2.5
 ## Hub height above the road for the race spawn, used when the first
@@ -217,6 +247,17 @@ func _init() -> void:
 	grass.drive_multiplier = 0.30
 	grass.steer_multiplier = 0.90
 	grass.speed_resistance = 1.0
+	if _road_noise == null:
+		_road_noise = _make_road_noise(0.35)
+		_swell_noise = _make_road_noise(0.045)
+
+
+static func _make_road_noise(frequency: float) -> FastNoiseLite:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
+	noise.frequency = frequency
+	noise.fractal_type = FastNoiseLite.FRACTAL_NONE
+	return noise
 
 
 func apply_setup(chassis: Dictionary, grip_rating: float) -> void:
@@ -227,6 +268,12 @@ func apply_setup(chassis: Dictionary, grip_rating: float) -> void:
 		config.front_axle_fraction = float(chassis.get("front_axle_fraction", config.front_axle_fraction))
 		var steer_deg := float(chassis.get("max_steer_deg", rad_to_deg(config.max_steer_rad)))
 		config.max_steer_rad = deg_to_rad(steer_deg)
+	# Same bounce on every car: a heavy car gets springs and shocks to match its weight.
+	# The parts on the car then set how stiff it is from there.
+	var mass_scale := config.mass_kg / _REFERENCE_MASS_KG
+	_spring_rate = spring_stiffness * mass_scale * float(chassis.get("spring_rate", 1.0))
+	_shock_rate = damper_coefficient * mass_scale * float(chassis.get("shock_rate", 1.0))
+	_ride_lower = float(chassis.get("ride_lower", 0.0))
 	var rating := grip_rating - config.grip_reference_rating
 	_tire_grip = maxf(config.grip_mu + rating * config.grip_mu_per_rating, 0.2)
 	_apply_grip_to_wheels()
@@ -293,6 +340,37 @@ func steer_angle() -> float:
 	return _steer_angle
 
 
+## How far the steering has been asked to turn, -1 to 1.
+func steer_input() -> float:
+	return _steer_input
+
+
+## Height of the body at the mass center over its ride height, in meters.
+func body_heave() -> float:
+	return _heave
+
+
+## How far the springs drop the body below where stock ones hold it, in meters.
+func ride_lower() -> float:
+	return _ride_lower
+
+
+## Share of the tires' grip the suspension leaves, 1 with the body flat and still. It is why
+## stiffer springs and better shocks hold the road better.
+func ride_grip() -> float:
+	return _ride_grip
+
+
+## Radians. Positive lifts the nose.
+func body_pitch() -> float:
+	return _pitch
+
+
+## Radians. Positive lowers the left side.
+func body_roll() -> float:
+	return _roll
+
+
 ## Peak acceleration the asphalt tires allow on a flat road, in m/s².
 func grip_accel() -> float:
 	return _tire_grip * config.asphalt.grip_multiplier * config.gravity
@@ -334,6 +412,7 @@ func reset_motion() -> void:
 	for wheel in _wheels:
 		wheel.long_slip = 0.0
 		wheel.compression_speed = 0.0
+		wheel.hub_lift = 0.0
 		wheel.suspension_ready = false
 		wheel.ride_recapture = true
 		wheel.suspension_force = wheel.static_load
@@ -387,8 +466,17 @@ func sample_surfaces(track: Object, body: Transform3D) -> void:
 		if track != null and track.has_method(&"surface_height"):
 			road_y = float(track.surface_height(world))
 		wheel.road_y = road_y
+		wheel.road_bump = _road_bump_at(world, amount)
 		blends.append(amount)
 	set_surface_blends(blends)
+
+
+## The road's surface under a wheel over its smooth height: a fine roughness and a slow
+## swell, fixed to the road so the front wheels meet a bump before the rear ones. Grass is
+## rougher. Near the start of a track it stays smooth, so the cars line up level.
+func _road_bump_at(world: Vector3, grass: float) -> float:
+	var fine := lerpf(_ROAD_ROUGHNESS_M, _GRASS_ROUGHNESS_M, grass)
+	return _road_noise.get_noise_2d(world.x, world.z) * fine + _swell_noise.get_noise_2d(world.x, world.z) * _ROAD_SWELL_M
 
 
 ## Propulsion request for one gear. Force falls toward the top of the gear and
@@ -426,6 +514,17 @@ func set_surface_blends(blends: Array) -> void:
 		var wheel := _wheels[i]
 		wheel.surface_blend = blend
 		wheel.surface_name = "grass" if blend > 0.5 else "asphalt"
+
+
+## The springs and shocks alone, for a car the tires are not moving (the arcade drive and
+## a parking car). The accelerations are what the body feels, in m/s².
+func ride(dt: float, long_accel: float, lat_accel: float) -> void:
+	if dt <= 0.0 or _wheels.is_empty():
+		return
+	_long_accel = long_accel
+	_lat_accel = lat_accel
+	_update_suspension(dt)
+	_integrate_suspension(dt)
 
 
 ## One fixed physics step. drive_force_n is the total rear propulsion request.
@@ -507,7 +606,7 @@ func _steer_angle_limit() -> float:
 	var cap := config.max_steer_rad
 	if speed < 1.0:
 		return cap
-	var ay := maxf(config.steer_full_lateral_accel, 0.5)
+	var ay := maxf(config.steer_full_lateral_accel * _tire_grip / maxf(config.grip_mu, 0.01) * _ride_grip, 0.5)
 	var wheelbase := maxf(_wheelbase, 0.5)
 	return minf(cap, atan(ay * wheelbase / (speed * speed)))
 
@@ -556,7 +655,7 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 	wheel.slip_angle = slip
 
 	var blend := wheel.surface_blend
-	var mu := _tire_grip * _blended(blend, config.asphalt.grip_multiplier, config.grass.grip_multiplier)
+	var mu := _tire_grip * _blended(blend, config.asphalt.grip_multiplier, config.grass.grip_multiplier) * _ride_grip
 	wheel.grip = mu
 	var limit := mu * wheel.normal_load
 	var axle_share := config.brake_front_fraction if wheel.front else (1.0 - config.brake_front_fraction)
@@ -749,8 +848,8 @@ func _update_suspension(dt: float) -> void:
 	var world := car.get_world_3d()
 	if world != null:
 		space = world.direct_space_state
-	var stiffness := maxf(spring_stiffness, 1000.0)
-	var damper := maxf(damper_coefficient, 0.0)
+	var stiffness := maxf(_spring_rate, 1000.0)
+	var damper := maxf(_shock_rate, 0.0)
 	for wheel in _wheels:
 		var origin := car.global_transform * wheel.local_position
 		origin.y += _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
@@ -761,8 +860,9 @@ func _update_suspension(dt: float) -> void:
 			wheel.ride_recapture = false
 		var sag := wheel.static_load / stiffness
 		wheel.rest_length = wheel.ride_drop + sag
-		var travel := wheel.rest_length - drop
+		var travel := wheel.rest_length - drop + wheel.road_bump
 		var compression := clampf(travel, 0.0, _MAX_TRAVEL_M)
+		wheel.hub_lift = wheel.road_bump + maxf(-travel, 0.0)
 		if not wheel.suspension_ready:
 			wheel.compression = compression
 			wheel.compression_speed = 0.0
@@ -828,9 +928,11 @@ func _integrate_suspension(dt: float) -> void:
 		roll_moment += force * wheel.offset.x
 	var mass := config.mass_kg
 	var height := maxf(config.cg_height_m, 0.0)
+	var long_accel := clampf(_long_accel, -_RIDE_ACCEL_LIMIT, _RIDE_ACCEL_LIMIT)
+	var lat_accel := clampf(_lat_accel, -_RIDE_ACCEL_LIMIT, _RIDE_ACCEL_LIMIT)
 	_heave_vel += (support - mass * config.gravity) / mass * dt
-	_pitch_vel += (pitch_moment + mass * _long_accel * height) / _pitch_inertia * dt
-	_roll_vel += (roll_moment + mass * _lat_accel * height) / _roll_inertia * dt
+	_pitch_vel += (pitch_moment + mass * long_accel * height) / _pitch_inertia * dt
+	_roll_vel += (roll_moment + mass * lat_accel * height) / _roll_inertia * dt
 	_heave += _heave_vel * dt
 	_pitch += _pitch_vel * dt
 	_roll += _roll_vel * dt
@@ -843,6 +945,10 @@ func _integrate_suspension(dt: float) -> void:
 	if absf(_roll) > _LEAN_LIMIT_RAD:
 		_roll = clampf(_roll, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
 		_roll_vel = 0.0
+	var lean_loss := absf(_roll) / _LEAN_LIMIT_RAD * _LEAN_GRIP_LOSS
+	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * config.wheelbase_m * 0.5 + absf(_roll_vel) * config.track_width_m * 0.5
+	var wallow_loss := minf(corner_speed * _WALLOW_GRIP_LOSS, _WALLOW_GRIP_LOSS_MAX)
+	_ride_grip = lerpf(_ride_grip, 1.0 - lean_loss - wallow_loss, 1.0 - exp(-_RIDE_GRIP_RESPONSE * dt))
 
 
 func _update_inertia() -> void:

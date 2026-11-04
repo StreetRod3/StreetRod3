@@ -5,6 +5,7 @@ extends Node3D
 ## exhaust pipes, a muffler, or the rear end to swap it for a spare. The exhaust can
 ## come off and leave the headers open, and a muffler can come off and leave its pipe
 ## ending open where the muffler bolted on. A dual exhaust has a muffler on each side.
+## The springs and shocks are at all four corners, and they swap as a set.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 
@@ -59,6 +60,8 @@ const SLOT_NAMES := {
 	"muffler": "Muffler",
 	"muffler_left": "Left muffler",
 	"differential": "Rear end",
+	"springs": "Springs",
+	"shocks": "Shocks",
 }
 const SLOT_PLURALS := {
 	"manifold": "exhaust manifolds",
@@ -66,6 +69,8 @@ const SLOT_PLURALS := {
 	"muffler": "mufflers",
 	"muffler_left": "mufflers",
 	"differential": "rear ends",
+	"springs": "springs",
+	"shocks": "shocks",
 }
 const SLOT_KEYS := {
 	"manifold": "1",
@@ -73,6 +78,8 @@ const SLOT_KEYS := {
 	"muffler": "3",
 	"muffler_left": "4",
 	"differential": "5",
+	"springs": "6",
+	"shocks": "7",
 }
 const _SLOT_KEYCODES := {
 	KEY_1: "manifold",
@@ -80,6 +87,8 @@ const _SLOT_KEYCODES := {
 	KEY_3: "muffler",
 	KEY_4: "muffler_left",
 	KEY_5: "differential",
+	KEY_6: "springs",
+	KEY_7: "shocks",
 }
 
 const _IRON := Color(0.22, 0.2, 0.19)
@@ -92,6 +101,22 @@ const _UNDERBODY := Color(0.09, 0.085, 0.08)
 const _SOOT := Color(0.05, 0.045, 0.04)
 const _CREAM := Color(0.95, 0.9, 0.78, 1)
 const _HOVER := Color(0.95, 0.62, 0.22)
+const _SPRING_COLORS := {
+	"stock": Color(0.14, 0.14, 0.14),
+	"heavy": Color(0.62, 0.1, 0.08),
+	"lowering": Color(0.1, 0.25, 0.6),
+	"racing": Color(0.85, 0.72, 0.1),
+}
+const _SHOCK_COLORS := {
+	"stock": Color(0.3, 0.3, 0.3),
+	"gas": Color(0.8, 0.62, 0.08),
+	"racing": Color(0.7, 0.1, 0.1),
+}
+## Leaves in a rear leaf spring, by the spring's style.
+const _SPRING_LEAVES := {"stock": 2, "heavy": 3, "lowering": 3, "racing": 4}
+const _COIL_RADIUS := 0.055
+const _COIL_TURNS := 5
+const _SHOCK_Z := 0.6
 const _RATE := 22050
 
 @onready var _camera: Camera3D = $Camera3D
@@ -718,11 +743,10 @@ func _build_engine() -> void:
 	engine.position = Vector3(_engine_rear - ENGINE_REAR_X * ENGINE_SCALE, CRANK_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0)
 
 
-## Gearbox (seen from below, it is changed on the lift), driveshaft, axle housing, and springs.
+## Gearbox (seen from below, it is changed on the lift), driveshaft, and axle housing.
 func _build_driveline() -> void:
 	var steel := _mat(_STEEL, 0.7, 0.35)
 	var iron := _mat(_IRON, 0.5, 0.6)
-	var spring := _mat(Color(0.14, 0.14, 0.14), 0.5, 0.5)
 	var tail := _engine_rear + 0.2
 	if GameState.has_gearbox():
 		var box := GameState.get_equipped_gearbox()
@@ -738,8 +762,43 @@ func _build_driveline() -> void:
 	for side in [-1.0, 1.0]:
 		_tube(self, Vector3(_rear_x, AXLE_Y, 0.1 * side), Vector3(_rear_x, AXLE_Y, (TRACK_HALF - 0.12) * side), 0.042, iron)
 		_cylinder_z(self, 0.15, 0.08, Vector3(_rear_x, AXLE_Y, (TRACK_HALF - 0.12) * side), iron)
-		_box(self, Vector3(1.2, 0.03, 0.06), Vector3(_rear_x, AXLE_Y - 0.06, FRAME_HALF * side), spring)
-		_box(self, Vector3(0.8, 0.025, 0.055), Vector3(_rear_x, AXLE_Y - 0.085, FRAME_HALF * side), spring)
+
+
+## Coil springs from the frame down to the front control arms, and a leaf spring under the
+## axle at the back. Stiffer springs have a color of their own and more leaves.
+func _build_springs(rig: Node3D, style: String) -> void:
+	var mat := _mat(_SPRING_COLORS.get(style, _SPRING_COLORS["stock"]), 0.5, 0.45)
+	var leaves := int(_SPRING_LEAVES.get(style, 2))
+	for side in [-1.0, 1.0]:
+		_build_coil(rig, Vector3(_front_x, FRAME_Y - 0.04, FRAME_HALF * 0.95 * side), AXLE_Y - 0.06, mat)
+		for leaf in leaves:
+			var length := 1.2 - 0.3 * float(leaf)
+			_box(rig, Vector3(length, 0.022, 0.06), Vector3(_rear_x, AXLE_Y - 0.06 - 0.024 * float(leaf), FRAME_HALF * side), mat)
+
+
+func _build_coil(rig: Node3D, center: Vector3, bottom_y: float, mat: Material) -> void:
+	var points: Array[Vector3] = []
+	var steps := _COIL_TURNS * 8
+	for i in steps + 1:
+		var t := float(i) / float(steps)
+		var angle := t * TAU * float(_COIL_TURNS)
+		points.append(Vector3(center.x + cos(angle) * _COIL_RADIUS, lerpf(center.y, bottom_y, t), center.z + sin(angle) * _COIL_RADIUS))
+	_pipe(rig, points, 0.009, mat)
+
+
+## A shock at each corner: its body, the chrome rod, and on racing shocks a reservoir.
+func _build_shocks(rig: Node3D, style: String) -> void:
+	var body := _mat(_SHOCK_COLORS.get(style, _SHOCK_COLORS["stock"]), 0.4, 0.45)
+	var rod := _mat(_CHROME, 0.9, 0.2)
+	for side in [-1.0, 1.0]:
+		for axle_x in [_front_x, _rear_x]:
+			var top := Vector3(axle_x + 0.16, FRAME_Y + 0.02, _SHOCK_Z * 0.86 * side)
+			var bottom := Vector3(axle_x + 0.03, AXLE_Y - 0.05, _SHOCK_Z * side)
+			var middle := top.lerp(bottom, 0.45)
+			_tube(rig, top, middle, 0.012, rod)
+			_tube(rig, middle, bottom, 0.03, body)
+			if style == "racing":
+				_cylinder_x(rig, 0.024, 0.024, 0.1, middle.x + 0.03, body, middle.y, middle.z + 0.05 * side, 14)
 
 
 ## Head pipes from the manifold flanges back to where the muffler bolts on. A single
@@ -800,6 +859,11 @@ func _build_zones() -> void:
 	var pipes_to := _muffler_x - MUFFLER_LEN * 0.5 - 0.08
 	_zone(GameState.SLOT_EXHAUST, Vector3(pipes_to - pipes_from, 0.14, MUFFLER_Z * 2.0 + 0.12), Vector3((pipes_from + pipes_to) * 0.5, PIPE_Y, 0.0))
 	_zone(GameState.SLOT_DIFFERENTIAL, Vector3(0.62, 0.34, 0.4), Vector3(_rear_x - 0.06, AXLE_Y, 0.0))
+	for side in [-1.0, 1.0]:
+		_zone(GameState.SLOT_SPRINGS, Vector3(0.24, 0.3, 0.2), Vector3(_front_x, (FRAME_Y + AXLE_Y) * 0.5 - 0.04, FRAME_HALF * 0.95 * side))
+		_zone(GameState.SLOT_SPRINGS, Vector3(1.24, 0.12, 0.1), Vector3(_rear_x, AXLE_Y - 0.08, FRAME_HALF * side))
+		for axle_x in [_front_x, _rear_x]:
+			_zone(GameState.SLOT_SHOCKS, Vector3(0.26, 0.4, 0.12), Vector3(axle_x + 0.1, (FRAME_Y + AXLE_Y) * 0.5, _SHOCK_Z * 0.95 * side))
 
 
 func _zone(slot: String, size: Vector3, pos: Vector3) -> void:
@@ -840,6 +904,10 @@ func _rebuild_rig(slot: String) -> Node3D:
 			_build_tailpipe(rig, side)
 		GameState.SLOT_DIFFERENTIAL:
 			_build_rear_end(rig, style, float(part.get("ratio", 3.08)))
+		GameState.SLOT_SPRINGS:
+			_build_springs(rig, style)
+		GameState.SLOT_SHOCKS:
+			_build_shocks(rig, style)
 	_rigs[slot] = rig
 	return rig
 

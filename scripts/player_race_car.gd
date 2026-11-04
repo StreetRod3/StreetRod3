@@ -9,6 +9,10 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
+const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
+const _WallScrape := preload("res://scripts/wall_scrape.gd")
+const _CarDamage := preload("res://scripts/car_damage.gd")
+const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -17,8 +21,6 @@ const RPM_REDLINE := 6500.0
 const RPM_CRITICAL := 6700.0
 const RPM_METER_MAX := 7000.0
 const OVERREV_HOLD_S := 0.55
-## Speed straight into a barrier that wrecks the car. Glancing scrapes stay below it.
-const WRECK_BARRIER_MPS := 6.0
 
 const CAM_FAR := 0
 const CAM_CLOSE := 1
@@ -43,8 +45,11 @@ var _gear: int = 0
 var _shift_timer: float = 0.0
 var _overrev_time: float = 0.0
 var _engine_blown: bool = false
-var _wrecked: bool = false
+var _damage: _CarDamage = _CarDamage.new()
 var _arcade_active: bool = false
+var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
+var _cam_rest := Transform3D.IDENTITY
+var _chase_cam: _ChaseCamera = _ChaseCamera.new()
 var _parking := false
 var _park_speed := 0.0
 var _park_slot := 0.0
@@ -59,13 +64,16 @@ func _ready() -> void:
 		_dynamics.name = "VehicleDynamics"
 		add_child(_dynamics)
 	motion_mode = MOTION_MODE_FLOATING
-	# Layer 2 is cars. Keep the road mask and also collide with other cars.
-	collision_mask = collision_mask | collision_layer
+	# Layer 2 is cars. Only the road and its barriers stop this body. Contact with the other
+	# car is all in `car_bump.gd`, or on a slope the bodies touch before it sees a hit.
+	collision_mask = 1
 	_apply_car_spec()
 	_cache_axles()
 	_layout_wheels()
+	_body_motion.setup(_visual, _dynamics)
 	_dynamics.yaw = rotation.y
 	heading_yaw = rotation.y
+	_chase_cam.settle(heading_yaw)
 	_skids = _SkidMarks.new()
 	_skids.name = "SkidMarks"
 	add_child(_skids)
@@ -98,22 +106,38 @@ func _apply_camera_mode() -> void:
 		return
 	match _cam_mode:
 		CAM_FAR:
-			_cam.position = Vector3(0.0, 2.2, -8.5)
-			_cam.rotation_degrees = Vector3(-14.0, 180.0, 0.0)
+			_cam_rest = _camera_pose(Vector3(0.0, 2.2, -8.5), -14.0)
 			_cam.fov = 68.0
 		CAM_CLOSE:
-			_cam.position = Vector3(0.0, 1.45, -4.2)
-			_cam.rotation_degrees = Vector3(-10.0, 180.0, 0.0)
+			_cam_rest = _camera_pose(Vector3(0.0, 1.45, -4.2), -10.0)
 			_cam.fov = 70.0
 		CAM_COCKPIT:
-			_cam.position = Vector3(0.42, 0.88, 1.52)
-			_cam.rotation_degrees = Vector3(-2.0, 180.0, 0.0)
+			_cam_rest = _camera_pose(Vector3(0.42, 0.88, 1.52), -2.0)
 			_cam.fov = 72.0
 		CAM_BUMPER:
-			_cam.position = Vector3(0.0, 0.16, 4.85)
-			_cam.rotation_degrees = Vector3(-1.0, 180.0, 0.0)
+			_cam_rest = _camera_pose(Vector3(0.0, 0.16, 4.85), -1.0)
 			_cam.fov = 72.0
+	_cam.top_level = true
 	_cam.current = true
+	_chase_cam.settle(rotation.y)
+	_place_camera(0.0)
+
+
+func _camera_pose(pos: Vector3, pitch_deg: float) -> Transform3D:
+	var look := Basis.from_euler(Vector3(deg_to_rad(pitch_deg), PI, 0.0))
+	return Transform3D(look, pos)
+
+
+## The chase cameras hang back from the car. The cockpit and bumper cameras are part of the
+## body, so they ride its springs and the horizon tilts with it.
+func _place_camera(delta: float) -> void:
+	if _cam == null:
+		return
+	if _cam_mode == CAM_COCKPIT or _cam_mode == CAM_BUMPER:
+		_cam.global_transform = global_transform * _body_motion.lean_in_car_space() * _cam_rest
+		return
+	var planar := _dynamics.cg_velocity if _parking else planar_velocity()
+	_chase_cam.place(_cam, self, _car_center, _cam_rest, planar, delta)
 
 
 func get_forward_speed() -> float:
@@ -126,18 +150,37 @@ func planar_velocity() -> Vector3:
 	return _dynamics.cg_velocity
 
 
-## Moves this car out of another car and keeps the bumped speed. No damage.
-func apply_car_bump(offset: Vector3, new_velocity: Vector3) -> void:
+func get_mass_kg() -> float:
+	return _dynamics.config.mass_kg
+
+
+## Moves this car out of another car, keeps the bumped speed, and sets it turning.
+func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> void:
 	global_position += offset
 	var planar := Vector3(new_velocity.x, 0.0, new_velocity.z)
 	if GameState.arcade_drive:
 		_arcade.apply_planar_velocity(self, planar, _car_center)
+		_arcade.kick_yaw(yaw_kick)
 		forward_speed = _arcade.forward_speed
 		heading_yaw = _arcade.heading_yaw
 	else:
 		_dynamics.cg_velocity = planar
+		_dynamics.yaw_rate += yaw_kick
 		velocity = planar
 		_sync_motion_state()
+
+
+## A hit from a barrier or the other car, by how much it changed this car's speed.
+func take_hit(speed_change: float) -> bool:
+	if not _damage.take_hit(speed_change):
+		return false
+	_chase_cam.jolt(speed_change)
+	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D)
+	return true
+
+
+func damage_amount() -> float:
+	return _damage.amount
 
 
 func get_gear_label() -> String:
@@ -156,7 +199,7 @@ func is_engine_blown() -> bool:
 
 
 func is_wrecked() -> bool:
-	return _wrecked
+	return _damage.is_totaled()
 
 
 func get_rpm() -> float:
@@ -256,19 +299,40 @@ func begin_park(slot: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_damage.tick(delta)
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
 		heading_yaw = rotation.y
 		_stick_to_road()
 		_update_engine_sound(false)
+		_body_motion.ride_from_motion(delta, _dynamics.cg_velocity, rotation.y)
+		_pose_body(delta)
 		return
 	_poll_touch_shifts()
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
+		_dynamics.sample_surfaces(_race_track(), global_transform)
+		_body_motion.ride_from_motion(delta, _arcade.planar_velocity(), heading_yaw)
 	else:
 		_physics_simulation(delta)
+		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_stick_to_road()
+	_pose_body(delta)
+
+
+func _pose_body(delta: float) -> void:
+	var race := get_parent()
+	if race != null and race.has_method(&"is_race_started") and not race.is_race_started():
+		_chase_cam.settle(rotation.y)
+		_place_camera(0.0)
+		return
+	_body_motion.capture()
+	var on_arcade := GameState.arcade_drive and not _parking
+	var steer: float = _arcade.steer_angle if on_arcade else _dynamics.steer_angle()
+	var steer_input: float = _arcade.steer_input() if on_arcade else _dynamics.steer_input()
+	_body_motion.pose(delta, forward_speed, steer, steer_input)
+	_place_camera(delta)
 
 
 func _physics_simulation(delta: float) -> void:
@@ -317,10 +381,7 @@ func _physics_simulation(delta: float) -> void:
 	_dynamics.pose_body(self, true)
 	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle(before):
-		_dynamics.reset_motion()
-		_sync_motion_state()
-		velocity = Vector3.ZERO
+	if _scrape_barrier(before, delta):
 		_skids.end_strips()
 	else:
 		_skids.record(_dynamics.wheels(), global_transform, _race_track())
@@ -367,6 +428,7 @@ func _physics_arcade(delta: float) -> void:
 
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)]) * GameState.final_drive_accel()
+	_arcade.ride_grip = _dynamics.ride_grip()
 	_arcade.step(
 		self,
 		delta,
@@ -375,15 +437,13 @@ func _physics_arcade(delta: float) -> void:
 		brake,
 		_shift_timer > 0.0,
 		_engine_blown,
-		_arcade.gear_acceleration(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * GameState.wheel_weight_accel(),
+		_arcade.gear_acceleration(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * GameState.wheel_weight_accel() * _damage.power_left(),
 		GameState.get_effective_vmax_kmh() / 3.6,
 		_car_center
 	)
 	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle(before):
-		_arcade.reset()
-		velocity = Vector3.ZERO
+	_scrape_barrier(before, delta)
 	forward_speed = _arcade.forward_speed
 	heading_yaw = _arcade.heading_yaw
 	_skids.end_strips()
@@ -420,7 +480,7 @@ func _gear_top_mps(gear_index: int) -> float:
 func _requested_drive_force() -> float:
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)])
-	return _dynamics.drive_force(ratio * GameState.final_drive_accel(), _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp)
+	return _dynamics.drive_force(ratio * GameState.final_drive_accel(), _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * _damage.power_left()
 
 
 func _request_shift(direction: int) -> void:
@@ -507,16 +567,22 @@ func _escape_obstacle(track: Node) -> bool:
 	return true
 
 
-func _slide_hit_obstacle(before: Vector3) -> bool:
-	var hit := false
-	for i in get_slide_collision_count():
-		var col := get_slide_collision(i)
-		var collider := col.get_collider()
-		if collider is Node and (collider as Node).has_meta(&"track_obstacle"):
-			hit = true
-			if -before.dot(col.get_normal()) >= WRECK_BARRIER_MPS:
-				_wrecked = true
-	return hit
+## Applies touching a barrier to the driving model. True when one was touched.
+func _scrape_barrier(before: Vector3, delta: float) -> bool:
+	var hit := _WallScrape.resolve(self, before, delta)
+	if hit.is_empty():
+		return false
+	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
+	var after: Vector3 = hit["velocity"]
+	if GameState.arcade_drive:
+		_arcade.apply_planar_velocity(self, after, _car_center)
+		_arcade.swing_by(_WallScrape.arcade_swing(_race_track(), self, _arcade.heading_yaw, after))
+	else:
+		_dynamics.cg_velocity = after
+		velocity = after
+		_dynamics.yaw_rate = _WallScrape.turn_rate(_race_track(), self, _dynamics.yaw)
+		_sync_motion_state()
+	return true
 
 
 func _update_debug_draw() -> void:

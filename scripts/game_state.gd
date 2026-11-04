@@ -82,7 +82,10 @@ const SLOT_DIFFERENTIAL := "differential"
 ## The tires on the car's wheels. They are changed at the tire machine with the wheels off
 ## the car. Wheels can be bare, but a car does not leave the garage on bare wheels.
 const SLOT_TIRES := "tires"
-const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL]
+## What the body rides on. A car always has both, so they swap but never just come off.
+const SLOT_SPRINGS := "springs"
+const SLOT_SHOCKS := "shocks"
+const UNDER_CAR_SLOTS: Array[String] = [SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_SPRINGS, SLOT_SHOCKS]
 ## Parts changed under the hood, from the bottom up: the camshaft in the block, the
 ## cylinder heads over it, the intake on the heads, the carburetors and the distributor in the intake, the air
 ## cleaner over the carburetors. The heads are one part however many the engine has.
@@ -99,7 +102,7 @@ const SLOT_AIR_CLEANER := "air_cleaner"
 const CARB_SLOTS: Array[String] = [SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3]
 const HOOD_SLOTS: Array[String] = [SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
 const ALL_SLOTS: Array[String] = [
-	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_TIRES,
+	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_SPRINGS, SLOT_SHOCKS, SLOT_TIRES,
 	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
 ]
 ## Slot id for an empty slot. The exhaust, the mufflers, and everything under the hood
@@ -116,6 +119,8 @@ const STOCK_SLOT_PARTS := {
 	SLOT_MUFFLER: "muffler-stock",
 	SLOT_MUFFLER_LEFT: NO_PART_ID,
 	SLOT_DIFFERENTIAL: "diff-308",
+	SLOT_SPRINGS: "springs-stock",
+	SLOT_SHOCKS: "shocks-stock",
 	SLOT_TIRES: "tires-bias",
 	SLOT_CAM: "cam-stock",
 	SLOT_HEADS: "heads-iron",
@@ -148,6 +153,11 @@ const CONDITION_USED_MIN := 0.5
 const CONDITION_USED_MAX := 0.9
 const CONDITION_WEAR_MIN := 0.01
 const CONDITION_WEAR_MAX := 0.03
+## The most of a part's condition crashes can take in one race, just short of a total.
+const CRASH_WEAR_MAX := 0.5
+## What a part worn right down still does. Tired springs sag, and worn shocks barely damp.
+const SPRING_WORN_RATE := 0.75
+const SHOCK_WORN_RATE := 0.45
 const CONDITION_FLOOR := 0.05
 ## Tires worn down to this blow out in the next race, somewhere between these shares of
 ## the way along it.
@@ -1146,6 +1156,8 @@ func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
 	opp["accel_scale"] = float(row.get("accel_scale", 0.3))
 	opp["vmax_scale"] = float(row.get("vmax_scale", 0.9))
 	opp["shift_time"] = float(row.get("shift_time", 0.35))
+	opp["springs"] = str(row.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS]))
+	opp["shocks"] = str(row.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS]))
 	var build := _opponent_stock_build(opp["car_file"])
 	var engine := listing_by_id(ENGINES, str(row.get("engine", build["engine"])))
 	if not engine.is_empty():
@@ -1285,6 +1297,8 @@ func _opponents_for_save() -> Array:
 			"vmax_scale": float(opp.get("vmax_scale", 0.9)),
 			"shift_time": float(opp.get("shift_time", 0.35)),
 			"tires": str(opp.get("tires", "")),
+			"springs": str(opp.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS])),
+			"shocks": str(opp.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS])),
 			"hp": float(opp.get("hp", 280.0)),
 			"engine_hp": float(opp.get("engine_hp", opp.get("hp", 280.0))),
 			"hood_parts": opponent_hood_parts(opp),
@@ -1326,6 +1340,8 @@ func _load_saved_opponents(d: Dictionary) -> void:
 			"vmax_scale": float(row.get("vmax_scale", 0.9)),
 			"shift_time": float(row.get("shift_time", 0.35)),
 			"tires": str(row.get("tires", "")),
+			"springs": str(row.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS])),
+			"shocks": str(row.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS])),
 			"tier": int(row.get("tier", i)),
 			"beaten": bool(row.get("beaten", false)),
 		})
@@ -1448,11 +1464,25 @@ func opponent_gearbox(opp: Dictionary) -> Dictionary:
 	return listing_by_id(GEARBOXES, DEFAULT_GEARBOX_ID) if box.is_empty() else box
 
 
-## The chassis of a rival's car, from its car file.
+## The chassis of a rival's car, from its car file, on the rival's own springs and shocks.
 func opponent_chassis(opp: Dictionary) -> Dictionary:
 	var spec := _CarFile.load_path(str(opp.get("car_file", "")))
-	var chassis: Variant = spec.get("chassis", {})
-	return chassis if typeof(chassis) == TYPE_DICTIONARY else {}
+	var stored: Variant = spec.get("chassis", {})
+	if typeof(stored) != TYPE_DICTIONARY or (stored as Dictionary).is_empty():
+		return {}
+	var chassis: Dictionary = (stored as Dictionary).duplicate()
+	_put_on_suspension(chassis, listing_by_id(PARTS, str(opp.get("springs", ""))), listing_by_id(PARTS, str(opp.get("shocks", ""))), 1.0, 1.0)
+	return chassis
+
+
+## Sets a chassis's spring and shock rates and its ride height from the parts on it and
+## what condition they are in. Lowering a car lowers its mass center too.
+func _put_on_suspension(chassis: Dictionary, springs: Dictionary, shocks: Dictionary, spring_condition: float, shock_condition: float) -> void:
+	chassis["spring_rate"] = float(springs.get("spring_rate", 1.0)) * lerpf(SPRING_WORN_RATE, 1.0, spring_condition)
+	chassis["shock_rate"] = float(shocks.get("shock_rate", 1.0)) * lerpf(SHOCK_WORN_RATE, 1.0, shock_condition)
+	var lower := float(springs.get("lower_m", 0.0))
+	chassis["ride_lower"] = lower
+	chassis["cg_height"] = float(chassis.get("cg_height", 0.48)) - lower
 
 
 func _grip_of(tires: Dictionary) -> float:
@@ -1476,6 +1506,7 @@ func race_chassis() -> Dictionary:
 		return {}
 	var chassis: Dictionary = (spec as Dictionary).duplicate()
 	chassis["mass"] = float(chassis.get("mass", 1360.0)) + wheel_mass_delta_kg()
+	_put_on_suspension(chassis, slot_part(SLOT_SPRINGS), slot_part(SLOT_SHOCKS), mount_condition("slot:" + SLOT_SPRINGS), mount_condition("slot:" + SLOT_SHOCKS))
 	return chassis
 
 
@@ -1834,6 +1865,20 @@ func wear_parts_after_race() -> void:
 		entry["c"] = maxf(float(entry.get("c", 1.0)) - randf_range(CONDITION_WEAR_MIN, CONDITION_WEAR_MAX), CONDITION_FLOOR)
 
 
+## A race's crashes wear everything on the active car, by how close they came to totaling
+## it (0 to 1). Each part takes between half and all of the most it can lose.
+func wear_parts_from_crashes(damage: float) -> void:
+	if damage <= 0.0:
+		return
+	_sync_record_from_active()
+	var rec: Dictionary = car_records.get(current_car_id, {})
+	var conditions: Dictionary = rec.get("conditions", {})
+	for mount in conditions.keys():
+		var entry: Dictionary = conditions[mount]
+		var wear := damage * CRASH_WEAR_MAX * randf_range(0.5, 1.0)
+		entry["c"] = maxf(float(entry.get("c", 1.0)) - wear, CONDITION_FLOOR)
+
+
 ## The register entry for an id of a garage parts-list kind.
 func listing_for(kind: String, id: String) -> Dictionary:
 	match kind:
@@ -2114,6 +2159,12 @@ func spare_slot_parts(slot: String) -> Array[Dictionary]:
 
 ## One line on what a part does, for ads and lists.
 func part_detail(part: Dictionary) -> String:
+	if part.has("spring_rate"):
+		var lower_cm := roundi(float(part.get("lower_m", 0.0)) * 100.0)
+		var stiffer := "stock rate" if is_equal_approx(float(part["spring_rate"]), 1.0) else "%d%% stiffer" % roundi((float(part["spring_rate"]) - 1.0) * 100.0)
+		return "%s   lowers %d cm" % [stiffer, lower_cm] if lower_cm > 0 else stiffer
+	if part.has("shock_rate"):
+		return "stock damping" if is_equal_approx(float(part["shock_rate"]), 1.0) else "%d%% more damping" % roundi((float(part["shock_rate"]) - 1.0) * 100.0)
 	if part.has("accel"):
 		return "%d%% more pull · %d%% top speed" % [
 			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
@@ -2482,7 +2533,10 @@ func _take_opponent_car() -> bool:
 	if typeof(taken) == TYPE_DICTIONARY:
 		won_id = _add_owned_record((taken as Dictionary).duplicate(true))
 	else:
-		won_id = _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), opponent_hood_parts(opp))
+		var parts := opponent_hood_parts(opp)
+		parts[SLOT_SPRINGS] = str(opp.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS]))
+		parts[SLOT_SHOCKS] = str(opp.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS]))
+		won_id = _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), parts)
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
 	return true
@@ -2509,6 +2563,8 @@ func _lose_raced_car() -> void:
 		"engine_hp": engine_power_hp,
 		"hood_parts": hood,
 		"taken_car": taken,
+		"springs": str(slot_part_ids.get(SLOT_SPRINGS, STOCK_SLOT_PARTS[SLOT_SPRINGS])),
+		"shocks": str(slot_part_ids.get(SLOT_SHOCKS, STOCK_SLOT_PARTS[SLOT_SHOCKS])),
 		"vmax": (vmax_kmh - float(tires.get("vmax", 0.0))) * float(slot_part(SLOT_DIFFERENTIAL).get("top_speed", 1.0)),
 		"engine": equipped_engine_id,
 		"engine_wait": RIVAL_ENGINE_WAIT_RACES,

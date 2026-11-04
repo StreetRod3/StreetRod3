@@ -277,6 +277,10 @@ text = "Speed: 0 km/h"
 layout_mode = 2
 text = "Gear: —"
 
+[node name="DamageLabel" type="Label" parent="RaceUI/Panel/Margin/VBox"]
+layout_mode = 2
+text = "Damage: 0%"
+
 [node name="DistLabel" type="Label" parent="RaceUI/Panel/Margin/VBox"]
 layout_mode = 2
 text = "To finish: —"

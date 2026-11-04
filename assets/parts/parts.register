@@ -150,6 +150,13 @@
     {"id": "diff-308", "slot": "differential", "stock": true, "style": "iron", "name": "3.08 rear end", "price": 160, "ratio": 3.08, "accel": 1.0, "top_speed": 1.0},
     {"id": "diff-355", "slot": "differential", "style": "chrome", "name": "3.55 rear end", "price": 260, "ratio": 3.55, "accel": 1.1, "top_speed": 0.96},
     {"id": "diff-411", "slot": "differential", "style": "finned", "name": "4.11 Positraction rear end", "price": 480, "ratio": 4.11, "accel": 1.2, "top_speed": 0.91},
-    {"id": "diff-456", "slot": "differential", "style": "girdle", "name": "4.56 drag rear end", "price": 620, "ratio": 4.56, "accel": 1.28, "top_speed": 0.86}
+    {"id": "diff-456", "slot": "differential", "style": "girdle", "name": "4.56 drag rear end", "price": 620, "ratio": 4.56, "accel": 1.28, "top_speed": 0.86},
+    {"id": "springs-stock", "slot": "springs", "stock": true, "style": "stock", "name": "Stock springs", "price": 80, "spring_rate": 1.0},
+    {"id": "springs-heavy", "slot": "springs", "style": "heavy", "name": "Heavy-duty springs", "price": 190, "spring_rate": 1.35},
+    {"id": "springs-lowering", "slot": "springs", "style": "lowering", "name": "Lowering springs", "price": 280, "spring_rate": 1.5, "lower_m": 0.04},
+    {"id": "springs-racing", "slot": "springs", "style": "racing", "name": "Racing springs", "price": 460, "spring_rate": 1.9, "lower_m": 0.03},
+    {"id": "shocks-stock", "slot": "shocks", "stock": true, "style": "stock", "name": "Stock shocks", "price": 60, "shock_rate": 1.0},
+    {"id": "shocks-gas", "slot": "shocks", "style": "gas", "name": "Gas shocks", "price": 140, "shock_rate": 1.35},
+    {"id": "shocks-racing", "slot": "shocks", "style": "racing", "name": "Racing shocks", "price": 320, "shock_rate": 1.7}
   ]
 }

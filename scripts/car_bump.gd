@@ -1,30 +1,35 @@
 extends RefCounted
 
-## Bumper contact between the two race cars. Overlap is pushed apart and
-## closing speed is shared. `resolve` reports the closing speed so the race
-## can decide whether the hit was hard enough to wreck.
+## Contact between the two race cars. Overlap is pushed apart and the hit is
+## shared by weight, so a light car takes more of it than a heavy one. A hit
+## away from a car's center also turns it. `resolve` reports how suddenly each
+## car's speed changed, which is what damages it.
 
 const CONTACT_MARGIN_M := 0.05
 const SEPARATION_SLOP_M := 0.02
 const MIN_OVERLAP_M := 0.01
 const MIN_CLOSING_MPS := 0.25
 const RESTITUTION := 0.2
+## A car's resistance to turning is about its mass times this, in square meters.
+const YAW_INERTIA_PER_KG := 1.67
+## The fastest a hit can set a car turning, in rad/s.
+const YAW_KICK_MAX := 1.6
 
-## Returns the closing speed in m/s, or 0 when the cars are not touching.
-func resolve(a: CharacterBody3D, b: CharacterBody3D) -> float:
+## Returns how much each car's speed changed in m/s, (a, b). Zero when they are not touching.
+func resolve(a: CharacterBody3D, b: CharacterBody3D) -> Vector2:
 	if a == null or b == null:
-		return 0.0
+		return Vector2.ZERO
 	if not a.has_method(&"planar_velocity") or not a.has_method(&"apply_car_bump"):
-		return 0.0
+		return Vector2.ZERO
 	if not b.has_method(&"planar_velocity") or not b.has_method(&"apply_car_bump"):
-		return 0.0
+		return Vector2.ZERO
 	var box_a := _box(a)
 	var box_b := _box(b)
 	if box_a.is_empty() or box_b.is_empty():
-		return 0.0
+		return Vector2.ZERO
 	var hit := _overlap(box_a, box_b)
 	if hit.is_empty():
-		return 0.0
+		return Vector2.ZERO
 
 	var normal := hit["normal"] as Vector2
 	var depth := float(hit["depth"])
@@ -39,18 +44,35 @@ func resolve(a: CharacterBody3D, b: CharacterBody3D) -> float:
 		offset_b = Vector3(push.x, 0.0, push.y)
 	var new_a := vel_a
 	var new_b := vel_b
+	var change_a := 0.0
+	var change_b := 0.0
+	var kick_a := 0.0
+	var kick_b := 0.0
 	if rel < -MIN_CLOSING_MPS:
-		# Equal mass. Each car takes half of the bounce.
-		var change := -(1.0 + RESTITUTION) * rel * 0.5
-		var delta := Vector3(normal.x, 0.0, normal.y) * change
-		new_a = vel_a - delta
-		new_b = vel_b + delta
-	var closing := maxf(-rel, 0.0)
+		var mass_a: float = a.get_mass_kg()
+		var mass_b: float = b.get_mass_kg()
+		var impulse := -(1.0 + RESTITUTION) * rel * mass_a * mass_b / (mass_a + mass_b)
+		change_a = impulse / mass_a
+		change_b = impulse / mass_b
+		var push := Vector3(normal.x, 0.0, normal.y)
+		new_a = vel_a - push * change_a
+		new_b = vel_b + push * change_b
+		var center_a: Vector2 = box_a["center"]
+		var center_b: Vector2 = box_b["center"]
+		var contact := (center_a + center_b) * 0.5
+		kick_a = _yaw_kick(contact - center_a, -normal * impulse, mass_a)
+		kick_b = _yaw_kick(contact - center_b, normal * impulse, mass_b)
 	if offset_a.is_zero_approx() and offset_b.is_zero_approx() and new_a.is_equal_approx(vel_a):
-		return closing
-	a.apply_car_bump(offset_a, new_a)
-	b.apply_car_bump(offset_b, new_b)
-	return closing
+		return Vector2.ZERO
+	a.apply_car_bump(offset_a, new_a, kick_a)
+	b.apply_car_bump(offset_b, new_b, kick_b)
+	return Vector2(change_a, change_b)
+
+
+## How fast a push at `arm` from the car's center sets it turning. x is world X and y is world Z.
+func _yaw_kick(arm: Vector2, push: Vector2, mass: float) -> float:
+	var torque := arm.y * push.x - arm.x * push.y
+	return clampf(torque / (mass * YAW_INERTIA_PER_KG), -YAW_KICK_MAX, YAW_KICK_MAX)
 
 
 func _box(body: CharacterBody3D) -> Dictionary:

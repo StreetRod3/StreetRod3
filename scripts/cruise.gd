@@ -1,21 +1,35 @@
 extends Node3D
 
-## A short automatic drive between two places on the city map.
+## A short automatic drive between two places on the city map. It follows the route, and
+## plans its speed for the corners. The car rides on its own springs and shocks: the body
+## leans and dives over wheels that roll and steer, and the camera hangs back.
 
 const CITY_MAP := "res://assets/maps/city.trk"
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
+const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
+const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
+const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 
 const _BODY_Y := 0.35
-const _WHEEL_R := 0.32
 const _LOOK_AHEAD := 6.0
 ## Corner radius through a junction. Kept inside the width of the street.
 const _TURN_RADIUS := 14.0
 const _FADE_IN_S := 0.28
 const _FADE_OUT_S := 0.28
-const _CRUISE_SPEED := 18.0
-const _CRUISE_MIN_S := 2.2
-const _CRUISE_MAX_S := 16.0
+const _TOP_SPEED := 26.0
+## How the driver pulls away and brakes, in m/s². Brisk, but the car's tires set the corners,
+## so better tires make the drive quicker.
+const _DRIVE_ACCEL := 6.0
+const _DRIVE_BRAKE := 8.0
+const _CORNER_GRIP_USE := 0.88
+## The road is read this far either side of a point to judge how tight it is, in meters.
+const _CURVE_SPAN := 3.0
+## Slowest the plan moves at, so the car gets away from a standing start and reaches the end.
+const _CREEP_SPEED := 2.0
+## Turn rate that shows as a full steering input, in rad/s.
+const _FULL_STEER_YAW_RATE := 0.8
+const _LONGEST_RIDE_STEP_S := 1.0 / 30.0
 
 const _ROAD_COLOR := Color(0.32, 0.33, 0.35, 1)
 const _EDGE_COLOR := Color(0.86, 0.84, 0.78, 1)
@@ -39,17 +53,25 @@ const _GAS_YELLOW := Color(0.95, 0.78, 0.16)
 const _DOOR_SWING := 1.75
 const _DOOR_OPEN_S := 1.1
 
-var _car: Node3D
-var _wheels: Array[Node3D] = []
-var _wheel_bases: Array[Basis] = []
+var _car: CharacterBody3D
+var _pivot: Node3D
+var _camera: Camera3D
+var _cam_rest := Transform3D.IDENTITY
+var _chase_cam: _ChaseCamera = _ChaseCamera.new()
+var _dynamics: _VehicleDynamics
+var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _engine: AudioStreamPlayer
 var _shade: ColorRect
 var _pts: PackedVector3Array = PackedVector3Array()
 var _dists: PackedFloat32Array = PackedFloat32Array()
 var _length: float = 0.0
-var _duration: float = _CRUISE_MIN_S
-var _driven: float = 0.0
-var _spin: float = 0.0
+## Planned speed at each point of `_pts`, in m/s.
+var _plan: PackedFloat32Array = PackedFloat32Array()
+var _corner_accel: float = 8.0
+var _along: float = 0.0
+var _speed: float = 0.0
+var _yaw_rate: float = 0.0
+var _road_y: float = 0.0
 var _fade: float = 1.0
 var _phase: int = 0
 var _destination: String = ""
@@ -87,9 +109,12 @@ func _ready() -> void:
 		return
 	_build_city(track)
 	_bake(route)
-	_duration = clampf(_length / _CRUISE_SPEED, _CRUISE_MIN_S, _CRUISE_MAX_S)
 	_build_car()
+	_plan_speeds()
 	_place_car(0.0)
+	_yaw_rate = 0.0
+	_chase_cam.settle(_car.rotation.y)
+	_chase_cam.place(_camera, _car, _pivot.position, _cam_rest, Vector3.ZERO, 0.0)
 	if GameState.engine_runs():
 		_engine = _EngineSound.new()
 		_car.add_child(_engine)
@@ -113,20 +138,23 @@ func _process(delta: float) -> void:
 	if _phase == 0:
 		_fade = maxf(_fade - delta / _FADE_IN_S, 0.0)
 		_paint_fade()
+		_ride(delta)
 		if _fade <= 0.0:
 			_phase = 1
 			if _leaving_garage:
 				_close_garage_doors()
 		return
 	if _phase == 1:
-		_driven = minf(_driven + delta, _duration)
-		var along := _smooth(_driven / _duration) * _length
-		_place_car(along)
-		_spin_wheels(delta)
-		_update_engine(along)
-		if _driven >= _duration:
+		_speed = maxf(_planned_speed(_along), _CREEP_SPEED)
+		_along = minf(_along + _speed * delta, _length)
+		_place_car(_along)
+		_update_engine()
+		if _along >= _length:
 			_phase = 2
+			_speed = 0.0
+		_ride(delta)
 		return
+	_ride(delta)
 	_fade = minf(_fade + delta / _FADE_OUT_S, 1.0)
 	_paint_fade()
 	if _fade >= 1.0:
@@ -146,9 +174,25 @@ func _finish() -> void:
 	get_tree().change_scene_to_file(_destination)
 
 
-func _smooth(t: float) -> float:
-	var u := clampf(t, 0.0, 1.0)
-	return u * u * (3.0 - 2.0 * u)
+## The road's height where the car is. The suspension reads this for each wheel.
+func surface_height(_world: Vector3) -> float:
+	return _road_y
+
+
+## Runs the springs and shocks from how the car is moving, and poses it and the camera.
+func _ride(delta: float) -> void:
+	if _car == null or _dynamics == null or delta <= 0.0:
+		return
+	var step := minf(delta, _LONGEST_RIDE_STEP_S)
+	var yaw := _car.rotation.y
+	var velocity := Vector3(sin(yaw), 0.0, cos(yaw)) * _speed
+	_dynamics.sample_surfaces(self, _car.global_transform)
+	_body_motion.ride_from_motion(step, velocity, yaw)
+	# Not before the first frame: the visuals are fitted to the floor once `_ready` is done.
+	_body_motion.capture()
+	var steer := atan(_yaw_rate * _dynamics.config.wheelbase_m / maxf(_speed, 1.0))
+	_body_motion.pose(delta, _speed, steer, clampf(_yaw_rate / _FULL_STEER_YAW_RATE, -1.0, 1.0))
+	_chase_cam.place(_camera, _car, _pivot.position, _cam_rest, velocity, delta)
 
 
 func _build_world() -> void:
@@ -742,26 +786,80 @@ func _build_blocks(track: Dictionary) -> void:
 
 
 func _build_car() -> void:
-	_car = Node3D.new()
+	# A body so the suspension has a car to read the road for. It touches nothing.
+	_car = CharacterBody3D.new()
 	_car.name = "Car"
+	_car.collision_layer = 0
+	_car.collision_mask = 0
 	add_child(_car)
-	var pivot := _CAR_SCENE.instantiate() as Node3D
-	pivot.position = Vector3(0.0, 0.0, 1.9)
-	_car.add_child(pivot)
-	var cam := Camera3D.new()
-	cam.position = Vector3(0.0, 3.1, -9.5)
-	cam.rotation_degrees = Vector3(-12.0, 180.0, 0.0)
-	cam.fov = 66.0
-	cam.current = true
-	_car.add_child(cam)
-	for wname in ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]:
-		var wheel := pivot.get_node_or_null(NodePath(wname)) as Node3D
+	_pivot = _CAR_SCENE.instantiate() as Node3D
+	_pivot.position = Vector3(0.0, 0.0, 1.9)
+	_car.add_child(_pivot)
+	_camera = Camera3D.new()
+	_camera.top_level = true
+	_camera.fov = 66.0
+	_cam_rest = Transform3D(Basis.from_euler(Vector3(deg_to_rad(-12.0), PI, 0.0)), Vector3(0.0, 3.1, -9.5))
+	_car.add_child(_camera)
+	_camera.current = true
+	_dynamics = _VehicleDynamics.new()
+	_dynamics.name = "VehicleDynamics"
+	_car.add_child(_dynamics)
+	_dynamics.apply_setup(GameState.race_chassis(), GameState.tire_grip())
+	_lay_out_wheels()
+	_body_motion.setup(_pivot, _dynamics)
+	if _pivot.has_method(&"align_wheels_to_floor") and _floor != null:
+		_pivot.call_deferred(&"align_wheels_to_floor", _floor)
+
+
+func _lay_out_wheels() -> void:
+	var points: Array[Vector3] = []
+	for wname in _CarBodyMotion.WHEEL_NAMES:
+		var wheel := _pivot.get_node_or_null(NodePath(wname)) as Node3D
 		if wheel == null:
-			continue
-		_wheels.append(wheel)
-		_wheel_bases.append(wheel.basis)
-	if pivot.has_method(&"align_wheels_to_floor") and _floor != null:
-		pivot.call_deferred(&"align_wheels_to_floor", _floor)
+			_dynamics.layout_about(Vector3(_pivot.position.x, 0.0, _pivot.position.z))
+			return
+		points.append(_car.to_local(wheel.global_position))
+	_dynamics.set_wheel_positions(points)
+
+
+## The fastest the car can be at each point of the route: slow enough for the corners, and
+## able to brake for them and to stop at the end.
+func _plan_speeds() -> void:
+	_corner_accel = _dynamics.grip_accel() * _CORNER_GRIP_USE
+	var count := _pts.size()
+	_plan.resize(count)
+	for i in count:
+		_plan[i] = _corner_limit(_dists[i])
+	_plan[0] = 0.0
+	_plan[count - 1] = 0.0
+	for i in range(1, count):
+		_plan[i] = minf(_plan[i], sqrt(_plan[i - 1] * _plan[i - 1] + 2.0 * _DRIVE_ACCEL * (_dists[i] - _dists[i - 1])))
+	for i in range(count - 2, -1, -1):
+		_plan[i] = minf(_plan[i], sqrt(_plan[i + 1] * _plan[i + 1] + 2.0 * _DRIVE_BRAKE * (_dists[i + 1] - _dists[i])))
+
+
+func _corner_limit(distance: float) -> float:
+	var a := _sample(maxf(distance - _CURVE_SPAN, 0.0))
+	var mid := _sample(distance)
+	var b := _sample(minf(distance + _CURVE_SPAN, _length))
+	var into := Vector2(mid.x - a.x, mid.z - a.z)
+	var out := Vector2(b.x - mid.x, b.z - mid.z)
+	if into.length_squared() < 0.01 or out.length_squared() < 0.01:
+		return _TOP_SPEED
+	var curve := absf(into.angle_to(out)) / _CURVE_SPAN
+	if curve < 0.001:
+		return _TOP_SPEED
+	return minf(_TOP_SPEED, sqrt(_corner_accel / curve))
+
+
+func _planned_speed(distance: float) -> float:
+	var s := clampf(distance, 0.0, _length)
+	var i := 0
+	while i + 1 < _dists.size() and _dists[i + 1] < s:
+		i += 1
+	var j := mini(i + 1, _plan.size() - 1)
+	var span: float = _dists[j] - _dists[i]
+	return lerpf(_plan[i], _plan[j], (s - _dists[i]) / span if span > 0.0001 else 0.0)
 
 
 func _bake(points: Array[Vector3]) -> void:
@@ -926,29 +1024,21 @@ func _place_car(distance: float) -> void:
 	var behind := _sample(maxf(distance - 2.0, 0.0))
 	var ahead := _sample(minf(distance + _LOOK_AHEAD, _length))
 	var flat := Vector2(ahead.x - behind.x, ahead.z - behind.z)
+	var delta := get_process_delta_time()
 	if flat.length_squared() > 0.0001:
-		_car.rotation.y = atan2(flat.x, flat.y)
+		var yaw := atan2(flat.x, flat.y)
+		if delta > 0.0:
+			var turning := wrapf(yaw - _car.rotation.y, -PI, PI) / delta
+			_yaw_rate = lerpf(_yaw_rate, turning, 1.0 - exp(-8.0 * delta))
+		_car.rotation.y = yaw
+	_road_y = pos.y
 	_car.position = Vector3(pos.x, pos.y + _BODY_Y, pos.z)
 
 
-func _spin_wheels(delta: float) -> void:
-	var speed := 0.0
-	if _duration > 0.0:
-		var t := _driven / _duration
-		speed = (6.0 * t * (1.0 - t)) * _length / _duration
-	_spin -= speed * delta / _WHEEL_R
-	for i in _wheels.size():
-		var wheel := _wheels[i]
-		if is_instance_valid(wheel):
-			wheel.basis = _wheel_bases[i] * Basis(Vector3.UP, _spin)
-
-
-func _update_engine(distance: float) -> void:
+func _update_engine() -> void:
 	if _engine == null:
 		return
-	var pace := 0.0
-	if _length > 0.0:
-		pace = 1.0 - absf(distance / _length * 2.0 - 1.0)
+	var pace := clampf(_speed / _TOP_SPEED, 0.0, 1.0)
 	_engine.set_state(lerpf(900.0, 2600.0, pace), lerpf(0.25, 0.7, pace), false)
 
 

@@ -7,6 +7,9 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
+const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
+const _WallScrape := preload("res://scripts/wall_scrape.gd")
+const _CarDamage := preload("res://scripts/car_damage.gd")
 
 ## The path-following opponent from before the tire simulation.
 const ARCADE_REF_RATIO := 2.80
@@ -19,6 +22,10 @@ const ARCADE_RATIOS: Array[float] = [2.52, 1.52, 1.00]
 const PRESET_ACCEL_REF := 0.30
 ## Share of the tire grip the driver plans to use in corners.
 const CORNER_GRIP_USE := 0.5
+## The same on the arcade rails, where the driver cannot lose it.
+const ARCADE_CORNER_GRIP_USE := 0.8
+## How hard the driver slows for a corner on the arcade rails, in m/s².
+const ARCADE_CORNER_BRAKE := 14.0
 ## Heading error that asks for full steering input.
 const STEER_FULL_ERROR_RAD := 0.175
 ## Steering per meter of drift from the chosen lane.
@@ -30,6 +37,15 @@ const STEER_YAW_DAMPING := 0.55
 ## Body slip speed where the driver stops steering at the line and catches the slide.
 const SLIDE_LATERAL_MPS := 4.0
 const LANE_EDGE_MARGIN_M := 1.8
+## Turn rate on the arcade rails that shows as a full steering input, in rad/s.
+const _RAIL_FULL_YAW_RATE := 0.5
+## How quickly a sideways shove on the arcade rails dies away, in 1/seconds.
+const _RAIL_SHOVE_DECAY := 2.2
+## How quickly a hit's turn on the arcade rails dies away, and how fast the nose comes back.
+const _RAIL_SPIN_DECAY := 3.0
+const _RAIL_WOBBLE_RETURN := 3.5
+## How hard a totaled car comes to a stop, in m/s².
+const _TOTALED_BRAKE := 11.0
 
 var forward_speed: float = 0.0
 
@@ -49,6 +65,13 @@ var _path_s: float = 0.0
 var _path_yaw: float = 0.0
 var _lateral: float = 0.0
 var _arcade_active: bool = false
+var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
+var _last_yaw: float = 0.0
+var _rail_yaw_rate: float = 0.0
+var _rail_shove: float = 0.0
+var _rail_spin: float = 0.0
+var _rail_wobble: float = 0.0
+var _damage: _CarDamage = _CarDamage.new()
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
 var _arcade_accel: float = 7.0
@@ -67,8 +90,9 @@ func _ready() -> void:
 		_dynamics.name = "VehicleDynamics"
 		add_child(_dynamics)
 	motion_mode = MOTION_MODE_FLOATING
-	# Layer 2 is cars. Keep the road mask and also collide with other cars.
-	collision_mask = collision_mask | collision_layer
+	# Layer 2 is cars. Only the road and its barriers stop this body. Contact with the other
+	# car is all in `car_bump.gd`, or on a slope the bodies touch before it sees a hit.
+	collision_mask = 1
 	_visual = get_node_or_null("CarPivot") as Node3D
 	var opp := GameState.selected_opponent()
 	_apply_opponent_look(opp)
@@ -81,7 +105,9 @@ func _ready() -> void:
 	_lane_x = global_position.x
 	_apply_car_spec()
 	_layout_wheels()
+	_body_motion.setup(_visual, _dynamics)
 	_dynamics.yaw = rotation.y
+	_last_yaw = rotation.y
 	_skids = _SkidMarks.new()
 	_skids.name = "SkidMarks"
 	add_child(_skids)
@@ -99,12 +125,33 @@ func planar_velocity() -> Vector3:
 	return _dynamics.cg_velocity
 
 
-## Moves this car out of another car and keeps the bumped speed. No damage.
-func apply_car_bump(offset: Vector3, new_velocity: Vector3) -> void:
+func get_mass_kg() -> float:
+	return _dynamics.config.mass_kg
+
+
+## A hit from the other car or a barrier, by how much it changed this car's speed.
+func take_hit(speed_change: float) -> bool:
+	if not _damage.take_hit(speed_change):
+		return false
+	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D if _visual != null else null)
+	return true
+
+
+func damage_amount() -> float:
+	return _damage.amount
+
+
+func is_wrecked() -> bool:
+	return _damage.is_totaled()
+
+
+## Moves this car out of another car, keeps the bumped speed, and sets it turning.
+func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> void:
 	var planar := Vector3(new_velocity.x, 0.0, new_velocity.z)
 	if not GameState.arcade_drive:
 		global_position += offset
 		_dynamics.cg_velocity = planar
+		_dynamics.yaw_rate += yaw_kick
 		velocity = planar
 		_sync_motion_state()
 		return
@@ -118,6 +165,8 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3) -> void:
 		_path_s += offset.dot(forward)
 		_lane_x += offset.dot(right)
 		_lane_ready = true
+		_rail_shove = planar.dot(right)
+		_rail_spin += yaw_kick
 	global_position += offset
 	forward_speed = clampf(planar.dot(forward), 0.0, _max_mps)
 
@@ -132,16 +181,66 @@ func begin_park(slot: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_damage.tick(delta)
+	if _damage.is_totaled():
+		_coast_to_a_stop(delta)
+		return
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
 		_stick_to_road()
+		_body_motion.ride_from_motion(delta, _dynamics.cg_velocity, rotation.y)
+		_pose_body(delta)
 		return
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
+		_ride_rails(delta)
 	else:
 		_physics_simulation(delta)
+		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_stick_to_road()
+	_pose_body(delta)
+
+
+## A totaled car rolls straight on until it stops, and sits there smoking.
+func _coast_to_a_stop(delta: float) -> void:
+	forward_speed = move_toward(forward_speed, 0.0, _TOTALED_BRAKE * delta)
+	var nose := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	velocity = nose * forward_speed
+	_dynamics.yaw = rotation.y
+	_dynamics.yaw_rate = 0.0
+	_dynamics.cg_velocity = velocity
+	_dynamics.update_steering(delta, 0.0)
+	move_and_slide()
+	_skids.end_strips()
+	_dynamics.sample_surfaces(_race_track(get_parent()), global_transform)
+	_body_motion.ride_from_motion(delta, velocity, rotation.y)
+	_stick_to_road()
+	_pose_body(delta)
+
+
+## On the arcade rails only the speed and the heading say how hard the body is being thrown.
+func _ride_rails(delta: float) -> void:
+	var track := _race_track(get_parent())
+	_dynamics.sample_surfaces(track, global_transform)
+	var turned := wrapf(rotation.y - _last_yaw, -PI, PI) / maxf(delta, 0.0001)
+	_last_yaw = rotation.y
+	_rail_yaw_rate = lerpf(_rail_yaw_rate, turned, 1.0 - exp(-8.0 * delta))
+	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	_body_motion.ride_from_motion(delta, forward * forward_speed, rotation.y)
+
+
+func _pose_body(delta: float) -> void:
+	var race := get_parent()
+	if race != null and race.has_method(&"is_race_started") and not race.is_race_started():
+		return
+	_body_motion.capture()
+	var steer := _dynamics.steer_angle()
+	var steer_input := _dynamics.steer_input()
+	if GameState.arcade_drive and not _parking and not _damage.is_totaled():
+		steer = atan(_rail_yaw_rate * _dynamics.config.wheelbase_m / maxf(forward_speed, 1.0))
+		steer_input = clampf(_rail_yaw_rate / _RAIL_FULL_YAW_RATE, -1.0, 1.0)
+	_body_motion.pose(delta, forward_speed, steer, steer_input)
 
 
 func _physics_simulation(delta: float) -> void:
@@ -189,11 +288,9 @@ func _physics_simulation(delta: float) -> void:
 	_dynamics.step(delta, steer, drive, brake_input)
 	_sync_motion_state()
 	_dynamics.pose_body(self, true)
+	var before := velocity
 	move_and_slide()
-	if _slide_hit_obstacle():
-		_dynamics.reset_motion()
-		_sync_motion_state()
-		velocity = Vector3.ZERO
+	if _scrape_barrier(before, track, delta):
 		_skids.end_strips()
 	else:
 		_skids.record(_dynamics.wheels(), global_transform, track)
@@ -212,7 +309,12 @@ func _physics_arcade(delta: float) -> void:
 		velocity = Vector3.ZERO
 		move_and_slide()
 		return
-	if _arcade_shift > 0.0:
+	var corner := _max_mps
+	if track != null and track.has_method(&"sample_at"):
+		corner = _corner_speed(track, forward_speed, ARCADE_CORNER_GRIP_USE * _dynamics.ride_grip())
+	if forward_speed > corner:
+		forward_speed = move_toward(forward_speed, corner, ARCADE_CORNER_BRAKE * delta)
+	elif _arcade_shift > 0.0:
 		_arcade_shift = maxf(0.0, _arcade_shift - delta)
 	else:
 		var top := _arcade_gear_top(_arcade_gear)
@@ -220,10 +322,15 @@ func _physics_arcade(delta: float) -> void:
 			_arcade_gear += 1
 			_arcade_shift = _shift_time
 		else:
-			forward_speed += _arcade_gear_accel() * delta
+			forward_speed = minf(forward_speed + _arcade_gear_accel() * _damage.power_left() * delta, maxf(corner, forward_speed))
 	forward_speed = minf(forward_speed, _max_mps)
 	if track != null and track.has_method(&"sample_at"):
 		_path_s += forward_speed * delta
+		_lane_x += _rail_shove * delta
+		_rail_shove *= exp(-_RAIL_SHOVE_DECAY * delta)
+		_rail_wobble += _rail_spin * delta
+		_rail_spin *= exp(-_RAIL_SPIN_DECAY * delta)
+		_rail_wobble *= exp(-_RAIL_WOBBLE_RETURN * delta)
 		var sample: Dictionary = track.sample_at(_path_s)
 		var right: Vector3 = sample.get("right", Vector3.RIGHT)
 		var center: Vector3 = sample.get("position", global_position)
@@ -235,7 +342,7 @@ func _physics_arcade(delta: float) -> void:
 		move_and_slide()
 		global_position.x = dest.x
 		global_position.z = dest.z
-		rotation.y = float(sample.get("yaw", 0.0))
+		rotation.y = float(sample.get("yaw", 0.0)) + _rail_wobble
 		return
 	velocity = Vector3(0.0, velocity.y, forward_speed)
 	move_and_slide()
@@ -361,7 +468,7 @@ func _drive_command(track: Node) -> Vector3:
 	if planar < 4.0:
 		steer = err / (STEER_FULL_ERROR_RAD * 4.0)
 	steer = clampf(steer, -1.0, 1.0)
-	var too_fast := planar - _corner_speed(track, planar)
+	var too_fast := planar - _corner_speed(track, planar, CORNER_GRIP_USE)
 	var braking := (too_fast > 1.8 and absf(steer) < 0.3) or too_fast > 8.0
 	var throttle := not braking and too_fast < 0.6 and absf(err) < 0.7 and not sliding
 	if planar < 4.0 and absf(err) < 1.2:
@@ -371,8 +478,8 @@ func _drive_command(track: Node) -> Vector3:
 
 
 ## Fastest speed the tightest bend in the braking horizon allows.
-func _corner_speed(track: Node, planar: float) -> float:
-	var ay := _dynamics.grip_accel() * CORNER_GRIP_USE
+func _corner_speed(track: Node, planar: float, grip_use: float) -> float:
+	var ay := _dynamics.grip_accel() * grip_use
 	var horizon := clampf(planar * 2.8, 36.0, 110.0)
 	var step := 6.0
 	var count := maxi(int(horizon / step), 1)
@@ -406,7 +513,7 @@ func _requested_drive_force() -> float:
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)])
 	var force := _dynamics.drive_force(ratio, _gear_top_mps(_gear), forward_speed, _power_hp)
-	return force * _drive_scale
+	return force * _drive_scale * _damage.power_left()
 
 
 func _auto_shift() -> void:
@@ -435,10 +542,15 @@ func _escape_obstacle(track: Node) -> bool:
 	return true
 
 
-func _slide_hit_obstacle() -> bool:
-	for i in get_slide_collision_count():
-		var col := get_slide_collision(i)
-		var collider := col.get_collider()
-		if collider is Node and (collider as Node).has_meta(&"track_obstacle"):
-			return true
-	return false
+## Applies touching a barrier to the tires' model. True when one was touched.
+func _scrape_barrier(before: Vector3, track: Node, delta: float) -> bool:
+	var hit := _WallScrape.resolve(self, before, delta)
+	if hit.is_empty():
+		return false
+	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
+	var after: Vector3 = hit["velocity"]
+	_dynamics.cg_velocity = after
+	velocity = after
+	_dynamics.yaw_rate = _WallScrape.turn_rate(track, self, _dynamics.yaw)
+	_sync_motion_state()
+	return true
