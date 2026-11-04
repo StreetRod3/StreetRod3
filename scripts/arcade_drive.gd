@@ -219,12 +219,25 @@ static func grip_accel_scale(grip_rating: float) -> float:
 
 ## How much of the engine's pull the tires can pass on while they are also cornering.
 func _corner_power() -> float:
-	var grip_used := absf(forward_speed * _yaw_rate) / maxf(_lateral_grip, 0.1)
+	return corner_power(absf(forward_speed * _yaw_rate) / maxf(_lateral_grip, 0.1))
+
+
+## The share of its pull a car keeps with this share of its sideways grip in use.
+static func corner_power(grip_used: float) -> float:
 	return clampf((1.0 - grip_used) / (1.0 - CORNER_POWER_FADE_FROM), CORNER_POWER_MIN, 1.0)
 
 
+## Sideways acceleration tires of this rating can hold on dry road, in m/s².
+static func dry_grip_accel(grip_rating: float, ride: float) -> float:
+	return MU_DRY * GRAVITY * ride * grip_steer_scale(grip_rating)
+
+
 func _grip_steer_scale() -> float:
-	return 1.0 + (_wheel_grip - 3.0) * 0.12
+	return grip_steer_scale(_wheel_grip)
+
+
+static func grip_steer_scale(grip_rating: float) -> float:
+	return 1.0 + (grip_rating - 3.0) * 0.12
 
 
 func _step_chassis(delta: float, longitudinal_accel: float) -> void:
@@ -278,7 +291,7 @@ func _lateral_limit(normal: float, longitudinal: float, mu: float) -> float:
 	return limit * sqrt(maxf(0.0, 1.0 - long_used * long_used))
 
 
-func gear_acceleration(ratio: float, gear_top: float, speed: float, power_hp: float) -> float:
+static func gear_acceleration(ratio: float, gear_top: float, speed: float, power_hp: float) -> float:
 	var headroom := 1.0
 	if gear_top > 0.05:
 		var progress := maxf(speed, 0.0) / gear_top

@@ -437,7 +437,7 @@ func _physics_arcade(delta: float) -> void:
 		brake,
 		_shift_timer > 0.0,
 		_engine_blown,
-		_arcade.gear_acceleration(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * GameState.wheel_weight_accel() * _damage.power_left(),
+		_ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * GameState.wheel_weight_accel() * _damage.power_left(),
 		GameState.get_effective_vmax_kmh() / 3.6,
 		_car_center
 	)
