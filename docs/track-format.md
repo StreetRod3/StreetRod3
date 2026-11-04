@@ -182,6 +182,7 @@ A `street` track lists what stands beside it. Each entry has no collision. Heigh
 | Gray sprites at the road's edge, every fourth line | A continuous gravel shoulder, 0.75 m wide | They stand for a shoulder, drawn as strips only because of what the game could draw. |
 | Road width 1800 | 8 m | The car's size in the same units suggests 5.4 to 7 m. 8 m is the format's default and leaves room to steer. |
 | One height word | 0.4 m | Set by eye. Street Rod 2's height only shifts the view up and down, so it has no real size. |
+| Heights running straight to a point | Nodes only at the tops, the bottoms, and where a rise leaves level road | The tops and bottoms stay at Street Rod 2's lines and heights, but the track's curve rounds them. In 3D the points looked and felt sharp. |
 
 ## Example
 
