@@ -82,8 +82,6 @@ const CARD_VALUES: Array[Dictionary] = [
 
 @onready var _card: Control = $Card
 @onready var _name_edit: LineEdit = $Card/NameEdit
-@onready var _continue_button: Button = $Buttons/ContinueButton
-
 var _typed_font := FontVariation.new()
 var _signature := Label.new()
 ## The name as typed. The line shows it in capitals, the signature keeps its case.
@@ -106,7 +104,6 @@ func _ready() -> void:
 	_setup_lenses_box()
 	_setup_portrait()
 	_setup_aging()
-	_continue_button.disabled = true
 	_name_edit.edit()
 
 
@@ -364,7 +361,6 @@ func _on_name_changed(new_text: String) -> void:
 		var caret := _name_edit.caret_column
 		_name_edit.text = capitals
 		_name_edit.caret_column = caret
-	_continue_button.disabled = _driver_name().is_empty()
 	_update_signature()
 
 
@@ -373,8 +369,6 @@ func _on_name_submitted(_new_text: String) -> void:
 
 
 func _on_continue_pressed() -> void:
-	if _driver_name().is_empty():
-		return
 	var driver_name := _signed_name(_driver_name())
 	var traits := _traits()
 	GameState.new_game()
