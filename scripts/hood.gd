@@ -773,7 +773,7 @@ func _bolt_turns(key: String) -> Array[int]:
 	if not _peek:
 		return GameState.hood_bolts(key)
 	var turns: Array[int] = []
-	for _i in _engine.bolt_spots(key).size():
+	for _i: int in _engine.bolt_spots(key).size():
 		turns.append(GameState.GEARBOX_BOLT_TIGHT)
 	return turns
 
