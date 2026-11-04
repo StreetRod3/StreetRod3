@@ -11,6 +11,7 @@ func _ready() -> void:
 	%MasterSlider.value = db_to_linear(AudioServer.get_bus_volume_db(0))
 	%MusicCheck.set_pressed_no_signal(GameState.music_enabled)
 	%ArcadeCheck.set_pressed_no_signal(GameState.arcade_drive)
+	%ImperialCheck.set_pressed_no_signal(GameState.imperial_units)
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_nav.setup([
@@ -18,6 +19,7 @@ func _ready() -> void:
 		%MasterSlider,
 		%MusicCheck,
 		%ArcadeCheck,
+		%ImperialCheck,
 		$Margin/VBox/BackButton,
 	])
 
@@ -48,3 +50,7 @@ func _on_music_toggled(pressed: bool) -> void:
 
 func _on_arcade_toggled(pressed: bool) -> void:
 	GameState.set_arcade_drive(pressed)
+
+
+func _on_imperial_toggled(pressed: bool) -> void:
+	GameState.set_imperial_units(pressed)

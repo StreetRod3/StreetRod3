@@ -47,6 +47,11 @@ const _CarFile := preload("res://scripts/car_file.gd")
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
 
+const MILES_PER_KM := 0.621371
+const POUNDS_PER_KG := 2.20462
+const GALLONS_PER_L := 0.264172
+const INCHES_PER_CM := 0.393701
+const FEET_PER_M := 3.28084
 const RACE_DRAG := "drag"
 const RACE_ROAD := "road"
 const QUARTER_MILE_M := 402.336
@@ -233,6 +238,8 @@ var drive_in_rival_index: int = -1
 var drive_in_hood_seen: bool = false
 ## The direct-speed driving model from before the tire simulation.
 var arcade_drive: bool = true
+## Show speeds, fuel, weights, and distances in US units. They are always kept in metric.
+var imperial_units: bool = false
 
 ## Whether background music is on. Persisted in settings; also toggled by the garage radio.
 var music_enabled: bool = true
@@ -1521,7 +1528,7 @@ func wheel_weight_accel() -> float:
 
 
 func wheel_detail(wheel: Dictionary) -> String:
-	return "%d kg the set" % int(wheel.get("mass", 0))
+	return "%s the set" % mass_text(float(wheel.get("mass", 0)))
 
 
 func get_equipped_wheel() -> Dictionary:
@@ -2162,7 +2169,7 @@ func part_detail(part: Dictionary) -> String:
 	if part.has("spring_rate"):
 		var lower_cm := roundi(float(part.get("lower_m", 0.0)) * 100.0)
 		var stiffer := "stock rate" if is_equal_approx(float(part["spring_rate"]), 1.0) else "%d%% stiffer" % roundi((float(part["spring_rate"]) - 1.0) * 100.0)
-		return "%s   lowers %d cm" % [stiffer, lower_cm] if lower_cm > 0 else stiffer
+		return "%s   lowers %s" % [stiffer, short_length_text(lower_cm)] if lower_cm > 0 else stiffer
 	if part.has("shock_rate"):
 		return "stock damping" if is_equal_approx(float(part["shock_rate"]), 1.0) else "%d%% more damping" % roundi((float(part["shock_rate"]) - 1.0) * 100.0)
 	if part.has("accel"):
@@ -2173,7 +2180,7 @@ func part_detail(part: Dictionary) -> String:
 	var bits: Array[String] = ["Grip %d" % int(part.get("grip", 0)) if part.has("grip") else "+%d hp" % int(part.get("hp", 0))]
 	var vmax := int(part.get("vmax", 0))
 	if vmax != 0:
-		bits.append("%+d km/h" % vmax)
+		bits.append(speed_change_text(vmax))
 	if part.has("cfm"):
 		bits.append("%d cfm" % int(part.get("cfm", 0)))
 	var carbs := int(part.get("carbs", 0))
@@ -3236,6 +3243,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "master_db", AudioServer.get_bus_volume_db(0))
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("game", "arcade_drive", arcade_drive)
+	cfg.set_value("game", "imperial_units", imperial_units)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -3254,6 +3262,8 @@ func load_settings() -> void:
 		music_enabled = bool(cfg.get_value("audio", "music_enabled"))
 	if cfg.has_section_key("game", "arcade_drive"):
 		arcade_drive = bool(cfg.get_value("game", "arcade_drive"))
+	if cfg.has_section_key("game", "imperial_units"):
+		imperial_units = bool(cfg.get_value("game", "imperial_units"))
 
 
 func toggle_music() -> void:
@@ -3269,6 +3279,58 @@ func set_music_enabled(enabled: bool) -> void:
 func set_arcade_drive(enabled: bool) -> void:
 	arcade_drive = enabled
 	save_settings()
+
+
+func set_imperial_units(enabled: bool) -> void:
+	imperial_units = enabled
+	save_settings()
+
+
+func speed_text(kmh: float) -> String:
+	return "%.0f mph" % (kmh * MILES_PER_KM) if imperial_units else "%.0f km/h" % kmh
+
+
+## A part's change to top speed. At least 1 either way, so a small gain does not read as none.
+func speed_change_text(kmh: int) -> String:
+	if not imperial_units:
+		return "%+d km/h" % kmh
+	var mph := roundi(kmh * MILES_PER_KM)
+	if mph == 0 and kmh != 0:
+		mph = signi(kmh)
+	return "%+d mph" % mph
+
+
+func mass_text(kg: float) -> String:
+	return "%d lb" % roundi(kg * POUNDS_PER_KG) if imperial_units else "%d kg" % int(kg)
+
+
+func short_length_text(cm: int) -> String:
+	return "%.1f in" % (cm * INCHES_PER_CM) if imperial_units else "%d cm" % cm
+
+
+## Whole liters, or gallons to a tenth, since a race can take less than one.
+func fuel_text(liters: float) -> String:
+	return "%.1f gal" % (liters * GALLONS_PER_L) if imperial_units else "%.0f L" % liters
+
+
+## For fuel while it is being pumped, to a tenth in either unit.
+func fuel_fine_text(liters: float) -> String:
+	return "%.1f gal" % (liters * GALLONS_PER_L) if imperial_units else "%.1f L" % liters
+
+
+## What is in the tank out of what it holds.
+func tank_text(fine: bool = false) -> String:
+	if imperial_units:
+		return "%.1f / %.1f gal" % [fuel * GALLONS_PER_L, DEFAULT_TANK_L * GALLONS_PER_L]
+	return ("%.1f / %.0f L" if fine else "%.0f / %.0f L") % [fuel, DEFAULT_TANK_L]
+
+
+func race_distance_text(meters: float) -> String:
+	return "%.0f ft" % (meters * FEET_PER_M) if imperial_units else "%.1f m" % meters
+
+
+func long_distance_text(km: float) -> String:
+	return "%.1f mi" % (km * MILES_PER_KM) if imperial_units else "%.1f km" % km
 
 
 func set_music_dimmed(dimmed: bool, dimmed_db: float = -16.0) -> void:

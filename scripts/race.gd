@@ -5,6 +5,7 @@ const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
+const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
 
 const COUNTDOWN_RED_S := 1.2
@@ -44,8 +45,10 @@ var _race_started: bool = false
 @onready var _pause_master: HSlider = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _pause_music: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _pause_arcade: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck
+@onready var _pause_imperial: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck
 
 var _race_over: bool = false
+var _result_shown_ms: int = 0
 var _car_bump: _CarBump = _CarBump.new()
 var _fuel_used: bool = false
 var _opponent_finished: bool = false
@@ -92,9 +95,9 @@ func _ready() -> void:
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	if _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · A/D or arrows: steer · C: camera"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · C: camera · W+S: burnout"
 	else:
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · A/D or arrows: steer · Q/E: shift · C: camera"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera · W+S: burnout"
 	_traffic.visible = true
 	_refresh_traffic_lights()
 
@@ -231,9 +234,7 @@ func _process(delta: float) -> void:
 
 	_elapsed += delta
 	_hud_time.text = "Time: %.2f s" % _elapsed
-	_hud_dist.text = "To finish: %.1f m" % _distance_to_finish()
-	var spd: float = _player.get_forward_speed()
-	_hud_speed.text = "Speed: %.0f km/h" % (spd * 3.6)
+	_show_speed_and_distance()
 	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
 		_show_tire_blowout()
@@ -412,6 +413,7 @@ func _show_rival_wreck() -> void:
 
 
 func _show_result(player_won: bool) -> void:
+	_result_shown_ms = Time.get_ticks_msec()
 	_park_cars()
 	_end_race_ui()
 	if player_won:
@@ -492,6 +494,9 @@ func _leave_result() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if _result.visible:
+		# Space is the hand brake a moment ago, so it does not skip past the result.
+		if event is InputEventKey and (event as InputEventKey).keycode == KEY_SPACE and Time.get_ticks_msec() - _result_shown_ms < RESULT_SPACE_GUARD_MS:
+			return
 		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
 			get_viewport().set_input_as_handled()
 			_leave_result()
@@ -555,6 +560,7 @@ func _sync_pause_nav() -> void:
 			_pause_master,
 			_pause_music,
 			_pause_arcade,
+			_pause_imperial,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _pause_menu.visible:
@@ -595,6 +601,7 @@ func _refresh_pause_settings() -> void:
 	_pause_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_pause_music.set_pressed_no_signal(GameState.music_enabled)
 	_pause_arcade.set_pressed_no_signal(GameState.arcade_drive)
+	_pause_imperial.set_pressed_no_signal(GameState.imperial_units)
 
 
 func _on_pause_fullscreen_toggled(pressed: bool) -> void:
@@ -613,6 +620,16 @@ func _on_pause_music_toggled(pressed: bool) -> void:
 
 func _on_pause_arcade_toggled(pressed: bool) -> void:
 	GameState.set_arcade_drive(pressed)
+
+
+func _on_pause_imperial_toggled(pressed: bool) -> void:
+	GameState.set_imperial_units(pressed)
+	_show_speed_and_distance()
+
+
+func _show_speed_and_distance() -> void:
+	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
+	_hud_speed.text = "Speed: %s" % GameState.speed_text(_player.get_forward_speed() * 3.6)
 
 
 func _on_pause_exit_pressed() -> void:

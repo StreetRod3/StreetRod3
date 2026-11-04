@@ -481,7 +481,7 @@ func _refresh_ui() -> void:
 		btn.visible = active.has(slot)
 		btn.disabled = _busy
 		btn.text = "%s (%s)" % [_slot_name(slot).replace("Exhaust manifolds", "Manifolds"), SLOT_KEYS[slot]]
-	_stats_label.text = "%.0f hp · %.0f km/h" % [GameState.engine_power_hp, GameState.get_effective_vmax_kmh()]
+	_stats_label.text = "%.0f hp · %s" % [GameState.engine_power_hp, GameState.speed_text(GameState.get_effective_vmax_kmh())]
 	_done_btn.disabled = _busy
 	if _busy:
 		return

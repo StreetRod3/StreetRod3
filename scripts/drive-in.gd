@@ -1368,11 +1368,11 @@ func _refresh_race_popup() -> void:
 		opp = GameState.opponents[_chosen_index]
 	var rival := str(opp.get("name", "Rival"))
 	var car_name := str(opp.get("car_name", "car"))
-	_race_hint.text = "Racing %s in a %s.\nTank %.0f L." % [rival, car_name, GameState.fuel]
+	_race_hint.text = "Racing %s in a %s.\nTank %s." % [rival, car_name, GameState.fuel_text(GameState.fuel)]
 	if GameState.tires_worn_out():
 		_race_hint.text += "\nYour tires are worn out and will blow."
-	_drag_btn.text = "Drag race\nQuarter mile · %.0f L" % GameState.race_fuel_liters(GameState.RACE_DRAG)
-	_road_btn.text = "Road race\n2.4 km with turns · %.0f L" % GameState.race_fuel_liters(GameState.RACE_ROAD)
+	_drag_btn.text = "Drag race\nQuarter mile · %s" % GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_DRAG))
+	_road_btn.text = "Road race\n%s with turns · %s" % [GameState.long_distance_text(2.4), GameState.fuel_text(GameState.race_fuel_liters(GameState.RACE_ROAD))]
 
 
 func _on_race_type_chosen(race_type: String) -> void:
@@ -1630,7 +1630,7 @@ func _start_race(race_type: String, stake: int, pink_slips: bool = false) -> voi
 
 func _show_fuel_monitor(race_type: String) -> void:
 	var need := GameState.race_fuel_liters(race_type)
-	_fuel_message.text = "The tank has %.0f L. This race needs %.0f L.\nFill it up at the gas station first." % [GameState.fuel, need]
+	_fuel_message.text = "The tank has %s. This race needs %s.\nFill it up at the gas station first." % [GameState.fuel_text(GameState.fuel), GameState.fuel_text(need)]
 	_fuel_root.visible = true
 	_sync_nav()
 

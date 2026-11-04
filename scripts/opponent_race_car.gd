@@ -12,11 +12,14 @@ const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
 
 ## The path-following opponent from before the tire simulation.
-const ARCADE_REF_RATIO := 2.80
-## Pull at a preset `accel_scale` of 1 in the arcade drive. Set so the ladder of rivals
-## lines up with what the player's car can do there
-const ARCADE_REF_ACCEL := 46.0
+## What a preset `accel_scale` of 1 gets of the pull the arcade drive gives a car. Set so
+## the ladder of rivals lines up with what the player's car can do there.
+const ARCADE_DRIVER_PULL := 46.0 / 24.0
 const ARCADE_RATIOS: Array[float] = [2.52, 1.52, 1.00]
+## How far ahead the arcade rails read the road's curve for the tires' share of power, in meters.
+const _ARCADE_CURVE_STEP_M := 6.0
+## The rear tires' share of a car's grip while it is pulling away.
+const _ARCADE_REAR_GRIP_SHARE := 0.6
 
 ## Opponent preset `accel_scale` that matches the player's drive force.
 const PRESET_ACCEL_REF := 0.30
@@ -24,8 +27,6 @@ const PRESET_ACCEL_REF := 0.30
 const CORNER_GRIP_USE := 0.5
 ## The same on the arcade rails, where the driver cannot lose it.
 const ARCADE_CORNER_GRIP_USE := 0.8
-## How hard the driver slows for a corner on the arcade rails, in m/s².
-const ARCADE_CORNER_BRAKE := 14.0
 ## Heading error that asks for full steering input.
 const STEER_FULL_ERROR_RAD := 0.175
 ## Steering per meter of drift from the chosen lane.
@@ -74,7 +75,8 @@ var _rail_wobble: float = 0.0
 var _damage: _CarDamage = _CarDamage.new()
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
-var _arcade_accel: float = 7.0
+var _arcade_driver: float = 0.3
+var _arcade_grip: float = 3.0
 var _parking := false
 var _park_speed := 0.0
 var _park_slot := 0.0
@@ -101,7 +103,8 @@ func _ready() -> void:
 	var top_mps: float = GameState.opponent_top_kmh(opp) / 3.6
 	_max_mps = top_mps * float(opp.get("vmax_scale", 0.90))
 	_power_hp = GameState.opponent_power_hp(opp)
-	_arcade_accel = ARCADE_REF_ACCEL * float(opp.get("accel_scale", 0.30)) * (_power_hp / 280.0) * _ArcadeDrive.grip_accel_scale(GameState.opponent_tire_grip(opp))
+	_arcade_grip = GameState.opponent_tire_grip(opp)
+	_arcade_driver = ARCADE_DRIVER_PULL * float(opp.get("accel_scale", 0.30)) * _ArcadeDrive.grip_accel_scale(_arcade_grip)
 	_lane_x = global_position.x
 	_apply_car_spec()
 	_layout_wheels()
@@ -311,9 +314,11 @@ func _physics_arcade(delta: float) -> void:
 		return
 	var corner := _max_mps
 	if track != null and track.has_method(&"sample_at"):
-		corner = _corner_speed(track, forward_speed, ARCADE_CORNER_GRIP_USE * _dynamics.ride_grip())
-	if forward_speed > corner:
-		forward_speed = move_toward(forward_speed, corner, ARCADE_CORNER_BRAKE * delta)
+		corner = _corner_speed(track, forward_speed, _ArcadeDrive.dry_grip_accel(_arcade_grip, _dynamics.ride_grip()) * ARCADE_CORNER_GRIP_USE)
+	var braking := forward_speed > corner
+	var pull := 0.0
+	if braking:
+		forward_speed = move_toward(forward_speed, corner, _ArcadeDrive.BRAKING * delta)
 	elif _arcade_shift > 0.0:
 		_arcade_shift = maxf(0.0, _arcade_shift - delta)
 	else:
@@ -322,8 +327,10 @@ func _physics_arcade(delta: float) -> void:
 			_arcade_gear += 1
 			_arcade_shift = _shift_time
 		else:
-			forward_speed = minf(forward_speed + _arcade_gear_accel() * _damage.power_left() * delta, maxf(corner, forward_speed))
+			pull = _arcade_gear_accel(track)
+			forward_speed = minf(forward_speed + pull * _damage.power_left() * delta, maxf(corner, forward_speed))
 	forward_speed = minf(forward_speed, _max_mps)
+	_mark_arcade_tires(track, braking, pull)
 	if track != null and track.has_method(&"sample_at"):
 		_path_s += forward_speed * delta
 		_lane_x += _rail_shove * delta
@@ -348,6 +355,25 @@ func _physics_arcade(delta: float) -> void:
 	move_and_slide()
 
 
+## Marks and smoke off the line and under hard braking. On the rails a rival never slides.
+func _mark_arcade_tires(track: Node, braking: bool, pull: float) -> void:
+	var hard_braking := braking and forward_speed > _ArcadeDrive.BRAKE_MARK_SPEED
+	var rear_grip := _ArcadeDrive.dry_grip_accel(_arcade_grip, _dynamics.ride_grip()) * _ARCADE_REAR_GRIP_SHARE
+	var rear_long := pull / maxf(rear_grip, 0.1)
+	_skids.record_axles(
+		_dynamics.wheels(),
+		global_transform,
+		track,
+		forward_speed,
+		1.0 if hard_braking else 0.0,
+		0.0,
+		-1.0 if hard_braking else 0.0,
+		rear_long,
+		0.0,
+		rear_long
+	)
+
+
 func _arcade_gear_top(gear_index: int) -> float:
 	var i := clampi(gear_index, 0, ARCADE_RATIOS.size() - 1)
 	var top_ratio: float = ARCADE_RATIOS[ARCADE_RATIOS.size() - 1]
@@ -355,16 +381,16 @@ func _arcade_gear_top(gear_index: int) -> float:
 	return _max_mps * (top_ratio / ratio)
 
 
-func _arcade_gear_accel() -> float:
+func _arcade_gear_accel(track: Node) -> float:
 	var ratio: float = ARCADE_RATIOS[clampi(_arcade_gear, 0, ARCADE_RATIOS.size() - 1)]
-	var top := _arcade_gear_top(_arcade_gear)
-	var headroom := 1.0
-	if top > 0.05:
-		var progress := clampf(forward_speed / top, 0.0, 1.0)
-		if progress >= 1.0:
-			return 0.0
-		headroom = 1.0 - progress * progress
-	return _arcade_accel * (ratio / ARCADE_REF_RATIO) * headroom
+	var pull := _ArcadeDrive.gear_acceleration(ratio, _arcade_gear_top(_arcade_gear), forward_speed, _power_hp) * _arcade_driver
+	if track == null or not track.has_method(&"sample_at"):
+		return pull
+	var yaw_now: float = float(track.sample_at(_path_s).get("yaw", 0.0))
+	var yaw_on: float = float(track.sample_at(_path_s + _ARCADE_CURVE_STEP_M).get("yaw", yaw_now))
+	var curve := absf(wrapf(yaw_on - yaw_now, -PI, PI)) / _ARCADE_CURVE_STEP_M
+	var grip := _ArcadeDrive.dry_grip_accel(_arcade_grip, _dynamics.ride_grip())
+	return pull * _ArcadeDrive.corner_power(forward_speed * forward_speed * curve / maxf(grip, 0.1))
 
 
 func _hold_still() -> void:
@@ -468,7 +494,7 @@ func _drive_command(track: Node) -> Vector3:
 	if planar < 4.0:
 		steer = err / (STEER_FULL_ERROR_RAD * 4.0)
 	steer = clampf(steer, -1.0, 1.0)
-	var too_fast := planar - _corner_speed(track, planar, CORNER_GRIP_USE)
+	var too_fast := planar - _corner_speed(track, planar, _dynamics.grip_accel() * CORNER_GRIP_USE)
 	var braking := (too_fast > 1.8 and absf(steer) < 0.3) or too_fast > 8.0
 	var throttle := not braking and too_fast < 0.6 and absf(err) < 0.7 and not sliding
 	if planar < 4.0 and absf(err) < 1.2:
@@ -478,8 +504,7 @@ func _drive_command(track: Node) -> Vector3:
 
 
 ## Fastest speed the tightest bend in the braking horizon allows.
-func _corner_speed(track: Node, planar: float, grip_use: float) -> float:
-	var ay := _dynamics.grip_accel() * grip_use
+func _corner_speed(track: Node, planar: float, ay: float) -> float:
 	var horizon := clampf(planar * 2.8, 36.0, 110.0)
 	var step := 6.0
 	var count := maxi(int(horizon / step), 1)

@@ -205,7 +205,7 @@ func _make_car_card(car: Dictionary) -> Control:
 	if car_id == _preview_car_id:
 		box.modulate = Color(0.96, 0.84, 0.58, 1)
 	box.add_child(_heading(str(car.get("name", "Car"))))
-	box.add_child(_body("%.0f km/h   %.0f hp" % [float(car.get("vmax", 0.0)), float(car.get("hp", 0.0))]))
+	box.add_child(_body("%s   %.0f hp" % [GameState.speed_text(float(car.get("vmax", 0.0))), float(car.get("hp", 0.0))]))
 	var btn := _ink_button()
 	btn.text = "Buy — $%d" % price
 	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:

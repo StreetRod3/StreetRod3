@@ -68,6 +68,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Arcade driving"
 
+[node name="ImperialCheck" type="CheckBox" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Imperial units (mph, gallons, pounds)"
+
 [node name="BackButton" type="Button" parent="Margin/VBox"]
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
@@ -78,4 +83,5 @@ text = "Back to main menu"
 [connection signal="value_changed" from="Margin/VBox/MasterSlider" to="." method="_on_master_volume_changed"]
 [connection signal="toggled" from="Margin/VBox/MusicCheck" to="." method="_on_music_toggled"]
 [connection signal="toggled" from="Margin/VBox/ArcadeCheck" to="." method="_on_arcade_toggled"]
+[connection signal="toggled" from="Margin/VBox/ImperialCheck" to="." method="_on_imperial_toggled"]
 [connection signal="pressed" from="Margin/VBox/BackButton" to="." method="_on_back_pressed"]

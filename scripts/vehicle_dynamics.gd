@@ -104,6 +104,8 @@ class Config:
 	## Total brake request shared across all four wheels, before the tire limit.
 	## Above the car's total grip, so a hard stop can use up the friction circle.
 	var brake_force_n: float = 16000.0
+	## What the hand brake asks of the rear axle, enough to lock it.
+	var handbrake_force_n: float = 14000.0
 	## Share of brake_force_n applied by the front axle.
 	var brake_front_fraction: float = 0.62
 	## How fast the throttle and brake requests are chased, in 1/seconds.
@@ -197,6 +199,8 @@ var _spring_rate: float = spring_stiffness
 var _shock_rate: float = damper_coefficient
 var _ride_lower: float = 0.0
 var _ride_grip: float = 1.0
+## The hand brake, 0 to 1, for whoever drives this car.
+var handbrake_input: float = 0.0
 
 static var _road_noise: FastNoiseLite
 static var _swell_noise: FastNoiseLite
@@ -233,6 +237,7 @@ const _HEAVE_LIMIT_M := 0.18
 const _LEAN_LIMIT_RAD := 0.12
 ## How fast normalized longitudinal slip chases the force the driver asked for.
 const _SLIP_RESPONSE := 9.0
+const _CATCH_LOCK_MAX_RAD := 0.5
 ## Return rate while a slide still needs the current steering angle.
 const _COUNTERSTEER_RETURN := 0.4
 const _SLIDE_YAW_RATE := 0.4
@@ -582,7 +587,7 @@ func _apply_steering(dt: float, steer_input: float) -> void:
 	var target_input := clampf(steer_input, -1.0, 1.0)
 	var blend := 1.0 - exp(-config.steer_input_response * dt)
 	_steer_input = lerpf(_steer_input, target_input, blend)
-	var target_angle := _shaped_steer(_steer_input) * _steer_angle_limit()
+	var target_angle := _shaped_steer(_steer_input) * (_steer_angle_limit() + _catch_lock())
 	var rate := _steering_rate(target_angle)
 	_steer_angle = move_toward(_steer_angle, target_angle, rate * dt)
 	var front_blend := 0.0
@@ -626,6 +631,14 @@ func _steering_rate(target_angle: float) -> float:
 	return rate * _COUNTERSTEER_RETURN
 
 
+## Opposite lock past the rack's limit, as much as the car is sliding, for a driver steering
+## against a slide. Without it the wheels cannot reach the direction the car is really going.
+func _catch_lock() -> float:
+	if not _slide_needs_catch():
+		return 0.0
+	return minf(absf(atan2(lateral_speed(), maxf(longitudinal_speed(), 1.0))), _CATCH_LOCK_MAX_RAD)
+
+
 func _slide_needs_catch() -> bool:
 	if absf(yaw_rate) < _SLIDE_YAW_RATE or absf(lateral_speed()) < _SLIDE_LATERAL_MPS:
 		return false
@@ -660,6 +673,8 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 	var limit := mu * wheel.normal_load
 	var axle_share := config.brake_front_fraction if wheel.front else (1.0 - config.brake_front_fraction)
 	var brake_n := brake_input * config.brake_force_n * axle_share * 0.5
+	if not wheel.front:
+		brake_n += handbrake_input * config.handbrake_force_n * 0.5
 	var along := _smooth_sign(v_long)
 	var rolling := _blended(blend, config.asphalt.rolling_resistance, config.grass.rolling_resistance)
 	var long_request := -brake_n * along
