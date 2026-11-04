@@ -198,6 +198,7 @@ Both cars are `CharacterBody3D` nodes with `MOTION_MODE_FLOATING` and a child in
 - Gear ratios from the equipped gearbox set each gear’s top speed and acceleration. Horsepower scales acceleration against a 280 hp reference.
 - Steering uses a bicycle model (`tan(steer) / wheelbase`). Lock tightens with speed.
 - The nose can only turn a little faster than the tires can hold the path to (`YAW_GRIP_MARGIN`), so a car over its grip runs wide and the steering can still catch it. Tire grip, ride grip, and what braking or power takes all set that limit.
+- Turning past what the wheel asks for bleeds away (`YAW_SETTLE_RATE`) rather than being cut off, so the car carries its rotation as the wheel comes back.
 - Cornering takes power away (`_corner_power()`): past half the sideways grip in use, the pull fades, down to a fifth at the limit. On a straight the pull is untouched.
 - Heading 0 points along world `+Z`.
 - Leaving the pavement cuts acceleration and slows the car to a capped speed.

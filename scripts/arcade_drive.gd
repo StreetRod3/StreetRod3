@@ -14,7 +14,7 @@ const MAX_STEER_RAD := 0.52
 const STEER_RESPONSE := 3.2
 ## Sideways acceleration full steering asks for at speed, in m/s². As in the simulation,
 ## the rack closes as speed rises, so a key press is not full lock at top speed.
-const STEER_FULL_LATERAL_ACCEL := 10.5
+const STEER_FULL_LATERAL_ACCEL := 14.0
 ## Extra angle at any speed, for the slip the front tires need to make that force.
 const STEER_SLIP_ALLOWANCE_RAD := 0.055
 ## How fast the steering input moves on and back off, per second, so a tap is a small turn.
@@ -26,7 +26,7 @@ const LONG_GRIP_SHARE_MAX := 0.72
 const LOAD_TRANSFER_ACCEL_MAX := 11.0
 ## How far the nose may turn past what the tires can hold the path to. A little lets
 ## the car rotate into a corner; more and it slides on until steering cannot catch it.
-const YAW_GRIP_MARGIN := 1.15
+const YAW_GRIP_MARGIN := 1.25
 ## Share of the sideways grip in use before cornering starts to take power away.
 const CORNER_POWER_FADE_FROM := 0.5
 ## The power left when cornering takes all the grip the tires have.
@@ -35,10 +35,17 @@ const CORNER_POWER_MIN := 0.2
 const SPIN_DECAY := 2.8
 ## How fast a barrier swings the nose round, in rad/s.
 const SWING_RATE := 5.0
+## How fast turning past what the wheel asks for dies away, in rad/s². The car carries
+## its rotation for a moment as the wheel comes back, instead of stopping dead.
+const YAW_SETTLE_RATE := 2.2
+## Share of the front tires' sideways force that slows the car in a turn.
+const CORNER_SCRUB := 0.6
+## How quickly the turning dies away once the wheel is straight, in 1/seconds.
+const STRAIGHTEN_RATE := 4.0
 const MASS_KG := 1360.0
 const CG_HEIGHT_M := 0.48
 const GRAVITY := 9.81
-const MU_DRY := 1.25
+const MU_DRY := 1.6
 ## Loose surface. Still well under dry grip, but the nose can come around.
 const MU_OFFROAD := 0.78
 const FRONT_AXLE_FRACTION := 0.46
@@ -170,12 +177,14 @@ func step(
 	steer_angle = move_toward(steer_angle, steer_target, STEER_RESPONSE * delta)
 	_step_chassis(delta, longitudinal_accel)
 	if absf(_steer_input) < 0.02 and absf(steer_angle) < 0.02:
-		var straighten := clampf(12.0 * delta, 0.0, 1.0)
+		var straighten := clampf(STRAIGHTEN_RATE * delta, 0.0, 1.0)
 		_yaw_rate = lerpf(_yaw_rate, 0.0, straighten)
 		_lateral_speed = lerpf(_lateral_speed, 0.0, straighten)
-	var yaw_cap := absf(forward_speed * tan(steer_angle) / _wheelbase) * 1.2 * _grip_steer_scale() + 0.08
-	yaw_cap = minf(yaw_cap, YAW_GRIP_MARGIN * _lateral_grip / maxf(forward_speed, GRIP_FADE_SPEED))
-	_yaw_rate = clampf(_yaw_rate, -yaw_cap, yaw_cap)
+	var steered_yaw := absf(forward_speed * tan(steer_angle) / _wheelbase) * 1.2 * _grip_steer_scale() + 0.08
+	if absf(_yaw_rate) > steered_yaw:
+		_yaw_rate = move_toward(_yaw_rate, signf(_yaw_rate) * steered_yaw, YAW_SETTLE_RATE * delta)
+	var grip_yaw := YAW_GRIP_MARGIN * _lateral_grip / maxf(forward_speed, GRIP_FADE_SPEED)
+	_yaw_rate = clampf(_yaw_rate, -grip_yaw, grip_yaw)
 	_lateral_speed = clampf(_lateral_speed, -forward_speed * 0.45, forward_speed * 0.45)
 	forward_speed = clampf(forward_speed, 0.0, max_mps)
 	var swung := clampf(_swing, -SWING_RATE * delta, SWING_RATE * delta)
@@ -251,7 +260,7 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var inertia := _mass_kg * axle_front * axle_rear
 	_lateral_speed += (lateral_force / _mass_kg - _yaw_rate * forward_speed) * delta
 	_yaw_rate += (yaw_moment / inertia) * delta
-	forward_speed += (-front_force * steer_sin / _mass_kg) * delta
+	forward_speed += (-front_force * steer_sin * CORNER_SCRUB / _mass_kg) * delta
 	if forward_speed < GRIP_FADE_SPEED:
 		var settle := (1.0 - forward_speed / GRIP_FADE_SPEED) * 8.0 * delta
 		_lateral_speed = lerpf(_lateral_speed, 0.0, clampf(settle, 0.0, 1.0))
