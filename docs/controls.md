@@ -156,6 +156,10 @@ There is no force feedback, so the wheel only centers itself if its own settings
 
 A Moza HGP shifter through a Moza base uses buttons up around 113 to 120, which Linux may not pass on. If its gears do not register, plug the shifter into the computer with its own USB cable.
 
+## Driving HUD
+
+Graphics in the settings can hide the control hints on the driving HUD, and make the HUD smaller, down to 60%. The panel in the top right corner and the rev counter both shrink, and stay where they are.
+
 ## Reverse
 
 One shift down from first, or from drive on an automatic, is reverse once the car has stopped. While it is still rolling forward, that shift is neutral, and another once it has slowed is reverse. One shift up from reverse is first.

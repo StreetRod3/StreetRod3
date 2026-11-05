@@ -41,10 +41,12 @@ layout_mode = 2
 theme_override_font_sizes/font_size = 28
 text = "Settings"
 
-[node name="FullscreenCheck" type="CheckBox" parent="Margin/VBox"]
+[node name="GraphicsBtn" type="Button" parent="Margin/VBox"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
-text = "Fullscreen"
+size_flags_horizontal = 0
+text = "Graphics"
 
 [node name="MasterLabel" type="Label" parent="Margin/VBox"]
 layout_mode = 2
@@ -93,7 +95,7 @@ layout_mode = 2
 size_flags_horizontal = 0
 text = "Back to main menu"
 
-[connection signal="toggled" from="Margin/VBox/FullscreenCheck" to="." method="_on_fullscreen_toggled"]
+[connection signal="pressed" from="Margin/VBox/GraphicsBtn" to="." method="_on_graphics_pressed"]
 [connection signal="value_changed" from="Margin/VBox/MasterSlider" to="." method="_on_master_volume_changed"]
 [connection signal="toggled" from="Margin/VBox/MusicCheck" to="." method="_on_music_toggled"]
 [connection signal="toggled" from="Margin/VBox/ArcadeCheck" to="." method="_on_arcade_toggled"]

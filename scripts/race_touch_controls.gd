@@ -60,6 +60,11 @@ func _on_viewport_size_changed() -> void:
 	_refresh_visible()
 
 
+## For when the hints setting changes.
+func refresh() -> void:
+	_refresh_visible()
+
+
 func _refresh_visible() -> void:
 	var result := get_parent().get_node_or_null("ResultPanel") as CanvasItem
 	if result != null and result.visible:
@@ -68,7 +73,7 @@ func _refresh_visible() -> void:
 	visible = _is_mobile_view()
 	var hint := get_parent().get_node_or_null("Panel/Margin/VBox/HintLabel") as CanvasItem
 	if hint != null:
-		hint.visible = not visible
+		hint.visible = not visible and GameState.show_control_hints
 	_refresh_shift_visible()
 
 

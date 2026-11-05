@@ -5,6 +5,8 @@ const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _ControlsSetup := preload("res://scripts/controls_setup.gd")
+const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
+const _HudSize := preload("res://scripts/hud_size.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
@@ -55,7 +57,6 @@ var _race_started: bool = false
 @onready var _pause_main: Control = $RaceUI/PauseMenu/Panel
 @onready var _pause_settings: Control = $RaceUI/PauseMenu/SettingsPanel
 @onready var _pause_confirm: Control = $RaceUI/PauseMenu/ConfirmPanel
-@onready var _pause_fullscreen: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/FullscreenCheck
 @onready var _pause_master: HSlider = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _pause_music: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _pause_arcade: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck
@@ -120,6 +121,7 @@ func _ready() -> void:
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	refresh_control_hint()
+	refresh_hud()
 	_traffic.visible = true
 	if _street_start:
 		_build_start_word()
@@ -645,7 +647,7 @@ func _sync_pause_nav() -> void:
 		])
 	elif _pause_settings.visible:
 		_nav.setup([
-			_pause_fullscreen,
+			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
 			_pause_master,
 			_pause_music,
 			_pause_arcade,
@@ -688,17 +690,21 @@ func _close_pause_settings() -> void:
 
 
 func _refresh_pause_settings() -> void:
-	_pause_fullscreen.set_pressed_no_signal(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_pause_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_pause_music.set_pressed_no_signal(GameState.music_enabled)
 	_pause_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_pause_imperial.set_pressed_no_signal(GameState.imperial_units)
 
 
-func _on_pause_fullscreen_toggled(pressed: bool) -> void:
-	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if pressed else DisplayServer.WINDOW_MODE_WINDOWED
-	)
+func _on_pause_graphics_pressed() -> void:
+	_GraphicsSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
+
+
+## The HUD's size and hints as set on the graphics page. Also called when that page closes.
+func refresh_hud() -> void:
+	_HudSize.apply($RaceUI/Panel, _rpm_meter)
+	if _mobile != null and _mobile.has_method(&"refresh"):
+		_mobile.call(&"refresh")
 
 
 func _on_pause_master_volume_changed(value: float) -> void:

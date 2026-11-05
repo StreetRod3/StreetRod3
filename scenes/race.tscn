@@ -430,9 +430,9 @@ layout_mode = 2
 text = "Settings"
 horizontal_alignment = 1
 
-[node name="FullscreenCheck" type="CheckBox" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
+[node name="GraphicsBtn" type="Button" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
 layout_mode = 2
-text = "Fullscreen"
+text = "Graphics"
 
 [node name="MasterLabel" type="Label" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
 layout_mode = 2
@@ -519,7 +519,7 @@ text = "Leave race"
 [connection signal="pressed" from="RaceUI/PauseMenu/Panel/Margin/VBox/ResumeBtn" to="." method="_on_pause_resume_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/Panel/Margin/VBox/SettingsBtn" to="." method="_on_pause_settings_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/Panel/Margin/VBox/ExitBtn" to="." method="_on_pause_exit_pressed"]
-[connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/FullscreenCheck" to="." method="_on_pause_fullscreen_toggled"]
+[connection signal="pressed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn" to="." method="_on_pause_graphics_pressed"]
 [connection signal="value_changed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MasterSlider" to="." method="_on_pause_master_volume_changed"]
 [connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_pause_music_toggled"]
 [connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck" to="." method="_on_pause_arcade_toggled"]

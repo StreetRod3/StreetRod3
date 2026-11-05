@@ -3,6 +3,7 @@ extends Node3D
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _ControlsSetup := preload("res://scripts/controls_setup.gd")
+const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
@@ -21,7 +22,6 @@ var _view_port: SubViewport
 @onready var _clock_menu: Control = $GarageUI/ClockMenu
 @onready var _clock_main: Control = $GarageUI/ClockMenu/Panel
 @onready var _clock_settings: Control = $GarageUI/ClockMenu/SettingsPanel
-@onready var _clock_fullscreen: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/FullscreenCheck
 @onready var _clock_master: HSlider = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _clock_music: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _clock_arcade: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck
@@ -968,7 +968,7 @@ func _reset_clock_menu_page() -> void:
 func _sync_menu_nav() -> void:
 	if _clock_menu.visible and _clock_settings.visible:
 		_nav.setup([
-			_clock_fullscreen,
+			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
 			_clock_master,
 			_clock_music,
 			_clock_arcade,
@@ -2976,17 +2976,14 @@ func _close_clock_settings() -> void:
 
 
 func _refresh_clock_settings() -> void:
-	_clock_fullscreen.set_pressed_no_signal(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_clock_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_clock_music.set_pressed_no_signal(GameState.music_enabled)
 	_clock_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_clock_imperial.set_pressed_no_signal(GameState.imperial_units)
 
 
-func _on_clock_fullscreen_toggled(pressed: bool) -> void:
-	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if pressed else DisplayServer.WINDOW_MODE_WINDOWED
-	)
+func _on_clock_graphics_pressed() -> void:
+	_GraphicsSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
 
 
 func _on_clock_master_volume_changed(value: float) -> void:
