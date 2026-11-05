@@ -37,6 +37,8 @@ const CAM_BUMPER := 3
 ## Below first gear. The box starts in drive (gear 0) in a race and on the city.
 const GEAR_NEUTRAL := -1
 const GEAR_REVERSE := -2
+## Reverse only goes in below this forward speed, in m/s. Above it the box stays out of gear.
+const REVERSE_ENGAGE_SPEED := 2.0
 ## Reverse tops out at this share of first gear, and never slower than a brisk walk.
 const REVERSE_TOP_FRACTION := 0.38
 const REVERSE_TOP_MIN := 7.0
@@ -615,42 +617,34 @@ func _reverse_top() -> float:
 	return maxf(_gear_top_mps(0) * REVERSE_TOP_FRACTION, REVERSE_TOP_MIN)
 
 
-## Q and E, and the on-screen paddles. Drive gears stay where they are on an automatic:
-## one step down leaves drive for neutral, and the next selects reverse.
+## Q and E, and the on-screen paddles. A step down from first, or from
+## drive on an automatic, is reverse once the car has stopped, and neutral while it still rolls.
 func _select_shift(direction: int) -> void:
 	if _engine_blown or _shift_timer > 0.0 or direction == 0:
 		return
-	var next := _gear
+	_set_gear(_gear_below() if direction < 0 else _gear_above())
+
+
+func _gear_below() -> int:
+	if _gear > 0 and not _is_automatic():
+		return _gear - 1
+	return GEAR_REVERSE if _can_engage_reverse() else GEAR_NEUTRAL
+
+
+func _gear_above() -> int:
+	if _gear < 0:
+		return 0
 	if _is_automatic():
-		if direction < 0:
-			if _gear >= 0:
-				next = GEAR_NEUTRAL
-			elif _gear == GEAR_NEUTRAL:
-				next = GEAR_REVERSE
-			else:
-				return
-		elif _gear == GEAR_REVERSE:
-			next = GEAR_NEUTRAL
-		elif _gear == GEAR_NEUTRAL:
-			next = 0
-		else:
-			return
-	elif direction < 0:
-		if _gear > 0:
-			next = _gear - 1
-		elif _gear == 0:
-			next = GEAR_NEUTRAL
-		elif _gear == GEAR_NEUTRAL:
-			next = GEAR_REVERSE
-		else:
-			return
-	elif _gear == GEAR_REVERSE:
-		next = GEAR_NEUTRAL
-	elif _gear == GEAR_NEUTRAL:
-		next = 0
-	elif _gear < _gear_count() - 1:
-		next = _gear + 1
-	else:
+		return _gear
+	return mini(_gear + 1, _gear_count() - 1)
+
+
+func _can_engage_reverse() -> bool:
+	return forward_speed <= REVERSE_ENGAGE_SPEED
+
+
+func _set_gear(next: int) -> void:
+	if next == _gear:
 		return
 	_gear = next
 	_shift_timer = float(_gearbox.get("shift_time", 0.15))

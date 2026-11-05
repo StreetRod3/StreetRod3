@@ -216,3 +216,7 @@ The look under a rival's hood no longer marks every part as tight, since a car t
 If a rival's car ever turns up with an engine the game does not know, which would be a bug, the hood no longer guesses at it. Every part gets a random label like Mystery, Experimental, or Top secret, the power reads ??? hp, and the air cleaner lid says ??? V8.
 
 The spot to click for under the hood in the garage is bigger and farther forward. It was a thin strip that began at the windshield and stopped short of the nose, and now it takes in the whole front of the car from the cowl to the nose, across its full width and down the fender, about 1.7 to 2 times the area on screen. A rival's car at the drive-in had its own copy of the old strip, and now both use the same spot. The rival's car also had its click box turned the wrong way, so only a narrow column in the middle of the screen could be clicked at all, and it now covers the car.
+
+## 2026-11-05
+
+Reverse is one shift down from first now. With the car stopped, Q or the on-screen minus paddle goes straight from first into reverse, and E goes straight back to first, and an automatic does the same from drive. It used to take two presses, through neutral, and it would go in at any speed, where a manual read the car's speed as over-revving and could blow the engine. Reverse now waits until the car is down to a crawl. A car still rolling forward goes into neutral instead, which is how to coast, and another press once it has slowed puts it in reverse.
