@@ -2532,12 +2532,9 @@ func _place_bay_targets() -> void:
 		return
 	var origin := box.position
 	var size := box.size
-	# The whole front of the car from the cowl to the nose, down the fenders to the top of
-	# the gearbox band below, so that the hood is easy to hit.
-	var hood_min := origin + Vector3(0.0, size.y * 0.3, size.z * 0.62)
-	var hood_size := Vector3(size.x, size.y * 0.42, size.z * 0.38)
-	_hood.global_position = hood_min + hood_size * 0.5
-	_hood_shape.size = hood_size
+	var hood := GameState.hood_click_box(box)
+	_hood.global_position = hood.get_center()
+	_hood_shape.size = hood.size
 	if _under_car == null or _under_car_shape == null:
 		return
 	# Low band between the axles, just behind the engine: where the gearbox sits.

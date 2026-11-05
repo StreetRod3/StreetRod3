@@ -1319,14 +1319,15 @@ func _is_skin_mesh(node_name: String) -> bool:
 	return false
 
 
+## Measured in the rival's own space, since the box turns with the car.
 func _add_rival_hitbox(root: Node3D) -> void:
-	var bounds := _node_aabb(root)
+	var bounds := _aabb_in(root, root)
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
 	box.size = bounds.size
 	shape.shape = box
 	root.add_child(shape)
-	shape.global_position = bounds.get_center()
+	shape.position = bounds.get_center()
 
 
 func _side_fits(box: AABB) -> bool:
@@ -1529,11 +1530,7 @@ func _apply_hood_box(car: Node3D) -> bool:
 	var box := _aabb_in(body, car)
 	if box.size.y < 0.2 or box.size.z < 0.4:
 		return false
-	var origin := box.position
-	var size := box.size
-	var hood_min := origin + Vector3(size.x * 0.18, size.y * 0.42, size.z * 0.55)
-	var hood_size := Vector3(size.x * 0.64, size.y * 0.26, size.z * 0.38)
-	_hood_box = AABB(hood_min, hood_size)
+	_hood_box = GameState.hood_click_box(box)
 	_hood_ready = true
 	return true
 
