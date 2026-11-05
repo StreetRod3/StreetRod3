@@ -2,6 +2,7 @@ extends Control
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _ControllerSetup := preload("res://scripts/controller_setup.gd")
+const _ControlsSetup := preload("res://scripts/controls_setup.gd")
 
 var _nav := _MenuNav.new()
 
@@ -21,6 +22,7 @@ func _ready() -> void:
 		%MusicCheck,
 		%ArcadeCheck,
 		%ImperialCheck,
+		%ControlsBtn,
 		%ControllerBtn,
 		$Margin/VBox/BackButton,
 	])
@@ -56,6 +58,10 @@ func _on_arcade_toggled(pressed: bool) -> void:
 
 func _on_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
+
+
+func _on_controls_pressed() -> void:
+	_ControlsSetup.new().open(self, $Margin, %ControlsBtn)
 
 
 func _on_controller_pressed() -> void:

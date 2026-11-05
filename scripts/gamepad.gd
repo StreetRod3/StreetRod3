@@ -3,7 +3,7 @@ extends CanvasLayer
 ## Makes a gamepad of a known make work everywhere with no setup, by pressing what the game
 ## already answers to: the D-pad is the arrow keys, A is Enter, and B and Start are Escape.
 ## Outside of driving the left stick moves a pointer, and A clicks with it. The game's own code
-## never has to know a gamepad is there. Sticks and triggers for driving are in controller.gd.
+## never has to know a gamepad is there. Driving reads its controls from controller.gd.
 
 const _Controller := preload("res://scripts/controller.gd")
 
@@ -72,22 +72,21 @@ func _is_driving() -> bool:
 	return path == GameState.SCENE_RACE or path == GameState.SCENE_CRUISE
 
 
+## On the road the car reads its controls itself, as set on the controls page. Off it the
+## buttons are fixed, so the menus can always be worked. A stays Enter on the road for the result
+## screen, unless it has a driving job.
 func _update_buttons(driving: bool) -> void:
-	_update_button(JOY_BUTTON_A, CLICK if _pointing else KEY_ENTER)
-	_update_button(JOY_BUTTON_B, KEY_ESCAPE)
-	_update_button(JOY_BUTTON_START, KEY_ESCAPE)
-	_update_button(JOY_BUTTON_DPAD_UP, KEY_UP)
-	_update_button(JOY_BUTTON_DPAD_DOWN, KEY_DOWN)
-	_update_button(JOY_BUTTON_DPAD_LEFT, KEY_LEFT)
-	_update_button(JOY_BUTTON_DPAD_RIGHT, KEY_RIGHT)
-	_update_button(JOY_BUTTON_X, KEY_SPACE if driving else RIGHT_CLICK)
-	_update_button(JOY_BUTTON_Y, KEY_C if driving else NOTHING)
-	_update_button(JOY_BUTTON_LEFT_SHOULDER, KEY_Q if driving else NOTHING)
-	_update_button(JOY_BUTTON_RIGHT_SHOULDER, KEY_E if driving else NOTHING)
+	var a_on_road := NOTHING if _Controller.pad_button_has_job(JOY_BUTTON_A) else KEY_ENTER
+	_update_button(JOY_BUTTON_A, a_on_road if driving else (CLICK if _pointing else KEY_ENTER))
+	_update_button(JOY_BUTTON_B, NOTHING if driving else KEY_ESCAPE)
+	_update_button(JOY_BUTTON_START, NOTHING if driving else KEY_ESCAPE)
+	_update_button(JOY_BUTTON_DPAD_UP, NOTHING if driving else KEY_UP)
+	_update_button(JOY_BUTTON_DPAD_DOWN, NOTHING if driving else KEY_DOWN)
+	_update_button(JOY_BUTTON_DPAD_LEFT, NOTHING if driving else KEY_LEFT)
+	_update_button(JOY_BUTTON_DPAD_RIGHT, NOTHING if driving else KEY_RIGHT)
+	_update_button(JOY_BUTTON_X, NOTHING if driving else RIGHT_CLICK)
 	_update_button(JOY_BUTTON_BACK, NOTHING if driving else KEY_Q)
-	# Any device can have these bound, and the game only knows them as keys.
-	_update_source(_Controller.CAMERA, _Controller.is_down(_Controller.CAMERA), KEY_C)
-	_update_source(_Controller.PAUSE, _Controller.is_down(_Controller.PAUSE), KEY_ESCAPE)
+	_update_source(_Controller.PAUSE, _Controller.pause_down(driving), KEY_ESCAPE)
 
 
 func _update_button(button: JoyButton, does: int) -> void:

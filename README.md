@@ -19,7 +19,9 @@ Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRo
 
 On a phone or a narrow window, on-screen pedals and a steering wheel replace the keyboard hint.
 
-An Xbox, PlayStation, or other common gamepad works with no setup. Driving: left stick steers, right trigger is gas, left trigger is brake, the bumpers shift, X is the hand brake, Y is the camera, and Start pauses. Everywhere else, the D-pad and A work the menus, B goes back, and the left stick moves a pointer that A clicks with, X right-clicks with, and the right stick scrolls with. The Back button opens the clock menu in the garage.
+An Xbox, PlayStation, or other common gamepad works with no setup. Driving: left stick steers, right trigger is gas, left trigger is brake, the bumpers shift, X is the hand brake, Y is the camera, and Start pauses. It rumbles too. Everywhere else, the D-pad and A work the menus, B goes back, and the left stick moves a pointer that A clicks with, X right-clicks with, and the right stick scrolls with. The Back button opens the clock menu in the garage. A PlayStation pad goes by its own button names.
+
+Controls in the settings changes the driving controls on the keyboard and gamepad, with two slots each, and sets how hard the rumble is. The menu buttons stay as they are, and Esc always pauses.
 
 A steering wheel, pedals, a hand brake, and an H-pattern or sequential shifter or a wheel's paddles can be bound under Wheel and shifter setup in the settings. The keyboard keeps working alongside them. There is no force feedback, so the wheel only centers itself if its own settings do that.
 

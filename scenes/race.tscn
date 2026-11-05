@@ -458,6 +458,10 @@ text = "Arcade driving"
 layout_mode = 2
 text = "Imperial units (mph, gallons, pounds)"
 
+[node name="ControlsBtn" type="Button" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
+layout_mode = 2
+text = "Controls"
+
 [node name="ControllerBtn" type="Button" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
 layout_mode = 2
 text = "Wheel and shifter setup"
@@ -520,6 +524,7 @@ text = "Leave race"
 [connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_pause_music_toggled"]
 [connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck" to="." method="_on_pause_arcade_toggled"]
 [connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck" to="." method="_on_pause_imperial_toggled"]
+[connection signal="pressed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControlsBtn" to="." method="_on_pause_controls_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControllerBtn" to="." method="_on_pause_controller_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn" to="." method="_on_pause_settings_back_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/ConfirmPanel/Margin/VBox/CancelBtn" to="." method="_on_pause_confirm_cancel_pressed"]

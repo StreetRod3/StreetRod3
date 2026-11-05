@@ -4,6 +4,7 @@ const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _ControllerSetup := preload("res://scripts/controller_setup.gd")
+const _ControlsSetup := preload("res://scripts/controls_setup.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
@@ -118,12 +119,7 @@ func _ready() -> void:
 		_hud_opp.text = "Opponent: %s" % rival
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
-	if not _Controller.pads().is_empty():
-		_hud_hint.text = _Controller.pad_hint()
-	elif _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, reverse · C: camera · W+S: burnout"
-	else:
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift, reverse · C: camera · W+S: burnout"
+	refresh_control_hint()
 	_traffic.visible = true
 	if _street_start:
 		_build_start_word()
@@ -654,6 +650,7 @@ func _sync_pause_nav() -> void:
 			_pause_music,
 			_pause_arcade,
 			_pause_imperial,
+			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControlsBtn,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControllerBtn,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
@@ -719,6 +716,15 @@ func _on_pause_arcade_toggled(pressed: bool) -> void:
 func _on_pause_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
 	_show_speed_and_distance()
+
+
+## Also called when the controls page closes.
+func refresh_control_hint() -> void:
+	_hud_hint.text = _Controller.driving_hint(_player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox())
+
+
+func _on_pause_controls_pressed() -> void:
+	_ControlsSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControlsBtn)
 
 
 func _on_pause_controller_pressed() -> void:

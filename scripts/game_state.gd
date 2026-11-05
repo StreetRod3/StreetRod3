@@ -267,6 +267,9 @@ var controller_bindings: Dictionary = {}
 ## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
 ## car's own lock, and a 900 degree wheel reaches full lock a third of the way round at 3.
 var steer_sensitivity: float = 3.0
+## The driving controls as changed on the controls page, by action. One not here has its default.
+var control_keys: Dictionary = {}
+var control_pad: Dictionary = {}
 ## How hard a gamepad rumbles, from 0 for off to 1. Persisted in settings.
 var rumble_strength: float = 1.0
 var _gamepad: _Gamepad
@@ -3435,6 +3438,8 @@ func save_settings() -> void:
 	cfg.set_value("input", "controller", controller_bindings)
 	cfg.set_value("input", "steer_sensitivity", steer_sensitivity)
 	cfg.set_value("input", "rumble_strength", rumble_strength)
+	cfg.set_value("input", "keys", control_keys)
+	cfg.set_value("input", "pad", control_pad)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -3458,6 +3463,10 @@ func load_settings() -> void:
 	if cfg.get_value("input", "controller", {}) is Dictionary:
 		controller_bindings = cfg.get_value("input", "controller", {})
 	steer_sensitivity = float(cfg.get_value("input", "steer_sensitivity", steer_sensitivity))
+	if cfg.get_value("input", "keys", {}) is Dictionary:
+		control_keys = cfg.get_value("input", "keys", {})
+	if cfg.get_value("input", "pad", {}) is Dictionary:
+		control_pad = cfg.get_value("input", "pad", {})
 	rumble_strength = clampf(float(cfg.get_value("input", "rumble_strength", rumble_strength)), 0.0, 1.0)
 
 

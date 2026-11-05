@@ -3,9 +3,9 @@ extends RefCounted
 ## A wheel, pedals, and shifter as bound in the setup page (controller_setup.gd). An H-pattern
 ## holds down one button per gear, and none in neutral. A sequential, or a wheel's paddles, has
 ## one button for up and one for down. A binding keeps the device's GUID, since the number a
-## device gets can change from one run to the next. A gamepad of a known make needs none of
-## this: left stick and triggers work as they are here, and gamepad.gd does its buttons. Binding
-## is still there to change them.
+## device gets can change from one run to the next. Keyboard and gamepad driving controls are
+## here too, and have their own page in controls_setup.gd, since a key or a gamepad's layout
+## is the same on any machine.
 
 const STEER := "steer"
 const THROTTLE := "throttle"
@@ -13,6 +13,8 @@ const BRAKE := "brake"
 const HANDBRAKE := "handbrake"
 const CAMERA := "camera"
 const PAUSE := "pause"
+const STEER_LEFT := "steer_left"
+const STEER_RIGHT := "steer_right"
 const UP := "up"
 const DOWN := "down"
 const REVERSE := "reverse"
@@ -32,6 +34,10 @@ const PEDAL_DEAD_HIGH := 0.96
 const HANDBRAKE_ON := 0.5
 ## A gamepad's stick noise around center, as a share of the axis.
 const STICK_DEAD_ZONE := 0.12
+## A button-like job taken by a stick or a trigger is on past this much of its travel.
+const ACTION_ON := 0.5
+## A key or gamepad slot with nothing in it.
+const NO_KEY := 0
 ## What the buttons are called on the pad in hand. These go by where a button sits, so Godot's X
 ## is the square on a PlayStation pad.
 const XBOX_NAMES: Dictionary[int, String] = {
@@ -98,6 +104,10 @@ static func action_label(action: String) -> String:
 			return "Camera"
 		PAUSE:
 			return "Pause"
+		STEER_LEFT:
+			return "Steer left"
+		STEER_RIGHT:
+			return "Steer right"
 		UP:
 			return "Shift up"
 		DOWN:
@@ -113,11 +123,11 @@ static func action_label(action: String) -> String:
 	return "%sth" % action
 
 
-## From -1 for full right to 1 for full left, the same way as the keys.
+## A bound wheel, from -1 for full right to 1 for full left, or 0 with none.
 static func steer() -> float:
 	var device := _device_for(STEER)
 	if device < 0:
-		return _pad_stick()
+		return 0.0
 	var binding: Dictionary = GameState.controller_bindings[STEER]
 	var value := Input.get_joy_axis(device, int(binding.get("axis", 0)) as JoyAxis)
 	if absf(value) < STEER_DEAD_ZONE:
@@ -133,11 +143,11 @@ static func is_wheel_steering() -> bool:
 	return device >= 0 and not Input.is_joy_known(device)
 
 
-## How far a pedal is pressed, from 0 to 1.
+## How far a bound pedal is pressed, from 0 to 1.
 static func pedal(action: String) -> float:
 	var device := _device_for(action)
 	if device < 0:
-		return _pad_trigger(action)
+		return 0.0
 	var binding: Dictionary = GameState.controller_bindings[action]
 	var value := Input.get_joy_axis(device, int(binding.get("axis", 0)) as JoyAxis)
 	# An axis reads 0 until it first moves, so one resting at the end of its travel would read
@@ -162,28 +172,6 @@ static func playstation_names() -> bool:
 	return false
 
 
-## What an unbound control does on a gamepad, for the setup page, or empty if nothing.
-static func pad_default_label(action: String) -> String:
-	match action:
-		STEER:
-			return "Gamepad: left stick"
-		THROTTLE:
-			return "Gamepad: %s" % trigger_name(JOY_AXIS_TRIGGER_RIGHT)
-		BRAKE:
-			return "Gamepad: %s" % trigger_name(JOY_AXIS_TRIGGER_LEFT)
-		HANDBRAKE:
-			return "Gamepad: %s" % button_name(JOY_BUTTON_X)
-		CAMERA:
-			return "Gamepad: %s" % button_name(JOY_BUTTON_Y)
-		PAUSE:
-			return "Gamepad: %s" % button_name(JOY_BUTTON_START)
-		UP:
-			return "Gamepad: %s" % button_name(JOY_BUTTON_RIGHT_SHOULDER)
-		DOWN:
-			return "Gamepad: %s" % button_name(JOY_BUTTON_LEFT_SHOULDER)
-	return ""
-
-
 static func button_name(button: JoyButton) -> String:
 	var names := PLAYSTATION_NAMES if playstation_names() else XBOX_NAMES
 	return names.get(int(button), "Button %d" % int(button))
@@ -193,21 +181,6 @@ static func trigger_name(axis: JoyAxis) -> String:
 	if playstation_names():
 		return "R2" if axis == JOY_AXIS_TRIGGER_RIGHT else "L2"
 	return "RT" if axis == JOY_AXIS_TRIGGER_RIGHT else "LT"
-
-
-## The driving controls for the HUD, by the names on the pad in hand.
-static func pad_hint() -> String:
-	return "Stick: steer · %s: gas · %s: brake · %s: hand brake · %s/%s: shift, reverse · %s: camera · %s: pause · %s+%s: burnout" % [
-		trigger_name(JOY_AXIS_TRIGGER_RIGHT),
-		trigger_name(JOY_AXIS_TRIGGER_LEFT),
-		button_name(JOY_BUTTON_X),
-		button_name(JOY_BUTTON_LEFT_SHOULDER),
-		button_name(JOY_BUTTON_RIGHT_SHOULDER),
-		button_name(JOY_BUTTON_Y),
-		button_name(JOY_BUTTON_START),
-		trigger_name(JOY_AXIS_TRIGGER_RIGHT),
-		trigger_name(JOY_AXIS_TRIGGER_LEFT),
-	]
 
 
 ## Gamepads Godot knows the layout of, which an unknown wheel or shifter is not.
@@ -227,8 +200,7 @@ static func pad_button_down(button: JoyButton) -> bool:
 	return false
 
 
-## The left stick across all gamepads, with its dead zone taken out: x for steering, and both
-## for the pointer outside of driving.
+## A stick across all gamepads, with its dead zone taken out, for the pointer and scrolling.
 static func pad_stick(x_axis: JoyAxis, y_axis: JoyAxis) -> Vector2:
 	for device: int in pads():
 		var stick := Vector2(Input.get_joy_axis(device, x_axis), Input.get_joy_axis(device, y_axis))
@@ -237,18 +209,263 @@ static func pad_stick(x_axis: JoyAxis, y_axis: JoyAxis) -> Vector2:
 	return Vector2.ZERO
 
 
-static func _pad_stick() -> float:
-	return -pad_stick(JOY_AXIS_LEFT_X, JOY_AXIS_LEFT_Y).x
+## The jobs on the controls page, in its order.
+static func control_actions() -> Array[String]:
+	return [THROTTLE, BRAKE, STEER_LEFT, STEER_RIGHT, HANDBRAKE, UP, DOWN, CAMERA, PAUSE]
 
 
-static func _pad_trigger(action: String) -> float:
-	var axis := JOY_AXIS_TRIGGER_RIGHT if action == THROTTLE else JOY_AXIS_TRIGGER_LEFT
-	if action != THROTTLE and action != BRAKE:
-		return 0.0
+static func control_label(action: String) -> String:
+	return action_label(action)
+
+
+## Nothing here for Pause, since Esc always does that too.
+static func default_keys(action: String) -> Array:
+	match action:
+		THROTTLE:
+			return [KEY_W, KEY_UP]
+		BRAKE:
+			return [KEY_S, KEY_DOWN]
+		STEER_LEFT:
+			return [KEY_A, KEY_LEFT]
+		STEER_RIGHT:
+			return [KEY_D, KEY_RIGHT]
+		HANDBRAKE:
+			return [KEY_SPACE, NO_KEY]
+		UP:
+			return [KEY_E, NO_KEY]
+		DOWN:
+			return [KEY_Q, NO_KEY]
+		CAMERA:
+			return [KEY_C, NO_KEY]
+	return [NO_KEY, NO_KEY]
+
+
+## Each slot is a button, or an axis and the way it has to go, or empty.
+static func default_pad(action: String) -> Array:
+	match action:
+		THROTTLE:
+			return [{"axis": int(JOY_AXIS_TRIGGER_RIGHT), "dir": 1}, {}]
+		BRAKE:
+			return [{"axis": int(JOY_AXIS_TRIGGER_LEFT), "dir": 1}, {}]
+		STEER_LEFT:
+			return [{"axis": int(JOY_AXIS_LEFT_X), "dir": -1}, {"button": int(JOY_BUTTON_DPAD_LEFT)}]
+		STEER_RIGHT:
+			return [{"axis": int(JOY_AXIS_LEFT_X), "dir": 1}, {"button": int(JOY_BUTTON_DPAD_RIGHT)}]
+		HANDBRAKE:
+			return [{"button": int(JOY_BUTTON_X)}, {}]
+		UP:
+			return [{"button": int(JOY_BUTTON_RIGHT_SHOULDER)}, {}]
+		DOWN:
+			return [{"button": int(JOY_BUTTON_LEFT_SHOULDER)}, {}]
+		CAMERA:
+			return [{"button": int(JOY_BUTTON_Y)}, {}]
+		PAUSE:
+			return [{"button": int(JOY_BUTTON_START)}, {}]
+	return [{}, {}]
+
+
+static func keys_for(action: String) -> Array:
+	return GameState.control_keys.get(action, default_keys(action))
+
+
+static func pad_for(action: String) -> Array:
+	return GameState.control_pad.get(action, default_pad(action))
+
+
+## How hard a job is being asked for by the keyboard and gamepad, from 0 to 1.
+static func amount(action: String) -> float:
+	for code: Variant in keys_for(action):
+		if int(code) != NO_KEY and Input.is_key_pressed(int(code) as Key):
+			return 1.0
 	var most := 0.0
 	for device: int in pads():
-		most = maxf(most, Input.get_joy_axis(device, axis))
-	return clampf(inverse_lerp(PEDAL_DEAD_LOW, PEDAL_DEAD_HIGH, most), 0.0, 1.0)
+		for entry: Variant in pad_for(action):
+			most = maxf(most, _pad_amount(device, entry))
+	return most
+
+
+## A job that is on or off, from the keys, the gamepad, or a bound wheel or shifter.
+static func action_down(action: String) -> bool:
+	return amount(action) >= ACTION_ON or is_down(action)
+
+
+## Pause, for gamepad.gd. Out on the road the gamepad can do it, and in the pause menu its fixed
+## buttons take over, or going back would count twice. Esc is left out, being Esc already.
+static func pause_down(on_road: bool) -> bool:
+	if is_down(PAUSE):
+		return true
+	for code: Variant in keys_for(PAUSE):
+		if int(code) != NO_KEY and Input.is_key_pressed(int(code) as Key):
+			return true
+	if not on_road:
+		return false
+	for device: int in pads():
+		for entry: Variant in pad_for(PAUSE):
+			if _pad_amount(device, entry) >= ACTION_ON:
+				return true
+	return false
+
+
+## Whether a gamepad button has a driving job, so it does not also do its menu job on the road.
+static func pad_button_has_job(button: JoyButton) -> bool:
+	for action: String in control_actions():
+		for entry: Variant in pad_for(action):
+			if entry is Dictionary and int(entry.get("button", -1)) == int(button):
+				return true
+	return false
+
+
+static func _pad_amount(device: int, entry: Variant) -> float:
+	if not entry is Dictionary or entry.is_empty():
+		return 0.0
+	if entry.has("button"):
+		var button := int(entry["button"])
+		if Input.is_joy_button_pressed(device, button as JoyButton) and not _is_bound(device, button):
+			return 1.0
+		return 0.0
+	var axis := int(entry.get("axis", 0))
+	var low := PEDAL_DEAD_LOW if axis == JOY_AXIS_TRIGGER_LEFT or axis == JOY_AXIS_TRIGGER_RIGHT else STICK_DEAD_ZONE
+	var value := Input.get_joy_axis(device, axis as JoyAxis) * float(entry.get("dir", 1))
+	return clampf(inverse_lerp(low, PEDAL_DEAD_HIGH, value), 0.0, 1.0)
+
+
+static func set_key(action: String, slot: int, code: int) -> void:
+	var was: int = int(keys_for(action)[slot])
+	_take_key_off_all(code)
+	if was != code:
+		var keys := keys_for(action).duplicate()
+		keys[slot] = code
+		GameState.control_keys[action] = keys
+	GameState.save_settings()
+
+
+static func clear_key(action: String, slot: int) -> void:
+	var keys := keys_for(action).duplicate()
+	keys[slot] = NO_KEY
+	GameState.control_keys[action] = keys
+	GameState.save_settings()
+
+
+static func set_pad(action: String, slot: int, entry: Dictionary) -> void:
+	var same: bool = pad_for(action)[slot] == entry
+	_take_pad_off_all(entry)
+	if not same:
+		var list := pad_for(action).duplicate(true)
+		list[slot] = entry
+		GameState.control_pad[action] = list
+	GameState.save_settings()
+
+
+static func clear_pad(action: String, slot: int) -> void:
+	var list := pad_for(action).duplicate(true)
+	list[slot] = {}
+	GameState.control_pad[action] = list
+	GameState.save_settings()
+
+
+static func reset_controls() -> void:
+	GameState.control_keys.clear()
+	GameState.control_pad.clear()
+	GameState.save_settings()
+
+
+static func _take_key_off_all(code: int) -> void:
+	for action: String in control_actions():
+		var keys := keys_for(action).duplicate()
+		if keys.has(code):
+			keys[keys.find(code)] = NO_KEY
+			GameState.control_keys[action] = keys
+
+
+static func _take_pad_off_all(entry: Dictionary) -> void:
+	for action: String in control_actions():
+		var list := pad_for(action).duplicate(true)
+		var at := list.find(entry)
+		if at >= 0:
+			list[at] = {}
+			GameState.control_pad[action] = list
+
+
+static func key_slot_name(action: String, slot: int) -> String:
+	var code := int(keys_for(action)[slot])
+	return OS.get_keycode_string(code as Key) if code != NO_KEY else "Not set"
+
+
+static func pad_slot_name(action: String, slot: int) -> String:
+	return pad_entry_name(pad_for(action)[slot])
+
+
+static func pad_entry_name(entry: Variant) -> String:
+	if not entry is Dictionary or entry.is_empty():
+		return "Not set"
+	if entry.has("button"):
+		return button_name(int(entry["button"]) as JoyButton)
+	var axis := int(entry.get("axis", 0)) as JoyAxis
+	if axis == JOY_AXIS_TRIGGER_LEFT or axis == JOY_AXIS_TRIGGER_RIGHT:
+		return trigger_name(axis)
+	var negative := int(entry.get("dir", 1)) < 0
+	match axis:
+		JOY_AXIS_LEFT_X:
+			return "Left stick left" if negative else "Left stick right"
+		JOY_AXIS_LEFT_Y:
+			return "Left stick up" if negative else "Left stick down"
+		JOY_AXIS_RIGHT_X:
+			return "Right stick left" if negative else "Right stick right"
+		JOY_AXIS_RIGHT_Y:
+			return "Right stick up" if negative else "Right stick down"
+	return "Axis %d" % int(axis)
+
+
+## The driving controls for the HUD, as they are set now.
+static func driving_hint(automatic: bool) -> String:
+	return _pad_hint() if not pads().is_empty() else _key_hint(automatic)
+
+
+static func _key_hint(automatic: bool) -> String:
+	var shifting := "drive, reverse" if automatic else "shift, reverse"
+	return "%s: throttle · %s: brake · %s: hand brake · %s, %s: steer · %s, %s: %s · %s: camera · %s+%s: burnout" % [
+		_keys_text(THROTTLE), _keys_text(BRAKE), _keys_text(HANDBRAKE), _keys_text(STEER_LEFT), _keys_text(STEER_RIGHT),
+		_keys_text(DOWN), _keys_text(UP), shifting, _keys_text(CAMERA), _first_key_text(THROTTLE), _first_key_text(BRAKE),
+	]
+
+
+static func _keys_text(action: String) -> String:
+	var names: Array[String] = []
+	for slot: int in keys_for(action).size():
+		if int(keys_for(action)[slot]) != NO_KEY:
+			names.append(key_slot_name(action, slot))
+	return " / ".join(names) if not names.is_empty() else "-"
+
+
+static func _first_key_text(action: String) -> String:
+	return _keys_text(action).split(" / ")[0]
+
+
+static func _pad_hint() -> String:
+	var left := _first_pad_entry(STEER_LEFT)
+	var right := _first_pad_entry(STEER_RIGHT)
+	var steering := "%s, %s" % [pad_entry_name(left), pad_entry_name(right)]
+	if left.get("axis", -1) == right.get("axis", -2) and left.get("dir", 0) == -int(right.get("dir", 0)):
+		steering = "Stick" if int(left.get("axis", -1)) == JOY_AXIS_LEFT_X else pad_entry_name(left).trim_suffix(" left")
+	return "%s: steer · %s: gas · %s: brake · %s: hand brake · %s/%s: shift, reverse · %s: camera · %s: pause · %s+%s: burnout" % [
+		steering,
+		pad_entry_name(_first_pad_entry(THROTTLE)),
+		pad_entry_name(_first_pad_entry(BRAKE)),
+		pad_entry_name(_first_pad_entry(HANDBRAKE)),
+		pad_entry_name(_first_pad_entry(DOWN)),
+		pad_entry_name(_first_pad_entry(UP)),
+		pad_entry_name(_first_pad_entry(CAMERA)),
+		pad_entry_name(_first_pad_entry(PAUSE)),
+		pad_entry_name(_first_pad_entry(THROTTLE)),
+		pad_entry_name(_first_pad_entry(BRAKE)),
+	]
+
+
+static func _first_pad_entry(action: String) -> Dictionary:
+	for entry: Variant in pad_for(action):
+		if entry is Dictionary and not entry.is_empty():
+			return entry
+	return {}
 
 
 static func _is_bound(device: int, button: int) -> bool:

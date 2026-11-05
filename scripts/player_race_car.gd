@@ -73,6 +73,10 @@ var _shift_timer: float = 0.0
 ## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
 var _shifter_gear: int = _Controller.POSITION_NONE
 var _rumble := _Rumble.new()
+var _camera_held: bool = false
+var _tapped_up: bool = false
+var _tapped_down: bool = false
+var _tapped_camera: bool = false
 var _shifter_up_held: bool = false
 var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
@@ -119,19 +123,15 @@ func _ready() -> void:
 		_touch = race.get_node_or_null("RaceUI/MobileControls")
 
 
+## The car reads held controls each step, and a quick tap on a slow machine can come and go
+## between two steps. So a key going down is remembered until the next one looks.
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_C:
-			_cam_mode = (_cam_mode + 1) % 4
-			_apply_camera_mode()
-			get_viewport().set_input_as_handled()
-			return
-		if event.keycode == KEY_E:
-			_select_shift(1)
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_Q:
-			_select_shift(-1)
-			get_viewport().set_input_as_handled()
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	var code := int(event.keycode)
+	_tapped_up = _tapped_up or _Controller.keys_for(_Controller.UP).has(code)
+	_tapped_down = _tapped_down or _Controller.keys_for(_Controller.DOWN).has(code)
+	_tapped_camera = _tapped_camera or _Controller.keys_for(_Controller.CAMERA).has(code)
 
 
 func _apply_camera_mode() -> void:
@@ -325,11 +325,7 @@ func _hold_still() -> void:
 
 
 func _steer_input() -> float:
-	var s := 0.0
-	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
-		s += 1.0
-	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
-		s -= 1.0
+	var s := _Controller.amount(_Controller.STEER_LEFT) - _Controller.amount(_Controller.STEER_RIGHT)
 	if _touch != null and _touch.has_method(&"get_steer"):
 		var touch_steer: float = _touch.get_steer()
 		if not is_zero_approx(touch_steer):
@@ -349,19 +345,15 @@ func _brake_down() -> bool:
 
 ## How far down each pedal is, from 0 to 1. Keys and the touch pedals are all or nothing.
 func _throttle_amount() -> float:
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		return 1.0
 	if _touch != null and _touch.has_method(&"is_throttle_down") and _touch.is_throttle_down():
 		return 1.0
-	return _Controller.pedal(_Controller.THROTTLE)
+	return maxf(_Controller.amount(_Controller.THROTTLE), _Controller.pedal(_Controller.THROTTLE))
 
 
 func _brake_amount() -> float:
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		return 1.0
 	if _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down():
 		return 1.0
-	return _Controller.pedal(_Controller.BRAKE)
+	return maxf(_Controller.amount(_Controller.BRAKE), _Controller.pedal(_Controller.BRAKE))
 
 
 ## Gas and brake together with the car all but stopped, which is how a burnout starts.
@@ -394,7 +386,7 @@ func _update_burnout(delta: float) -> void:
 
 
 func _handbrake_down() -> bool:
-	if Input.is_key_pressed(KEY_SPACE) or _Controller.is_down(_Controller.HANDBRAKE):
+	if _Controller.action_down(_Controller.HANDBRAKE):
 		return true
 	return _touch != null and _touch.has_method(&"is_handbrake_down") and _touch.is_handbrake_down()
 
@@ -411,6 +403,7 @@ func begin_park(slot: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
+	_poll_camera()
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
@@ -656,7 +649,7 @@ func _reverse_top() -> float:
 	return maxf(_gear_top_mps(0) * REVERSE_TOP_FRACTION, REVERSE_TOP_MIN)
 
 
-## Q and E, the on-screen paddles, and a sequential shifter. A step down from first, or from
+## The keys and gamepad buttons for shifting, the on-screen paddles, and a sequential shifter. A step down from first, or from
 ## drive on an automatic, is reverse once the car has stopped, and neutral while it still rolls.
 func _select_shift(direction: int) -> void:
 	if _engine_blown or _shift_timer > 0.0 or direction == 0:
@@ -762,15 +755,26 @@ func _update_engine_sound(throttle: bool) -> void:
 	_engine_sound.set_state(get_rpm(), 1.0 if throttle else 0.0, _engine_blown, _shift_timer > 0.0)
 
 
+func _poll_camera() -> void:
+	var held := _Controller.action_down(_Controller.CAMERA)
+	if (held and not _camera_held) or _tapped_camera:
+		_cam_mode = (_cam_mode + 1) % 4
+		_apply_camera_mode()
+	_camera_held = held
+	_tapped_camera = false
+
+
 func _poll_shifter() -> void:
-	var up := _Controller.is_down(_Controller.UP)
-	if up and not _shifter_up_held:
+	var up := _Controller.action_down(_Controller.UP)
+	if (up and not _shifter_up_held) or _tapped_up:
 		_select_shift(1)
 	_shifter_up_held = up
-	var down := _Controller.is_down(_Controller.DOWN)
-	if down and not _shifter_down_held:
+	_tapped_up = false
+	var down := _Controller.action_down(_Controller.DOWN)
+	if (down and not _shifter_down_held) or _tapped_down:
 		_select_shift(-1)
 	_shifter_down_held = down
+	_tapped_down = false
 
 	var wanted := _shifter_wanted_gear()
 	if wanted == _shifter_gear or _engine_blown or _shift_timer > 0.0:

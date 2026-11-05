@@ -6,7 +6,7 @@ extends CanvasLayer
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
 
-const HELP := "Click a row, then move that control. A car with fewer gears uses its top gear for the rest. Paddles or a sequential shifter go on Shift up and Shift down. Gamepads work with nothing set, and these change them."
+const HELP := "Click a row, then move that control. A car with fewer gears uses its top gear for the rest. Paddles or a sequential shifter go on Shift up and Shift down. Keyboard and gamepad are under Controls."
 ## An axis has to move this far, and come back to within this share of that, to be taken.
 const AXIS_MIN_TRAVEL := 0.15
 const AXIS_BACK_SHARE := 0.25
@@ -269,8 +269,7 @@ func _listen_prompt() -> String:
 func _binding_text(action: String) -> String:
 	var binding: Variant = GameState.controller_bindings.get(action)
 	if not binding is Dictionary:
-		var default := _Controller.pad_default_label(action)
-		return default if not default.is_empty() and not _Controller.pads().is_empty() else "Not set"
+		return "Not set"
 	var name_text := str(binding.get("name", ""))
 	if not _Controller.is_plugged_in(action):
 		return "%s (not plugged in)" % name_text
