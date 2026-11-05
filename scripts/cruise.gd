@@ -18,6 +18,7 @@ const _RpmMeter := preload("res://scripts/rpm_meter.gd")
 const _TouchControls := preload("res://scripts/race_touch_controls.gd")
 const _StreetLamp := preload("res://scripts/street_lamp.gd")
 const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
+const _CruiseMinimap := preload("res://scripts/cruise_minimap.gd")
 ## Spawn at least this far from the place just left, toward the street, in meters.
 const _ROAM_CLEAR := 8.5
 ## A stop in front of a place. Faster than this is still driving past.
@@ -135,6 +136,7 @@ var _hud_gear: Label
 var _hud_damage: Label
 var _hud_hint: Label
 var _rpm_meter: Control
+var _minimap: Control
 var _touch: Node
 
 
@@ -203,6 +205,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _process(delta: float) -> void:
 	_update_hud()
+	if _minimap != null and _roam_car != null:
+		_minimap.call(&"set_view", _roam_car.global_position, _roam_car.rotation.y)
 	if _roaming:
 		_fade = maxf(_fade - delta / _FADE_IN_S, 0.0)
 		_paint_fade()
@@ -289,7 +293,7 @@ func _start_roam(from_poi: String) -> void:
 	_build_city(track)
 	if _leaving_garage:
 		_set_garage_doors_open()
-	_build_hud()
+	_build_hud(track)
 	_build_roam_car(track, from_poi)
 	if _touch != null and _roam_car != null:
 		_roam_car.set(&"_touch", _touch)
@@ -512,7 +516,7 @@ func _scene_for_roam(place_id: String) -> String:
 
 
 ## The race cluster while the player is driving. A scripted cruise stays clear.
-func _build_hud() -> void:
+func _build_hud(track: Dictionary) -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "CruiseUI"
 	layer.layer = 10
@@ -573,6 +577,33 @@ func _build_hud() -> void:
 	touch.set_script(_TouchControls)
 	layer.add_child(touch)
 	_touch = touch
+	_minimap = Control.new()
+	_minimap.name = "Minimap"
+	_minimap.set_script(_CruiseMinimap)
+	_minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_minimap.z_index = 1
+	_minimap.call(&"set_track", track)
+	layer.add_child(_minimap)
+	_layout_minimap()
+	get_viewport().size_changed.connect(_layout_minimap)
+
+
+func _layout_minimap() -> void:
+	if _minimap == null:
+		return
+	var viewport_size := get_viewport().get_visible_rect().size
+	var mobile := OS.has_feature("mobile") or viewport_size.x <= 900.0 or viewport_size.x < viewport_size.y
+	var map_size := 128.0 if mobile else 156.0
+	var bottom_margin := 212.0 if mobile else 16.0
+	_minimap.anchor_left = 1.0
+	_minimap.anchor_right = 1.0
+	_minimap.anchor_top = 1.0
+	_minimap.anchor_bottom = 1.0
+	_minimap.offset_left = -map_size - 16.0
+	_minimap.offset_right = -16.0
+	_minimap.offset_top = -bottom_margin - map_size
+	_minimap.offset_bottom = -bottom_margin
+	_minimap.size = Vector2(map_size, map_size)
 
 
 func _hud_line(text: String) -> Label:
