@@ -9,7 +9,7 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
-const _Shifter := preload("res://scripts/shifter.gd")
+const _Controller := preload("res://scripts/controller.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
@@ -38,6 +38,8 @@ const CAM_BUMPER := 3
 ## Below first gear. The box starts in drive (gear 0) in a race and on the city.
 const GEAR_NEUTRAL := -1
 const GEAR_REVERSE := -2
+## Both pedals need to be this far down to start a burnout.
+const BURNOUT_PEDAL := 0.5
 ## Reverse only goes in below this forward speed, in m/s. Above it the box stays out of gear.
 const REVERSE_ENGAGE_SPEED := 2.0
 ## Reverse tops out at this share of first gear, and never slower than a brisk walk.
@@ -61,7 +63,7 @@ var _gearbox: Dictionary = {}
 var _gear: int = 0
 var _shift_timer: float = 0.0
 ## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
-var _shifter_gear: int = _Shifter.POSITION_NONE
+var _shifter_gear: int = _Controller.POSITION_NONE
 var _shifter_up_held: bool = false
 var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
@@ -321,24 +323,39 @@ func _steer_input() -> float:
 		var touch_steer: float = _touch.get_steer()
 		if not is_zero_approx(touch_steer):
 			s = touch_steer
+	if is_zero_approx(s):
+		s = _Controller.steer()
 	return clampf(s, -1.0, 1.0)
 
 
 func _throttle_down() -> bool:
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		return true
-	return _touch != null and _touch.has_method(&"is_throttle_down") and _touch.is_throttle_down()
+	return _throttle_amount() > 0.0
 
 
 func _brake_down() -> bool:
+	return _brake_amount() > 0.0
+
+
+## How far down each pedal is, from 0 to 1. Keys and the touch pedals are all or nothing.
+func _throttle_amount() -> float:
+	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
+		return 1.0
+	if _touch != null and _touch.has_method(&"is_throttle_down") and _touch.is_throttle_down():
+		return 1.0
+	return _Controller.pedal(_Controller.THROTTLE)
+
+
+func _brake_amount() -> float:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		return true
-	return _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down()
+		return 1.0
+	if _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down():
+		return 1.0
+	return _Controller.pedal(_Controller.BRAKE)
 
 
 ## Gas and brake together with the car all but stopped, which is how a burnout starts.
 func _burnout_held() -> bool:
-	return _throttle_down() and _brake_down() and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
+	return _throttle_amount() >= BURNOUT_PEDAL and _brake_amount() >= BURNOUT_PEDAL and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
 
 
 ## Only for show so far: the wheels spin, the engine revs, and the tires smoke and mark the
@@ -366,7 +383,7 @@ func _update_burnout(delta: float) -> void:
 
 
 func _handbrake_down() -> bool:
-	if Input.is_key_pressed(KEY_SPACE):
+	if Input.is_key_pressed(KEY_SPACE) or _Controller.is_down(_Controller.HANDBRAKE):
 		return true
 	return _touch != null and _touch.has_method(&"is_handbrake_down") and _touch.is_handbrake_down()
 
@@ -394,6 +411,9 @@ func _physics_process(delta: float) -> void:
 		return
 	_poll_touch_shifts()
 	_poll_shifter()
+	var on_wheel := _Controller.is_plugged_in(_Controller.STEER)
+	_dynamics.direct_steer = on_wheel
+	_arcade.direct_steer = on_wheel
 	# Runs during the countdown too, so a gear picked on the start line is in by the green light.
 	if _shift_timer > 0.0:
 		_shift_timer = maxf(0.0, _shift_timer - delta)
@@ -460,9 +480,9 @@ func _physics_simulation(delta: float) -> void:
 	var drive := 0.0
 	var brake_input := 0.0
 	if throttle and _shift_timer <= 0.0 and not handbrake:
-		drive = _requested_drive_force()
+		drive = _requested_drive_force() * _throttle_amount()
 	elif brake:
-		brake_input = 1.0
+		brake_input = _brake_amount()
 	_dynamics.sample_surfaces(track, global_transform)
 	_dynamics.step(delta, steer, drive, brake_input)
 	_sync_motion_state()
@@ -526,7 +546,9 @@ func _physics_arcade(delta: float) -> void:
 		_signed_gear_accel(),
 		limits.y,
 		_car_center,
-		limits.x
+		limits.x,
+		_throttle_amount(),
+		_brake_amount()
 	)
 	var before := velocity
 	move_and_slide()
@@ -702,11 +724,11 @@ func _update_engine_sound(throttle: bool) -> void:
 
 
 func _poll_shifter() -> void:
-	var up := _Shifter.is_down(_Shifter.UP)
+	var up := _Controller.is_down(_Controller.UP)
 	if up and not _shifter_up_held:
 		_select_shift(1)
 	_shifter_up_held = up
-	var down := _Shifter.is_down(_Shifter.DOWN)
+	var down := _Controller.is_down(_Controller.DOWN)
 	if down and not _shifter_down_held:
 		_select_shift(-1)
 	_shifter_down_held = down
@@ -715,15 +737,15 @@ func _poll_shifter() -> void:
 	if wanted == _shifter_gear or _engine_blown or _shift_timer > 0.0:
 		return
 	_shifter_gear = wanted
-	if wanted != _Shifter.POSITION_NONE:
+	if wanted != _Controller.POSITION_NONE:
 		_set_gear(wanted)
 
 
 ## Any forward position is drive on an automatic. A car with fewer gears than the shifter has
 ## its top gear in the rest. Reverse waits in neutral until the car has slowed enough for it.
 func _shifter_wanted_gear() -> int:
-	var lever := _Shifter.position()
-	if lever == _Shifter.POSITION_REVERSE:
+	var lever := _Controller.position()
+	if lever == _Controller.POSITION_REVERSE:
 		return GEAR_REVERSE if _can_engage_reverse() else GEAR_NEUTRAL
 	if lever < 0:
 		return lever

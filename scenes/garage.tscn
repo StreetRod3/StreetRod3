@@ -1065,9 +1065,9 @@ text = "Arcade driving"
 layout_mode = 2
 text = "Imperial units (mph, gallons, pounds)"
 
-[node name="ShifterBtn" type="Button" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070031]
+[node name="ControllerBtn" type="Button" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070031]
 layout_mode = 2
-text = "Shifter setup"
+text = "Wheel and shifter setup"
 
 [node name="BackBtn" type="Button" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070029]
 layout_mode = 2
@@ -1294,7 +1294,7 @@ script = ExtResource("5")
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_clock_music_toggled"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck" to="." method="_on_clock_arcade_toggled"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck" to="." method="_on_clock_imperial_toggled"]
-[connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ShifterBtn" to="." method="_on_clock_shifter_pressed"]
+[connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControllerBtn" to="." method="_on_clock_controller_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn" to="." method="_on_clock_settings_back_pressed"]
 [connection signal="pressed" from="GarageUI/StatsPanel/Panel/Margin/VBox/StatsClose" to="." method="_on_stats_close_pressed"]
 [connection signal="pressed" from="GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn" to="." method="_on_spray_confirm_pressed"]

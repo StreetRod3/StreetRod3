@@ -2,7 +2,7 @@ extends Node3D
 
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _MenuNav := preload("res://scripts/menu_nav.gd")
-const _ShifterSetup := preload("res://scripts/shifter_setup.gd")
+const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
@@ -651,7 +651,7 @@ func _sync_pause_nav() -> void:
 			_pause_music,
 			_pause_arcade,
 			_pause_imperial,
-			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ShifterBtn,
+			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControllerBtn,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _pause_menu.visible:
@@ -718,8 +718,8 @@ func _on_pause_imperial_toggled(pressed: bool) -> void:
 	_show_speed_and_distance()
 
 
-func _on_pause_shifter_pressed() -> void:
-	_ShifterSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ShifterBtn)
+func _on_pause_controller_pressed() -> void:
+	_ControllerSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControllerBtn)
 
 
 func _show_speed_and_distance() -> void:

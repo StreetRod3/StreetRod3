@@ -1,7 +1,7 @@
 extends Control
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
-const _ShifterSetup := preload("res://scripts/shifter_setup.gd")
+const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 
 var _nav := _MenuNav.new()
 
@@ -21,7 +21,7 @@ func _ready() -> void:
 		%MusicCheck,
 		%ArcadeCheck,
 		%ImperialCheck,
-		%ShifterBtn,
+		%ControllerBtn,
 		$Margin/VBox/BackButton,
 	])
 
@@ -58,5 +58,5 @@ func _on_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
 
 
-func _on_shifter_pressed() -> void:
-	_ShifterSetup.new().open(self, $Margin, %ShifterBtn)
+func _on_controller_pressed() -> void:
+	_ControllerSetup.new().open(self, $Margin, %ControllerBtn)

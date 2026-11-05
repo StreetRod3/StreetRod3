@@ -45,6 +45,7 @@ const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const _CarFile := preload("res://scripts/car_file.gd")
+const _Controller := preload("res://scripts/controller.gd")
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
 
@@ -260,8 +261,11 @@ var drive_in_hood_seen: bool = false
 var arcade_drive: bool = true
 ## Show speeds, fuel, weights, and distances in US units. They are always kept in metric.
 var imperial_units: bool = false
-## What each shifter position is bound to, by action in shifter.gd. Persisted in settings.
-var shifter_bindings: Dictionary = {}
+## What each control on a wheel or shifter is bound to, by action in controller.gd. Persisted in settings.
+var controller_bindings: Dictionary = {}
+## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
+## car's own lock, and a 900 degree wheel reaches full lock a third of the way round at 3.
+var steer_sensitivity: float = 3.0
 
 ## Whether background music is on. Persisted in settings; also toggled by the garage radio.
 var music_enabled: bool = true
@@ -3421,7 +3425,8 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("game", "arcade_drive", arcade_drive)
 	cfg.set_value("game", "imperial_units", imperial_units)
-	cfg.set_value("input", "shifter", shifter_bindings)
+	cfg.set_value("input", "controller", controller_bindings)
+	cfg.set_value("input", "steer_sensitivity", steer_sensitivity)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -3442,8 +3447,10 @@ func load_settings() -> void:
 		arcade_drive = bool(cfg.get_value("game", "arcade_drive"))
 	if cfg.has_section_key("game", "imperial_units"):
 		imperial_units = bool(cfg.get_value("game", "imperial_units"))
-	if cfg.get_value("input", "shifter", {}) is Dictionary:
-		shifter_bindings = cfg.get_value("input", "shifter", {})
+	if cfg.get_value("input", "controller", {}) is Dictionary:
+		controller_bindings = cfg.get_value("input", "controller", {})
+		_Controller.free_menu_inputs()
+	steer_sensitivity = float(cfg.get_value("input", "steer_sensitivity", steer_sensitivity))
 
 
 func toggle_music() -> void:
