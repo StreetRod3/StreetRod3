@@ -1,7 +1,8 @@
 extends Node3D
 
 ## Cars on the city streets during a cruise. Each one keeps to the same side of the
-## road as the player's own drive and picks a road at random when the street ends.
+## road as the player's own drive. Each one drives the shortest way to a random destination
+## and, once there, picks a new one.
 ## Hitting one is the race's car bump: it shoves both cars, and the player takes damage.
 
 const _TrafficCar := preload("res://scripts/traffic_car.gd")
@@ -15,6 +16,8 @@ const _MAX_YAW := 1.15
 ## Streets this wide, curb to curb, get a lane off the center line.
 const _TWO_LANE_HALF := 6.0
 const _BODY_Y := 0.35
+## A trip is at least this far in a straight line, in meters.
+const _MIN_TRIP := 70.0
 
 const _PAINTS: Array[Color] = [
 	Color(0.74, 0.1, 0.08),
@@ -29,6 +32,8 @@ const _PAINTS: Array[Color] = [
 
 var _edges: Array[Dictionary] = []
 var _out: Dictionary = {}
+var _stops: Array[int] = []
+var _node_pos: Dictionary = {}
 var _cars: Array[CharacterBody3D] = []
 var _bump: _CarBump = _CarBump.new()
 var _prev_player := Vector3.ZERO
@@ -121,7 +126,7 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	if _off_road(car):
 		_reacquire(car)
 	if car.next_i < 0:
-		car.next_i = _choose_next(car.edge_i)
+		car.next_i = _next_edge(car)
 	var center := car.center()
 	var forward := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
 	var desired := car.cruise_mps
@@ -212,19 +217,97 @@ func _reacquire(car: _TrafficCar) -> void:
 			best = i
 	if best_gap > 24.0:
 		return
+	car.route.clear()
 	_enter(car, best)
 
 
 func _enter(car: _TrafficCar, idx: int) -> void:
 	if idx < 0 or idx >= _edges.size():
+		car.route.clear()
 		idx = _choose_next(car.edge_i)
 	car.edge_i = idx
-	car.next_i = _choose_next(idx)
+	car.next_i = _next_edge(car)
 	var edge: Dictionary = _edges[idx]
 	var a: Vector3 = edge["a"]
 	var dir: Vector3 = edge["dir"]
 	var along := (car.center() - a).dot(dir)
 	car.along = clampf(along, 0.0, float(edge["length"]))
+
+
+## The road after the current one. At the end of a trip a new destination is picked.
+func _next_edge(car: _TrafficCar) -> int:
+	if car.route.is_empty():
+		_plan_trip(car)
+	if car.route.is_empty():
+		return _choose_next(car.edge_i)
+	return car.route.pop_front()
+
+
+func _plan_trip(car: _TrafficCar) -> void:
+	car.route.clear()
+	car.destination = -1
+	if _stops.is_empty():
+		return
+	var here: Dictionary = _edges[car.edge_i]
+	var end: Vector3 = here["b"]
+	for attempt in 8:
+		var stop: int = _stops[randi() % _stops.size()]
+		var target: Vector3 = _node_pos[stop]
+		var min_trip := _MIN_TRIP if attempt < 6 else 0.0
+		if stop == int(here["to"]) or Vector2(target.x - end.x, target.z - end.z).length() < min_trip:
+			continue
+		var path := _route(car.edge_i, stop)
+		if path.is_empty():
+			continue
+		car.destination = stop
+		car.route = path
+		return
+
+
+## Shortest road list after `start_edge` that ends at node `goal`. A U-turn is only taken at a dead end.
+func _route(start_edge: int, goal: int) -> Array[int]:
+	var cost := PackedFloat32Array()
+	cost.resize(_edges.size())
+	cost.fill(INF)
+	var prev := PackedInt32Array()
+	prev.resize(_edges.size())
+	prev.fill(-1)
+	var done := PackedByteArray()
+	done.resize(_edges.size())
+	cost[start_edge] = 0.0
+	var open: Array[int] = [start_edge]
+	var found := -1
+	while not open.is_empty():
+		var best_at := 0
+		for i in open.size():
+			if cost[open[i]] < cost[open[best_at]]:
+				best_at = i
+		var current: int = open[best_at]
+		open.remove_at(best_at)
+		if done[current] == 1:
+			continue
+		done[current] = 1
+		var edge: Dictionary = _edges[current]
+		if current != start_edge and int(edge["to"]) == goal:
+			found = current
+			break
+		var outs: Array = _out.get(int(edge["to"]), [])
+		for item: Variant in outs:
+			var idx := int(item)
+			var nxt: Dictionary = _edges[idx]
+			if int(nxt["to"]) == int(edge["from"]) and outs.size() > 1:
+				continue
+			var total: float = cost[current] + float(nxt["length"])
+			if total < cost[idx]:
+				cost[idx] = total
+				prev[idx] = current
+				open.append(idx)
+	var path: Array[int] = []
+	var step := found
+	while step >= 0 and step != start_edge:
+		path.push_front(step)
+		step = prev[step]
+	return path
 
 
 func _choose_next(edge_i: int) -> int:
@@ -318,6 +401,10 @@ func _build_graph(track: Dictionary) -> void:
 			var fresh: Array[int] = []
 			_out[from_id] = fresh
 		(_out[from_id] as Array).append(idx)
+		_node_pos[from_id] = a
+		_node_pos[to_id] = b
+	for id: int in _out:
+		_stops.append(id)
 
 
 func _spawn(avoid: Vector3, floor_mesh: MeshInstance3D, car_files: Array[String]) -> void:
