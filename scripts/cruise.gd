@@ -4,6 +4,7 @@ extends Node3D
 ## The automatic drive follows the route and plans its speed for the corners. The car rides
 ## on its own springs and shocks: the body leans and dives over wheels that roll and steer,
 ## and the camera hangs back. Free roam uses the same city and the race car's own driving.
+## Other cars drive the streets in a lane and turn off at random.
 
 const CITY_MAP := "res://assets/maps/city.trk"
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
@@ -16,6 +17,7 @@ const _PlayerCar := preload("res://scripts/player_race_car.gd")
 const _RpmMeter := preload("res://scripts/rpm_meter.gd")
 const _TouchControls := preload("res://scripts/race_touch_controls.gd")
 const _StreetLamp := preload("res://scripts/street_lamp.gd")
+const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
 ## Spawn at least this far from the place just left, toward the street, in meters.
 const _ROAM_CLEAR := 8.5
 ## A stop in front of a place. Faster than this is still driving past.
@@ -181,6 +183,7 @@ func _ready() -> void:
 		GameState.set_music_dimmed(true)
 	if _leaving_garage:
 		_set_garage_doors_open()
+	_start_traffic(track, _car.global_position)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -290,8 +293,24 @@ func _start_roam(from_poi: String) -> void:
 	_build_roam_car(track, from_poi)
 	if _touch != null and _roam_car != null:
 		_roam_car.set(&"_touch", _touch)
+	if _roam_car != null:
+		_start_traffic(track, _roam_car.global_position)
 	if GameState.engine_runs():
 		GameState.set_music_dimmed(true)
+
+
+func _start_traffic(track: Dictionary, avoid: Vector3) -> void:
+	var files: Array[String] = []
+	for car: Dictionary in GameState.USED_CARS:
+		var path := str(car.get("car_file", ""))
+		if not path.is_empty():
+			files.append(path)
+	if files.is_empty():
+		files.append("res://assets/cars/chevy-styleline-1950.car")
+	var traffic := _CruiseTraffic.new()
+	traffic.name = "Traffic"
+	add_child(traffic)
+	traffic.setup(track, avoid, _floor, files)
 
 
 ## The apron in front of a place. Local -Z of the building faces the street.
