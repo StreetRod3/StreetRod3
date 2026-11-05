@@ -32,18 +32,28 @@ const PEDAL_DEAD_HIGH := 0.96
 const HANDBRAKE_ON := 0.5
 ## A gamepad's stick noise around center, as a share of the axis.
 const STICK_DEAD_ZONE := 0.12
-## What an unbound control does on a gamepad, for the setup page.
-const PAD_LABELS: Dictionary[String, String] = {
-	STEER: "Gamepad: left stick",
-	THROTTLE: "Gamepad: right trigger",
-	BRAKE: "Gamepad: left trigger",
-	HANDBRAKE: "Gamepad: X",
-	CAMERA: "Gamepad: Y",
-	PAUSE: "Gamepad: Start or B",
-	UP: "Gamepad: right bumper",
-	DOWN: "Gamepad: left bumper",
+## What the buttons are called on the pad in hand. These go by where a button sits, so Godot's X
+## is the square on a PlayStation pad.
+const XBOX_NAMES: Dictionary[int, String] = {
+	JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
+	JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB",
+	JOY_BUTTON_BACK: "Back", JOY_BUTTON_START: "Start", JOY_BUTTON_GUIDE: "Guide",
+	JOY_BUTTON_LEFT_STICK: "LS", JOY_BUTTON_RIGHT_STICK: "RS",
+	JOY_BUTTON_DPAD_UP: "D-pad up", JOY_BUTTON_DPAD_DOWN: "D-pad down",
+	JOY_BUTTON_DPAD_LEFT: "D-pad left", JOY_BUTTON_DPAD_RIGHT: "D-pad right",
 }
-const PAD_HINT := "Stick: steer · RT: gas · LT: brake · X: hand brake · LB/RB: shift, reverse · Y: camera · Start: pause · RT+LT: burnout"
+const PLAYSTATION_NAMES: Dictionary[int, String] = {
+	JOY_BUTTON_A: "Cross", JOY_BUTTON_B: "Circle", JOY_BUTTON_X: "Square", JOY_BUTTON_Y: "Triangle",
+	JOY_BUTTON_LEFT_SHOULDER: "L1", JOY_BUTTON_RIGHT_SHOULDER: "R1",
+	JOY_BUTTON_BACK: "Share", JOY_BUTTON_START: "Options", JOY_BUTTON_GUIDE: "PS",
+	JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3",
+	JOY_BUTTON_DPAD_UP: "D-pad up", JOY_BUTTON_DPAD_DOWN: "D-pad down",
+	JOY_BUTTON_DPAD_LEFT: "D-pad left", JOY_BUTTON_DPAD_RIGHT: "D-pad right",
+}
+## Sony's USB vendor number, as Godot reports it. Pads from others that act as one say so in
+## their name instead.
+const SONY_VENDOR := "1356"
+const PLAYSTATION_WORDS: Array[String] = ["ps3", "ps4", "ps5", "playstation", "dualshock", "dualsense"]
 
 ## Set while the setup page waits for an input, so the controls do nothing else meanwhile.
 static var capturing: bool = false
@@ -136,6 +146,68 @@ static func pedal(action: String) -> float:
 		return 0.0
 	var pressed := inverse_lerp(float(binding.get("rest", -1.0)), float(binding.get("full", 1.0)), value)
 	return clampf(inverse_lerp(PEDAL_DEAD_LOW, PEDAL_DEAD_HIGH, pressed), 0.0, 1.0)
+
+
+## The first gamepad's names for its buttons. Xbox ones are the default, with or without a pad.
+static func playstation_names() -> bool:
+	var found := pads()
+	if found.is_empty():
+		return false
+	if str(Input.get_joy_info(found[0]).get("vendor_id", "")) == SONY_VENDOR:
+		return true
+	var pad_name := Input.get_joy_name(found[0]).to_lower()
+	for word: String in PLAYSTATION_WORDS:
+		if pad_name.contains(word):
+			return true
+	return false
+
+
+## What an unbound control does on a gamepad, for the setup page, or empty if nothing.
+static func pad_default_label(action: String) -> String:
+	match action:
+		STEER:
+			return "Gamepad: left stick"
+		THROTTLE:
+			return "Gamepad: %s" % trigger_name(JOY_AXIS_TRIGGER_RIGHT)
+		BRAKE:
+			return "Gamepad: %s" % trigger_name(JOY_AXIS_TRIGGER_LEFT)
+		HANDBRAKE:
+			return "Gamepad: %s" % button_name(JOY_BUTTON_X)
+		CAMERA:
+			return "Gamepad: %s" % button_name(JOY_BUTTON_Y)
+		PAUSE:
+			return "Gamepad: %s" % button_name(JOY_BUTTON_START)
+		UP:
+			return "Gamepad: %s" % button_name(JOY_BUTTON_RIGHT_SHOULDER)
+		DOWN:
+			return "Gamepad: %s" % button_name(JOY_BUTTON_LEFT_SHOULDER)
+	return ""
+
+
+static func button_name(button: JoyButton) -> String:
+	var names := PLAYSTATION_NAMES if playstation_names() else XBOX_NAMES
+	return names.get(int(button), "Button %d" % int(button))
+
+
+static func trigger_name(axis: JoyAxis) -> String:
+	if playstation_names():
+		return "R2" if axis == JOY_AXIS_TRIGGER_RIGHT else "L2"
+	return "RT" if axis == JOY_AXIS_TRIGGER_RIGHT else "LT"
+
+
+## The driving controls for the HUD, by the names on the pad in hand.
+static func pad_hint() -> String:
+	return "Stick: steer · %s: gas · %s: brake · %s: hand brake · %s/%s: shift, reverse · %s: camera · %s: pause · %s+%s: burnout" % [
+		trigger_name(JOY_AXIS_TRIGGER_RIGHT),
+		trigger_name(JOY_AXIS_TRIGGER_LEFT),
+		button_name(JOY_BUTTON_X),
+		button_name(JOY_BUTTON_LEFT_SHOULDER),
+		button_name(JOY_BUTTON_RIGHT_SHOULDER),
+		button_name(JOY_BUTTON_Y),
+		button_name(JOY_BUTTON_START),
+		trigger_name(JOY_AXIS_TRIGGER_RIGHT),
+		trigger_name(JOY_AXIS_TRIGGER_LEFT),
+	]
 
 
 ## Gamepads Godot knows the layout of, which an unknown wheel or shifter is not.
@@ -256,6 +328,10 @@ static func free_menu_inputs() -> void:
 		for event: InputEvent in InputMap.action_get_events(action):
 			if event is InputEventJoypadButton or event is InputEventJoypadMotion:
 				InputMap.action_erase_event(action, event)
+
+
+static func device_of(action: String) -> int:
+	return _device_for(action)
 
 
 static func _device_for(action: String) -> int:

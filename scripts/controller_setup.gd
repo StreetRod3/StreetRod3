@@ -269,11 +269,14 @@ func _listen_prompt() -> String:
 func _binding_text(action: String) -> String:
 	var binding: Variant = GameState.controller_bindings.get(action)
 	if not binding is Dictionary:
-		return str(_Controller.PAD_LABELS[action]) if _Controller.PAD_LABELS.has(action) and not _Controller.pads().is_empty() else "Not set"
+		var default := _Controller.pad_default_label(action)
+		return default if not default.is_empty() and not _Controller.pads().is_empty() else "Not set"
 	var name_text := str(binding.get("name", ""))
 	if not _Controller.is_plugged_in(action):
 		return "%s (not plugged in)" % name_text
 	if not binding.has("axis"):
+		if _Controller.pads().has(_Controller.device_of(action)):
+			return "%s, %s" % [name_text, _Controller.button_name(int(binding.get("button", 0)) as JoyButton)]
 		return "%s, button %d" % [name_text, int(binding.get("button", 0))]
 	var reading := ""
 	if action == _Controller.STEER:

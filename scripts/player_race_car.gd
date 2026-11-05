@@ -10,6 +10,7 @@ const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
 const _Controller := preload("res://scripts/controller.gd")
+const _Rumble := preload("res://scripts/rumble.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
@@ -38,6 +39,13 @@ const CAM_BUMPER := 3
 ## Below first gear. The box starts in drive (gear 0) in a race and on the city.
 const GEAR_NEUTRAL := -1
 const GEAR_REVERSE := -2
+## Road speed where rumble from the surface and from sliding is at its fullest, in m/s.
+const RUMBLE_FULL_SPEED := 25.0
+## A tire past this share of its grip has started to slide, and this far past it is sliding hard.
+const RUMBLE_SLIDE_START := 0.95
+const RUMBLE_SLIDE_FULL := 0.3
+const RUMBLE_SCRAPE := 0.35
+const RUMBLE_SHIFT := 0.3
 ## Both pedals need to be this far down to start a burnout.
 const BURNOUT_PEDAL := 0.5
 ## Reverse only goes in below this forward speed, in m/s. Above it the box stays out of gear.
@@ -64,6 +72,7 @@ var _gear: int = 0
 var _shift_timer: float = 0.0
 ## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
 var _shifter_gear: int = _Controller.POSITION_NONE
+var _rumble := _Rumble.new()
 var _shifter_up_held: bool = false
 var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
@@ -198,6 +207,8 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> 
 func take_hit(speed_change: float) -> bool:
 	if not _damage.take_hit(speed_change):
 		return false
+	var jolt := clampf(speed_change / _CarDamage.TOTAL_MPS, 0.3, 1.0)
+	_rumble.pulse(jolt * 0.6, jolt)
 	_chase_cam.jolt(speed_change)
 	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D)
 	return true
@@ -425,6 +436,7 @@ func _physics_process(delta: float) -> void:
 		_physics_simulation(delta)
 		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_update_burnout(delta)
+	_update_rumble(delta)
 	_stick_to_road()
 	_pose_body(delta)
 
@@ -673,6 +685,7 @@ func _can_engage_reverse() -> bool:
 func _set_gear(next: int) -> void:
 	if next == _gear:
 		return
+	_rumble.pulse(RUMBLE_SHIFT, 0.0)
 	_gear = next
 	_shift_timer = float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
@@ -703,6 +716,32 @@ func _auto_shift(throttle: bool, brake: bool) -> void:
 		_request_shift(-1)
 	elif (brake or not throttle) and forward_speed < prev_top * 0.62:
 		_request_shift(-1)
+
+
+## What the car is doing, felt through a gamepad: the tires spinning up, rough ground under it,
+## a slide, and the engine at its limit. Hits, scrapes, and shifts are jolts of their own.
+func _update_rumble(delta: float) -> void:
+	var moving := clampf(absf(forward_speed) / RUMBLE_FULL_SPEED, 0.0, 1.0)
+	var wheels := _dynamics.wheels()
+	var rough := 0.0
+	var grip_used := 0.0
+	for wheel: _VehicleDynamics.Wheel in wheels:
+		rough = maxf(rough, wheel.surface_blend)
+		grip_used = maxf(grip_used, wheel.grip_utilization)
+	if GameState.arcade_drive:
+		grip_used = maxf(_arcade.front_grip_use, _arcade.rear_grip_use)
+	var slide := clampf((grip_used - RUMBLE_SLIDE_START) / RUMBLE_SLIDE_FULL, 0.0, 1.0) * moving
+	var at_limit := 0.0
+	if not _engine_blown and not _is_automatic() and get_rpm() >= RPM_REDLINE:
+		at_limit = 0.4
+	var ground := rough * clampf(moving * 4.0, 0.0, 1.0)
+	var weak := maxf(maxf(_burnout * 0.5, ground * (0.2 + 0.35 * moving)), maxf(slide * 0.35, at_limit))
+	var strong := maxf(_burnout * 0.6, ground * 0.3 * moving)
+	_rumble.update(delta, weak, strong)
+
+
+func _exit_tree() -> void:
+	_rumble.stop()
 
 
 func _update_overrev(delta: float) -> void:
@@ -801,6 +840,7 @@ func _scrape_barrier(before: Vector3, delta: float) -> bool:
 	if hit.is_empty():
 		return false
 	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
+	_rumble.pulse(RUMBLE_SCRAPE, RUMBLE_SCRAPE)
 	var after: Vector3 = hit["velocity"]
 	if GameState.arcade_drive:
 		_arcade.apply_planar_velocity(self, after, _car_center)

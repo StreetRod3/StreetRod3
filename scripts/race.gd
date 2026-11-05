@@ -119,7 +119,7 @@ func _ready() -> void:
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	if not _Controller.pads().is_empty():
-		_hud_hint.text = _Controller.PAD_HINT
+		_hud_hint.text = _Controller.pad_hint()
 	elif _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
 		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, reverse · C: camera · W+S: burnout"
 	else:

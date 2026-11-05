@@ -585,7 +585,7 @@ func _hud_line(text: String) -> Label:
 
 func _drive_hint() -> String:
 	if not _Controller.pads().is_empty():
-		return _Controller.PAD_HINT + "\nStop in front of a place to go in"
+		return _Controller.pad_hint() + "\nStop in front of a place to go in"
 	var box := GameState.get_equipped_gearbox()
 	if bool(box.get("automatic", false)):
 		return "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, reverse · C: camera · W+S: burnout\nStop in front of a place to go in"
