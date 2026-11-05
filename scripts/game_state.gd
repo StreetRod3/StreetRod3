@@ -46,6 +46,7 @@ const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const _CarFile := preload("res://scripts/car_file.gd")
 const _Controller := preload("res://scripts/controller.gd")
+const _Gamepad := preload("res://scripts/gamepad.gd")
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
 
@@ -266,6 +267,7 @@ var controller_bindings: Dictionary = {}
 ## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
 ## car's own lock, and a 900 degree wheel reaches full lock a third of the way round at 3.
 var steer_sensitivity: float = 3.0
+var _gamepad: _Gamepad
 
 ## Whether background music is on. Persisted in settings; also toggled by the garage radio.
 var music_enabled: bool = true
@@ -357,6 +359,9 @@ func _ready() -> void:
 	_music_player = AudioStreamPlayer.new()
 	_music_player.name = "MusicPlayer"
 	add_child(_music_player)
+	_Controller.free_menu_inputs()
+	_gamepad = _Gamepad.new()
+	add_child(_gamepad)
 	load_settings()
 	load_parts_register()
 	load_cars_register()
@@ -3449,8 +3454,12 @@ func load_settings() -> void:
 		imperial_units = bool(cfg.get_value("game", "imperial_units"))
 	if cfg.get_value("input", "controller", {}) is Dictionary:
 		controller_bindings = cfg.get_value("input", "controller", {})
-		_Controller.free_menu_inputs()
 	steer_sensitivity = float(cfg.get_value("input", "steer_sensitivity", steer_sensitivity))
+
+
+## Where the mouse is, or a gamepad's pointer when that is in use.
+func pointer_position(viewport: Viewport) -> Vector2:
+	return _gamepad.pointer_position(viewport)
 
 
 func toggle_music() -> void:

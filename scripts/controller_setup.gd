@@ -6,7 +6,7 @@ extends CanvasLayer
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
 
-const HELP := "Click a row, then move that control. A car with fewer gears uses its top gear for the rest. Paddles or a sequential shifter go on Shift up and Shift down."
+const HELP := "Click a row, then move that control. A car with fewer gears uses its top gear for the rest. Paddles or a sequential shifter go on Shift up and Shift down. Gamepads work with nothing set, and these change them."
 ## An axis has to move this far, and come back to within this share of that, to be taken.
 const AXIS_MIN_TRAVEL := 0.15
 const AXIS_BACK_SHARE := 0.25
@@ -28,6 +28,10 @@ var _back_button: Button
 var _clear_button: Button
 ## The action waiting for an input, or empty.
 var _listening: String = ""
+## The button that answered, still held. It stays quiet until it comes up, or binding Pause to
+## it would count as pressing Pause and close this page.
+var _answer_device: int = -1
+var _answer_button: int = -1
 ## Where each axis started, the farthest it has gone, and where it has come back to, while listening.
 var _travel: Dictionary = {}
 
@@ -143,12 +147,18 @@ func _nav_items() -> Array:
 	return items
 
 
+func _exit_tree() -> void:
+	_Controller.capturing = false
+
+
 func _input(event: InputEvent) -> void:
 	if _listening.is_empty():
 		return
 	if event is InputEventJoypadButton:
 		if event.pressed and _Controller.takes_button(_listening):
 			_Controller.bind_button(_listening, event.device, int(event.button_index))
+			_answer_device = event.device
+			_answer_button = int(event.button_index)
 			_listen_done()
 		get_viewport().set_input_as_handled()
 	elif event is InputEventJoypadMotion:
@@ -201,11 +211,16 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(_delta: float) -> void:
 	if not _listening.is_empty():
 		_take_settled_axis()
+	elif _answer_button >= 0 and not Input.is_joy_button_pressed(_answer_device, _answer_button as JoyButton):
+		_answer_button = -1
+		_Controller.capturing = false
 	_refresh_rows()
 
 
 func _listen(action: String) -> void:
 	_listening = action
+	_answer_button = -1
+	_Controller.capturing = true
 	_travel.clear()
 	_refresh()
 
@@ -213,6 +228,7 @@ func _listen(action: String) -> void:
 func _listen_done() -> void:
 	var button: Button = _rows[_listening]
 	_listening = ""
+	_Controller.capturing = _answer_button >= 0
 	button.grab_focus()
 	_refresh()
 
@@ -245,13 +261,15 @@ func _listen_prompt() -> String:
 			return "Press the %s pedal all the way down, then let it go." % _Controller.action_label(_listening).to_lower()
 		_Controller.HANDBRAKE:
 			return "Pull the hand brake all the way, then let it go, or press its button."
+		_Controller.CAMERA, _Controller.PAUSE:
+			return "Press the button for %s." % _Controller.action_label(_listening).to_lower()
 	return "Move the shifter into %s, or press the button for it." % _Controller.action_label(_listening)
 
 
 func _binding_text(action: String) -> String:
 	var binding: Variant = GameState.controller_bindings.get(action)
 	if not binding is Dictionary:
-		return "Not set"
+		return str(_Controller.PAD_LABELS[action]) if _Controller.PAD_LABELS.has(action) and not _Controller.pads().is_empty() else "Not set"
 	var name_text := str(binding.get("name", ""))
 	if not _Controller.is_plugged_in(action):
 		return "%s (not plugged in)" % name_text
@@ -277,6 +295,8 @@ func _on_sensitivity_changed(value: float) -> void:
 
 func _on_clear_pressed() -> void:
 	_listening = ""
+	_answer_button = -1
+	_Controller.capturing = false
 	_Controller.clear()
 	_refresh()
 

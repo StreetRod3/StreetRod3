@@ -15,6 +15,7 @@ const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 const _PlayerCar := preload("res://scripts/player_race_car.gd")
 const _RpmMeter := preload("res://scripts/rpm_meter.gd")
+const _Controller := preload("res://scripts/controller.gd")
 const _TouchControls := preload("res://scripts/race_touch_controls.gd")
 const _StreetLamp := preload("res://scripts/street_lamp.gd")
 const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
@@ -195,7 +196,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _roaming or _finished or not event is InputEventKey:
 		return
 	var key := event as InputEventKey
-	if not key.pressed or key.echo or key.keycode != KEY_SPACE:
+	if not key.pressed or key.echo or (key.keycode != KEY_SPACE and key.keycode != KEY_ENTER):
 		return
 	get_viewport().set_input_as_handled()
 	_finish()
@@ -583,6 +584,8 @@ func _hud_line(text: String) -> Label:
 
 
 func _drive_hint() -> String:
+	if not _Controller.pads().is_empty():
+		return _Controller.PAD_HINT + "\nStop in front of a place to go in"
 	var box := GameState.get_equipped_gearbox()
 	if bool(box.get("automatic", false)):
 		return "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, reverse · C: camera · W+S: burnout\nStop in front of a place to go in"

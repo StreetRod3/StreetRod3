@@ -526,8 +526,8 @@ func _fly_nozzle() -> void:
 	var nozzle := _nozzle(_held)
 	if nozzle == null:
 		return
-	var from := _camera.project_ray_origin(get_viewport().get_mouse_position())
-	var aim := _camera.project_ray_normal(get_viewport().get_mouse_position())
+	var from := _camera.project_ray_origin(GameState.pointer_position(get_viewport()))
+	var aim := _camera.project_ray_normal(GameState.pointer_position(get_viewport()))
 	nozzle.global_position = from + aim * _RAG_REACH
 	nozzle.scale = Vector3.ONE * _nozzle_pointer_scale()
 
@@ -536,7 +536,7 @@ func _fly_nozzle() -> void:
 func _fly_rag() -> void:
 	if not _rag_held or _busy or _rag == null or _camera == null:
 		return
-	_place_rag_at(get_viewport().get_mouse_position())
+	_place_rag_at(GameState.pointer_position(get_viewport()))
 
 
 func _place_rag_at(mouse: Vector2) -> void:
@@ -736,7 +736,7 @@ func _set_rag_solid(on: bool) -> void:
 func _update_cursor() -> void:
 	var mode := "arrow"
 	if not _busy:
-		var kind: Variant = _kind_at(get_viewport().get_mouse_position())
+		var kind: Variant = _kind_at(GameState.pointer_position(get_viewport()))
 		if _nozzle_seated or _nozzle_lifted:
 			mode = "hand"
 		elif kind == &"rag" or kind == &"rag_home":
@@ -1178,7 +1178,7 @@ func _tooltip_text() -> String:
 	var hovered := get_viewport().gui_get_hovered_control()
 	if hovered != null and hovered != _ui:
 		return ""
-	var kind: Variant = _kind_at(get_viewport().get_mouse_position())
+	var kind: Variant = _kind_at(GameState.pointer_position(get_viewport()))
 	if _nozzle_seated:
 		return "Take the nozzle"
 	if _nozzle_lifted:

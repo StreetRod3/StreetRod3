@@ -111,6 +111,10 @@ var _map_inspecting: bool = false
 var _map_tween: Tween
 ## Each place on the sheet: id, marker, label center, and the label's half size.
 var _map_spots: Array[Dictionary] = []
+## The price box's up and down, and the most its five digits hold.
+const SALE_PRICE_STEP := 50
+const SALE_PRICE_MAX := 99999
+
 var _nav := _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
@@ -540,7 +544,7 @@ func _tooltip_text_at_mouse() -> String:
 		if hovered == _hud_top or _hud_top.is_ancestor_of(hovered):
 			return _TOOLTIP_CARS
 		return ""
-	var kind: Variant = _interact_kind_at(vp.get_mouse_position())
+	var kind: Variant = _interact_kind_at(GameState.pointer_position(vp))
 	if kind == null:
 		return ""
 	if _bay_needs_car(kind) and not GameState.has_active_car():
@@ -2625,7 +2629,8 @@ func _try_say_bubble_key(event: InputEvent) -> bool:
 	return false
 
 
-## Enter or O for the red button, Esc or N for the other. Digits go on to the price.
+## Enter or O for the red button, Esc or N for the other. Digits go on to the price, and up
+## and down move it, which is the only way to name a price on a gamepad.
 func _try_sale_key(event: InputEvent) -> bool:
 	if not _sale_panel.visible or not event is InputEventKey:
 		return false
@@ -2633,6 +2638,9 @@ func _try_sale_key(event: InputEvent) -> bool:
 	if not key.pressed or key.echo:
 		return false
 	var countering := _sale_answers.visible
+	if not countering and (key.keycode == KEY_UP or key.keycode == KEY_DOWN):
+		_nudge_sale_price(SALE_PRICE_STEP if key.keycode == KEY_UP else -SALE_PRICE_STEP)
+		return true
 	if _is_enter_key(event) or key.keycode == KEY_O:
 		if countering:
 			_on_sale_answer(true)
@@ -2646,6 +2654,13 @@ func _try_sale_key(event: InputEvent) -> bool:
 			_close_car_sale()
 		return true
 	return false
+
+
+## From what is typed, or from what the car is worth with nothing typed yet.
+func _nudge_sale_price(by: int) -> void:
+	var asked := _sale_entry.text.to_int() if not _sale_entry.text.is_empty() else GameState.car_value(_sale_car_id)
+	_sale_entry.text = str(clampi(asked + by, 0, SALE_PRICE_MAX))
+	_sale_entry.caret_column = _sale_entry.text.length()
 
 
 func _apply_active_car_visual() -> void:

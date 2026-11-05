@@ -2,6 +2,7 @@ extends Node3D
 
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _Controller := preload("res://scripts/controller.gd")
 const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
@@ -117,7 +118,9 @@ func _ready() -> void:
 		_hud_opp.text = "Opponent: %s" % rival
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
-	if _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
+	if not _Controller.pads().is_empty():
+		_hud_hint.text = _Controller.PAD_HINT
+	elif _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
 		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, reverse · C: camera · W+S: burnout"
 	else:
 		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift, reverse · C: camera · W+S: burnout"

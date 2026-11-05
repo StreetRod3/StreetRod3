@@ -411,7 +411,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_poll_touch_shifts()
 	_poll_shifter()
-	var on_wheel := _Controller.is_plugged_in(_Controller.STEER)
+	var on_wheel := _Controller.is_wheel_steering()
 	_dynamics.direct_steer = on_wheel
 	_arcade.direct_steer = on_wheel
 	# Runs during the countdown too, so a gear picked on the start line is in by the green light.
