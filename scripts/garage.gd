@@ -1,6 +1,8 @@
 extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _ControlsSetup := preload("res://scripts/controls_setup.gd")
+const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
@@ -19,7 +21,6 @@ var _view_port: SubViewport
 @onready var _clock_menu: Control = $GarageUI/ClockMenu
 @onready var _clock_main: Control = $GarageUI/ClockMenu/Panel
 @onready var _clock_settings: Control = $GarageUI/ClockMenu/SettingsPanel
-@onready var _clock_fullscreen: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/FullscreenCheck
 @onready var _clock_master: HSlider = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _clock_music: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _clock_arcade: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck
@@ -110,6 +111,10 @@ var _map_inspecting: bool = false
 var _map_tween: Tween
 ## Each place on the sheet: id, marker, label center, and the label's half size.
 var _map_spots: Array[Dictionary] = []
+## The price box's up and down, and the most its five digits hold.
+const SALE_PRICE_STEP := 50
+const SALE_PRICE_MAX := 99999
+
 var _nav := _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
@@ -539,7 +544,7 @@ func _tooltip_text_at_mouse() -> String:
 		if hovered == _hud_top or _hud_top.is_ancestor_of(hovered):
 			return _TOOLTIP_CARS
 		return ""
-	var kind: Variant = _interact_kind_at(vp.get_mouse_position())
+	var kind: Variant = _interact_kind_at(GameState.pointer_position(vp))
 	if kind == null:
 		return ""
 	if _bay_needs_car(kind) and not GameState.has_active_car():
@@ -962,11 +967,12 @@ func _reset_clock_menu_page() -> void:
 func _sync_menu_nav() -> void:
 	if _clock_menu.visible and _clock_settings.visible:
 		_nav.setup([
-			_clock_fullscreen,
+			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
 			_clock_master,
 			_clock_music,
 			_clock_arcade,
 			_clock_imperial,
+			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControlsBtn,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _clock_menu.visible:
@@ -2623,7 +2629,8 @@ func _try_say_bubble_key(event: InputEvent) -> bool:
 	return false
 
 
-## Enter or O for the red button, Esc or N for the other. Digits go on to the price.
+## Enter or O for the red button, Esc or N for the other. Digits go on to the price, and up
+## and down move it, which is the only way to name a price on a gamepad.
 func _try_sale_key(event: InputEvent) -> bool:
 	if not _sale_panel.visible or not event is InputEventKey:
 		return false
@@ -2631,6 +2638,9 @@ func _try_sale_key(event: InputEvent) -> bool:
 	if not key.pressed or key.echo:
 		return false
 	var countering := _sale_answers.visible
+	if not countering and (key.keycode == KEY_UP or key.keycode == KEY_DOWN):
+		_nudge_sale_price(SALE_PRICE_STEP if key.keycode == KEY_UP else -SALE_PRICE_STEP)
+		return true
 	if _is_enter_key(event) or key.keycode == KEY_O:
 		if countering:
 			_on_sale_answer(true)
@@ -2644,6 +2654,13 @@ func _try_sale_key(event: InputEvent) -> bool:
 			_close_car_sale()
 		return true
 	return false
+
+
+## From what is typed, or from what the car is worth with nothing typed yet.
+func _nudge_sale_price(by: int) -> void:
+	var asked := _sale_entry.text.to_int() if not _sale_entry.text.is_empty() else GameState.car_value(_sale_car_id)
+	_sale_entry.text = str(clampi(asked + by, 0, SALE_PRICE_MAX))
+	_sale_entry.caret_column = _sale_entry.text.length()
 
 
 func _apply_active_car_visual() -> void:
@@ -2941,6 +2958,12 @@ func _on_clock_settings_back_pressed() -> void:
 	_close_clock_settings()
 
 
+func _on_clock_controls_pressed() -> void:
+	_ControlsSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControlsBtn)
+
+
+
+
 func _close_clock_settings() -> void:
 	GameState.save_settings()
 	_clock_settings.visible = false
@@ -2949,17 +2972,14 @@ func _close_clock_settings() -> void:
 
 
 func _refresh_clock_settings() -> void:
-	_clock_fullscreen.set_pressed_no_signal(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_clock_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_clock_music.set_pressed_no_signal(GameState.music_enabled)
 	_clock_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_clock_imperial.set_pressed_no_signal(GameState.imperial_units)
 
 
-func _on_clock_fullscreen_toggled(pressed: bool) -> void:
-	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if pressed else DisplayServer.WINDOW_MODE_WINDOWED
-	)
+func _on_clock_graphics_pressed() -> void:
+	_GraphicsSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
 
 
 func _on_clock_master_volume_changed(value: float) -> void:

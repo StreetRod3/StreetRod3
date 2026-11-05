@@ -179,6 +179,9 @@ var yaw_inertia: float = 2000.0
 
 var _wheels: Array[Wheel] = []
 var _steer_input: float = 0.0
+## A real wheel: the steering input is where the wheel is, with no easing or shaping for keys.
+## The rack still only moves as fast as it does.
+var direct_steer: bool = false
 var _steer_angle: float = 0.0
 var _tire_grip: float = 1.05
 var _long_accel: float = 0.0
@@ -605,8 +608,9 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 func _apply_steering(dt: float, steer_input: float) -> void:
 	var target_input := clampf(steer_input, -1.0, 1.0)
 	var blend := 1.0 - exp(-config.steer_input_response * dt)
-	_steer_input = lerpf(_steer_input, target_input, blend)
-	var target_angle := _shaped_steer(_steer_input) * (_steer_angle_limit() + _catch_lock())
+	_steer_input = target_input if direct_steer else lerpf(_steer_input, target_input, blend)
+	var shaped := _steer_input if direct_steer else _shaped_steer(_steer_input)
+	var target_angle := shaped * (_steer_angle_limit() + _catch_lock())
 	var rate := _steering_rate(target_angle)
 	_steer_angle = move_toward(_steer_angle, target_angle, rate * dt)
 	var front_blend := 0.0

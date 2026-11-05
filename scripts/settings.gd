@@ -1,13 +1,13 @@
 extends Control
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _ControlsSetup := preload("res://scripts/controls_setup.gd")
+const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 
 var _nav := _MenuNav.new()
 
 
 func _ready() -> void:
-	var fs := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
-	%FullscreenCheck.button_pressed = fs
 	%MasterSlider.value = db_to_linear(AudioServer.get_bus_volume_db(0))
 	%MusicCheck.set_pressed_no_signal(GameState.music_enabled)
 	%ArcadeCheck.set_pressed_no_signal(GameState.arcade_drive)
@@ -15,11 +15,12 @@ func _ready() -> void:
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_nav.setup([
-		%FullscreenCheck,
+		%GraphicsBtn,
 		%MasterSlider,
 		%MusicCheck,
 		%ArcadeCheck,
 		%ImperialCheck,
+		%ControlsBtn,
 		$Margin/VBox/BackButton,
 	])
 
@@ -34,10 +35,8 @@ func _on_back_pressed() -> void:
 	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
 
 
-func _on_fullscreen_toggled(pressed: bool) -> void:
-	DisplayServer.window_set_mode(
-		DisplayServer.WINDOW_MODE_FULLSCREEN if pressed else DisplayServer.WINDOW_MODE_WINDOWED
-	)
+func _on_graphics_pressed() -> void:
+	_GraphicsSetup.new().open(self, $Margin, %GraphicsBtn)
 
 
 func _on_master_volume_changed(value: float) -> void:
@@ -54,3 +53,9 @@ func _on_arcade_toggled(pressed: bool) -> void:
 
 func _on_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
+
+
+func _on_controls_pressed() -> void:
+	_ControlsSetup.new().open(self, $Margin, %ControlsBtn)
+
+

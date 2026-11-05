@@ -20,6 +20,8 @@ const STEER_SLIP_ALLOWANCE_RAD := 0.055
 ## How fast the steering input moves on and back off, per second, so a tap is a small turn.
 const STEER_INPUT_RATE := 4.0
 const STEER_INPUT_RETURN := 7.0
+## How far down the brake pedal has to be to mark the road.
+const BRAKE_MARK_PEDAL := 0.8
 ## The most of a tire's grip that braking or power can take. What is left always steers.
 const LONG_GRIP_SHARE_MAX := 0.72
 ## Acceleration past this shifts no more weight between the axles, in m/s².
@@ -71,6 +73,8 @@ const OFFROAD_MAX_SPEED_SCALE := 0.5
 const OFFROAD_SLOWDOWN := 20.0
 
 var forward_speed: float = 0.0
+## A real wheel: the steering input is where the wheel is, with no easing on and off.
+var direct_steer: bool = false
 var heading_yaw: float = 0.0
 var steer_angle: float = 0.0
 
@@ -178,7 +182,9 @@ func step(
 	gear_accel: float,
 	max_mps: float,
 	car_center: Vector3,
-	min_mps: float = 0.0
+	min_mps: float = 0.0,
+	throttle_amount: float = 1.0,
+	brake_amount: float = 1.0
 ) -> void:
 	_update_surface(body)
 	_handbrake = handbrake
@@ -187,9 +193,11 @@ func step(
 	if handbrake:
 		forward_speed = move_toward(forward_speed, 0.0, HANDBRAKE_DECEL * delta)
 	if throttle and not shifting and not handbrake:
-		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * _corner_power() * delta
+		forward_speed += gear_accel * throttle_amount * accel_scale * grip_accel_scale(_wheel_grip) * _corner_power() * delta
+		# Part throttle lifts by that much, so a steady pedal settles at a steady speed.
+		forward_speed *= pow(COAST_FACTOR, (1.0 - throttle_amount) * delta * 60.0)
 	elif brake:
-		forward_speed = move_toward(forward_speed, 0.0, BRAKING * delta)
+		forward_speed = move_toward(forward_speed, 0.0, BRAKING * brake_amount * delta)
 	elif not throttle:
 		forward_speed *= pow(COAST_FACTOR, delta * 60.0)
 	if blown:
@@ -206,11 +214,11 @@ func step(
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
 	var wanted := clampf(steer, -1.0, 1.0)
 	var input_rate := STEER_INPUT_RATE if wanted * _steer_input > 0.0 and absf(wanted) > absf(_steer_input) else STEER_INPUT_RETURN
-	_steer_input = move_toward(_steer_input, wanted, input_rate * delta)
+	_steer_input = wanted if direct_steer else move_toward(_steer_input, wanted, input_rate * delta)
 	var steer_target := _steer_input * _steer_limit() * _grip_steer_scale()
 	steer_angle = move_toward(steer_angle, steer_target, STEER_RESPONSE * delta)
 	_step_chassis(delta, longitudinal_accel)
-	if brake and absf(speed_before) > BRAKE_MARK_SPEED:
+	if brake and brake_amount >= BRAKE_MARK_PEDAL and absf(speed_before) > BRAKE_MARK_SPEED:
 		front_grip_use = maxf(front_grip_use, 1.0)
 		front_long_slip = -1.0
 	if handbrake and absf(speed_before) > GRIP_FADE_SPEED:

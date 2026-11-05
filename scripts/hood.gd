@@ -594,7 +594,7 @@ func _update_hover() -> void:
 	var target: Array = []
 	var vp := get_viewport()
 	if not _picker.visible and not _orbiting and vp.gui_get_hovered_control() == null:
-		target = _target_at(vp.get_mouse_position())
+		target = _target_at(GameState.pointer_position(vp))
 	if target != _hover:
 		_hover = target
 		for key: String in _bolt_mats.keys():
@@ -607,7 +607,7 @@ func _update_hover() -> void:
 	_tooltip.text = _target_text(_hover)
 	_tooltip.visible = true
 	_tooltip.reset_size()
-	_tooltip.position = vp.get_mouse_position() + Vector2(18.0, 14.0)
+	_tooltip.position = GameState.pointer_position(vp) + Vector2(18.0, 14.0)
 
 
 func _target_text(target: Array) -> String:

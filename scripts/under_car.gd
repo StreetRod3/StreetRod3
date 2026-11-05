@@ -283,7 +283,7 @@ func _update_hover() -> void:
 	var slot := ""
 	var vp := get_viewport()
 	if not _picker.visible and not _looking and vp.gui_get_hovered_control() == null:
-		slot = _slot_at(vp.get_mouse_position())
+		slot = _slot_at(GameState.pointer_position(vp))
 	if slot != _hover:
 		_light_rig(_hover, false)
 		_hover = slot
@@ -294,7 +294,7 @@ func _update_hover() -> void:
 	_tooltip.text = _slot_hint(_hover)
 	_tooltip.visible = true
 	_tooltip.reset_size()
-	_tooltip.position = vp.get_mouse_position() + Vector2(18.0, 14.0)
+	_tooltip.position = GameState.pointer_position(vp) + Vector2(18.0, 14.0)
 
 
 func _light_rig(slot: String, lit: bool) -> void:

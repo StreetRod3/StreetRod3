@@ -45,6 +45,8 @@ const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const _CarFile := preload("res://scripts/car_file.gd")
+const _Controller := preload("res://scripts/controller.gd")
+const _Gamepad := preload("res://scripts/gamepad.gd")
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
 
@@ -260,6 +262,21 @@ var drive_in_hood_seen: bool = false
 var arcade_drive: bool = true
 ## Show speeds, fuel, weights, and distances in US units. They are always kept in metric.
 var imperial_units: bool = false
+## What each control on a wheel or shifter is bound to, by action in controller.gd. Persisted in settings.
+var controller_bindings: Dictionary = {}
+## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
+## car's own lock, and a 900 degree wheel reaches full lock a third of the way round at 3.
+var steer_sensitivity: float = 3.0
+## The driving controls as changed on the controls page, by action. One not here has its default.
+var control_keys: Dictionary = {}
+var control_pad: Dictionary = {}
+## The driving HUD: what it shows, by item in driving_hud.gd, and its size from 0.6 to 1. An item
+## not in `hud_items` is shown.
+var hud_items: Dictionary = {}
+var hud_size: float = 1.0
+## How hard a gamepad rumbles, from 0 for off to 1. Persisted in settings.
+var rumble_strength: float = 1.0
+var _gamepad: _Gamepad
 
 ## Whether background music is on. Persisted in settings; also toggled by the garage radio.
 var music_enabled: bool = true
@@ -351,6 +368,9 @@ func _ready() -> void:
 	_music_player = AudioStreamPlayer.new()
 	_music_player.name = "MusicPlayer"
 	add_child(_music_player)
+	_Controller.free_menu_inputs()
+	_gamepad = _Gamepad.new()
+	add_child(_gamepad)
 	load_settings()
 	load_parts_register()
 	load_cars_register()
@@ -3419,6 +3439,13 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("game", "arcade_drive", arcade_drive)
 	cfg.set_value("game", "imperial_units", imperial_units)
+	cfg.set_value("input", "controller", controller_bindings)
+	cfg.set_value("input", "steer_sensitivity", steer_sensitivity)
+	cfg.set_value("input", "rumble_strength", rumble_strength)
+	cfg.set_value("display", "hud_items", hud_items)
+	cfg.set_value("display", "hud_size", hud_size)
+	cfg.set_value("input", "keys", control_keys)
+	cfg.set_value("input", "pad", control_pad)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -3439,6 +3466,26 @@ func load_settings() -> void:
 		arcade_drive = bool(cfg.get_value("game", "arcade_drive"))
 	if cfg.has_section_key("game", "imperial_units"):
 		imperial_units = bool(cfg.get_value("game", "imperial_units"))
+	if cfg.get_value("input", "controller", {}) is Dictionary:
+		controller_bindings = cfg.get_value("input", "controller", {})
+	steer_sensitivity = float(cfg.get_value("input", "steer_sensitivity", steer_sensitivity))
+	if cfg.get_value("input", "keys", {}) is Dictionary:
+		control_keys = cfg.get_value("input", "keys", {})
+	if cfg.get_value("input", "pad", {}) is Dictionary:
+		control_pad = cfg.get_value("input", "pad", {})
+	rumble_strength = clampf(float(cfg.get_value("input", "rumble_strength", rumble_strength)), 0.0, 1.0)
+	if cfg.get_value("display", "hud_items", {}) is Dictionary:
+		hud_items = cfg.get_value("display", "hud_items", {})
+	hud_size = clampf(float(cfg.get_value("display", "hud_size", hud_size)), 0.6, 1.0)
+
+
+func hud_shows(item: String) -> bool:
+	return bool(hud_items.get(item, true))
+
+
+## Where the mouse is, or a gamepad's pointer when that is in use.
+func pointer_position(viewport: Viewport) -> Vector2:
+	return _gamepad.pointer_position(viewport)
 
 
 func toggle_music() -> void:

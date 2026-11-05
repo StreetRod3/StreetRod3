@@ -9,6 +9,8 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
+const _Controller := preload("res://scripts/controller.gd")
+const _Rumble := preload("res://scripts/rumble.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
@@ -37,6 +39,17 @@ const CAM_BUMPER := 3
 ## Below first gear. The box starts in drive (gear 0) in a race and on the city.
 const GEAR_NEUTRAL := -1
 const GEAR_REVERSE := -2
+## Road speed where rumble from the surface and from sliding is at its fullest, in m/s.
+const RUMBLE_FULL_SPEED := 25.0
+## A tire past this share of its grip has started to slide, and this far past it is sliding hard.
+const RUMBLE_SLIDE_START := 0.95
+const RUMBLE_SLIDE_FULL := 0.3
+const RUMBLE_SCRAPE := 0.35
+const RUMBLE_SHIFT := 0.3
+## Both pedals need to be this far down to start a burnout.
+const BURNOUT_PEDAL := 0.5
+## Reverse only goes in below this forward speed, in m/s. Above it the box stays out of gear.
+const REVERSE_ENGAGE_SPEED := 2.0
 ## Reverse tops out at this share of first gear, and never slower than a brisk walk.
 const REVERSE_TOP_FRACTION := 0.38
 const REVERSE_TOP_MIN := 7.0
@@ -57,6 +70,15 @@ var _touch: Node = null
 var _gearbox: Dictionary = {}
 var _gear: int = 0
 var _shift_timer: float = 0.0
+## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
+var _shifter_gear: int = _Controller.POSITION_NONE
+var _rumble := _Rumble.new()
+var _camera_held: bool = false
+var _tapped_up: bool = false
+var _tapped_down: bool = false
+var _tapped_camera: bool = false
+var _shifter_up_held: bool = false
+var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
 var _burnout: float = 0.0
 var _overrev_time: float = 0.0
@@ -101,19 +123,15 @@ func _ready() -> void:
 		_touch = race.get_node_or_null("RaceUI/MobileControls")
 
 
+## The car reads held controls each step, and a quick tap on a slow machine can come and go
+## between two steps. So a key going down is remembered until the next one looks.
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_C:
-			_cam_mode = (_cam_mode + 1) % 4
-			_apply_camera_mode()
-			get_viewport().set_input_as_handled()
-			return
-		if event.keycode == KEY_E:
-			_select_shift(1)
-			get_viewport().set_input_as_handled()
-		elif event.keycode == KEY_Q:
-			_select_shift(-1)
-			get_viewport().set_input_as_handled()
+	if not event is InputEventKey or not event.pressed or event.echo:
+		return
+	var code := int(event.keycode)
+	_tapped_up = _tapped_up or _Controller.keys_for(_Controller.UP).has(code)
+	_tapped_down = _tapped_down or _Controller.keys_for(_Controller.DOWN).has(code)
+	_tapped_camera = _tapped_camera or _Controller.keys_for(_Controller.CAMERA).has(code)
 
 
 func _apply_camera_mode() -> void:
@@ -189,6 +207,8 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> 
 func take_hit(speed_change: float) -> bool:
 	if not _damage.take_hit(speed_change):
 		return false
+	var jolt := clampf(speed_change / _CarDamage.TOTAL_MPS, 0.3, 1.0)
+	_rumble.pulse(jolt * 0.6, jolt)
 	_chase_cam.jolt(speed_change)
 	_damage.update_smoke(_visual.get_node_or_null("CarBody") as Node3D)
 	return true
@@ -305,33 +325,40 @@ func _hold_still() -> void:
 
 
 func _steer_input() -> float:
-	var s := 0.0
-	if Input.is_key_pressed(KEY_LEFT) or Input.is_key_pressed(KEY_A):
-		s += 1.0
-	if Input.is_key_pressed(KEY_RIGHT) or Input.is_key_pressed(KEY_D):
-		s -= 1.0
+	var s := _Controller.amount(_Controller.STEER_LEFT) - _Controller.amount(_Controller.STEER_RIGHT)
 	if _touch != null and _touch.has_method(&"get_steer"):
 		var touch_steer: float = _touch.get_steer()
 		if not is_zero_approx(touch_steer):
 			s = touch_steer
+	if is_zero_approx(s):
+		s = _Controller.steer()
 	return clampf(s, -1.0, 1.0)
 
 
 func _throttle_down() -> bool:
-	if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-		return true
-	return _touch != null and _touch.has_method(&"is_throttle_down") and _touch.is_throttle_down()
+	return _throttle_amount() > 0.0
 
 
 func _brake_down() -> bool:
-	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-		return true
-	return _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down()
+	return _brake_amount() > 0.0
+
+
+## How far down each pedal is, from 0 to 1. Keys and the touch pedals are all or nothing.
+func _throttle_amount() -> float:
+	if _touch != null and _touch.has_method(&"is_throttle_down") and _touch.is_throttle_down():
+		return 1.0
+	return maxf(_Controller.amount(_Controller.THROTTLE), _Controller.pedal(_Controller.THROTTLE))
+
+
+func _brake_amount() -> float:
+	if _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down():
+		return 1.0
+	return maxf(_Controller.amount(_Controller.BRAKE), _Controller.pedal(_Controller.BRAKE))
 
 
 ## Gas and brake together with the car all but stopped, which is how a burnout starts.
 func _burnout_held() -> bool:
-	return _throttle_down() and _brake_down() and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
+	return _throttle_amount() >= BURNOUT_PEDAL and _brake_amount() >= BURNOUT_PEDAL and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
 
 
 ## Only for show so far: the wheels spin, the engine revs, and the tires smoke and mark the
@@ -359,7 +386,7 @@ func _update_burnout(delta: float) -> void:
 
 
 func _handbrake_down() -> bool:
-	if Input.is_key_pressed(KEY_SPACE):
+	if _Controller.action_down(_Controller.HANDBRAKE):
 		return true
 	return _touch != null and _touch.has_method(&"is_handbrake_down") and _touch.is_handbrake_down()
 
@@ -376,6 +403,7 @@ func begin_park(slot: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
+	_poll_camera()
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
@@ -386,6 +414,13 @@ func _physics_process(delta: float) -> void:
 		_pose_body(delta)
 		return
 	_poll_touch_shifts()
+	_poll_shifter()
+	var on_wheel := _Controller.is_wheel_steering()
+	_dynamics.direct_steer = on_wheel
+	_arcade.direct_steer = on_wheel
+	# Runs during the countdown too, so a gear picked on the start line is in by the green light.
+	if _shift_timer > 0.0:
+		_shift_timer = maxf(0.0, _shift_timer - delta)
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
 		_dynamics.sample_surfaces(_race_track(), global_transform)
@@ -394,6 +429,7 @@ func _physics_process(delta: float) -> void:
 		_physics_simulation(delta)
 		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_update_burnout(delta)
+	_update_rumble(delta)
 	_stick_to_road()
 	_pose_body(delta)
 
@@ -429,8 +465,6 @@ func _physics_simulation(delta: float) -> void:
 	var throttle := _throttle_down() and not _burnout_held()
 	var brake := _brake_down()
 	var steer := _steer_input()
-	if _shift_timer > 0.0:
-		_shift_timer = maxf(0.0, _shift_timer - delta)
 	if _engine_blown:
 		throttle = false
 	elif _is_automatic():
@@ -451,9 +485,9 @@ func _physics_simulation(delta: float) -> void:
 	var drive := 0.0
 	var brake_input := 0.0
 	if throttle and _shift_timer <= 0.0 and not handbrake:
-		drive = _requested_drive_force()
+		drive = _requested_drive_force() * _throttle_amount()
 	elif brake:
-		brake_input = 1.0
+		brake_input = _brake_amount()
 	_dynamics.sample_surfaces(track, global_transform)
 	_dynamics.step(delta, steer, drive, brake_input)
 	_sync_motion_state()
@@ -488,8 +522,6 @@ func _physics_arcade(delta: float) -> void:
 	var throttle := _throttle_down() and not _burnout_held()
 	var brake := _brake_down()
 	var steer := _steer_input()
-	if _shift_timer > 0.0:
-		_shift_timer = maxf(0.0, _shift_timer - delta)
 	if _engine_blown:
 		throttle = false
 	elif _is_automatic():
@@ -519,7 +551,9 @@ func _physics_arcade(delta: float) -> void:
 		_signed_gear_accel(),
 		limits.y,
 		_car_center,
-		limits.x
+		limits.x,
+		_throttle_amount(),
+		_brake_amount()
 	)
 	var before := velocity
 	move_and_slide()
@@ -615,43 +649,36 @@ func _reverse_top() -> float:
 	return maxf(_gear_top_mps(0) * REVERSE_TOP_FRACTION, REVERSE_TOP_MIN)
 
 
-## Q and E, and the on-screen paddles. Drive gears stay where they are on an automatic:
-## one step down leaves drive for neutral, and the next selects reverse.
+## The keys and gamepad buttons for shifting, the on-screen paddles, and a sequential shifter. A step down from first, or from
+## drive on an automatic, is reverse once the car has stopped, and neutral while it still rolls.
 func _select_shift(direction: int) -> void:
 	if _engine_blown or _shift_timer > 0.0 or direction == 0:
 		return
-	var next := _gear
+	_set_gear(_gear_below() if direction < 0 else _gear_above())
+
+
+func _gear_below() -> int:
+	if _gear > 0 and not _is_automatic():
+		return _gear - 1
+	return GEAR_REVERSE if _can_engage_reverse() else GEAR_NEUTRAL
+
+
+func _gear_above() -> int:
+	if _gear < 0:
+		return 0
 	if _is_automatic():
-		if direction < 0:
-			if _gear >= 0:
-				next = GEAR_NEUTRAL
-			elif _gear == GEAR_NEUTRAL:
-				next = GEAR_REVERSE
-			else:
-				return
-		elif _gear == GEAR_REVERSE:
-			next = GEAR_NEUTRAL
-		elif _gear == GEAR_NEUTRAL:
-			next = 0
-		else:
-			return
-	elif direction < 0:
-		if _gear > 0:
-			next = _gear - 1
-		elif _gear == 0:
-			next = GEAR_NEUTRAL
-		elif _gear == GEAR_NEUTRAL:
-			next = GEAR_REVERSE
-		else:
-			return
-	elif _gear == GEAR_REVERSE:
-		next = GEAR_NEUTRAL
-	elif _gear == GEAR_NEUTRAL:
-		next = 0
-	elif _gear < _gear_count() - 1:
-		next = _gear + 1
-	else:
+		return _gear
+	return mini(_gear + 1, _gear_count() - 1)
+
+
+func _can_engage_reverse() -> bool:
+	return forward_speed <= REVERSE_ENGAGE_SPEED
+
+
+func _set_gear(next: int) -> void:
+	if next == _gear:
 		return
+	_rumble.pulse(RUMBLE_SHIFT, 0.0)
 	_gear = next
 	_shift_timer = float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
@@ -684,6 +711,32 @@ func _auto_shift(throttle: bool, brake: bool) -> void:
 		_request_shift(-1)
 
 
+## What the car is doing, felt through a gamepad: the tires spinning up, rough ground under it,
+## a slide, and the engine at its limit. Hits, scrapes, and shifts are jolts of their own.
+func _update_rumble(delta: float) -> void:
+	var moving := clampf(absf(forward_speed) / RUMBLE_FULL_SPEED, 0.0, 1.0)
+	var wheels := _dynamics.wheels()
+	var rough := 0.0
+	var grip_used := 0.0
+	for wheel: _VehicleDynamics.Wheel in wheels:
+		rough = maxf(rough, wheel.surface_blend)
+		grip_used = maxf(grip_used, wheel.grip_utilization)
+	if GameState.arcade_drive:
+		grip_used = maxf(_arcade.front_grip_use, _arcade.rear_grip_use)
+	var slide := clampf((grip_used - RUMBLE_SLIDE_START) / RUMBLE_SLIDE_FULL, 0.0, 1.0) * moving
+	var at_limit := 0.0
+	if not _engine_blown and not _is_automatic() and get_rpm() >= RPM_REDLINE:
+		at_limit = 0.4
+	var ground := rough * clampf(moving * 4.0, 0.0, 1.0)
+	var weak := maxf(maxf(_burnout * 0.5, ground * (0.2 + 0.35 * moving)), maxf(slide * 0.35, at_limit))
+	var strong := maxf(_burnout * 0.6, ground * 0.3 * moving)
+	_rumble.update(delta, weak, strong)
+
+
+func _exit_tree() -> void:
+	_rumble.stop()
+
+
 func _update_overrev(delta: float) -> void:
 	if _engine_blown or _is_automatic():
 		_overrev_time = 0.0
@@ -700,6 +753,46 @@ func _update_engine_sound(throttle: bool) -> void:
 	if _engine_sound == null or not _engine_sound.has_method(&"set_state"):
 		return
 	_engine_sound.set_state(get_rpm(), 1.0 if throttle else 0.0, _engine_blown, _shift_timer > 0.0)
+
+
+func _poll_camera() -> void:
+	var held := _Controller.action_down(_Controller.CAMERA)
+	if (held and not _camera_held) or _tapped_camera:
+		_cam_mode = (_cam_mode + 1) % 4
+		_apply_camera_mode()
+	_camera_held = held
+	_tapped_camera = false
+
+
+func _poll_shifter() -> void:
+	var up := _Controller.action_down(_Controller.UP)
+	if (up and not _shifter_up_held) or _tapped_up:
+		_select_shift(1)
+	_shifter_up_held = up
+	_tapped_up = false
+	var down := _Controller.action_down(_Controller.DOWN)
+	if (down and not _shifter_down_held) or _tapped_down:
+		_select_shift(-1)
+	_shifter_down_held = down
+	_tapped_down = false
+
+	var wanted := _shifter_wanted_gear()
+	if wanted == _shifter_gear or _engine_blown or _shift_timer > 0.0:
+		return
+	_shifter_gear = wanted
+	if wanted != _Controller.POSITION_NONE:
+		_set_gear(wanted)
+
+
+## Any forward position is drive on an automatic. A car with fewer gears than the shifter has
+## its top gear in the rest. Reverse waits in neutral until the car has slowed enough for it.
+func _shifter_wanted_gear() -> int:
+	var lever := _Controller.position()
+	if lever == _Controller.POSITION_REVERSE:
+		return GEAR_REVERSE if _can_engage_reverse() else GEAR_NEUTRAL
+	if lever < 0:
+		return lever
+	return 0 if _is_automatic() else mini(lever, _gear_count() - 1)
 
 
 func _poll_touch_shifts() -> void:
@@ -751,6 +844,7 @@ func _scrape_barrier(before: Vector3, delta: float) -> bool:
 	if hit.is_empty():
 		return false
 	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
+	_rumble.pulse(RUMBLE_SCRAPE, RUMBLE_SCRAPE)
 	var after: Vector3 = hit["velocity"]
 	if GameState.arcade_drive:
 		_arcade.apply_planar_velocity(self, after, _car_center)
