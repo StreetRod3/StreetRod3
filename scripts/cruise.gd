@@ -1,15 +1,29 @@
 extends Node3D
 
-## A short automatic drive between two places on the city map. It follows the route, and
-## plans its speed for the corners. The car rides on its own springs and shocks: the body
-## leans and dives over wheels that roll and steer, and the camera hangs back.
+## A short automatic drive between two places on the city map, or a free drive around it.
+## The automatic drive follows the route and plans its speed for the corners. The car rides
+## on its own springs and shocks: the body leans and dives over wheels that roll and steer,
+## and the camera hangs back. Free roam uses the same city and the race car's own driving.
+## Other cars drive the streets in a lane and turn off at random.
 
 const CITY_MAP := "res://assets/maps/city.trk"
+const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
+const _PlayerCar := preload("res://scripts/player_race_car.gd")
+const _RpmMeter := preload("res://scripts/rpm_meter.gd")
+const _TouchControls := preload("res://scripts/race_touch_controls.gd")
+const _StreetLamp := preload("res://scripts/street_lamp.gd")
+const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
+## Spawn at least this far from the place just left, toward the street, in meters.
+const _ROAM_CLEAR := 8.5
+## A stop in front of a place. Faster than this is still driving past.
+const _ROAM_STOP := 1.0
+## The roam car's body origin sits this far behind the middle of the car.
+const _ROAM_NOSE := 1.9
 
 const _BODY_Y := 0.35
 const _LOOK_AHEAD := 6.0
@@ -43,15 +57,17 @@ const _CURB_FROM_EDGE := 0.28
 const _CURB_HALF := 0.12
 const _GROUND_COLOR := Color(0.2, 0.28, 0.18, 1)
 const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
-const _LAMP_POLE := Color(0.3, 0.31, 0.33)
-const _LAMP_GLOW := Color(1.0, 0.86, 0.5)
 const _BUSH_DARK := Color(0.14, 0.32, 0.13)
 const _BUSH_MID := Color(0.24, 0.42, 0.17)
 ## Past the curb, in meters. The lamp head reaches back over the gutter.
 const _LAMP_SETBACK := 0.95
-const _LAMP_REACH := 1.2
+## The pole's base must sit at least this far off every paved edge.
+const _LAMP_CLEAR := 0.4
 const _LAMP_EVERY := 18.0
 const _BUSH_EVERY := 6.4
+## The street drag's trees, on the grass this far past the curb, and about this far apart.
+const _TREE_SETBACK := 5.5
+const _TREE_EVERY := 36.0
 const _FRAME_COLOR := Color(0.15, 0.14, 0.13)
 const _STOOP_COLOR := Color(0.58, 0.56, 0.52)
 const _DOOR_COLORS: Array[Color] = [
@@ -105,10 +121,30 @@ var _garage_left: Node3D
 var _garage_right: Node3D
 var _leaving_garage := false
 var _finished := false
+var _roaming := false
+var _roam_car: CharacterBody3D
+var _roam_home := ""
+var _roam_home_clear := false
+var _roam_done := false
+var _wrecked := false
+var _roam_doors_shut := false
+## Each place's front apron: id, origin, facing, right, half_width, depth.
+var _roam_places: Array[Dictionary] = []
+var _hud_speed: Label
+var _hud_gear: Label
+var _hud_damage: Label
+var _hud_hint: Label
+var _rpm_meter: Control
+var _touch: Node
 
 
 func _ready() -> void:
 	GameState.update_music()
+	var from_roam := GameState.roam_from_poi
+	if not from_roam.is_empty():
+		GameState.roam_from_poi = ""
+		_start_roam(from_roam)
+		return
 	var destination := GameState.cruise_scene
 	var from_poi := GameState.cruise_from_poi
 	var to_poi := GameState.cruise_to_poi
@@ -147,10 +183,16 @@ func _ready() -> void:
 		GameState.set_music_dimmed(true)
 	if _leaving_garage:
 		_set_garage_doors_open()
+	_start_traffic(track, _car.global_position)
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if _finished or not event is InputEventKey:
+	if _wrecked:
+		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
+			get_viewport().set_input_as_handled()
+			_leave_after_wreck()
+		return
+	if _roaming or _finished or not event is InputEventKey:
 		return
 	var key := event as InputEventKey
 	if not key.pressed or key.echo or key.keycode != KEY_SPACE:
@@ -160,6 +202,17 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(delta: float) -> void:
+	_update_hud()
+	if _roaming:
+		_fade = maxf(_fade - delta / _FADE_IN_S, 0.0)
+		_paint_fade()
+		if _fade <= 0.0 and _leaving_garage and not _roam_doors_shut:
+			_roam_doors_shut = true
+			_close_garage_doors()
+		if _check_roam_wreck():
+			return
+		_check_roam_arrival()
+		return
 	if _phase == 0:
 		_fade = maxf(_fade - delta / _FADE_IN_S, 0.0)
 		_paint_fade()
@@ -220,6 +273,401 @@ func _ride(delta: float) -> void:
 	_chase_cam.place(_camera, _car, _pivot.position, _cam_rest, velocity, delta)
 
 
+func _start_roam(from_poi: String) -> void:
+	_roaming = true
+	_roam_home = from_poi
+	_leaving_garage = from_poi == GameState.POI_GARAGE
+	_build_world()
+	_build_fade()
+	var track := TrackFile.load_path(CITY_MAP)
+	var errors: Array = track.get("errors", [])
+	if not errors.is_empty():
+		for err: String in errors:
+			push_error(str(err))
+		_enter_roam_place(GameState.POI_GARAGE)
+		return
+	_build_city(track)
+	if _leaving_garage:
+		_set_garage_doors_open()
+	_build_hud()
+	_build_roam_car(track, from_poi)
+	if _touch != null and _roam_car != null:
+		_roam_car.set(&"_touch", _touch)
+	if _roam_car != null:
+		_start_traffic(track, _roam_car.global_position)
+	if GameState.engine_runs():
+		GameState.set_music_dimmed(true)
+
+
+func _start_traffic(track: Dictionary, avoid: Vector3) -> void:
+	var files: Array[String] = []
+	for car: Dictionary in GameState.USED_CARS:
+		var path := str(car.get("car_file", ""))
+		if not path.is_empty():
+			files.append(path)
+	if files.is_empty():
+		files.append("res://assets/cars/chevy-styleline-1950.car")
+	var traffic := _CruiseTraffic.new()
+	traffic.name = "Traffic"
+	add_child(traffic)
+	traffic.setup(track, avoid, _floor, files)
+
+
+## The apron in front of a place. Local -Z of the building faces the street.
+func _note_roam_front(place_id: String, root: Node3D) -> void:
+	var facing := -root.global_transform.basis.z
+	facing.y = 0.0
+	if facing.length_squared() < 0.0001:
+		facing = Vector3(0.0, 0.0, 1.0)
+	else:
+		facing = facing.normalized()
+	var right := root.global_transform.basis.x
+	right.y = 0.0
+	if right.length_squared() < 0.0001:
+		right = Vector3(1.0, 0.0, 0.0)
+	else:
+		right = right.normalized()
+	var origin := root.global_position
+	origin.y = 0.0
+	_roam_places.append({
+		"id": place_id,
+		"origin": origin,
+		"facing": facing,
+		"right": right,
+		"half_width": _front_half_width(place_id),
+		"depth": _front_depth(place_id),
+	})
+
+
+func _front_half_width(place_id: String) -> float:
+	match place_id:
+		GameState.POI_GARAGE:
+			return 6.2
+		GameState.POI_DRIVE_IN:
+			return 8.8
+		GameState.POI_GAS_STATION:
+			return 5.4
+		_:
+			return 6.5
+
+
+func _front_depth(place_id: String) -> float:
+	match place_id:
+		GameState.POI_GARAGE:
+			return 8.0
+		GameState.POI_DRIVE_IN:
+			return 6.3
+		GameState.POI_GAS_STATION:
+			return 5.6
+		_:
+			return 6.5
+
+
+func _build_roam_car(track: Dictionary, from_poi: String) -> void:
+	var spawn := _roam_spawn(track, from_poi)
+	var body := CharacterBody3D.new()
+	body.name = "PlayerCar"
+	body.set_script(_PlayerCar)
+	body.collision_layer = 2
+	body.collision_mask = 1
+	var pos: Vector3 = spawn["pos"]
+	body.position = pos
+	body.rotation.y = float(spawn["yaw"])
+	var pivot := _CAR_SCENE.instantiate() as Node3D
+	pivot.name = "CarPivot"
+	pivot.position = Vector3(0.0, 0.0, 1.9)
+	body.add_child(pivot)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(1.6, 0.5, 3.8)
+	shape.shape = box
+	shape.position = Vector3(0.0, 0.0, 1.9)
+	body.add_child(shape)
+	var sound := AudioStreamPlayer.new()
+	sound.name = "EngineSound"
+	sound.set_script(_EngineSound)
+	body.add_child(sound)
+	var cam := Camera3D.new()
+	cam.name = "RaceCamera"
+	cam.position = Vector3(0.0, 2.2, -8.5)
+	cam.rotation_degrees = Vector3(-14.0, 180.0, 0.0)
+	cam.current = true
+	body.add_child(cam)
+	var dyn := Node.new()
+	dyn.name = "VehicleDynamics"
+	dyn.set_script(_VehicleDynamics)
+	body.add_child(dyn)
+	add_child(body)
+	_roam_car = body
+	if _floor != null and pivot.has_method(&"align_wheels_to_floor"):
+		pivot.call(&"align_wheels_to_floor", _floor)
+
+
+## On the driveway, facing the street, and clear of the apron that opens the place just left.
+func _roam_spawn(track: Dictionary, from_poi: String) -> Dictionary:
+	var pois: Dictionary = track["pois"]
+	var poi: Dictionary = pois.get(from_poi, {})
+	if poi.is_empty():
+		var order: Array = track["poi_order"]
+		poi = pois[str(order[0])]
+	var stop := TrackFile.world_position(poi)
+	var join := TrackFile.world_position(track["nodes"][int(poi["at"])])
+	var to_street := join - stop
+	to_street.y = 0.0
+	var gap := to_street.length()
+	if gap < 0.5:
+		to_street = Vector3(0.0, 0.0, 1.0)
+		gap = 1.0
+	else:
+		to_street /= gap
+	var along := clampf(gap * 0.35, _ROAM_CLEAR, maxf(gap - 4.0, _ROAM_CLEAR))
+	var pos := stop + to_street * along
+	pos.y = 0.35
+	return {"pos": pos, "yaw": atan2(to_street.x, to_street.z)}
+
+
+func _check_roam_arrival() -> void:
+	if _roam_done or _roam_car == null:
+		return
+	var here := _roam_center()
+	if not _roam_home_clear and not _parked_at(_roam_home, here):
+		_roam_home_clear = true
+	if absf(float(_roam_car.call(&"get_forward_speed"))) > _ROAM_STOP:
+		return
+	var place := _roam_place_at(here)
+	if place.is_empty() or (place == _roam_home and not _roam_home_clear):
+		return
+	_enter_roam_place(place)
+
+
+func _roam_center() -> Vector3:
+	var center := _roam_car.global_position + _roam_car.global_transform.basis.z * _ROAM_NOSE
+	center.y = 0.0
+	return center
+
+
+func _roam_place_at(here: Vector3) -> String:
+	var best := ""
+	var best_ahead := INF
+	for spot: Dictionary in _roam_places:
+		if not _point_in_front(spot, here):
+			continue
+		if _scene_for_roam(str(spot["id"])).is_empty():
+			continue
+		var origin: Vector3 = spot["origin"]
+		var facing: Vector3 = spot["facing"]
+		var ahead := Vector3(here.x - origin.x, 0.0, here.z - origin.z).dot(facing)
+		if ahead >= best_ahead:
+			continue
+		best_ahead = ahead
+		best = str(spot["id"])
+	return best
+
+
+func _parked_at(place_id: String, here: Vector3) -> bool:
+	for spot: Dictionary in _roam_places:
+		if str(spot["id"]) != place_id:
+			continue
+		return _point_in_front(spot, here)
+	return false
+
+
+## `ahead` runs from the front wall toward the street. The wall itself does not count.
+func _point_in_front(spot: Dictionary, here: Vector3) -> bool:
+	var origin: Vector3 = spot["origin"]
+	var facing: Vector3 = spot["facing"]
+	var right: Vector3 = spot["right"]
+	var rel := Vector3(here.x - origin.x, 0.0, here.z - origin.z)
+	var side := rel.dot(right)
+	var ahead := rel.dot(facing)
+	if absf(side) > float(spot["half_width"]):
+		return false
+	return ahead >= 0.4 and ahead <= float(spot["depth"])
+
+
+func _enter_roam_place(place_id: String) -> void:
+	var scene := _scene_for_roam(place_id)
+	if scene.is_empty() or _roam_done:
+		return
+	_roam_done = true
+	set_process(false)
+	if _roam_car != null:
+		_roam_car.set_physics_process(false)
+	GameState.set_music_dimmed(false)
+	GameState.roam_from_poi = ""
+	if place_id == GameState.POI_GARAGE:
+		GameState.drive_into_garage = true
+	GameState.current_scene_path = scene
+	get_tree().change_scene_to_file(scene)
+
+
+func _scene_for_roam(place_id: String) -> String:
+	if place_id == GameState.POI_GARAGE:
+		return GameState.SCENE_GARAGE
+	if place_id == GameState.POI_DRIVE_IN:
+		return GameState.SCENE_DRIVE_IN
+	if place_id == GameState.POI_GAS_STATION:
+		return GameState.SCENE_GAS_STATION
+	return ""
+
+
+## The race cluster while the player is driving. A scripted cruise stays clear.
+func _build_hud() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "CruiseUI"
+	layer.layer = 10
+	add_child(layer)
+	var panel := PanelContainer.new()
+	panel.name = "Panel"
+	panel.anchor_left = 1.0
+	panel.anchor_right = 1.0
+	panel.offset_left = -332.0
+	panel.offset_top = 12.0
+	panel.offset_right = -12.0
+	panel.offset_bottom = 300.0
+	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	layer.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.name = "Margin"
+	margin.add_theme_constant_override(&"margin_left", 12)
+	margin.add_theme_constant_override(&"margin_top", 12)
+	margin.add_theme_constant_override(&"margin_right", 12)
+	margin.add_theme_constant_override(&"margin_bottom", 12)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.name = "VBox"
+	box.add_theme_constant_override(&"separation", 6)
+	margin.add_child(box)
+	_hud_speed = _hud_line("Speed: 0 km/h")
+	_hud_speed.name = "SpeedLabel"
+	_hud_gear = _hud_line("Gear: —")
+	_hud_gear.name = "GearLabel"
+	_hud_damage = _hud_line("Damage: 0%")
+	_hud_damage.name = "DamageLabel"
+	_hud_hint = _hud_line(_drive_hint())
+	_hud_hint.name = "HintLabel"
+	_hud_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_hud_hint.custom_minimum_size = Vector2(280.0, 0.0)
+	box.add_child(_hud_speed)
+	box.add_child(_hud_gear)
+	box.add_child(_hud_damage)
+	box.add_child(_hud_hint)
+	var meter := Control.new()
+	meter.name = "RpmMeter"
+	meter.set_script(_RpmMeter)
+	meter.anchor_left = 0.5
+	meter.anchor_right = 0.5
+	meter.anchor_top = 1.0
+	meter.anchor_bottom = 1.0
+	meter.offset_left = -150.0
+	meter.offset_top = -196.0
+	meter.offset_right = 150.0
+	meter.offset_bottom = -16.0
+	meter.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	meter.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(meter)
+	_rpm_meter = meter
+	var touch := Control.new()
+	touch.name = "MobileControls"
+	touch.set_script(_TouchControls)
+	layer.add_child(touch)
+	_touch = touch
+
+
+func _hud_line(text: String) -> Label:
+	var label := Label.new()
+	label.text = text
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return label
+
+
+func _drive_hint() -> String:
+	var box := GameState.get_equipped_gearbox()
+	if bool(box.get("automatic", false)):
+		return "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, neutral, reverse · C: camera · W+S: burnout\nStop in front of a place to go in"
+	return "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera · W+S: burnout\nStop in front of a place to go in"
+
+
+func _update_hud() -> void:
+	if _hud_speed == null:
+		return
+	if _roaming and _roam_car != null and _roam_car.has_method(&"get_forward_speed"):
+		var speed := absf(float(_roam_car.call(&"get_forward_speed")))
+		_hud_speed.text = "Speed: %s" % GameState.speed_text(speed * 3.6)
+		_hud_gear.text = "Gear: %s" % str(_roam_car.call(&"get_gear_label"))
+		_hud_damage.text = "Damage: %d%%" % roundi(float(_roam_car.call(&"damage_amount")) * 100.0)
+		if _rpm_meter != null and _rpm_meter.has_method(&"set_reading"):
+			_rpm_meter.call(
+				&"set_reading",
+				float(_roam_car.call(&"get_rpm")),
+				float(_roam_car.call(&"get_rpm_shift_start")),
+				float(_roam_car.call(&"get_rpm_redline")),
+				float(_roam_car.call(&"get_rpm_critical")),
+				bool(_roam_car.call(&"is_engine_blown"))
+			)
+		return
+
+
+func _check_roam_wreck() -> bool:
+	if _wrecked or _roam_done or _roam_car == null:
+		return _wrecked
+	if not _roam_car.has_method(&"is_wrecked") or not bool(_roam_car.call(&"is_wrecked")):
+		return false
+	_wrecked = true
+	_roam_done = true
+	_roam_car.set_physics_process(false)
+	var engine := _roam_car.get_node_or_null("EngineSound") as AudioStreamPlayer
+	if engine != null:
+		engine.stop()
+	GameState.set_music_dimmed(false)
+	GameState.wreck_active_car()
+	_fade = 1.0
+	_paint_fade()
+	var layer := CanvasLayer.new()
+	layer.layer = 30
+	add_child(layer)
+	var label := Label.new()
+	label.name = "WreckLabel"
+	label.text = "Lucky you weren't killed, 'cause the car is totaled."
+	label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78))
+	label.add_theme_font_size_override(&"font_size", 28)
+	layer.add_child(label)
+	return true
+
+
+func _leave_after_wreck() -> void:
+	GameState.drive_into_garage = false
+	GameState.current_scene_path = GameState.SCENE_GARAGE
+	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+
+
+func _add_solid(parent: Node3D, size: Vector3, pos: Vector3, barrier := false) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	if barrier:
+		body.set_meta(&"track_obstacle", true)
+	body.position = pos
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	parent.add_child(body)
+
+
+func _add_solid_world(pos: Vector3, size: Vector3) -> void:
+	var holder := Node3D.new()
+	holder.name = "GroundBody"
+	add_child(holder)
+	_add_solid(holder, size, pos)
+
+
 func _build_world() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
@@ -247,6 +695,9 @@ func _build_world() -> void:
 func _build_city(track: Dictionary) -> void:
 	var ground := _build_ground(track)
 	add_child(ground)
+	var ground_box := ground.mesh as BoxMesh
+	if ground_box != null:
+		_add_solid_world(ground.position, ground_box.size)
 	var road_mat := StandardMaterial3D.new()
 	road_mat.albedo_color = _ROAD_COLOR
 	road_mat.roughness = 0.92
@@ -394,22 +845,21 @@ func _add_street(segments: Array[Dictionary], links: Dictionary, a_id: int, b_id
 	_note_link(links, b_id, -dir, half)
 
 
-## Poles just outside the curb, and shrubs on the grass behind them.
+## Poles just outside the curb, shrubs on the grass, and the street drag's trees behind those.
 func _build_streetscape(track: Dictionary) -> void:
 	var blocks: Array = track.get("buildings", [])
 	var keep_out: Array[Vector3] = []
 	for pid: String in track["poi_order"]:
 		keep_out.append(TrackFile.world_position(track["pois"][pid]))
-	var poles: Array[Transform3D] = []
-	var bases: Array[Transform3D] = []
-	var arms: Array[Transform3D] = []
-	var housings: Array[Transform3D] = []
-	var lenses: Array[Transform3D] = []
-	var glows: Array[Vector3] = []
+	var lamps: Array[Dictionary] = []
 	var dark_bush: Array[Transform3D] = []
 	var mid_bush: Array[Transform3D] = []
+	var trees: Array[Vector2] = []
+	var big_trees: Array[Vector2] = []
+	var bare_trees: Array[Vector2] = []
 	var lamp_cells := {}
 	var bush_cells := {}
+	var tree_cells := {}
 	for segment in _streets:
 		if int(segment["a_node"]) < 0:
 			continue
@@ -441,15 +891,9 @@ func _build_streetscape(track: Dictionary) -> void:
 					continue
 				if _lot_blocked(Vector2(pos.x, pos.z), 0.5, blocks, keep_out):
 					continue
-				var toward := -outward
-				var stand := _basis_along(toward)
-				poles.append(Transform3D(Basis.IDENTITY, pos + Vector3(0.0, 2.35, 0.0)))
-				bases.append(Transform3D(Basis.IDENTITY, pos + Vector3(0.0, 0.04, 0.0)))
-				arms.append(Transform3D(stand, pos + Vector3(0.0, 4.62, 0.0) + toward * 0.52))
-				var head := pos + Vector3(0.0, 4.5, 0.0) + toward * _LAMP_REACH
-				housings.append(Transform3D(stand, head))
-				lenses.append(Transform3D(stand, head + Vector3(0.0, -0.07, 0.0)))
-				glows.append(head + Vector3(0.0, -0.15, 0.0))
+				if _on_pavement(Vector2(pos.x, pos.z), _LAMP_CLEAR):
+					continue
+				lamps.append({"at": pos, "toward": -outward})
 		var bush_count := maxi(int(floor(usable / _BUSH_EVERY)) + 1, 1)
 		var bush_step := usable / float(bush_count)
 		for i in bush_count:
@@ -469,47 +913,45 @@ func _build_streetscape(track: Dictionary) -> void:
 					var radius := 0.58 + float(n % 4) * 0.1
 					if _lot_blocked(Vector2(pos.x, pos.z), radius + 0.2, blocks, keep_out):
 						continue
+					if _on_pavement(Vector2(pos.x, pos.z), radius):
+						continue
 					var pile: Array[Transform3D] = dark_bush if n % 2 == 0 else mid_bush
-					pile.append(_bush_transform(pos, radius, 0.0))
-					pile.append(_bush_transform(pos + outward * 0.22 + dir * 0.28, radius * 0.72, 0.05))
-					pile.append(_bush_transform(pos - dir * 0.16, radius * 0.55, radius * 0.35))
+					_place_bush(pile, pos, radius, 0.0)
+					_place_bush(pile, pos + outward * 0.22 + dir * 0.28, radius * 0.72, 0.05)
+					_place_bush(pile, pos - dir * 0.16, radius * 0.55, radius * 0.35)
+		if usable < 16.0:
+			continue
+		var tree_count := maxi(int(floor(usable / _TREE_EVERY)), 1)
+		var tree_step := usable / float(tree_count)
+		for i in tree_count:
+			var center := a + dir * (margin + tree_step * (float(i) + 0.5))
+			for sign_i in 2:
+				var n := _facade_hash(int(center.x * 2.0) + sign_i, int(center.z * 2.0), i, sign_i)
+				if n % 3 == 0:
+					continue
+				var sign := -1.0 if sign_i == 0 else 1.0
+				var pos := center + side * sign * (half + _TREE_SETBACK)
+				pos.y = 0.0
+				if not _claim_cell(tree_cells, pos, 8.0):
+					continue
+				if _lot_blocked(Vector2(pos.x, pos.z), 3.6, blocks, keep_out, 20.0):
+					continue
+				var spot := Vector2(pos.x, pos.z)
+				var kind := n % 5
+				if kind == 0:
+					bare_trees.append(spot)
+				elif kind == 1:
+					big_trees.append(spot)
+				else:
+					trees.append(spot)
 	var root := Node3D.new()
 	root.name = "Streetscape"
 	add_child(root)
-	var pole_mesh := CylinderMesh.new()
-	pole_mesh.top_radius = 0.065
-	pole_mesh.bottom_radius = 0.08
-	pole_mesh.height = 4.7
-	pole_mesh.radial_segments = 8
-	_add_multimesh(root, pole_mesh, _facade_material(_LAMP_POLE, 0.42, 0.55), poles, false)
-	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(0.36, 0.08, 0.36)
-	_add_multimesh(root, base_mesh, _facade_material(Color(0.22, 0.22, 0.24), 0.55, 0.35), bases, false)
-	var arm_mesh := BoxMesh.new()
-	arm_mesh.size = Vector3(_LAMP_REACH, 0.055, 0.055)
-	_add_multimesh(root, arm_mesh, _facade_material(_LAMP_POLE, 0.4, 0.5), arms, false)
-	var housing_mesh := BoxMesh.new()
-	housing_mesh.size = Vector3(0.4, 0.08, 0.22)
-	_add_multimesh(root, housing_mesh, _facade_material(Color(0.16, 0.16, 0.18), 0.45, 0.4), housings, false)
-	var lens_mesh := BoxMesh.new()
-	lens_mesh.size = Vector3(0.26, 0.035, 0.14)
-	var lens_mat := _facade_material(_LAMP_GLOW, 0.28, 0.0)
-	lens_mat.emission_enabled = true
-	lens_mat.emission = _LAMP_GLOW
-	lens_mat.emission_energy_multiplier = 1.6
-	_add_multimesh(root, lens_mesh, lens_mat, lenses, false)
-	for glow: Vector3 in glows:
-		var light := OmniLight3D.new()
-		light.position = glow
-		light.light_color = _LAMP_GLOW
-		light.light_energy = 0.28
-		light.omni_range = 8.0
-		light.omni_attenuation = 1.6
-		light.shadow_enabled = false
-		light.distance_fade_enabled = true
-		light.distance_fade_begin = 26.0
-		light.distance_fade_length = 16.0
-		root.add_child(light)
+	for spec: Dictionary in lamps:
+		var lamp := Node3D.new()
+		lamp.set_script(_StreetLamp)
+		root.add_child(lamp)
+		lamp.call(&"setup", spec["at"], spec["toward"])
 	var shrub := SphereMesh.new()
 	shrub.radius = 1.0
 	shrub.height = 2.0
@@ -517,15 +959,44 @@ func _build_streetscape(track: Dictionary) -> void:
 	shrub.rings = 5
 	_add_multimesh(root, shrub, _facade_material(_BUSH_DARK, 0.92, 0.0), dark_bush, false)
 	_add_multimesh(root, shrub, _facade_material(_BUSH_MID, 0.9, 0.0), mid_bush, false)
+	_StreetScenery.add_flat_trees(root, trees, big_trees, bare_trees)
+	_add_tree_barriers(root, trees, 0.22, 5.5)
+	_add_tree_barriers(root, big_trees, 0.34, 7.5)
+	_add_tree_barriers(root, bare_trees, 0.18, 6.5)
 
 
-func _basis_along(dir: Vector3) -> Basis:
-	var x := Vector3(dir.x, 0.0, dir.z)
-	if x.length_squared() < 0.001:
-		return Basis.IDENTITY
-	x = x.normalized()
-	var z := x.cross(Vector3.UP).normalized()
-	return Basis(x, Vector3.UP, z)
+## Trunks only. A tree does not get out of the way, and a hard hit wrecks the car.
+func _add_tree_barriers(parent: Node3D, spots: Array[Vector2], radius: float, height: float) -> void:
+	for spot: Vector2 in spots:
+		var body := StaticBody3D.new()
+		body.collision_layer = 1
+		body.collision_mask = 0
+		body.set_meta(&"track_obstacle", true)
+		body.position = Vector3(spot.x, height * 0.5 - 0.15, spot.y)
+		var shape := CollisionShape3D.new()
+		var trunk := CylinderShape3D.new()
+		trunk.radius = radius
+		trunk.height = height
+		shape.shape = trunk
+		body.add_child(shape)
+		parent.add_child(body)
+
+
+func _place_bush(pile: Array[Transform3D], pos: Vector3, radius: float, lift: float) -> void:
+	if _on_pavement(Vector2(pos.x, pos.z), radius):
+		return
+	pile.append(_bush_transform(pos, radius, lift))
+
+
+## A disc overlaps a paved street or a driveway.
+func _on_pavement(point: Vector2, clearance: float) -> bool:
+	for segment: Dictionary in _streets:
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		var gap := _gap_to_segment(point, Vector2(a.x, a.z), Vector2(b.x, b.z))
+		if gap < float(segment["half"]) + clearance:
+			return true
+	return false
 
 
 func _bush_transform(pos: Vector3, radius: float, lift: float) -> Transform3D:
@@ -541,9 +1012,9 @@ func _claim_cell(taken: Dictionary, pos: Vector3, cell: float) -> bool:
 	return true
 
 
-func _lot_blocked(point: Vector2, pad: float, blocks: Array, keep_out: Array[Vector3]) -> bool:
+func _lot_blocked(point: Vector2, pad: float, blocks: Array, keep_out: Array[Vector3], place_reach: float = 12.0) -> bool:
 	for spot: Vector3 in keep_out:
-		if Vector2(spot.x, spot.z).distance_to(point) < 12.0:
+		if Vector2(spot.x, spot.z).distance_to(point) < place_reach:
 			return true
 	for raw: Dictionary in blocks:
 		var hx := float(raw["w"]) * 0.5 + pad
@@ -673,6 +1144,7 @@ func _build_places(track: Dictionary) -> void:
 			root.position = stop + away * 4.0
 			root.rotation.y = atan2(away.x, away.z)
 		add_child(root)
+		_note_roam_front(place_id, root)
 		match place_id:
 			"garage":
 				_build_garage(root)
@@ -680,11 +1152,42 @@ func _build_places(track: Dictionary) -> void:
 				_build_drive_in(root)
 			"gas-station":
 				_build_gas_station(root)
+			GameState.POI_ROYAL_RODS:
+				_build_royal_rods(root)
 			_:
 				_add_box(root, Vector3(9.0, 4.2, 7.0), Vector3(0.0, 2.1, 3.5), Color(0.35, 0.35, 0.38))
 
 
 ## The front faces the lane. Local +X runs with the car, left to right across that front.
+## A custom shop on the west side of the street up to the drive-in. Local -Z faces that street.
+func _build_royal_rods(root: Node3D) -> void:
+	_add_solid(root, Vector3(11.6, 4.6, 8.2), Vector3(0.0, 2.3, 4.2), true)
+	var wall := Color(0.76, 0.7, 0.6)
+	var burgundy := Color(0.48, 0.07, 0.09)
+	var gold := Color(1.0, 0.82, 0.28)
+	var bay := Color(0.4, 0.42, 0.46)
+	_add_box(root, Vector3(11.6, 0.06, 5.2), Vector3(0.0, 0.03, -2.3), Color(0.5, 0.49, 0.46), 0.92)
+	_add_box(root, Vector3(11.6, 4.3, 8.0), Vector3(0.0, 2.15, 4.2), wall, 0.88)
+	_add_box(root, Vector3(12.1, 0.2, 8.5), Vector3(0.0, 4.4, 4.2), Color(0.22, 0.2, 0.2), 0.86)
+	_add_box(root, Vector3(11.6, 0.22, 0.06), Vector3(0.0, 3.9, 0.16), burgundy, 0.45)
+	_add_box(root, Vector3(3.8, 3.05, 0.1), Vector3(-3.15, 1.58, 0.16), bay, 0.5, 0.22)
+	for i in 5:
+		var rib_y := 0.45 + float(i) * 0.52
+		_add_box(root, Vector3(3.5, 0.06, 0.04), Vector3(-3.15, rib_y, 0.1), Color(0.62, 0.64, 0.68), 0.4, 0.45)
+	_add_box(root, Vector3(1.1, 2.15, 0.1), Vector3(-0.15, 1.12, 0.16), Color(0.16, 0.1, 0.09), 0.5)
+	_add_box(root, Vector3(0.08, 0.22, 0.04), Vector3(0.22, 1.08, 0.09), gold, 0.35, 0.65)
+	_add_box(root, Vector3(4.2, 2.3, 0.08), Vector3(3.15, 1.85, 0.16), Color(0.72, 0.74, 0.76), 0.32, 0.55)
+	_add_box(root, Vector3(3.9, 2.0, 0.04), Vector3(3.15, 1.85, 0.1), Color(0.45, 0.62, 0.78), 0.08, 0.1)
+	var metal := Color(0.2, 0.2, 0.22)
+	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(-3.5, 5.05, 0.25), metal, 0.4, 0.65)
+	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(3.5, 5.05, 0.25), metal, 0.4, 0.65)
+	_add_box(root, Vector3(7.8, 1.15, 0.12), Vector3(0.0, 5.1, 0.2), Color(0.06, 0.03, 0.04))
+	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 5.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
+	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 4.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
+	_add_label(root, "ROYAL RODS", Vector3(0.0, 5.1, 0.1), 40, 0.014, Color(2.3, 1.75, 0.45), Color(0.4, 0.1, 0.04), 6)
+	_add_light(root, Vector3(0.0, 4.5, -1.6), Color(1.0, 0.78, 0.4), 0.85, 12.0)
+
+
 func _place_alongside(root: Node3D, stop: Vector3, away: Vector3) -> void:
 	root.rotation.y = atan2(-away.z, away.x)
 	var side := Vector3(-away.z, 0.0, away.x)
@@ -692,6 +1195,7 @@ func _place_alongside(root: Node3D, stop: Vector3, away: Vector3) -> void:
 
 
 func _build_garage(root: Node3D) -> void:
+	_add_solid(root, Vector3(11.5, 5.4, 9.0), Vector3(-0.4, 2.7, 4.5), true)
 	_add_box(root, Vector3(8.4, 0.06, 4.6), Vector3(-0.3, 0.03, -2.2), Color(0.55, 0.54, 0.5), 0.92)
 	_add_box(root, Vector3(3.5, 5.2, 0.32), Vector3(-4.25, 2.6, 0.0), _SHOP_WALL)
 	_add_box(root, Vector3(2.0, 5.2, 0.32), Vector3(4.2, 2.6, 0.0), _SHOP_WALL)
@@ -739,6 +1243,7 @@ func _close_garage_doors() -> void:
 
 
 func _build_drive_in(root: Node3D) -> void:
+	_add_solid(root, Vector3(16.4, 3.5, 6.4), Vector3(0.0, 1.75, 3.2), true)
 	_add_box(root, Vector3(17.2, 0.06, 6.4), Vector3(0.0, 0.03, -3.0), Color(0.14, 0.14, 0.15), 0.94)
 	for i in 5:
 		var x := -6.0 + float(i) * 3.0
@@ -803,6 +1308,7 @@ func _diner_sign(root: Node3D) -> void:
 
 
 func _build_gas_station(root: Node3D) -> void:
+	_add_solid(root, Vector3(10.4, 4.8, 5.6), Vector3(0.0, 2.4, 2.8), true)
 	var brick := _brick_material()
 	_add_box(root, Vector3(9.2, 0.06, 5.2), Vector3(0.2, 0.03, -2.4), Color(0.58, 0.56, 0.52), 0.9)
 	_add_box_mat(root, Vector3(10.2, 3.2, 0.28), Vector3(0.0, 1.6, 0.0), brick)
@@ -996,6 +1502,7 @@ func _build_city_building(block: Dictionary, index: int, glass: Material, lit: M
 	var root := Node3D.new()
 	root.position = Vector3(float(block["x"]), 0.0, float(block["y"]))
 	add_child(root)
+	_add_solid(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), true)
 	_add_box(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), wall, 0.9)
 	_add_box(root, Vector3(wide + 0.08, 0.72, deep + 0.08), Vector3(0.0, 0.36, 0.0), wall.darkened(0.24), 0.92)
 	var board := wall.darkened(0.16)

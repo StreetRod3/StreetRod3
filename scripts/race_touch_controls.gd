@@ -150,7 +150,7 @@ func _refresh_layout() -> void:
 
 
 func _refresh_shift_visible() -> void:
-	var show_paddles := visible and not bool(GameState.get_equipped_gearbox().get("automatic", false))
+	var show_paddles := visible
 	if _shift_up != null:
 		_shift_up.visible = show_paddles
 	if _shift_down != null:

@@ -3,6 +3,7 @@ extends Node3D
 ## Night drive-in. Click the man, pick a rival, and their car drives in from the left.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _PlaceDeparture := preload("res://scripts/place_departure.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 ## Upright height of the rival's head, in meters.
@@ -67,6 +68,7 @@ var _nav := _MenuNav.new()
 var _cash: Label
 var _hover_prompt: Label
 var _back: Button
+var _town: Button
 var _opp_root: Control
 var _opp_box: VBoxContainer
 var _opp_list: VBoxContainer
@@ -237,6 +239,12 @@ func _try_shortcut(event: InputEvent) -> bool:
 		return false
 	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
 		return false
+	if _PlaceDeparture.home_pressed(event):
+		_on_back_pressed()
+		return true
+	if _PlaceDeparture.cruise_pressed(event):
+		_on_town_pressed()
+		return true
 	match key.keycode:
 		KEY_O:
 			if _popup_open() or _rival_present():
@@ -720,7 +728,7 @@ func _build_hud() -> void:
 	_cash.name = "CashLabel"
 	_cash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_cash.offset_left = 20.0
-	_cash.offset_right = -230.0
+	_cash.offset_right = -_PlaceDeparture.label_inset()
 	_cash.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_cash.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_cash.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78))
@@ -738,16 +746,11 @@ func _build_hud() -> void:
 	_hover_prompt.visible = false
 	_hover_prompt.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bar.add_child(_hover_prompt)
-	_back = Button.new()
-	_back.text = "Back to garage"
-	_back.custom_minimum_size = Vector2(180, 36)
-	_back.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	_back.offset_left = -200.0
-	_back.offset_right = -16.0
-	_back.offset_top = -18.0
-	_back.offset_bottom = 18.0
+	var depart: Dictionary = _PlaceDeparture.add_to(bar)
+	_back = depart["back"] as Button
+	_town = depart["town"] as Button
 	_back.pressed.connect(_on_back_pressed)
-	bar.add_child(_back)
+	_town.pressed.connect(_on_town_pressed)
 
 
 func _build_opponent_popup() -> void:
@@ -1724,10 +1727,15 @@ func _sync_nav() -> void:
 		items.append(_opp_back)
 		_nav.setup(items)
 		return
-	_nav.setup([_back])
+	_nav.setup([_back, _town])
 
 
 func _on_back_pressed() -> void:
 	_forget_drive_in_visit()
 	GameState.drive_into_garage = true
 	GameState.begin_cruise(GameState.POI_DRIVE_IN, GameState.POI_GARAGE, GameState.SCENE_GARAGE)
+
+
+func _on_town_pressed() -> void:
+	_forget_drive_in_visit()
+	GameState.begin_roam(GameState.POI_DRIVE_IN)

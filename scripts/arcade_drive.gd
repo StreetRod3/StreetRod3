@@ -133,11 +133,13 @@ func planar_velocity() -> Vector3:
 	return forward * forward_speed + right * _lateral_speed
 
 
-## Replaces the planar velocity after a bumper hit. Forward speed stays at or above zero.
+## Replaces the planar velocity after a bumper hit. A car going forward is not
+## knocked into reverse, and a car already backing up is not knocked forward.
 func apply_planar_velocity(body: CharacterBody3D, planar: Vector3, car_center: Vector3) -> void:
 	var forward := Vector3(sin(heading_yaw), 0.0, cos(heading_yaw))
 	var right := Vector3(cos(heading_yaw), 0.0, -sin(heading_yaw))
-	forward_speed = maxf(planar.dot(forward), 0.0)
+	var along := planar.dot(forward)
+	forward_speed = minf(along, 0.0) if forward_speed < 0.0 else maxf(along, 0.0)
 	_lateral_speed = planar.dot(right)
 	body.velocity = forward * forward_speed + right * _lateral_speed
 	_apply_heading(body, car_center)
@@ -175,18 +177,19 @@ func step(
 	blown: bool,
 	gear_accel: float,
 	max_mps: float,
-	car_center: Vector3
+	car_center: Vector3,
+	min_mps: float = 0.0
 ) -> void:
 	_update_surface(body)
 	_handbrake = handbrake
 	var speed_before := forward_speed
 	var accel_scale := OFFROAD_ACCEL_SCALE if _off_road else 1.0
 	if handbrake:
-		forward_speed -= HANDBRAKE_DECEL * delta
+		forward_speed = move_toward(forward_speed, 0.0, HANDBRAKE_DECEL * delta)
 	if throttle and not shifting and not handbrake:
 		forward_speed += gear_accel * accel_scale * grip_accel_scale(_wheel_grip) * _corner_power() * delta
 	elif brake:
-		forward_speed -= BRAKING * delta
+		forward_speed = move_toward(forward_speed, 0.0, BRAKING * delta)
 	elif not throttle:
 		forward_speed *= pow(COAST_FACTOR, delta * 60.0)
 	if blown:
@@ -196,7 +199,9 @@ func step(
 		var offroad_max := max_mps * OFFROAD_MAX_SPEED_SCALE
 		if forward_speed > offroad_max:
 			forward_speed = move_toward(forward_speed, offroad_max, OFFROAD_SLOWDOWN * delta)
-	forward_speed = clampf(forward_speed, 0.0, max_mps)
+		elif forward_speed < -offroad_max:
+			forward_speed = move_toward(forward_speed, -offroad_max, OFFROAD_SLOWDOWN * delta)
+	_hold_speed_range(min_mps, max_mps, delta)
 
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
 	var wanted := clampf(steer, -1.0, 1.0)
@@ -205,10 +210,10 @@ func step(
 	var steer_target := _steer_input * _steer_limit() * _grip_steer_scale()
 	steer_angle = move_toward(steer_angle, steer_target, STEER_RESPONSE * delta)
 	_step_chassis(delta, longitudinal_accel)
-	if brake and speed_before > BRAKE_MARK_SPEED:
+	if brake and absf(speed_before) > BRAKE_MARK_SPEED:
 		front_grip_use = maxf(front_grip_use, 1.0)
 		front_long_slip = -1.0
-	if handbrake and speed_before > GRIP_FADE_SPEED:
+	if handbrake and absf(speed_before) > GRIP_FADE_SPEED:
 		rear_grip_use = maxf(rear_grip_use, 1.0)
 		rear_long_slip = -1.0
 	if absf(_steer_input) < 0.02 and absf(steer_angle) < 0.02:
@@ -218,16 +223,17 @@ func step(
 	var steered_yaw := absf(forward_speed * tan(steer_angle) / _wheelbase) * 1.2 * _grip_steer_scale() + 0.08
 	if absf(_yaw_rate) > steered_yaw:
 		_yaw_rate = move_toward(_yaw_rate, signf(_yaw_rate) * steered_yaw, YAW_SETTLE_RATE * delta)
-	var grip_yaw := YAW_GRIP_MARGIN * _lateral_grip / maxf(forward_speed, GRIP_FADE_SPEED)
+	var grip_yaw := YAW_GRIP_MARGIN * _lateral_grip / maxf(absf(forward_speed), GRIP_FADE_SPEED)
 	_handbrake_yaw = steered_yaw if handbrake else move_toward(_handbrake_yaw, 0.0, YAW_SETTLE_RATE * delta)
 	grip_yaw = maxf(grip_yaw, _handbrake_yaw)
 	_yaw_rate = clampf(_yaw_rate, -grip_yaw, grip_yaw)
 	_slide_limit = HANDBRAKE_SLIDE_LIMIT if handbrake else move_toward(_slide_limit, SLIDE_LIMIT, SLIDE_LIMIT_RETURN * delta)
 	# Past the usual slide the car really is going sideways, so turning trades forward speed for it.
 	if _slide_limit > SLIDE_LIMIT:
-		forward_speed = maxf(forward_speed + _lateral_speed * _yaw_rate * delta, 0.0)
-	_lateral_speed = clampf(_lateral_speed, -forward_speed * _slide_limit, forward_speed * _slide_limit)
-	forward_speed = clampf(forward_speed, 0.0, max_mps)
+		forward_speed = maxf(forward_speed + _lateral_speed * _yaw_rate * delta, min_mps)
+	var slide_span := absf(forward_speed) * _slide_limit
+	_lateral_speed = clampf(_lateral_speed, -slide_span, slide_span)
+	_hold_speed_range(min_mps, max_mps, delta)
 	var swung := clampf(_swing, -SWING_RATE * delta, SWING_RATE * delta)
 	_swing -= swung
 	heading_yaw += (_yaw_rate + _spin) * delta + swung
@@ -248,9 +254,16 @@ func hold(body: CharacterBody3D, delta: float, car_center: Vector3) -> void:
 	_apply_heading(body, car_center)
 
 
+func _hold_speed_range(min_mps: float, max_mps: float, delta: float) -> void:
+	if forward_speed > max_mps:
+		forward_speed = move_toward(forward_speed, max_mps, BRAKING * delta)
+	elif forward_speed < min_mps:
+		forward_speed = move_toward(forward_speed, min_mps, BRAKING * delta)
+
+
 ## The road-wheel angle full steering gives at this speed, never past the lock.
 func _steer_limit() -> float:
-	var speed := maxf(forward_speed, 1.0)
+	var speed := maxf(absf(forward_speed), 1.0)
 	return minf(_max_steer_rad, atan(STEER_FULL_LATERAL_ACCEL * ride_grip * _wheelbase / (speed * speed)) + STEER_SLIP_ALLOWANCE_RAD)
 
 
@@ -297,13 +310,13 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 		long_front = _mass_kg * longitudinal_accel * 0.65
 		long_rear = _mass_kg * longitudinal_accel * 0.35
 
-	var speed := maxf(forward_speed, 0.35)
+	var speed := maxf(absf(forward_speed), 0.35)
 	var front_slip := atan2(_lateral_speed + _yaw_rate * axle_front, speed) - steer_angle
 	var rear_slip := atan2(_lateral_speed - _yaw_rate * axle_rear, speed)
 	var front_force := _tire_force(front_slip, CORNERING_FRONT * steer_grip, fz_front, long_front, mu)
 	var rear_mu := mu * HANDBRAKE_REAR_GRIP if _handbrake else mu
 	var rear_force := _tire_force(rear_slip, CORNERING_REAR * steer_grip, fz_rear, long_rear, rear_mu)
-	var rolling := clampf(forward_speed / GRIP_FADE_SPEED, 0.0, 1.0)
+	var rolling := clampf(absf(forward_speed) / GRIP_FADE_SPEED, 0.0, 1.0)
 	front_force *= rolling
 	rear_force *= rolling
 
@@ -324,7 +337,7 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	_lateral_speed += (lateral_force / _mass_kg - _yaw_rate * forward_speed) * delta
 	_yaw_rate += (yaw_moment / inertia) * delta
 	forward_speed += (-front_force * steer_sin * CORNER_SCRUB / _mass_kg) * delta
-	if forward_speed < GRIP_FADE_SPEED:
+	if absf(forward_speed) < GRIP_FADE_SPEED:
 		var settle := (1.0 - forward_speed / GRIP_FADE_SPEED) * 8.0 * delta
 		_lateral_speed = lerpf(_lateral_speed, 0.0, clampf(settle, 0.0, 1.0))
 		_yaw_rate = lerpf(_yaw_rate, 0.0, clampf(settle, 0.0, 1.0))

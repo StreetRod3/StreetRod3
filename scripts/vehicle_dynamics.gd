@@ -561,7 +561,7 @@ func step(dt: float, steer_input: float, drive_force_n: float, brake_input: floa
 	if dt > tick * 1.5:
 		slices = clampi(int(ceil(dt / tick)), 1, 4)
 	var slice := dt / float(slices)
-	var drive_target := maxf(drive_force_n, 0.0)
+	var drive_target := drive_force_n
 	var brake_target := clampf(brake_input, 0.0, 1.0)
 	for _i in slices:
 		_chase_pedals(slice, drive_target, brake_target)
@@ -579,7 +579,7 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 		if wheel.driven:
 			driven += 1
 	if driven > 0:
-		drive_each = maxf(drive_force_n, 0.0) / float(driven)
+		drive_each = drive_force_n / float(driven)
 
 	var force_body := Vector3.ZERO
 	var torque := 0.0

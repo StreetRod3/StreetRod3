@@ -3,6 +3,7 @@ extends Node3D
 ## Chris' Gas. The garage fuel can drives the car here. Grab a nozzle, fuel the car, put it back, and the car drives home.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _PlaceDeparture := preload("res://scripts/place_departure.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _PumpSound := preload("res://scripts/pump_sound.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
@@ -76,6 +77,7 @@ var _pump_sound: AudioStreamPlayer
 var _cash: Label
 var _tooltip: Label
 var _back: Button
+var _town: Button
 var _shade: ColorRect
 var _open: Label3D
 var _filler_local := Vector3(0.7, 0.65, 1.2)
@@ -189,6 +191,16 @@ func _process(delta: float) -> void:
 	if _status_until > 0.0 and _time >= _status_until:
 		_status = ""
 		_status_until = 0.0
+
+
+func _input(event: InputEvent) -> void:
+	# D is also ui_right, so a focused button eats it before _unhandled_input.
+	if _PlaceDeparture.home_pressed(event):
+		get_viewport().set_input_as_handled()
+		_leave()
+	elif _PlaceDeparture.cruise_pressed(event):
+		get_viewport().set_input_as_handled()
+		_on_town_pressed()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -338,6 +350,14 @@ func _say_sleeper(text: String, min_size: Vector2) -> void:
 
 
 func _leave() -> void:
+	await _pull_out(true)
+
+
+func _on_town_pressed() -> void:
+	await _pull_out(false)
+
+
+func _pull_out(home: bool) -> void:
 	if _busy:
 		return
 	_end_pour("")
@@ -360,8 +380,11 @@ func _leave() -> void:
 	await _fade_to(1.0, 0.35)
 	if not is_instance_valid(self):
 		return
-	GameState.drive_into_garage = true
-	GameState.begin_cruise(GameState.POI_GAS_STATION, GameState.POI_GARAGE, GameState.SCENE_GARAGE)
+	if home:
+		GameState.drive_into_garage = true
+		GameState.begin_cruise(GameState.POI_GAS_STATION, GameState.POI_GARAGE, GameState.SCENE_GARAGE)
+		return
+	GameState.begin_roam(GameState.POI_GAS_STATION)
 
 
 func _activate(kind: Variant) -> void:
@@ -747,8 +770,6 @@ func _try_station_shortcut(event: InputEvent) -> bool:
 			_shortcut_pump()
 		KEY_F:
 			_shortcut_fuel()
-		KEY_D:
-			_leave()
 		_:
 			return false
 	return true
@@ -1033,6 +1054,8 @@ func _set_busy(busy: bool) -> void:
 	_busy = busy
 	if _back != null:
 		_back.disabled = busy
+	if _town != null:
+		_town.disabled = busy
 
 
 func _show_status(text: String) -> void:
@@ -1232,7 +1255,7 @@ func _build_hud() -> void:
 	_cash = Label.new()
 	_cash.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_cash.offset_left = 20.0
-	_cash.offset_right = -220.0
+	_cash.offset_right = -_PlaceDeparture.label_inset()
 	_cash.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_cash.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_cash.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78))
@@ -1244,25 +1267,21 @@ func _build_hud() -> void:
 	_tooltip.name = "TooltipLabel"
 	_tooltip.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_tooltip.offset_left = 400.0
-	_tooltip.offset_right = -210.0
+	_tooltip.offset_right = -_PlaceDeparture.label_inset()
 	_tooltip.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_tooltip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tooltip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_tooltip.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78, 1))
 	_tooltip.add_theme_font_size_override(&"font_size", 22)
 	bar.add_child(_tooltip)
-	_back = Button.new()
-	_back.text = "Back to garage"
-	_back.custom_minimum_size = Vector2(180, 36)
-	_back.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
-	_back.offset_left = -200.0
-	_back.offset_right = -16.0
-	_back.offset_top = -18.0
-	_back.offset_bottom = 18.0
+	var depart: Dictionary = _PlaceDeparture.add_to(bar)
+	_back = depart["back"] as Button
+	_town = depart["town"] as Button
 	_back.pressed.connect(_leave)
+	_town.pressed.connect(_on_town_pressed)
 	_back.disabled = true
-	bar.add_child(_back)
-	_nav.setup([_back])
+	_town.disabled = true
+	_nav.setup([_back, _town])
 
 
 func _refresh_cash() -> void:
