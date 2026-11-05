@@ -25,6 +25,7 @@ const _SaveSlots := preload("res://scripts/save_slots.gd")
 @onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/VBox/ColorPicker
 @onready var _calendar: StaticBody3D = $InteractCalendar
 @onready var _calendar_hint: Label = $GarageUI/CalendarHint
+@onready var _garage_ui: CanvasLayer = $GarageUI
 @onready var _hud_top: Control = $GarageUI/HudTop
 @onready var _hud_car_name: Label = %CarNameLabel
 @onready var _hud_cash: Label = %CashLabel
@@ -97,6 +98,14 @@ var _calendar_home: Transform3D
 var _calendar_blend: float = 0.0
 var _calendar_inspecting: bool = false
 var _calendar_tween: Tween
+var _map: StaticBody3D
+var _map_hint: Label
+var _map_home: Transform3D
+var _map_blend: float = 0.0
+var _map_inspecting: bool = false
+var _map_tween: Tween
+## Each place on the sheet: id, marker, label center, and the label's half size.
+var _map_spots: Array[Dictionary] = []
 var _nav := _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
@@ -149,12 +158,13 @@ const _TOOLTIPS := {
 	&"chart": "Parts list",
 	&"spares": "Spare parts (L)",
 	&"newspaper": "Newspaper (N)",
-	&"radio": "Radio (M)",
+	&"radio": "Radio (R)",
 	&"doors": "Drive out (D)",
 	&"spray": "Paint job (P)",
 	&"fuel": "Gas station",
 	&"hood": "Under the hood (H)",
 	&"calendar": "Calendar (X)",
+	&"map": "City map (M)",
 	&"lift": "Wheels (W)",
 	&"tire_machine": "Tire machine (T)",
 	&"transmission": "Transmission (A)",
@@ -196,6 +206,24 @@ const _MONTHS := [
 ]
 const _WEEKDAYS := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 const _DAYS_IN_MONTH := [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+const _CITY_MAP := "res://assets/maps/city.trk"
+## The sheet on the back wall, and how large it hangs in front of the camera.
+const _MAP_SHEET := Vector2(0.94, 1.26)
+const _MAP_DRAW := Vector2(0.86, 1.02)
+const _MAP_INSPECT_SCALE := 1.85
+const _MAP_INSPECT_DISTANCE := 1.55
+const _MAP_POI_COLOR := {
+	"garage": Color(0.78, 0.16, 0.13),
+	"drive-in": Color(0.9, 0.1, 0.16),
+	"gas-station": Color(0.12, 0.38, 0.78),
+	"royal-rods": Color(0.82, 0.58, 0.1),
+}
+const _MAP_LABEL_NUDGE := {
+	"garage": Vector2(0.07, 0.015),
+	"drive-in": Vector2(-0.05, 0.042),
+	"gas-station": Vector2(0.0, 0.04),
+	"royal-rods": Vector2(0.07, -0.028),
+}
 const _WHEEL_NODES: Array[String] = [
 	"WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight",
 ]
@@ -270,6 +298,7 @@ func _ready() -> void:
 	_calendar_home = _calendar.global_transform
 	_build_calendar_page()
 	_calendar_hint.visible = false
+	_build_city_map()
 	_hud_top.gui_input.connect(_on_hud_car_stripe_input)
 	_build_car_list()
 	_build_sale_panel()
@@ -471,6 +500,7 @@ func _process(_delta: float) -> void:
 		_cam_distance = lerpf(_cam_distance, _cam_distance_target, t)
 		_update_camera_transform()
 	_update_calendar_transform()
+	_update_map_transform()
 	_update_tooltip()
 
 
@@ -492,7 +522,7 @@ func _update_tooltip() -> void:
 
 
 func _tooltip_text_at_mouse() -> String:
-	if _departing or _bay_busy or _orbiting or _calendar_inspecting:
+	if _departing or _bay_busy or _orbiting or _calendar_inspecting or _map_inspecting:
 		return ""
 	var vp := get_viewport()
 	var hovered := vp.gui_get_hovered_control()
@@ -657,6 +687,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hang_calendar()
 		get_viewport().set_input_as_handled()
 		return
+	if _map_inspecting and event.is_action_pressed(&"ui_cancel"):
+		_hang_map()
+		get_viewport().set_input_as_handled()
+		return
 
 	if _car_list != null and _car_list.visible and _try_car_list_shortcut(event):
 		var viewport := get_viewport()
@@ -739,6 +773,14 @@ func _unhandled_input(event: InputEvent) -> void:
 				_hang_calendar()
 				get_viewport().set_input_as_handled()
 				return
+			if _map_inspecting:
+				var place := _map_poi_at(mb.position)
+				var scene := _scene_for_poi(place)
+				_hang_map()
+				if not scene.is_empty():
+					_start_drive_out(scene)
+				get_viewport().set_input_as_handled()
+				return
 			_try_interact(mb.position)
 
 	if event is InputEventMouseMotion and _orbiting:
@@ -804,6 +846,11 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 		KEY_N:
 			_handle_interact(&"newspaper")
 		KEY_M:
+			if _map_inspecting:
+				_hang_map()
+			else:
+				_bring_map_forward()
+		KEY_R:
 			GameState.toggle_music()
 			if _clock_settings.visible:
 				_clock_music.set_pressed_no_signal(GameState.music_enabled)
@@ -868,7 +915,7 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 
 ## The bay itself, or the car list already open over it. Other panels keep their own keys.
 func _car_management_available() -> bool:
-	if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or _calendar_inspecting:
+	if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or _calendar_inspecting or _map_inspecting:
 		return false
 	if _parts_board != null and _parts_board.visible:
 		return false
@@ -1029,6 +1076,8 @@ func _handle_interact(kind: Variant) -> void:
 			_open_hood()
 		&"calendar":
 			_bring_calendar_forward()
+		&"map":
+			_bring_map_forward()
 		&"lift":
 			_show_wheel_board()
 		&"tire_machine":
@@ -1083,6 +1132,7 @@ func _start_drive_out(destination: String) -> void:
 	_departing = true
 	_orbiting = false
 	_snap_calendar_home()
+	_snap_map_home()
 	_hide_garage_overlays()
 	$GarageUI.visible = false
 	var door_hit := $InteractDoors/CollisionShape3D as CollisionShape3D
@@ -1102,6 +1152,15 @@ func _poi_for_scene(destination: String) -> String:
 	return ""
 
 
+## Royal Rods is on the sheet, and has no place to arrive at yet.
+func _scene_for_poi(poi: String) -> String:
+	if poi == GameState.POI_DRIVE_IN:
+		return GameState.SCENE_DRIVE_IN
+	if poi == GameState.POI_GAS_STATION:
+		return GameState.SCENE_GAS_STATION
+	return ""
+
+
 func _go_to_drive_destination(destination: String, poi: String) -> void:
 	if poi.is_empty():
 		get_tree().change_scene_to_file(destination)
@@ -1116,6 +1175,18 @@ func _snap_calendar_home() -> void:
 	if _calendar_tween != null:
 		_calendar_tween.kill()
 	_calendar.global_transform = _calendar_home
+
+
+func _snap_map_home() -> void:
+	if _map == null:
+		return
+	_map_inspecting = false
+	if _map_hint != null:
+		_map_hint.visible = false
+	_map_blend = 0.0
+	if _map_tween != null:
+		_map_tween.kill()
+	_map.global_transform = _map_home
 
 
 func _wants_drive_in() -> bool:
@@ -3272,6 +3343,7 @@ func _on_stats_close_pressed() -> void:
 func _bring_calendar_forward() -> void:
 	if _calendar_inspecting:
 		return
+	_hang_map()
 	_clock_menu.visible = false
 	_stats_panel.visible = false
 	_spray_menu.visible = false
@@ -3306,6 +3378,287 @@ func _update_calendar_transform() -> void:
 func _calendar_inspect_transform() -> Transform3D:
 	var cam_xf := _camera.global_transform
 	var pos := cam_xf.origin - cam_xf.basis.z * 1.2
+	return Transform3D.IDENTITY.translated(pos).looking_at(cam_xf.origin, Vector3.UP)
+
+
+## A framed plan of the city, on the back wall. Clicking it brings the same sheet forward.
+func _build_city_map() -> void:
+	var track := TrackFile.load_path(_CITY_MAP)
+	var errors: Array = track.get("errors", [])
+	if not errors.is_empty():
+		push_error("City map: %s" % str(errors[0]))
+		return
+	_map = StaticBody3D.new()
+	_map.name = "InteractMap"
+	# The wall the garage opens facing. Local -Z points into the room.
+	_map.basis = Basis(Vector3(0.0, 0.0, -1.0), Vector3(0.0, 1.0, 0.0), Vector3(1.0, 0.0, 0.0))
+	_map.position = Vector3(4.55, 4.15, -3.4)
+	add_child(_map)
+	_map.set_meta(&"garage_interact", &"map")
+	_map_board(_map, Vector3(_MAP_SHEET.x + 0.1, _MAP_SHEET.y + 0.1, 0.03), Vector3(0.0, 0.0, 0.006), Color(0.32, 0.2, 0.11), 0.62)
+	_map_board(_map, Vector3(_MAP_SHEET.x, _MAP_SHEET.y, 0.008), Vector3(0.0, 0.0, -0.012), Color(0.9, 0.86, 0.76), 0.9)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = Vector3(_MAP_SHEET.x + 0.12, _MAP_SHEET.y + 0.12, 0.08)
+	shape.shape = box
+	_map.add_child(shape)
+	_draw_city_map(_map, track)
+	_map_home = _map.global_transform
+	_map_hint = Label.new()
+	_map_hint.name = "MapHint"
+	_map_hint.visible = false
+	_map_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_map_hint.offset_left = -460.0
+	_map_hint.offset_top = -92.0
+	_map_hint.offset_right = 460.0
+	_map_hint.offset_bottom = -52.0
+	_map_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_map_hint.text = "Click the drive-in or the gas station to drive there. M or Esc puts the map back"
+	_map_hint.add_theme_font_size_override(&"font_size", 22)
+	_map_hint.add_theme_color_override(&"font_color", Color(0.96, 0.93, 0.86))
+	_garage_ui.add_child(_map_hint)
+
+
+func _draw_city_map(host: Node3D, track: Dictionary) -> void:
+	var min_x := INF
+	var max_x := -INF
+	var min_y := INF
+	var max_y := -INF
+	var nodes: Dictionary = track["nodes"]
+	for id: int in nodes:
+		var node: Dictionary = nodes[id]
+		min_x = minf(min_x, float(node["x"]))
+		max_x = maxf(max_x, float(node["x"]))
+		min_y = minf(min_y, float(node["y"]))
+		max_y = maxf(max_y, float(node["y"]))
+	for pid: String in track["poi_order"]:
+		var poi: Dictionary = track["pois"][pid]
+		min_x = minf(min_x, float(poi["x"]))
+		max_x = maxf(max_x, float(poi["x"]))
+		min_y = minf(min_y, float(poi["y"]))
+		max_y = maxf(max_y, float(poi["y"]))
+	min_x -= 24.0
+	max_x += 24.0
+	min_y -= 24.0
+	max_y += 24.0
+	var span_x := maxf(max_x - min_x, 1.0)
+	var span_y := maxf(max_y - min_y, 1.0)
+	var scale := minf(_MAP_DRAW.x / span_x, _MAP_DRAW.y / span_y)
+	var layout := {
+		"cx": (min_x + max_x) * 0.5,
+		"cy": (min_y + max_y) * 0.5,
+		"scale": scale,
+		"shift_y": -0.05,
+	}
+	var paper := SurfaceTool.new()
+	paper.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_map_quad(paper, Vector2(0.0, float(layout["shift_y"])), Vector2(_MAP_DRAW.x * 0.5, 0.0), Vector2(0.0, _MAP_DRAW.y * 0.5), Color(0.55, 0.62, 0.46))
+	_add_map_mesh(host, "Paper", paper, -0.022)
+	var blocks := SurfaceTool.new()
+	blocks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for raw: Dictionary in track.get("buildings", []):
+		var color := Color(0.45, 0.42, 0.38)
+		if raw.has("color"):
+			color = raw["color"]
+		var center := _map_point(layout, float(raw["x"]), float(raw["y"]))
+		var half := Vector2(float(raw["w"]), float(raw["d"])) * scale * 0.5
+		_map_quad(blocks, center, Vector2(half.x, 0.0), Vector2(0.0, half.y), color.darkened(0.15))
+	_add_map_mesh(host, "Blocks", blocks, -0.026)
+	var streets := SurfaceTool.new()
+	streets.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var seen := {}
+	for road: Dictionary in track["roads"]:
+		var a_id := int(road["from"])
+		var b_id := int(road["to"])
+		var key := "%d-%d" % [mini(a_id, b_id), maxi(a_id, b_id)]
+		if seen.has(key) or not nodes.has(a_id) or not nodes.has(b_id):
+			continue
+		seen[key] = true
+		var a: Dictionary = nodes[a_id]
+		var b: Dictionary = nodes[b_id]
+		var from_pt := _map_point(layout, float(a["x"]), float(a["y"]))
+		var to_pt := _map_point(layout, float(b["x"]), float(b["y"]))
+		var span := to_pt - from_pt
+		var length := span.length()
+		if length < 0.0008:
+			continue
+		var dir := span / length
+		var half_w := maxf(float(road.get("width", 16.0)) * scale * 0.5, 0.0045)
+		_map_quad(streets, (from_pt + to_pt) * 0.5, dir * length * 0.5, Vector2(-dir.y, dir.x) * half_w, Color(0.32, 0.32, 0.34))
+	_add_map_mesh(host, "Streets", streets, -0.03)
+	_map_spots = []
+	var marks := SurfaceTool.new()
+	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var names := Node3D.new()
+	names.name = "Names"
+	names.position = Vector3(0.0, 0.0, -0.042)
+	host.add_child(names)
+	for pid: String in track["poi_order"]:
+		var poi: Dictionary = track["pois"][pid]
+		var at := _map_point(layout, float(poi["x"]), float(poi["y"]))
+		var color: Color = _MAP_POI_COLOR.get(pid, Color(0.9, 0.82, 0.3))
+		_map_quad(marks, at, Vector2(0.016, 0.0), Vector2(0.0, 0.016), color)
+		var lab := Label3D.new()
+		var place_name := str(poi["name"])
+		lab.text = place_name
+		var nudge: Vector2 = _MAP_LABEL_NUDGE.get(pid, Vector2(0.0, 0.04))
+		var label_at := at + nudge
+		var em := 40.0 * 0.00105
+		_map_spots.append({
+			"id": pid,
+			"at": at,
+			"label": label_at,
+			"half": Vector2(maxf(place_name.length() * em * 0.34, 0.03), em * 0.9),
+		})
+		lab.position = Vector3(label_at.x, label_at.y, 0.0)
+		lab.font_size = 40
+		lab.pixel_size = 0.00105
+		lab.modulate = Color(0.98, 0.95, 0.88)
+		lab.outline_modulate = Color(0.1, 0.07, 0.05)
+		lab.outline_size = 6
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lab.shaded = false
+		lab.double_sided = false
+		lab.rotation.y = PI
+		names.add_child(lab)
+	_add_map_mesh(host, "Places", marks, -0.034)
+	var title := Label3D.new()
+	title.text = "CITY"
+	title.position = Vector3(0.0, _MAP_SHEET.y * 0.5 - 0.07, -0.02)
+	title.font_size = 72
+	title.pixel_size = 0.0014
+	title.modulate = Color(0.22, 0.14, 0.08)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.shaded = false
+	title.rotation.y = PI
+	host.add_child(title)
+
+
+## The place under the pointer while the sheet is held up. Empty when the click misses every name and marker.
+func _map_poi_at(screen_pos: Vector2) -> String:
+	if _map == null or _map_blend < 0.9:
+		return ""
+	var hit := _raycast(screen_pos)
+	if hit.is_empty():
+		return ""
+	var body := hit.get("collider") as Node
+	if body != _map:
+		return ""
+	var local := _map.to_local(hit["position"])
+	var at := Vector2(local.x, local.y)
+	var best := ""
+	var best_d := 1000.0
+	for spot: Dictionary in _map_spots:
+		var marker: Vector2 = spot["at"]
+		var label: Vector2 = spot["label"]
+		var half: Vector2 = spot["half"]
+		var outside := Vector2(maxf(absf(at.x - label.x) - half.x, 0.0), maxf(absf(at.y - label.y) - half.y, 0.0))
+		var on_label := outside.length() <= 0.008
+		var marker_d := at.distance_to(marker)
+		var on_marker := marker_d <= 0.022
+		if not on_label and not on_marker:
+			continue
+		var dist := marker_d if on_marker and not on_label else outside.length()
+		if dist < best_d:
+			best_d = dist
+			best = str(spot["id"])
+	return best
+
+
+func _map_point(layout: Dictionary, x: float, y: float) -> Vector2:
+	var drawn := float(layout["scale"])
+	return Vector2((x - float(layout["cx"])) * drawn, (y - float(layout["cy"])) * drawn + float(layout["shift_y"]))
+
+
+func _map_quad(st: SurfaceTool, center: Vector2, along: Vector2, across: Vector2, color: Color) -> void:
+	var bl := Vector3(center.x - along.x - across.x, center.y - along.y - across.y, 0.0)
+	var br := Vector3(center.x + along.x - across.x, center.y + along.y - across.y, 0.0)
+	var tr := Vector3(center.x + along.x + across.x, center.y + along.y + across.y, 0.0)
+	var tl := Vector3(center.x - along.x + across.x, center.y - along.y + across.y, 0.0)
+	st.set_color(color)
+	st.set_normal(Vector3(0.0, 0.0, -1.0))
+	st.add_vertex(bl)
+	st.add_vertex(br)
+	st.add_vertex(tr)
+	st.add_vertex(bl)
+	st.add_vertex(tr)
+	st.add_vertex(tl)
+
+
+func _add_map_mesh(host: Node3D, node_name: String, st: SurfaceTool, z: float) -> void:
+	st.generate_normals()
+	var mesh := st.commit()
+	var mat := StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.92
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, mat)
+	var mi := MeshInstance3D.new()
+	mi.name = node_name
+	mi.mesh = mesh
+	mi.position = Vector3(0.0, 0.0, z)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	host.add_child(mi)
+
+
+func _map_board(host: Node3D, size: Vector3, pos: Vector3, color: Color, rough: float) -> void:
+	var mi := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = rough
+	mi.mesh = mesh
+	mi.material_override = mat
+	mi.position = pos
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	host.add_child(mi)
+
+
+func _bring_map_forward() -> void:
+	if _map == null or _map_inspecting:
+		return
+	_hang_calendar()
+	_clock_menu.visible = false
+	_stats_panel.visible = false
+	_spray_menu.visible = false
+	_map_inspecting = true
+	_map_hint.visible = true
+	if _map_tween != null:
+		_map_tween.kill()
+	_map_tween = create_tween()
+	_map_tween.tween_property(self, "_map_blend", 1.0, 0.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
+func _hang_map() -> void:
+	if not _map_inspecting:
+		return
+	_map_inspecting = false
+	_map_hint.visible = false
+	if _map_tween != null:
+		_map_tween.kill()
+	_map_tween = create_tween()
+	_map_tween.tween_property(self, "_map_blend", 0.0, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+
+
+func _update_map_transform() -> void:
+	if _map == null:
+		return
+	if _map_blend <= 0.0001:
+		if not _map_inspecting:
+			_map.global_transform = _map_home
+		return
+	var face := _map_home.interpolate_with(_map_face_transform(), _map_blend)
+	var grown := lerpf(1.0, _MAP_INSPECT_SCALE, _map_blend)
+	face.basis = face.basis.orthonormalized().scaled(Vector3(grown, grown, grown))
+	_map.global_transform = face
+
+
+func _map_face_transform() -> Transform3D:
+	var cam_xf := _camera.global_transform
+	var pos := cam_xf.origin - cam_xf.basis.z * _MAP_INSPECT_DISTANCE
 	return Transform3D.IDENTITY.translated(pos).looking_at(cam_xf.origin, Vector3.UP)
 
 
