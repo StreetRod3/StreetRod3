@@ -260,6 +260,8 @@ var drive_in_hood_seen: bool = false
 var arcade_drive: bool = true
 ## Show speeds, fuel, weights, and distances in US units. They are always kept in metric.
 var imperial_units: bool = false
+## What each shifter position is bound to, by action in shifter.gd. Persisted in settings.
+var shifter_bindings: Dictionary = {}
 
 ## Whether background music is on. Persisted in settings; also toggled by the garage radio.
 var music_enabled: bool = true
@@ -3419,6 +3421,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("game", "arcade_drive", arcade_drive)
 	cfg.set_value("game", "imperial_units", imperial_units)
+	cfg.set_value("input", "shifter", shifter_bindings)
 	cfg.save(SETTINGS_PATH)
 
 
@@ -3439,6 +3442,8 @@ func load_settings() -> void:
 		arcade_drive = bool(cfg.get_value("game", "arcade_drive"))
 	if cfg.has_section_key("game", "imperial_units"):
 		imperial_units = bool(cfg.get_value("game", "imperial_units"))
+	if cfg.get_value("input", "shifter", {}) is Dictionary:
+		shifter_bindings = cfg.get_value("input", "shifter", {})
 
 
 func toggle_music() -> void:

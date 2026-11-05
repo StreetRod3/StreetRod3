@@ -1,6 +1,7 @@
 extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _ShifterSetup := preload("res://scripts/shifter_setup.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
@@ -967,6 +968,7 @@ func _sync_menu_nav() -> void:
 			_clock_music,
 			_clock_arcade,
 			_clock_imperial,
+			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ShifterBtn,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _clock_menu.visible:
@@ -2939,6 +2941,10 @@ func _on_clock_settings_pressed() -> void:
 
 func _on_clock_settings_back_pressed() -> void:
 	_close_clock_settings()
+
+
+func _on_clock_shifter_pressed() -> void:
+	_ShifterSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ShifterBtn)
 
 
 func _close_clock_settings() -> void:

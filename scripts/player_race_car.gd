@@ -9,6 +9,7 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
 const _RacePark := preload("res://scripts/race_park.gd")
+const _Shifter := preload("res://scripts/shifter.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
@@ -59,6 +60,10 @@ var _touch: Node = null
 var _gearbox: Dictionary = {}
 var _gear: int = 0
 var _shift_timer: float = 0.0
+## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
+var _shifter_gear: int = _Shifter.POSITION_NONE
+var _shifter_up_held: bool = false
+var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
 var _burnout: float = 0.0
 var _overrev_time: float = 0.0
@@ -388,6 +393,10 @@ func _physics_process(delta: float) -> void:
 		_pose_body(delta)
 		return
 	_poll_touch_shifts()
+	_poll_shifter()
+	# Runs during the countdown too, so a gear picked on the start line is in by the green light.
+	if _shift_timer > 0.0:
+		_shift_timer = maxf(0.0, _shift_timer - delta)
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
 		_dynamics.sample_surfaces(_race_track(), global_transform)
@@ -431,8 +440,6 @@ func _physics_simulation(delta: float) -> void:
 	var throttle := _throttle_down() and not _burnout_held()
 	var brake := _brake_down()
 	var steer := _steer_input()
-	if _shift_timer > 0.0:
-		_shift_timer = maxf(0.0, _shift_timer - delta)
 	if _engine_blown:
 		throttle = false
 	elif _is_automatic():
@@ -490,8 +497,6 @@ func _physics_arcade(delta: float) -> void:
 	var throttle := _throttle_down() and not _burnout_held()
 	var brake := _brake_down()
 	var steer := _steer_input()
-	if _shift_timer > 0.0:
-		_shift_timer = maxf(0.0, _shift_timer - delta)
 	if _engine_blown:
 		throttle = false
 	elif _is_automatic():
@@ -617,7 +622,7 @@ func _reverse_top() -> float:
 	return maxf(_gear_top_mps(0) * REVERSE_TOP_FRACTION, REVERSE_TOP_MIN)
 
 
-## Q and E, and the on-screen paddles. A step down from first, or from
+## Q and E, the on-screen paddles, and a sequential shifter. A step down from first, or from
 ## drive on an automatic, is reverse once the car has stopped, and neutral while it still rolls.
 func _select_shift(direction: int) -> void:
 	if _engine_blown or _shift_timer > 0.0 or direction == 0:
@@ -694,6 +699,35 @@ func _update_engine_sound(throttle: bool) -> void:
 	if _engine_sound == null or not _engine_sound.has_method(&"set_state"):
 		return
 	_engine_sound.set_state(get_rpm(), 1.0 if throttle else 0.0, _engine_blown, _shift_timer > 0.0)
+
+
+func _poll_shifter() -> void:
+	var up := _Shifter.is_down(_Shifter.UP)
+	if up and not _shifter_up_held:
+		_select_shift(1)
+	_shifter_up_held = up
+	var down := _Shifter.is_down(_Shifter.DOWN)
+	if down and not _shifter_down_held:
+		_select_shift(-1)
+	_shifter_down_held = down
+
+	var wanted := _shifter_wanted_gear()
+	if wanted == _shifter_gear or _engine_blown or _shift_timer > 0.0:
+		return
+	_shifter_gear = wanted
+	if wanted != _Shifter.POSITION_NONE:
+		_set_gear(wanted)
+
+
+## Any forward position is drive on an automatic. A car with fewer gears than the shifter has
+## its top gear in the rest. Reverse waits in neutral until the car has slowed enough for it.
+func _shifter_wanted_gear() -> int:
+	var lever := _Shifter.position()
+	if lever == _Shifter.POSITION_REVERSE:
+		return GEAR_REVERSE if _can_engage_reverse() else GEAR_NEUTRAL
+	if lever < 0:
+		return lever
+	return 0 if _is_automatic() else mini(lever, _gear_count() - 1)
 
 
 func _poll_touch_shifts() -> void:
