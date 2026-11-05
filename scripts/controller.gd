@@ -305,13 +305,16 @@ static func default_keys(action: String) -> Array:
 	return [NO_KEY, NO_KEY]
 
 
-## Each slot is a button, or an axis and the way it has to go, or empty.
+## Each slot is a button, or an axis and the way it has to go, or empty. The right stick is gas
+## and brake as well as the triggers, which gives a Switch pad, whose ZL and ZR are only on or
+## off, a gas pedal it can ease onto. A burnout still works with a trigger on one and the stick on
+## the other, since the stronger of the two slots counts.
 static func default_pad(action: String) -> Array:
 	match action:
 		THROTTLE:
-			return [{"axis": int(JOY_AXIS_TRIGGER_RIGHT), "dir": 1}, {}]
+			return [{"axis": int(JOY_AXIS_TRIGGER_RIGHT), "dir": 1}, {"axis": int(JOY_AXIS_RIGHT_Y), "dir": -1}]
 		BRAKE:
-			return [{"axis": int(JOY_AXIS_TRIGGER_LEFT), "dir": 1}, {}]
+			return [{"axis": int(JOY_AXIS_TRIGGER_LEFT), "dir": 1}, {"axis": int(JOY_AXIS_RIGHT_Y), "dir": 1}]
 		STEER_LEFT:
 			return [{"axis": int(JOY_AXIS_LEFT_X), "dir": -1}, {"button": int(JOY_BUTTON_DPAD_LEFT)}]
 		STEER_RIGHT:
