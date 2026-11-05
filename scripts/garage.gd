@@ -11,6 +11,10 @@ const _SaveSlots := preload("res://scripts/save_slots.gd")
 @onready var _camera_pivot: Node3D = $CameraPivot
 @onready var _camera_pitch: Node3D = $CameraPivot/Pitch
 @onready var _camera: Camera3D = $CameraPivot/Pitch/Camera3D
+## Stays on the pivot. The camera itself renders into the view above the status bar.
+var _camera_mount: Node3D
+var _view_holder: SubViewportContainer
+var _view_port: SubViewport
 
 @onready var _clock_menu: Control = $GarageUI/ClockMenu
 @onready var _clock_main: Control = $GarageUI/ClockMenu/Panel
@@ -100,16 +104,12 @@ var _calendar_inspecting: bool = false
 var _calendar_tween: Tween
 var _map: StaticBody3D
 var _map_hint: Label
-var _map_legend: Panel
 var _map_home: Transform3D
 var _map_blend: float = 0.0
 var _map_inspecting: bool = false
 var _map_tween: Tween
-## Each place on the sheet: id and marker center.
+## Each place on the sheet: id, marker, label center, and the label's half size.
 var _map_spots: Array[Dictionary] = []
-## Ring shown on the sheet while the pointer is on that legend row.
-var _map_hover: Node3D
-var _map_hover_id: String = ""
 var _nav := _MenuNav.new()
 var _car_list: Control
 var _car_list_rows: VBoxContainer
@@ -136,7 +136,7 @@ var _sale_take: Button
 var _sale_refuse: Button
 var _say_bubble: Control
 var _say_after: Callable = Callable()
-## The map legend's "you're already here" line is up.
+## The map's "you're already here" line is up.
 var _map_here: bool = false
 ## The engine heard rolling out of and into the bay.
 var _engine_sound: AudioStreamPlayer
@@ -215,10 +215,6 @@ const _DAYS_IN_MONTH := [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 const _CITY_MAP := "res://assets/maps/city.trk"
 ## The sheet on the back wall, and how large it hangs in front of the camera.
 const _MAP_SHEET := Vector2(0.94, 1.26)
-## Wood border around the sheet. The legend matches this outer height.
-const _MAP_FRAME := 0.1
-## Legend width in the map's own units, so it scales with the sheet.
-const _MAP_LEGEND_W := 0.56
 const _MAP_DRAW := Vector2(0.86, 1.02)
 const _MAP_INSPECT_SCALE := 1.85
 const _MAP_INSPECT_DISTANCE := 1.55
@@ -228,8 +224,13 @@ const _MAP_POI_COLOR := {
 	"gas-station": Color(0.12, 0.38, 0.78),
 	"royal-rods": Color(0.82, 0.58, 0.1),
 }
-const _MAP_LEGEND: Array[String] = ["0: Garage", "1: Drive-In", "2: Gas station", "3: Royal Rods"]
-const _MAP_LEGEND_ID: Array[String] = ["garage", "drive-in", "gas-station", "royal-rods"]
+const _MAP_LABEL_NUDGE := {
+	"garage": Vector2(0.07, 0.015),
+	"drive-in": Vector2(-0.05, 0.042),
+	"gas-station": Vector2(0.0, 0.04),
+	"royal-rods": Vector2(0.07, -0.028),
+}
+const _MAP_NUMBER_ID: Array[String] = ["garage", "drive-in", "gas-station", "royal-rods"]
 const _WHEEL_NODES: Array[String] = [
 	"WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight",
 ]
@@ -327,6 +328,7 @@ func _ready() -> void:
 	elif GameState.is_ruined():
 		_loss_bubble.visible = true
 	_cam_distance_target = _cam_distance
+	_build_view_above_status()
 	_update_camera_transform()
 
 	# Defer so MeshInstance scripts (like the STL loader) have a chance
@@ -654,7 +656,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hang_map()
 		get_viewport().set_input_as_handled()
 		return
-	if _map_inspecting and _map_legend_key(event):
+	if _map_inspecting and _map_number_key(event):
 		get_viewport().set_input_as_handled()
 		return
 	if _say_bubble != null and _say_bubble.visible:
@@ -1018,14 +1020,66 @@ func nudge_view(yaw_delta: float, zoom_delta: float) -> void:
 	_update_camera_transform()
 
 
+## The 3D view fills the window down to the status bar, so that bar is not drawn on top of the map.
+func _build_view_above_status() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "ViewLayer"
+	layer.layer = -1
+	add_child(layer)
+	_view_holder = SubViewportContainer.new()
+	_view_holder.name = "View"
+	_view_holder.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_view_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_view_holder.stretch = true
+	layer.add_child(_view_holder)
+	_view_port = SubViewport.new()
+	_view_port.name = "ViewPort"
+	_view_port.handle_input_locally = false
+	_view_port.gui_disable_input = true
+	_view_port.physics_object_picking = false
+	_view_port.audio_listener_enable_3d = true
+	_view_port.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	var root := get_viewport()
+	_view_port.msaa_3d = root.msaa_3d
+	_view_port.screen_space_aa = root.screen_space_aa
+	_view_holder.add_child(_view_port)
+	_view_port.own_world_3d = false
+	_view_port.world_3d = root.world_3d
+	_camera_mount = Marker3D.new()
+	_camera_mount.name = "CameraMount"
+	_camera_pitch.add_child(_camera_mount)
+	_camera_mount.position = _camera.position
+	_camera.reparent(_view_port)
+	_camera.make_current()
+	_fit_view_above_status()
+	root.size_changed.connect(_fit_view_above_status)
+	_view_holder.resized.connect(_fit_view_above_status)
+
+
+func _fit_view_above_status() -> void:
+	if _view_holder == null or _view_port == null or _hud_bottom == null:
+		return
+	var bar_h := _hud_bottom.size.y
+	if bar_h < 1.0:
+		bar_h = -_hud_bottom.offset_top
+	var vp := get_viewport().get_visible_rect().size
+	var width := maxi(int(round(vp.x)), 2)
+	var height := maxi(int(round(vp.y - bar_h)), 2)
+	if not is_equal_approx(_view_holder.offset_bottom, -bar_h):
+		_view_holder.offset_bottom = -bar_h
+	var next := Vector2i(width, height)
+	if _view_port.size != next:
+		_view_port.size = next
+
+
 func _update_camera_transform() -> void:
 	_camera_pivot.rotation = Vector3.ZERO
 	_camera_pivot.rotate_y(_yaw)
 	_camera_pitch.rotation = Vector3.ZERO
 	_camera_pitch.rotate_object_local(Vector3.RIGHT, -_pitch)
-	_camera.position = Vector3(0.0, 0.6, _cam_distance)
+	_camera_mount.position = Vector3(0.0, 0.6, _cam_distance)
 	var target := _camera_pivot.global_position + Vector3(0.0, CAM_LOOK_HEIGHT, 0.0)
-	_camera.global_position = _inside_room(target, _camera.global_position)
+	_camera.global_position = _inside_room(target, _camera_mount.global_position)
 	_camera.look_at(target, Vector3.UP)
 
 
@@ -1197,7 +1251,7 @@ func _snap_map_home() -> void:
 	if _map == null:
 		return
 	_map_inspecting = false
-	_set_map_legend_visible(false)
+	_set_map_hint_visible(false)
 	_map_blend = 0.0
 	if _map_tween != null:
 		_map_tween.kill()
@@ -3426,11 +3480,10 @@ func _build_city_map() -> void:
 	_map_hint.offset_right = 460.0
 	_map_hint.offset_bottom = -52.0
 	_map_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_map_hint.text = "Press a number to drive there. M or Esc puts the map back"
+	_map_hint.text = "Click a place to drive there. M or Esc puts the map back"
 	_map_hint.add_theme_font_size_override(&"font_size", 22)
 	_map_hint.add_theme_color_override(&"font_color", Color(0.96, 0.93, 0.86))
 	_garage_ui.add_child(_map_hint)
-	_build_map_legend()
 
 
 func _draw_city_map(host: Node3D, track: Dictionary) -> void:
@@ -3503,18 +3556,40 @@ func _draw_city_map(host: Node3D, track: Dictionary) -> void:
 	_map_spots = []
 	var marks := SurfaceTool.new()
 	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var names := Node3D.new()
+	names.name = "Names"
+	names.position = Vector3(0.0, 0.0, -0.042)
+	host.add_child(names)
 	for pid: String in track["poi_order"]:
 		var poi: Dictionary = track["pois"][pid]
 		var at := _map_point(layout, float(poi["x"]), float(poi["y"]))
 		var color: Color = _MAP_POI_COLOR.get(pid, Color(0.9, 0.82, 0.3))
 		_map_quad(marks, at, Vector2(0.016, 0.0), Vector2(0.0, 0.016), color)
+		var lab := Label3D.new()
+		var place_name := str(poi["name"])
+		lab.text = place_name
+		var nudge: Vector2 = _MAP_LABEL_NUDGE.get(pid, Vector2(0.0, 0.04))
+		var label_at := at + nudge
+		var em := 40.0 * 0.00105
 		_map_spots.append({
 			"id": pid,
 			"at": at,
+			"label": label_at,
+			"half": Vector2(maxf(place_name.length() * em * 0.34, 0.03), em * 0.9),
 		})
+		lab.position = Vector3(label_at.x, label_at.y, 0.0)
+		lab.font_size = 40
+		lab.pixel_size = 0.00105
+		lab.modulate = Color(0.98, 0.95, 0.88)
+		lab.outline_modulate = Color(0.1, 0.07, 0.05)
+		lab.outline_size = 6
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lab.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lab.shaded = false
+		lab.double_sided = false
+		lab.rotation.y = PI
+		names.add_child(lab)
 	_add_map_mesh(host, "Places", marks, -0.034)
-	_map_hover = _map_hover_mark()
-	host.add_child(_map_hover)
 	var title := Label3D.new()
 	title.text = "CITY"
 	title.position = Vector3(0.0, _MAP_SHEET.y * 0.5 - 0.07, -0.02)
@@ -3527,7 +3602,7 @@ func _draw_city_map(host: Node3D, track: Dictionary) -> void:
 	host.add_child(title)
 
 
-## The place under the pointer while the sheet is held up. Empty when the click misses every marker.
+## The place under the pointer while the sheet is held up. Empty when the click misses every name and marker.
 func _map_poi_at(screen_pos: Vector2) -> String:
 	if _map == null or _map_blend < 0.9:
 		return ""
@@ -3540,105 +3615,25 @@ func _map_poi_at(screen_pos: Vector2) -> String:
 	var local := _map.to_local(hit["position"])
 	var at := Vector2(local.x, local.y)
 	var best := ""
-	var best_d := 0.028
+	var best_d := 1000.0
 	for spot: Dictionary in _map_spots:
 		var marker: Vector2 = spot["at"]
+		var label: Vector2 = spot["label"]
+		var half: Vector2 = spot["half"]
+		var outside := Vector2(maxf(absf(at.x - label.x) - half.x, 0.0), maxf(absf(at.y - label.y) - half.y, 0.0))
+		var on_label := outside.length() <= 0.008
 		var marker_d := at.distance_to(marker)
-		if marker_d < best_d:
-			best_d = marker_d
+		var on_marker := marker_d <= 0.022
+		if not on_label and not on_marker:
+			continue
+		var dist := marker_d if on_marker and not on_label else outside.length()
+		if dist < best_d:
+			best_d = dist
 			best = str(spot["id"])
 	return best
 
 
-func _build_map_legend() -> void:
-	var panel := Panel.new()
-	panel.name = "MapLegend"
-	panel.visible = false
-	panel.z_index = 2
-	panel.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	panel.add_theme_stylebox_override(&"panel", _map_legend_style())
-	var box := VBoxContainer.new()
-	box.name = "Rows"
-	box.set_anchors_preset(Control.PRESET_FULL_RECT)
-	box.offset_left = 10.0
-	box.offset_top = 10.0
-	box.offset_right = -10.0
-	box.offset_bottom = -10.0
-	box.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_theme_constant_override(&"separation", 2)
-	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_child(box)
-	for i in _MAP_LEGEND.size():
-		box.add_child(_map_legend_row(i))
-	_garage_ui.add_child(panel)
-	_map_legend = panel
-
-
-func _map_legend_row(index: int) -> Control:
-	var row := HBoxContainer.new()
-	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_theme_constant_override(&"separation", 8)
-	var poi := _MAP_LEGEND_ID[index]
-	row.mouse_entered.connect(_on_legend_hover.bind(poi))
-	row.mouse_exited.connect(_on_legend_unhover.bind(row, poi))
-	var swatch := ColorRect.new()
-	swatch.custom_minimum_size = Vector2(16, 16)
-	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var ink: Color = _MAP_POI_COLOR.get(poi, Color(0.9, 0.82, 0.3))
-	swatch.color = ink
-	row.add_child(swatch)
-	var btn := Button.new()
-	btn.text = _MAP_LEGEND[index]
-	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	btn.add_theme_font_size_override(&"font_size", 22)
-	btn.add_theme_color_override(&"font_color", Color(0.2, 0.12, 0.08))
-	btn.add_theme_color_override(&"font_hover_color", Color(0.2, 0.12, 0.08))
-	btn.add_theme_color_override(&"font_pressed_color", Color(0.2, 0.12, 0.08))
-	btn.add_theme_color_override(&"font_disabled_color", Color(0.45, 0.38, 0.32, 0.55))
-	btn.add_theme_stylebox_override(&"normal", _map_legend_button(Color(0, 0, 0, 0)))
-	btn.add_theme_stylebox_override(&"hover", _map_legend_button(Color(0.32, 0.2, 0.11, 0.14)))
-	btn.add_theme_stylebox_override(&"pressed", _map_legend_button(Color(0.32, 0.2, 0.11, 0.22)))
-	btn.add_theme_stylebox_override(&"disabled", _map_legend_button(Color(0, 0, 0, 0)))
-	btn.add_theme_stylebox_override(&"focus", _map_legend_button(Color(0.32, 0.2, 0.11, 0.14)))
-	btn.mouse_entered.connect(_on_legend_hover.bind(poi))
-	btn.mouse_exited.connect(_on_legend_unhover.bind(row, poi))
-	if poi == GameState.POI_ROYAL_RODS:
-		btn.disabled = true
-	else:
-		btn.pressed.connect(_choose_map_poi.bind(poi))
-	row.add_child(btn)
-	return row
-
-
-func _map_legend_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.93, 0.88, 0.76, 0.96)
-	style.border_color = Color(0.32, 0.2, 0.11)
-	style.set_border_width_all(3)
-	style.set_corner_radius_all(8)
-	style.content_margin_left = 14.0
-	style.content_margin_right = 14.0
-	style.content_margin_top = 12.0
-	style.content_margin_bottom = 12.0
-	return style
-
-
-func _map_legend_button(bg: Color) -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = bg
-	style.set_corner_radius_all(4)
-	style.content_margin_left = 8.0
-	style.content_margin_right = 8.0
-	style.content_margin_top = 4.0
-	style.content_margin_bottom = 4.0
-	return style
-
-
-func _map_legend_key(event: InputEvent) -> bool:
+func _map_number_key(event: InputEvent) -> bool:
 	if not event is InputEventKey:
 		return false
 	var key := event as InputEventKey
@@ -3656,9 +3651,9 @@ func _map_legend_key(event: InputEvent) -> bool:
 			number = 3
 		_:
 			return false
-	if number < 0 or number >= _MAP_LEGEND_ID.size():
+	if number < 0 or number >= _MAP_NUMBER_ID.size():
 		return false
-	_choose_map_poi(_MAP_LEGEND_ID[number])
+	_choose_map_poi(_MAP_NUMBER_ID[number])
 	return true
 
 
@@ -3684,113 +3679,14 @@ func _show_map_here() -> void:
 	_say_bubble.visible = true
 
 
-func _set_map_legend_visible(show: bool) -> void:
+func _set_map_hint_visible(show: bool) -> void:
 	if _map_hint != null:
 		_map_hint.visible = show
-	if _map_legend != null:
-		_map_legend.visible = show
-	if not show:
-		_set_map_highlight("")
 	if not show and _map_here:
 		_map_here = false
 		if _say_bubble != null:
 			_say_bubble.visible = false
 		_say_after = Callable()
-
-
-func _on_legend_hover(poi: String) -> void:
-	_set_map_highlight(poi)
-
-
-func _on_legend_unhover(row: Control, poi: String) -> void:
-	if _map_hover_id != poi:
-		return
-	if row.get_global_rect().has_point(row.get_global_mouse_position()):
-		return
-	_set_map_highlight("")
-
-
-## A ring around the marker for the legend row under the pointer.
-func _set_map_highlight(poi: String) -> void:
-	_map_hover_id = poi
-	if _map_hover == null:
-		return
-	if poi.is_empty():
-		_map_hover.visible = false
-		return
-	var at := Vector2.ZERO
-	var found := false
-	for spot: Dictionary in _map_spots:
-		if str(spot["id"]) != poi:
-			continue
-		at = spot["at"]
-		found = true
-		break
-	if not found:
-		_map_hover.visible = false
-		return
-	_map_hover.position = Vector3(at.x, at.y, -0.042)
-	var fill := _map_hover.get_node(^"Fill") as MeshInstance3D
-	var mat := fill.get_surface_override_material(0) as StandardMaterial3D
-	var color: Color = _MAP_POI_COLOR.get(poi, Color(0.95, 0.9, 0.4))
-	color = color.lightened(0.2)
-	mat.albedo_color = color
-	mat.emission = color
-	_map_hover.visible = true
-
-
-func _map_hover_mark() -> Node3D:
-	var mark := Node3D.new()
-	mark.name = "HoverMark"
-	mark.visible = false
-	var fill := _map_ring_mesh("Fill", 0.026, 0.044, Color(0.95, 0.9, 0.4))
-	mark.add_child(fill)
-	var edge := _map_ring_mesh("Edge", 0.044, 0.056, Color(0.98, 0.96, 0.9))
-	edge.position.z = -0.001
-	mark.add_child(edge)
-	return mark
-
-
-func _map_ring_mesh(node_name: String, inner: float, outer: float, color: Color) -> MeshInstance3D:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var steps := 28
-	for i in steps:
-		var a0 := TAU * float(i) / float(steps)
-		var a1 := TAU * float(i + 1) / float(steps)
-		var i0 := Vector2(cos(a0), sin(a0)) * inner
-		var i1 := Vector2(cos(a1), sin(a1)) * inner
-		var o0 := Vector2(cos(a0), sin(a0)) * outer
-		var o1 := Vector2(cos(a1), sin(a1)) * outer
-		_map_quad_corners(st, i0, o0, o1, i1, Color.WHITE)
-	st.generate_normals()
-	var mesh := st.commit()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = 0.4
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.emission_enabled = true
-	mat.emission = color
-	mat.emission_energy_multiplier = 0.6
-	mesh.surface_set_material(0, mat)
-	var mi := MeshInstance3D.new()
-	mi.name = node_name
-	mi.mesh = mesh
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.set_surface_override_material(0, mat)
-	return mi
-
-
-func _map_quad_corners(st: SurfaceTool, a: Vector2, b: Vector2, c: Vector2, d: Vector2, color: Color) -> void:
-	st.set_color(color)
-	st.set_normal(Vector3(0.0, 0.0, -1.0))
-	st.add_vertex(Vector3(a.x, a.y, 0.0))
-	st.add_vertex(Vector3(b.x, b.y, 0.0))
-	st.add_vertex(Vector3(c.x, c.y, 0.0))
-	st.add_vertex(Vector3(a.x, a.y, 0.0))
-	st.add_vertex(Vector3(c.x, c.y, 0.0))
-	st.add_vertex(Vector3(d.x, d.y, 0.0))
 
 
 func _map_point(layout: Dictionary, x: float, y: float) -> Vector2:
@@ -3852,7 +3748,7 @@ func _bring_map_forward() -> void:
 	_stats_panel.visible = false
 	_spray_menu.visible = false
 	_map_inspecting = true
-	_set_map_legend_visible(true)
+	_set_map_hint_visible(true)
 	if _map_tween != null:
 		_map_tween.kill()
 	_map_tween = create_tween()
@@ -3863,7 +3759,7 @@ func _hang_map() -> void:
 	if not _map_inspecting:
 		return
 	_map_inspecting = false
-	_set_map_legend_visible(false)
+	_set_map_hint_visible(false)
 	if _map_tween != null:
 		_map_tween.kill()
 	_map_tween = create_tween()
@@ -3876,57 +3772,11 @@ func _update_map_transform() -> void:
 	if _map_blend <= 0.0001:
 		if not _map_inspecting:
 			_map.global_transform = _map_home
-		_glue_map_legend()
 		return
 	var face := _map_home.interpolate_with(_map_face_transform(), _map_blend)
 	var grown := lerpf(1.0, _MAP_INSPECT_SCALE, _map_blend)
 	face.basis = face.basis.orthonormalized().scaled(Vector3(grown, grown, grown))
-	# Half the legend's width, so the sheet and the strip share the middle of the view.
-	var cam_right := _camera.global_transform.basis.x
-	face.origin -= cam_right * (_MAP_LEGEND_W * grown * 0.5 * _map_blend)
 	_map.global_transform = face
-	_glue_map_legend()
-
-
-## Puts the legend on the map's right edge, at the same height as the sheet.
-func _glue_map_legend() -> void:
-	if _map_legend == null or not _map_legend.visible or _camera == null:
-		return
-	var half := Vector2((_MAP_SHEET.x + _MAP_FRAME) * 0.5, (_MAP_SHEET.y + _MAP_FRAME) * 0.5)
-	var min_s := Vector2(INF, INF)
-	var max_s := Vector2(-INF, -INF)
-	var signs: Array[float] = [-1.0, 1.0]
-	for sx: float in signs:
-		for sy: float in signs:
-			var world: Vector3 = _map.global_transform * Vector3(sx * half.x, sy * half.y, 0.0)
-			if _camera.is_position_behind(world):
-				return
-			var screen := _camera.unproject_position(world)
-			min_s.x = minf(min_s.x, screen.x)
-			min_s.y = minf(min_s.y, screen.y)
-			max_s.x = maxf(max_s.x, screen.x)
-			max_s.y = maxf(max_s.y, screen.y)
-	var map_w := max_s.x - min_s.x
-	var map_h := max_s.y - min_s.y
-	if map_w < 2.0 or map_h < 2.0:
-		return
-	var width := map_w * (_MAP_LEGEND_W / (_MAP_SHEET.x + _MAP_FRAME))
-	var top := min_s.y
-	var bottom := max_s.y
-	if _hud_bottom != null:
-		bottom = minf(bottom, _hud_bottom.get_global_rect().position.y - 8.0)
-	if bottom - top < 2.0:
-		return
-	_map_legend.position = Vector2(max_s.x, top)
-	_map_legend.size = Vector2(width, bottom - top)
-	var font := int(clampf(width / 13.0, 15.0, 26.0))
-	for node: Node in _map_legend.find_children("*", "Button", true, false):
-		if node is Button:
-			(node as Button).add_theme_font_size_override(&"font_size", font)
-	var mark := maxf(font * 0.62, 8.0)
-	for node: Node in _map_legend.find_children("*", "ColorRect", true, false):
-		if node is ColorRect:
-			(node as ColorRect).custom_minimum_size = Vector2(mark, mark)
 
 
 func _map_face_transform() -> Transform3D:
