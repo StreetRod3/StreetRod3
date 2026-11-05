@@ -1,8 +1,10 @@
 extends CanvasLayer
 
 ## Makes a gamepad of a known make work everywhere with no setup, by pressing what the game
-## already answers to: the D-pad is the arrow keys, A is Enter, and B and Start are Escape.
-## Outside of driving the left stick moves a pointer, and A clicks with it. The game's own code
+## already answers to: the D-pad is the arrow keys, the yes button is Enter, and the back button
+## and Start are Escape. Yes and back are A and B as they say on the pad, which are on opposite
+## sides on a Switch pad. Outside of driving the left stick moves a pointer, and yes clicks with
+## it. The game's own code
 ## never has to know a gamepad is there. Driving reads its controls from controller.gd.
 
 const _Controller := preload("res://scripts/controller.gd")
@@ -73,12 +75,12 @@ func _is_driving() -> bool:
 
 
 ## On the road the car reads its controls itself, as set on the controls page. Off it the
-## buttons are fixed, so the menus can always be worked. A stays Enter on the road for the result
-## screen, unless it has a driving job.
+## buttons are fixed, so the menus can always be worked. The yes button stays Enter on the road
+## for the result screen, unless it has a driving job.
 func _update_buttons(driving: bool) -> void:
-	var a_on_road := NOTHING if _Controller.pad_button_has_job(JOY_BUTTON_A) else KEY_ENTER
-	_update_button(JOY_BUTTON_A, a_on_road if driving else (CLICK if _pointing else KEY_ENTER))
-	_update_button(JOY_BUTTON_B, NOTHING if driving else KEY_ESCAPE)
+	var yes_on_road := NOTHING if _Controller.confirm_has_job() else KEY_ENTER
+	_update_source(&"confirm", _Controller.confirm_down(), yes_on_road if driving else (CLICK if _pointing else KEY_ENTER))
+	_update_source(&"back", _Controller.back_down(), NOTHING if driving else KEY_ESCAPE)
 	_update_button(JOY_BUTTON_START, NOTHING if driving else KEY_ESCAPE)
 	_update_button(JOY_BUTTON_DPAD_UP, NOTHING if driving else KEY_UP)
 	_update_button(JOY_BUTTON_DPAD_DOWN, NOTHING if driving else KEY_DOWN)

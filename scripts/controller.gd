@@ -56,10 +56,24 @@ const PLAYSTATION_NAMES: Dictionary[int, String] = {
 	JOY_BUTTON_DPAD_UP: "D-pad up", JOY_BUTTON_DPAD_DOWN: "D-pad down",
 	JOY_BUTTON_DPAD_LEFT: "D-pad left", JOY_BUTTON_DPAD_RIGHT: "D-pad right",
 }
-## Sony's USB vendor number, as Godot reports it. Pads from others that act as one say so in
-## their name instead.
+## A Switch pad's letters sit the other way around from an Xbox pad's, so Godot's A, on the
+## bottom, says B on the pad. ZL and ZR are plain buttons, which Godot reports as full triggers.
+const NINTENDO_NAMES: Dictionary[int, String] = {
+	JOY_BUTTON_A: "B", JOY_BUTTON_B: "A", JOY_BUTTON_X: "Y", JOY_BUTTON_Y: "X",
+	JOY_BUTTON_LEFT_SHOULDER: "L", JOY_BUTTON_RIGHT_SHOULDER: "R",
+	JOY_BUTTON_BACK: "Minus", JOY_BUTTON_START: "Plus", JOY_BUTTON_GUIDE: "Home",
+	JOY_BUTTON_LEFT_STICK: "LS", JOY_BUTTON_RIGHT_STICK: "RS",
+	JOY_BUTTON_DPAD_UP: "D-pad up", JOY_BUTTON_DPAD_DOWN: "D-pad down",
+	JOY_BUTTON_DPAD_LEFT: "D-pad left", JOY_BUTTON_DPAD_RIGHT: "D-pad right",
+}
+## USB vendor numbers, as Godot reports them. Pads from others that act as one say so in their
+## name instead.
 const SONY_VENDOR := "1356"
+const NINTENDO_VENDOR := "1406"
 const PLAYSTATION_WORDS: Array[String] = ["ps3", "ps4", "ps5", "playstation", "dualshock", "dualsense"]
+const NINTENDO_WORDS: Array[String] = ["nintendo", "switch", "joy-con", "joycon"]
+
+enum PadMaker { XBOX, PLAYSTATION, NINTENDO }
 
 ## Set while the setup page waits for an input, so the controls do nothing else meanwhile.
 static var capturing: bool = false
@@ -158,28 +172,79 @@ static func pedal(action: String) -> float:
 	return clampf(inverse_lerp(PEDAL_DEAD_LOW, PEDAL_DEAD_HIGH, pressed), 0.0, 1.0)
 
 
-## The first gamepad's names for its buttons. Xbox ones are the default, with or without a pad.
-static func playstation_names() -> bool:
-	var found := pads()
-	if found.is_empty():
-		return false
-	if str(Input.get_joy_info(found[0]).get("vendor_id", "")) == SONY_VENDOR:
-		return true
-	var pad_name := Input.get_joy_name(found[0]).to_lower()
+## Who made a gamepad, going by its USB vendor and then its name. Xbox names are the default.
+static func pad_maker(device: int) -> PadMaker:
+	var vendor := str(Input.get_joy_info(device).get("vendor_id", ""))
+	if vendor == SONY_VENDOR:
+		return PadMaker.PLAYSTATION
+	if vendor == NINTENDO_VENDOR:
+		return PadMaker.NINTENDO
+	var pad_name := Input.get_joy_name(device).to_lower()
 	for word: String in PLAYSTATION_WORDS:
 		if pad_name.contains(word):
+			return PadMaker.PLAYSTATION
+	for word: String in NINTENDO_WORDS:
+		if pad_name.contains(word):
+			return PadMaker.NINTENDO
+	return PadMaker.XBOX
+
+
+## Names go by the first gamepad, and by Xbox with none plugged in.
+static func _names_maker() -> PadMaker:
+	var found := pads()
+	return pad_maker(found[0]) if not found.is_empty() else PadMaker.XBOX
+
+
+## The button a menu takes as yes. On a Switch pad that is the one that says A, on the right.
+static func confirm_button(device: int) -> JoyButton:
+	return JOY_BUTTON_B if pad_maker(device) == PadMaker.NINTENDO else JOY_BUTTON_A
+
+
+static func back_button(device: int) -> JoyButton:
+	return JOY_BUTTON_A if pad_maker(device) == PadMaker.NINTENDO else JOY_BUTTON_B
+
+
+## Each gamepad by its own layout, so two different makes can both work the menus.
+static func confirm_down() -> bool:
+	for device: int in pads():
+		var button := confirm_button(device)
+		if Input.is_joy_button_pressed(device, button) and not _is_bound(device, int(button)):
+			return true
+	return false
+
+
+static func back_down() -> bool:
+	for device: int in pads():
+		var button := back_button(device)
+		if Input.is_joy_button_pressed(device, button) and not _is_bound(device, int(button)):
+			return true
+	return false
+
+
+## Whether the yes button has a driving job, so it does not also press Enter on the road.
+static func confirm_has_job() -> bool:
+	for device: int in pads():
+		if pad_button_has_job(confirm_button(device)):
 			return true
 	return false
 
 
 static func button_name(button: JoyButton) -> String:
-	var names := PLAYSTATION_NAMES if playstation_names() else XBOX_NAMES
+	var names := XBOX_NAMES
+	match _names_maker():
+		PadMaker.PLAYSTATION:
+			names = PLAYSTATION_NAMES
+		PadMaker.NINTENDO:
+			names = NINTENDO_NAMES
 	return names.get(int(button), "Button %d" % int(button))
 
 
 static func trigger_name(axis: JoyAxis) -> String:
-	if playstation_names():
-		return "R2" if axis == JOY_AXIS_TRIGGER_RIGHT else "L2"
+	match _names_maker():
+		PadMaker.PLAYSTATION:
+			return "R2" if axis == JOY_AXIS_TRIGGER_RIGHT else "L2"
+		PadMaker.NINTENDO:
+			return "ZR" if axis == JOY_AXIS_TRIGGER_RIGHT else "ZL"
 	return "RT" if axis == JOY_AXIS_TRIGGER_RIGHT else "LT"
 
 
