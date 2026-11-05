@@ -493,6 +493,12 @@ func _clutch_kick() -> float:
 	return 1.0 + CLUTCH_KICK * over
 
 
+## Paving drawn over the ground where there is no track to say how high it is, as in free roam,
+## for the skid marks to lie on.
+func set_mark_paving(source: Object) -> void:
+	_skids.paving = source
+
+
 func _handbrake_down() -> bool:
 	if _Controller.action_down(_Controller.HANDBRAKE):
 		return true

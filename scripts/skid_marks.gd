@@ -36,6 +36,9 @@ var _smoke_at: Array[Vector3] = []
 var _smokes: Array[CPUParticles3D] = []
 var _smoke_mesh: QuadMesh = null
 var _burn_ticks: Array[int] = []
+## Anything with `paved_height(world)`, for paving drawn over the ground with no track to say how
+## high it is, such as free roam's driveways and the slabs in front of each place.
+var paving: Object = null
 
 
 func _ready() -> void:
@@ -129,7 +132,7 @@ func record_axles(
 ## A driven tire spinning on the spot: smoke, and rubber building up under it. `strength` is 0 to 1.
 func burn(index: int, world: Vector3, ground_y: float, forward: Vector3, strength: float) -> void:
 	_ensure(index)
-	var point := Vector3(world.x, ground_y + MARK_Y, world.z)
+	var point := _mark_point(world, ground_y)
 	_points[index] = point
 	_drawing[index] = false
 	_smoke_wanted[index] = strength * BURN_SMOKE
@@ -174,11 +177,11 @@ func stamp(
 			and contact_speed > 2.5
 			and (absf(slip_angle) > 0.1 or absf(long_slip) > 1.05)
 		)
-	var point := Vector3(world.x, ground_y + MARK_Y, world.z)
 	if not sliding:
 		_drawing[index] = false
-		_points[index] = point
+		_points[index] = Vector3(world.x, ground_y + MARK_Y, world.z)
 		return
+	var point := _mark_point(world, ground_y)
 	_smoke_wanted[index] = lerpf(0.5, 1.0, smoothstep(USE_MARK, 1.0, utilization)) * (1.0 - clampf(surface_blend, 0.0, 1.0) * 0.5)
 	_smoke_at[index] = point + Vector3.UP * SMOKE_RISE_M
 	if _drawing[index]:
@@ -194,6 +197,14 @@ func stamp(
 	else:
 		_points[index] = point
 	_drawing[index] = true
+
+
+## Where a mark goes, just over the road or over any paving drawn on top of it.
+func _mark_point(world: Vector3, ground_y: float) -> Vector3:
+	var top := ground_y
+	if paving != null and paving.has_method(&"paved_height"):
+		top = maxf(top, float(paving.paved_height(world)))
+	return Vector3(world.x, top + MARK_Y, world.z)
 
 
 func flush() -> void:
