@@ -18,7 +18,7 @@ Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRo
 | Hand brake | Space |
 | Camera | C |
 | Pause | Esc |
-| Burnout | W and S with the car stopped |
+| Burnout | W and S with the car stopped, steering to swing the back round |
 
 These can be changed under Controls in the settings. On a phone or a narrow window, on-screen pedals and a steering wheel replace the keyboard hint.
 
