@@ -382,6 +382,7 @@ func _build_roam_car(track: Dictionary, from_poi: String) -> void:
 	pivot.position = Vector3(0.0, 0.0, 1.9)
 	body.add_child(pivot)
 	var shape := CollisionShape3D.new()
+	shape.name = "CollisionShape3D"
 	var box := BoxShape3D.new()
 	box.size = Vector3(1.6, 0.5, 3.8)
 	shape.shape = box
