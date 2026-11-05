@@ -270,8 +270,9 @@ var steer_sensitivity: float = 3.0
 ## The driving controls as changed on the controls page, by action. One not here has its default.
 var control_keys: Dictionary = {}
 var control_pad: Dictionary = {}
-## The driving HUD: whether it shows the control hints, and its size from 0.6 to 1.
-var show_control_hints: bool = true
+## The driving HUD: what it shows, by item in driving_hud.gd, and its size from 0.6 to 1. An item
+## not in `hud_items` is shown.
+var hud_items: Dictionary = {}
 var hud_size: float = 1.0
 ## How hard a gamepad rumbles, from 0 for off to 1. Persisted in settings.
 var rumble_strength: float = 1.0
@@ -3441,7 +3442,7 @@ func save_settings() -> void:
 	cfg.set_value("input", "controller", controller_bindings)
 	cfg.set_value("input", "steer_sensitivity", steer_sensitivity)
 	cfg.set_value("input", "rumble_strength", rumble_strength)
-	cfg.set_value("display", "control_hints", show_control_hints)
+	cfg.set_value("display", "hud_items", hud_items)
 	cfg.set_value("display", "hud_size", hud_size)
 	cfg.set_value("input", "keys", control_keys)
 	cfg.set_value("input", "pad", control_pad)
@@ -3473,8 +3474,13 @@ func load_settings() -> void:
 	if cfg.get_value("input", "pad", {}) is Dictionary:
 		control_pad = cfg.get_value("input", "pad", {})
 	rumble_strength = clampf(float(cfg.get_value("input", "rumble_strength", rumble_strength)), 0.0, 1.0)
-	show_control_hints = bool(cfg.get_value("display", "control_hints", show_control_hints))
+	if cfg.get_value("display", "hud_items", {}) is Dictionary:
+		hud_items = cfg.get_value("display", "hud_items", {})
 	hud_size = clampf(float(cfg.get_value("display", "hud_size", hud_size)), 0.6, 1.0)
+
+
+func hud_shows(item: String) -> bool:
+	return bool(hud_items.get(item, true))
 
 
 ## Where the mouse is, or a gamepad's pointer when that is in use.

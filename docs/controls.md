@@ -158,7 +158,10 @@ A Moza HGP shifter through a Moza base uses buttons up around 113 to 120, which 
 
 ## Driving HUD
 
-Graphics in the settings can hide the control hints on the driving HUD, and make the HUD smaller, down to 60%. The panel in the top right corner and the rev counter both shrink, and stay where they are.
+Graphics in the settings sets what the driving HUD shows and how big it is, with a preview of the race screen that changes as you go:
+
+- Checkboxes turn each part on or off: opponent, speed, gear, damage, distance to finish, race time, control hints, and the rev counter. With every line off, the panel goes away.
+- The size goes down to 60%. It shrinks the whole panel in the top right corner, text and spacing alike, and the rev counter with it, and both stay where they are.
 
 ## Reverse
 

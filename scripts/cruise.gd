@@ -17,7 +17,7 @@ const _PlayerCar := preload("res://scripts/player_race_car.gd")
 const _RpmMeter := preload("res://scripts/rpm_meter.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _TouchControls := preload("res://scripts/race_touch_controls.gd")
-const _HudSize := preload("res://scripts/hud_size.gd")
+const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _StreetLamp := preload("res://scripts/street_lamp.gd")
 const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
 ## Spawn at least this far from the place just left, toward the street, in meters.
@@ -574,7 +574,7 @@ func _build_hud() -> void:
 	touch.name = "MobileControls"
 	touch.set_script(_TouchControls)
 	layer.add_child(touch)
-	_HudSize.apply(panel, meter)
+	_DrivingHud.apply(panel, meter)
 	_touch = touch
 
 

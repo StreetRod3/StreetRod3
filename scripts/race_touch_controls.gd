@@ -73,7 +73,7 @@ func _refresh_visible() -> void:
 	visible = _is_mobile_view()
 	var hint := get_parent().get_node_or_null("Panel/Margin/VBox/HintLabel") as CanvasItem
 	if hint != null:
-		hint.visible = not visible and GameState.show_control_hints
+		hint.visible = not visible and GameState.hud_shows("hints")
 	_refresh_shift_visible()
 
 

@@ -6,7 +6,7 @@ const _Controller := preload("res://scripts/controller.gd")
 const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _ControlsSetup := preload("res://scripts/controls_setup.gd")
 const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
-const _HudSize := preload("res://scripts/hud_size.gd")
+const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
@@ -700,9 +700,9 @@ func _on_pause_graphics_pressed() -> void:
 	_GraphicsSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
 
 
-## The HUD's size and hints as set on the graphics page. Also called when that page closes.
+## The HUD as set on the graphics page. Also called when that page closes.
 func refresh_hud() -> void:
-	_HudSize.apply($RaceUI/Panel, _rpm_meter)
+	_DrivingHud.apply($RaceUI/Panel, _rpm_meter)
 	if _mobile != null and _mobile.has_method(&"refresh"):
 		_mobile.call(&"refresh")
 
