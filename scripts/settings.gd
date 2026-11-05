@@ -1,7 +1,6 @@
 extends Control
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
-const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _ControlsSetup := preload("res://scripts/controls_setup.gd")
 const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 
@@ -22,7 +21,6 @@ func _ready() -> void:
 		%ArcadeCheck,
 		%ImperialCheck,
 		%ControlsBtn,
-		%ControllerBtn,
 		$Margin/VBox/BackButton,
 	])
 
@@ -61,5 +59,3 @@ func _on_controls_pressed() -> void:
 	_ControlsSetup.new().open(self, $Margin, %ControlsBtn)
 
 
-func _on_controller_pressed() -> void:
-	_ControllerSetup.new().open(self, $Margin, %ControllerBtn)

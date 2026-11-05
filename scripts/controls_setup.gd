@@ -6,6 +6,7 @@ extends CanvasLayer
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
+const _ControlsTabs := preload("res://scripts/controls_tabs.gd")
 
 const HELP := "Click a slot, then press the key or gamepad control for it. Press the one already there to clear it. A control does one job, so using it again moves it."
 const SLOTS := 2
@@ -16,6 +17,7 @@ const RUMBLE_STEP := 0.25
 const RUMBLE_TEST_S := 0.25
 
 var _nav := _MenuNav.new()
+var _tabs: TabBar
 var _host: Node
 var _page: Control
 var _return_focus: Control
@@ -69,6 +71,8 @@ func _build() -> void:
 	title.add_theme_font_size_override("font_size", 28)
 	title.text = "Controls"
 	box.add_child(title)
+	_tabs = _ControlsTabs.build(_ControlsTabs.KEYS_AND_PAD, self)
+	box.add_child(_tabs)
 	var help := Label.new()
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.text = HELP
@@ -131,7 +135,7 @@ func _slot_key(action: String, keys: bool, slot: int) -> String:
 
 
 func _nav_items() -> Array:
-	var items: Array = []
+	var items: Array = [_tabs]
 	for action: String in _Controller.control_actions():
 		for keys: bool in [true, false]:
 			for slot: int in SLOTS:
@@ -150,7 +154,15 @@ func _exit_tree() -> void:
 		_host.call(&"refresh_control_hint")
 
 
+## For a tab change, which opens this page in place of the other.
+func focus_tabs() -> void:
+	_tabs.grab_focus()
+
+
 func _input(event: InputEvent) -> void:
+	if _ControlsTabs.handle_key(_tabs, event):
+		get_viewport().set_input_as_handled()
+		return
 	if _listen_action.is_empty():
 		return
 	if event is InputEventKey:

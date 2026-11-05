@@ -82,13 +82,6 @@ layout_mode = 2
 size_flags_horizontal = 0
 text = "Controls"
 
-[node name="ControllerBtn" type="Button" parent="Margin/VBox"]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(200, 40)
-layout_mode = 2
-size_flags_horizontal = 0
-text = "Wheel and shifter setup"
-
 [node name="BackButton" type="Button" parent="Margin/VBox"]
 custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
@@ -101,5 +94,4 @@ text = "Back to main menu"
 [connection signal="toggled" from="Margin/VBox/ArcadeCheck" to="." method="_on_arcade_toggled"]
 [connection signal="toggled" from="Margin/VBox/ImperialCheck" to="." method="_on_imperial_toggled"]
 [connection signal="pressed" from="Margin/VBox/ControlsBtn" to="." method="_on_controls_pressed"]
-[connection signal="pressed" from="Margin/VBox/ControllerBtn" to="." method="_on_controller_pressed"]
 [connection signal="pressed" from="Margin/VBox/BackButton" to="." method="_on_back_pressed"]

@@ -3,7 +3,6 @@ extends Node3D
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
-const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _ControlsSetup := preload("res://scripts/controls_setup.gd")
 const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 const _DrivingHud := preload("res://scripts/driving_hud.gd")
@@ -653,7 +652,6 @@ func _sync_pause_nav() -> void:
 			_pause_arcade,
 			_pause_imperial,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControlsBtn,
-			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControllerBtn,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _pause_menu.visible:
@@ -733,8 +731,6 @@ func _on_pause_controls_pressed() -> void:
 	_ControlsSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControlsBtn)
 
 
-func _on_pause_controller_pressed() -> void:
-	_ControllerSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControllerBtn)
 
 
 func _show_speed_and_distance() -> void:

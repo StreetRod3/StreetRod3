@@ -122,7 +122,7 @@ The pad rumbles for burnouts, rough ground, slides, the engine at its limit, hit
 
 ## Changing the controls
 
-Controls in the settings, in the main menu, the garage menu, and the race pause menu, changes the driving controls:
+Controls in the settings, in the main menu, the garage menu, and the race pause menu, has two tabs. Keyboard and gamepad changes the driving controls:
 
 - Each job has two keyboard slots and two gamepad slots.
 - Click a slot, then press the key, button, trigger, or stick direction for it.
@@ -134,7 +134,7 @@ Menu buttons cannot be changed, so nobody can lock themselves out, and Esc alway
 
 ## Steering wheel, pedals, and shifter
 
-Wheel and shifter setup in the settings binds them, since every wheel numbers its controls differently:
+The Wheel and shifter tab under Controls in the settings binds them, since every wheel numbers its controls differently:
 
 - Click a row, then move that control.
 - Steering: turn the wheel to the right and back to center.

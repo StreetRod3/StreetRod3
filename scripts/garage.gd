@@ -1,7 +1,6 @@
 extends Node3D
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
-const _ControllerSetup := preload("res://scripts/controller_setup.gd")
 const _ControlsSetup := preload("res://scripts/controls_setup.gd")
 const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
@@ -974,7 +973,6 @@ func _sync_menu_nav() -> void:
 			_clock_arcade,
 			_clock_imperial,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControlsBtn,
-			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControllerBtn,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
 	elif _clock_menu.visible:
@@ -2964,8 +2962,6 @@ func _on_clock_controls_pressed() -> void:
 	_ControlsSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControlsBtn)
 
 
-func _on_clock_controller_pressed() -> void:
-	_ControllerSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControllerBtn)
 
 
 func _close_clock_settings() -> void:

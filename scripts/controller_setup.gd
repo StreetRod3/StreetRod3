@@ -5,8 +5,9 @@ extends CanvasLayer
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _Controller := preload("res://scripts/controller.gd")
+const _ControlsTabs := preload("res://scripts/controls_tabs.gd")
 
-const HELP := "Click a row, then move that control. A car with fewer gears uses its top gear for the rest. Paddles or a sequential shifter go on Shift up and Shift down. Keyboard and gamepad are under Controls."
+const HELP := "Click a row, then move that control. A car with fewer gears uses its top gear for the rest. Paddles or a sequential shifter go on Shift up and Shift down. Keyboard and gamepad are on the other tab."
 ## An axis has to move this far, and come back to within this share of that, to be taken.
 const AXIS_MIN_TRAVEL := 0.15
 const AXIS_BACK_SHARE := 0.25
@@ -18,6 +19,8 @@ const SENSITIVITY_MAX := 6.0
 const SENSITIVITY_STEP := 0.5
 
 var _nav := _MenuNav.new()
+var _tabs: TabBar
+var _host: Node
 var _page: Control
 var _return_focus: Control
 var _rows: Dictionary = {}
@@ -38,6 +41,7 @@ var _travel: Dictionary = {}
 
 ## Hides the settings page behind it, and goes back to the button that opened it.
 func open(host: Node, page: Control, return_focus: Control) -> void:
+	_host = host
 	_page = page
 	_return_focus = return_focus
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -65,8 +69,10 @@ func _build() -> void:
 	margin.add_child(box)
 	var title := Label.new()
 	title.add_theme_font_size_override("font_size", 28)
-	title.text = "Wheel and shifter"
+	title.text = "Controls"
 	box.add_child(title)
+	_tabs = _ControlsTabs.build(_ControlsTabs.WHEEL, self)
+	box.add_child(_tabs)
 	var help := Label.new()
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.text = HELP
@@ -136,7 +142,7 @@ func _add_sensitivity(column: VBoxContainer) -> void:
 
 
 func _nav_items() -> Array:
-	var items: Array = []
+	var items: Array = [_tabs]
 	for action: String in _Controller.wheel_actions():
 		items.append(_rows[action])
 	items.append(_sensitivity)
@@ -151,7 +157,15 @@ func _exit_tree() -> void:
 	_Controller.capturing = false
 
 
+## For a tab change, which opens this page in place of the other.
+func focus_tabs() -> void:
+	_tabs.grab_focus()
+
+
 func _input(event: InputEvent) -> void:
+	if _ControlsTabs.handle_key(_tabs, event):
+		get_viewport().set_input_as_handled()
+		return
 	if _listening.is_empty():
 		return
 	if event is InputEventJoypadButton:
