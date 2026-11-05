@@ -8,22 +8,21 @@ Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRo
 
 ## Play
 
-| Action | Control |
+| Action | Keyboard |
 | --- | --- |
 | Throttle | W or Up |
 | Brake | S or Down |
 | Steer | A/D or Left/Right |
 | Shift | Q / E |
 | Reverse | Q from first gear (or drive) with the car stopped |
+| Hand brake | Space |
 | Camera | C |
+| Pause | Esc |
+| Burnout | W and S with the car stopped |
 
-On a phone or a narrow window, on-screen pedals and a steering wheel replace the keyboard hint.
+These can be changed under Controls in the settings. On a phone or a narrow window, on-screen pedals and a steering wheel replace the keyboard hint.
 
-An Xbox, PlayStation, or other common gamepad works with no setup. Driving: left stick steers, right trigger is gas, left trigger is brake (or right stick up and down for either), the bumpers shift, X is the hand brake, Y is the camera, and Start pauses. It rumbles too. Everywhere else, the D-pad and A work the menus, B goes back, and the left stick moves a pointer that A clicks with, X right-clicks with, and the right stick scrolls with. The Back button opens the clock menu in the garage. PlayStation and Nintendo pads go by their own button names, and on a Nintendo pad the menus take the button marked A as yes and B as back, as on a Switch.
-
-Controls in the settings changes the driving controls on the keyboard and gamepad, with two slots each, and sets how hard the rumble is. The menu buttons stay as they are, and Esc always pauses.
-
-A steering wheel, pedals, a hand brake, and an H-pattern or sequential shifter or a wheel's paddles can be bound under Wheel and shifter setup in the settings. The keyboard keeps working alongside them. There is no force feedback, so the wheel only centers itself if its own settings do that.
+Gamepads work with no setup, and steering wheels, pedals, and shifters can be set up in the settings. See [docs/controls.md](docs/controls.md) for all of it.
 
 New Game asks for your name on a driver's license, then starts you in the garage with cash, a basic car, and an automatic 3-speed. Click the newspaper to buy parts, and the garage doors to pick a rival. Rivals turn up one at a time: beat the newest and the next arrives in a faster car. Parts wear as you race, and tires worn right down blow out in the next race, which loses it and the set, and the spare-parts list shows each one's condition and has a Sell button: a buyer makes an offer you can accept or turn down for another. Click low on the car between the wheels (or press T) to get under it and change the transmission: back both bellhousing bolts out to drop the gearbox, select a spare, and tighten the bolts before driving out. Click the engine compartment (or press H) to work under the hood: back the bolts out of a part to lift it off, use Parts to put in a spare engine, camshaft (the heads have to be off to reach it), cylinder heads, intake, carburetor, distributor, or air cleaner, and tighten every bolt and put the plug wires on before the engine will run. Tune there brings up a timing light on the balancer; advance or retard the distributor until the mark lines up with the red pointer and the idle runs smooth. Click the creeper on the floor beside the car (or press U) to roll under it and change the exhaust manifolds, the exhaust, the mufflers, and the rear end: click a part to swap in a spare, take a muffler off to leave its pipe open, or take the exhaust off for open headers. A dual exhaust has a muffler on each side, and the two can differ. A shorter rear end pulls harder in every gear but tops out lower. The springs and shocks are changed there too. Stiffer springs lean less and hold the road better, but they want better shocks to go with them, and worn ones make a car wallow. Buy tires in the newspaper. To change them, take the wheels off the car from the wheel list, click the tire machine against the front wall (or press T), pick the wheels, and pick the tires. The old tires go to spare parts, and the wheels stay in spare parts until you put them back on the car. Tires do most for how the car holds and pulls. Wheels (click the jack or press W) can be changed or taken off, tires and all. They change the look, and a lighter set like the magnesium wheels adds a little pull. In a race, crashes add up. Barriers and the other car both do damage by how suddenly they change your speed, so a heavy car takes less from a light one. Damage cuts your power and wears your parts, and enough of it totals the car, yours or your rival's. Total your rival and you win the race and the money, but not the pink slips.
 
