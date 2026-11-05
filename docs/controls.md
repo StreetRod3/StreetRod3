@@ -1,6 +1,85 @@
 # Controls
 
-The keyboard controls are in the [README](../README.md#play). Everything here can be used alongside the keyboard.
+Every control in the game: keyboard, gamepad, and steering wheel. They all work at the same time, so a gamepad or wheel can be used alongside the keyboard.
+
+## Keyboard
+
+### Driving
+
+| Action | Key |
+| --- | --- |
+| Throttle | W or Up |
+| Brake | S or Down |
+| Steer | A / D or Left / Right |
+| Shift up / down | E / Q |
+| Reverse | Q from first gear (or drive) with the car stopped |
+| Hand brake | Space |
+| Camera | C |
+| Pause | Esc |
+| Burnout | W and S with the car stopped |
+
+These can be changed under Controls in the settings. Esc always pauses, whatever else is set.
+
+### Menus
+
+| Action | Key |
+| --- | --- |
+| Move through a menu | W / S or Up / Down |
+| Move a slider | A / D or Left / Right |
+| Choose | Enter |
+| Back | Esc |
+
+### Garage
+
+| Key | Does |
+| --- | --- |
+| Q | Menu: save, load, new game, settings, quit |
+| N | Newspaper |
+| H | Under the hood |
+| U | Under the car |
+| A | Transmission |
+| T | Tire machine |
+| W | Wheels |
+| L | Spare parts |
+| C | Your cars |
+| P | Paint job |
+| I | Car stats |
+| D | Drive out to free roam |
+| G | Drive to the gas station |
+| M | City map |
+| X | Calendar |
+| R | Radio on and off |
+| Ctrl+0 (Cmd+0 on a Mac) | Put the view back |
+
+With the mouse, drag with the right button to turn the view, and scroll to zoom.
+
+In lists of cars and spare parts, the number keys pick an entry. In your cars, S switches to the car, L sells it, and F closes the list. In spare parts, S sells the part. When selling a car, type the price or move it by $50 with Up and Down, then Enter or O offers it and Esc or N walks away.
+
+With the city map up close, 1 drives to the drive-in and 2 to the gas station.
+
+### Other places
+
+| Where | Key | Does |
+| --- | --- | --- |
+| Under the hood | P | Parts |
+| Under the hood | W | Plug wires on or off |
+| Under the hood | T | Timing light |
+| Timing light | A or Up | Advance the timing a step |
+| Timing light | R or Down | Retard the timing a step |
+| Transmission | G | Pick a gearbox |
+| Transmission | 1 / 2 | The two bellhousing bolts |
+| Under the car | 1 to 7 | Manifolds, exhaust, muffler, left muffler, differential, springs, shocks |
+| Newspaper | U or C | Used cars |
+| Newspaper | P or A | Parts |
+| Gas station | P | Take the pump nozzle, or put it back |
+| Gas station | F | Put the nozzle in the tank to fuel, or take it out |
+| Drive-in | O | The list of rivals |
+| Drive-in | Enter | Race the rival who is there |
+| Drive-in | H | Look under the rival's hood |
+| Gas station, drive-in | G | Back to the garage |
+| Gas station, drive-in | D | Town cruise |
+
+Esc leaves each of these places, or first closes whatever list is open.
 
 ## Gamepad
 
@@ -43,7 +122,7 @@ The pad rumbles for burnouts, rough ground, slides, the engine at its limit, hit
 
 ## Changing the controls
 
-Controls in the settings, in the main menu, the garage clock, and the race pause menu, changes the driving controls:
+Controls in the settings, in the main menu, the garage menu, and the race pause menu, changes the driving controls:
 
 - Each job has two keyboard slots and two gamepad slots.
 - Click a slot, then press the key, button, trigger, or stick direction for it.
