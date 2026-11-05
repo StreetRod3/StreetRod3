@@ -94,7 +94,8 @@
     { "id": 92, "x": -108, "y": 40 },
     { "id": 93, "x": -108, "y": 80 },
     { "id": 94, "x": 160, "y": -188 },
-    { "id": 95, "x": 160, "y": -228 }
+    { "id": 95, "x": 160, "y": -228 },
+    { "id": 96, "x": 80, "y": 98 }
   ],
   "roads": [
     { "from": 1, "to": 2, "width": 16 },
@@ -143,8 +144,10 @@
     { "from": 23, "to": 9, "width": 16 },
     { "from": 9, "to": 24, "width": 16 },
     { "from": 24, "to": 9, "width": 16 },
-    { "from": 5, "to": 25, "width": 16 },
-    { "from": 25, "to": 5, "width": 16 },
+    { "from": 5, "to": 96, "width": 16 },
+    { "from": 96, "to": 5, "width": 16 },
+    { "from": 96, "to": 25, "width": 16 },
+    { "from": 25, "to": 96, "width": 16 },
     { "from": 25, "to": 26, "width": 16 },
     { "from": 26, "to": 25, "width": 16 },
     { "from": 9, "to": 27, "width": 16 },
@@ -349,7 +352,8 @@
   "pois": [
     { "id": "garage", "name": "Garage", "at": 1, "x": -32, "y": 0 },
     { "id": "drive-in", "name": "Drive-in", "at": 25, "x": 116, "y": 112 },
-    { "id": "gas-station", "name": "Gas station", "at": 27, "x": 112, "y": -116 }
+    { "id": "gas-station", "name": "Gas station", "at": 27, "x": 112, "y": -116 },
+    { "id": "royal-rods", "name": "Royal Rods", "at": 96, "x": 68, "y": 98 }
   ],
   "buildings": [
     { "x": 15, "y": 16, "w": 8, "d": 10, "h": 5, "color": [0.55, 0.5, 0.42], "sign": "MARKET" },

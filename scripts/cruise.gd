@@ -5,6 +5,7 @@ extends Node3D
 ## leans and dives over wheels that roll and steer, and the camera hangs back.
 
 const CITY_MAP := "res://assets/maps/city.trk"
+const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
@@ -52,6 +53,9 @@ const _LAMP_SETBACK := 0.95
 const _LAMP_REACH := 1.2
 const _LAMP_EVERY := 18.0
 const _BUSH_EVERY := 6.4
+## The street drag's trees, on the grass this far past the curb, and about this far apart.
+const _TREE_SETBACK := 5.5
+const _TREE_EVERY := 36.0
 const _FRAME_COLOR := Color(0.15, 0.14, 0.13)
 const _STOOP_COLOR := Color(0.58, 0.56, 0.52)
 const _DOOR_COLORS: Array[Color] = [
@@ -394,7 +398,7 @@ func _add_street(segments: Array[Dictionary], links: Dictionary, a_id: int, b_id
 	_note_link(links, b_id, -dir, half)
 
 
-## Poles just outside the curb, and shrubs on the grass behind them.
+## Poles just outside the curb, shrubs on the grass, and the street drag's trees behind those.
 func _build_streetscape(track: Dictionary) -> void:
 	var blocks: Array = track.get("buildings", [])
 	var keep_out: Array[Vector3] = []
@@ -408,8 +412,12 @@ func _build_streetscape(track: Dictionary) -> void:
 	var glows: Array[Vector3] = []
 	var dark_bush: Array[Transform3D] = []
 	var mid_bush: Array[Transform3D] = []
+	var trees: Array[Vector2] = []
+	var big_trees: Array[Vector2] = []
+	var bare_trees: Array[Vector2] = []
 	var lamp_cells := {}
 	var bush_cells := {}
+	var tree_cells := {}
 	for segment in _streets:
 		if int(segment["a_node"]) < 0:
 			continue
@@ -473,6 +481,31 @@ func _build_streetscape(track: Dictionary) -> void:
 					pile.append(_bush_transform(pos, radius, 0.0))
 					pile.append(_bush_transform(pos + outward * 0.22 + dir * 0.28, radius * 0.72, 0.05))
 					pile.append(_bush_transform(pos - dir * 0.16, radius * 0.55, radius * 0.35))
+		if usable < 16.0:
+			continue
+		var tree_count := maxi(int(floor(usable / _TREE_EVERY)), 1)
+		var tree_step := usable / float(tree_count)
+		for i in tree_count:
+			var center := a + dir * (margin + tree_step * (float(i) + 0.5))
+			for sign_i in 2:
+				var n := _facade_hash(int(center.x * 2.0) + sign_i, int(center.z * 2.0), i, sign_i)
+				if n % 3 == 0:
+					continue
+				var sign := -1.0 if sign_i == 0 else 1.0
+				var pos := center + side * sign * (half + _TREE_SETBACK)
+				pos.y = 0.0
+				if not _claim_cell(tree_cells, pos, 8.0):
+					continue
+				if _lot_blocked(Vector2(pos.x, pos.z), 3.6, blocks, keep_out, 20.0):
+					continue
+				var spot := Vector2(pos.x, pos.z)
+				var kind := n % 5
+				if kind == 0:
+					bare_trees.append(spot)
+				elif kind == 1:
+					big_trees.append(spot)
+				else:
+					trees.append(spot)
 	var root := Node3D.new()
 	root.name = "Streetscape"
 	add_child(root)
@@ -517,6 +550,7 @@ func _build_streetscape(track: Dictionary) -> void:
 	shrub.rings = 5
 	_add_multimesh(root, shrub, _facade_material(_BUSH_DARK, 0.92, 0.0), dark_bush, false)
 	_add_multimesh(root, shrub, _facade_material(_BUSH_MID, 0.9, 0.0), mid_bush, false)
+	_StreetScenery.add_flat_trees(root, trees, big_trees, bare_trees)
 
 
 func _basis_along(dir: Vector3) -> Basis:
@@ -541,9 +575,9 @@ func _claim_cell(taken: Dictionary, pos: Vector3, cell: float) -> bool:
 	return true
 
 
-func _lot_blocked(point: Vector2, pad: float, blocks: Array, keep_out: Array[Vector3]) -> bool:
+func _lot_blocked(point: Vector2, pad: float, blocks: Array, keep_out: Array[Vector3], place_reach: float = 12.0) -> bool:
 	for spot: Vector3 in keep_out:
-		if Vector2(spot.x, spot.z).distance_to(point) < 12.0:
+		if Vector2(spot.x, spot.z).distance_to(point) < place_reach:
 			return true
 	for raw: Dictionary in blocks:
 		var hx := float(raw["w"]) * 0.5 + pad
@@ -680,11 +714,41 @@ func _build_places(track: Dictionary) -> void:
 				_build_drive_in(root)
 			"gas-station":
 				_build_gas_station(root)
+			GameState.POI_ROYAL_RODS:
+				_build_royal_rods(root)
 			_:
 				_add_box(root, Vector3(9.0, 4.2, 7.0), Vector3(0.0, 2.1, 3.5), Color(0.35, 0.35, 0.38))
 
 
 ## The front faces the lane. Local +X runs with the car, left to right across that front.
+## A custom shop on the west side of the street up to the drive-in. Local -Z faces that street.
+func _build_royal_rods(root: Node3D) -> void:
+	var wall := Color(0.76, 0.7, 0.6)
+	var burgundy := Color(0.48, 0.07, 0.09)
+	var gold := Color(1.0, 0.82, 0.28)
+	var bay := Color(0.4, 0.42, 0.46)
+	_add_box(root, Vector3(11.6, 0.06, 5.2), Vector3(0.0, 0.03, -2.3), Color(0.5, 0.49, 0.46), 0.92)
+	_add_box(root, Vector3(11.6, 4.3, 8.0), Vector3(0.0, 2.15, 4.2), wall, 0.88)
+	_add_box(root, Vector3(12.1, 0.2, 8.5), Vector3(0.0, 4.4, 4.2), Color(0.22, 0.2, 0.2), 0.86)
+	_add_box(root, Vector3(11.6, 0.22, 0.06), Vector3(0.0, 3.9, 0.16), burgundy, 0.45)
+	_add_box(root, Vector3(3.8, 3.05, 0.1), Vector3(-3.15, 1.58, 0.16), bay, 0.5, 0.22)
+	for i in 5:
+		var rib_y := 0.45 + float(i) * 0.52
+		_add_box(root, Vector3(3.5, 0.06, 0.04), Vector3(-3.15, rib_y, 0.1), Color(0.62, 0.64, 0.68), 0.4, 0.45)
+	_add_box(root, Vector3(1.1, 2.15, 0.1), Vector3(-0.15, 1.12, 0.16), Color(0.16, 0.1, 0.09), 0.5)
+	_add_box(root, Vector3(0.08, 0.22, 0.04), Vector3(0.22, 1.08, 0.09), gold, 0.35, 0.65)
+	_add_box(root, Vector3(4.2, 2.3, 0.08), Vector3(3.15, 1.85, 0.16), Color(0.72, 0.74, 0.76), 0.32, 0.55)
+	_add_box(root, Vector3(3.9, 2.0, 0.04), Vector3(3.15, 1.85, 0.1), Color(0.45, 0.62, 0.78), 0.08, 0.1)
+	var metal := Color(0.2, 0.2, 0.22)
+	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(-3.5, 5.05, 0.25), metal, 0.4, 0.65)
+	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(3.5, 5.05, 0.25), metal, 0.4, 0.65)
+	_add_box(root, Vector3(7.8, 1.15, 0.12), Vector3(0.0, 5.1, 0.2), Color(0.06, 0.03, 0.04))
+	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 5.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
+	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 4.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
+	_add_label(root, "ROYAL RODS", Vector3(0.0, 5.1, 0.1), 40, 0.014, Color(2.3, 1.75, 0.45), Color(0.4, 0.1, 0.04), 6)
+	_add_light(root, Vector3(0.0, 4.5, -1.6), Color(1.0, 0.78, 0.4), 0.85, 12.0)
+
+
 func _place_alongside(root: Node3D, stop: Vector3, away: Vector3) -> void:
 	root.rotation.y = atan2(-away.z, away.x)
 	var side := Vector3(-away.z, 0.0, away.x)

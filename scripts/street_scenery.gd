@@ -40,9 +40,9 @@ static func build(track: Node3D, items: Array[Dictionary], road_width: float) ->
 		list.assign(spots.get(kind, list))
 		list.append(Vector2(float(item["x"]), float(item["y"])))
 		spots[kind] = list
-	_build_trees(track, root, _spots_of(spots, "tree"), 5.5, 0.22, 2.4, false)
-	_build_trees(track, root, _spots_of(spots, "big_tree"), 7.5, 0.34, 3.3, false)
-	_build_trees(track, root, _spots_of(spots, "bare_tree"), 6.5, 0.18, 1.0, true)
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "tree")), _spots_of(spots, "tree"), "tree")
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "big_tree")), _spots_of(spots, "big_tree"), "big_tree")
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "bare_tree")), _spots_of(spots, "bare_tree"), "bare_tree")
 	_build_poles(track, root, _spots_of(spots, "pole"))
 	_build_paint(track, root, "Dashes", _spots_of(spots, "dash"), _DASH_WIDTH, _DASH_LENGTH, 0.0, _STRIPE)
 	_build_paint(track, root, "Finish", _spots_of(spots, "finish"), road_width, _FINISH_LENGTH, 0.0, _FINISH)
@@ -66,16 +66,46 @@ static func _spot_random(spot: Vector2, salt: float) -> float:
 	return fposmod(sin(spot.x * 12.9898 + spot.y * 78.233 + salt) * 43758.5453, 1.0)
 
 
-static func _build_trees(
-	track: Node3D,
-	root: Node3D,
-	spots: Array[Vector2],
-	height: float,
-	trunk_radius: float,
-	crown_radius: float,
-	bare: bool
-) -> void:
-	if spots.is_empty():
+static func _feet_on_track(track: Node3D, spots: Array[Vector2]) -> Array[Vector3]:
+	var feet: Array[Vector3] = []
+	for spot: Vector2 in spots:
+		feet.append(_ground(track, spot.x, spot.y) + Vector3(0.0, -_TREE_SINK, 0.0))
+	return feet
+
+
+## The street drag's trees on flat ground. Each spot is world X and Z.
+static func add_flat_trees(root: Node3D, trees: Array[Vector2], big_trees: Array[Vector2], bare_trees: Array[Vector2]) -> void:
+	add_trees(root, _flat_feet(trees), trees, "tree")
+	add_trees(root, _flat_feet(big_trees), big_trees, "big_tree")
+	add_trees(root, _flat_feet(bare_trees), bare_trees, "bare_tree")
+
+
+static func _flat_feet(spots: Array[Vector2]) -> Array[Vector3]:
+	var feet: Array[Vector3] = []
+	for spot: Vector2 in spots:
+		feet.append(Vector3(spot.x, -_TREE_SINK, spot.y))
+	return feet
+
+
+## The street drag's round trees, larger ones, and sparse ones. `spots` pick each tree's
+## size, and `feet` are where they stand.
+static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2], kind: String) -> void:
+	if feet.is_empty() or feet.size() != spots.size():
+		return
+	var height := 5.5
+	var trunk_radius := 0.22
+	var crown_radius := 2.4
+	var bare := false
+	if kind == "big_tree":
+		height = 7.5
+		trunk_radius = 0.34
+		crown_radius = 3.3
+	elif kind == "bare_tree":
+		height = 6.5
+		trunk_radius = 0.18
+		crown_radius = 1.0
+		bare = true
+	elif kind != "tree":
 		return
 	var trunk_mesh := CylinderMesh.new()
 	trunk_mesh.top_radius = trunk_radius * 0.7
@@ -93,11 +123,11 @@ static func _build_trees(
 	var crowns := _bare_crowns(height, crown_radius) if bare else _full_crowns(height, crown_radius)
 	var trunk_xforms: Array[Transform3D] = []
 	var crown_xforms: Array[Transform3D] = []
-	for spot: Vector2 in spots:
+	for i in spots.size():
+		var spot: Vector2 = spots[i]
 		var size := lerpf(0.88, 1.15, _spot_random(spot, 1.0))
 		var turn := Basis(Vector3.UP, TAU * _spot_random(spot, 2.0)).scaled(Vector3(size, size, size))
-		var foot := _ground(track, spot.x, spot.y) + Vector3(0.0, -_TREE_SINK, 0.0)
-		var plant := Transform3D(turn, foot)
+		var plant := Transform3D(turn, feet[i])
 		trunk_xforms.append(plant * Transform3D(Basis.IDENTITY, Vector3(0.0, height * 0.5, 0.0)))
 		for crown: Transform3D in crowns:
 			crown_xforms.append(plant * crown)

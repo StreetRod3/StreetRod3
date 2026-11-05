@@ -24,6 +24,7 @@ const SCENE_CRUISE := "res://scenes/cruise.tscn"
 const POI_GARAGE := "garage"
 const POI_DRIVE_IN := "drive-in"
 const POI_GAS_STATION := "gas-station"
+const POI_ROYAL_RODS := "royal-rods"
 
 const MUSIC_GARAGE := "res://assets/music/garage.mp3"
 const MUSIC_RACE := "res://assets/music/race.mp3"
