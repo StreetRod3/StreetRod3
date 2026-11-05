@@ -117,7 +117,7 @@ func _ready() -> void:
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	if _player.has_method(&"is_automatic_gearbox") and _player.is_automatic_gearbox():
-		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · C: camera · W+S: burnout"
+		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: drive, neutral, reverse · C: camera · W+S: burnout"
 	else:
 		_hud_hint.text = "W / Up: throttle · S / Down: brake · Space: hand brake · A/D or arrows: steer · Q/E: shift · C: camera · W+S: burnout"
 	_traffic.visible = true
@@ -718,7 +718,7 @@ func _on_pause_imperial_toggled(pressed: bool) -> void:
 
 func _show_speed_and_distance() -> void:
 	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
-	_hud_speed.text = "Speed: %s" % GameState.speed_text(_player.get_forward_speed() * 3.6)
+	_hud_speed.text = "Speed: %s" % GameState.speed_text(absf(_player.get_forward_speed()) * 3.6)
 
 
 func _on_pause_exit_pressed() -> void:

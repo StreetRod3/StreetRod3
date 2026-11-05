@@ -34,6 +34,12 @@ const CAM_FAR := 0
 const CAM_CLOSE := 1
 const CAM_COCKPIT := 2
 const CAM_BUMPER := 3
+## Below first gear. The box starts in drive (gear 0) in a race and on the city.
+const GEAR_NEUTRAL := -1
+const GEAR_REVERSE := -2
+## Reverse tops out at this share of first gear, and never slower than a brisk walk.
+const REVERSE_TOP_FRACTION := 0.38
+const REVERSE_TOP_MIN := 7.0
 
 @export var debug_dynamics: bool = false
 
@@ -102,13 +108,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			_apply_camera_mode()
 			get_viewport().set_input_as_handled()
 			return
-		if not _is_automatic():
-			if event.keycode == KEY_E:
-				_request_shift(1)
-				get_viewport().set_input_as_handled()
-			elif event.keycode == KEY_Q:
-				_request_shift(-1)
-				get_viewport().set_input_as_handled()
+		if event.keycode == KEY_E:
+			_select_shift(1)
+			get_viewport().set_input_as_handled()
+		elif event.keycode == KEY_Q:
+			_select_shift(-1)
+			get_viewport().set_input_as_handled()
 
 
 func _apply_camera_mode() -> void:
@@ -199,7 +204,7 @@ func hit_sawhorse(harm: float, speed_lost: float) -> void:
 func scrape_road(speed_lost: float) -> void:
 	_chase_cam.jolt(speed_lost)
 	if GameState.arcade_drive:
-		_arcade.forward_speed = maxf(_arcade.forward_speed - speed_lost, 0.0)
+		_arcade.forward_speed = move_toward(_arcade.forward_speed, 0.0, speed_lost)
 		forward_speed = _arcade.forward_speed
 	else:
 		var speed := _dynamics.cg_velocity.length()
@@ -212,6 +217,10 @@ func damage_amount() -> float:
 
 
 func get_gear_label() -> String:
+	if _gear == GEAR_REVERSE:
+		return "R"
+	if _gear == GEAR_NEUTRAL:
+		return "N"
 	var count := _gear_count()
 	if _is_automatic():
 		return "D%d / %d" % [_gear + 1, count]
@@ -233,10 +242,12 @@ func is_wrecked() -> bool:
 func get_rpm() -> float:
 	if _engine_blown:
 		return 0.0
-	var top := _gear_top_mps(_gear)
+	if _gear == GEAR_NEUTRAL:
+		return RPM_IDLE
+	var top := _reverse_top() if _gear == GEAR_REVERSE else _gear_top_mps(_gear)
 	if top <= 0.05:
 		return RPM_IDLE
-	var rpm := RPM_IDLE + (RPM_REDLINE - RPM_IDLE) * (forward_speed / top)
+	var rpm := RPM_IDLE + (RPM_REDLINE - RPM_IDLE) * (absf(forward_speed) / top)
 	rpm = lerpf(rpm, maxf(rpm, BURNOUT_RPM), _burnout)
 	return clampf(rpm, RPM_IDLE_MIN, RPM_METER_MAX)
 
@@ -405,7 +416,7 @@ func _physics_simulation(delta: float) -> void:
 	if _arcade_active:
 		_dynamics.reset_all_motion()
 		_dynamics.yaw = heading_yaw
-		_dynamics.cg_velocity = Vector3(sin(heading_yaw), 0.0, cos(heading_yaw)) * maxf(forward_speed, 0.0)
+		_dynamics.cg_velocity = Vector3(sin(heading_yaw), 0.0, cos(heading_yaw)) * forward_speed
 		_arcade_active = false
 	var race := get_parent()
 	if race and race.has_method(&"is_race_started") and not race.is_race_started():
@@ -461,7 +472,7 @@ func _physics_simulation(delta: float) -> void:
 
 func _physics_arcade(delta: float) -> void:
 	if not _arcade_active:
-		_arcade.forward_speed = maxf(forward_speed, 0.0)
+		_arcade.forward_speed = forward_speed
 		_arcade.heading_yaw = heading_yaw
 		_arcade_active = true
 	var race := get_parent()
@@ -494,21 +505,21 @@ func _physics_arcade(delta: float) -> void:
 		_update_engine_sound(throttle)
 		return
 
-	var ratios := _ratios()
-	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)]) * GameState.final_drive_accel()
+	var limits := _speed_limits()
 	_arcade.ride_grip = _dynamics.ride_grip()
 	_arcade.step(
 		self,
 		delta,
 		steer,
-		throttle,
+		throttle and _gear != GEAR_NEUTRAL,
 		brake,
 		_handbrake_down(),
 		_shift_timer > 0.0,
 		_engine_blown,
-		_ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * GameState.wheel_weight_accel() * _damage.power_left(),
-		GameState.get_effective_vmax_kmh() / 3.6,
-		_car_center
+		_signed_gear_accel(),
+		limits.y,
+		_car_center,
+		limits.x
 	)
 	var before := velocity
 	move_and_slide()
@@ -558,15 +569,96 @@ func _gear_top_mps(gear_index: int) -> float:
 
 
 ## Gear and horsepower scale the configured propulsion force. The tires still
-## have to be able to push that hard.
+## have to be able to push that hard. Reverse pushes the other way.
 func _requested_drive_force() -> float:
+	if _gear == GEAR_NEUTRAL:
+		return 0.0
+	if _gear == GEAR_REVERSE:
+		var backing := absf(forward_speed) if forward_speed <= 0.0 else 0.0
+		return -_forward_drive_force(0, _reverse_top(), backing)
+	return _forward_drive_force(_gear, _gear_top_mps(_gear), maxf(forward_speed, 0.0))
+
+
+func _forward_drive_force(gear_index: int, top: float, speed: float) -> float:
 	var ratios := _ratios()
-	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)])
-	return _dynamics.drive_force(ratio * GameState.final_drive_accel(), _gear_top_mps(_gear), forward_speed, GameState.engine_power_hp) * _damage.power_left()
+	var ratio := float(ratios[clampi(gear_index, 0, ratios.size() - 1)])
+	return _dynamics.drive_force(ratio * GameState.final_drive_accel(), top, speed, GameState.engine_power_hp) * _damage.power_left()
+
+
+func _signed_gear_accel() -> float:
+	if _gear == GEAR_NEUTRAL:
+		return 0.0
+	if _gear == GEAR_REVERSE:
+		var ratios := _ratios()
+		var ratio := float(ratios[0]) * GameState.final_drive_accel()
+		var backing := absf(forward_speed) if forward_speed <= 0.0 else 0.0
+		var pull := _ArcadeDrive.gear_acceleration(ratio, _reverse_top(), backing, GameState.engine_power_hp)
+		return -pull * GameState.wheel_weight_accel() * _damage.power_left()
+	var ratios := _ratios()
+	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)]) * GameState.final_drive_accel()
+	var pull := _ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(_gear), maxf(forward_speed, 0.0), GameState.engine_power_hp)
+	return pull * GameState.wheel_weight_accel() * _damage.power_left()
+
+
+## Lowest and highest speed this gear allows, in m/s. Neutral coasts either way.
+func _speed_limits() -> Vector2:
+	var vmax := GameState.get_effective_vmax_kmh() / 3.6
+	var reverse_top := _reverse_top()
+	if _gear == GEAR_REVERSE:
+		return Vector2(-reverse_top, 0.0)
+	if _gear == GEAR_NEUTRAL:
+		return Vector2(-reverse_top, vmax)
+	return Vector2(minf(forward_speed, 0.0), vmax)
+
+
+func _reverse_top() -> float:
+	return maxf(_gear_top_mps(0) * REVERSE_TOP_FRACTION, REVERSE_TOP_MIN)
+
+
+## Q and E, and the on-screen paddles. Drive gears stay where they are on an automatic:
+## one step down leaves drive for neutral, and the next selects reverse.
+func _select_shift(direction: int) -> void:
+	if _engine_blown or _shift_timer > 0.0 or direction == 0:
+		return
+	var next := _gear
+	if _is_automatic():
+		if direction < 0:
+			if _gear >= 0:
+				next = GEAR_NEUTRAL
+			elif _gear == GEAR_NEUTRAL:
+				next = GEAR_REVERSE
+			else:
+				return
+		elif _gear == GEAR_REVERSE:
+			next = GEAR_NEUTRAL
+		elif _gear == GEAR_NEUTRAL:
+			next = 0
+		else:
+			return
+	elif direction < 0:
+		if _gear > 0:
+			next = _gear - 1
+		elif _gear == 0:
+			next = GEAR_NEUTRAL
+		elif _gear == GEAR_NEUTRAL:
+			next = GEAR_REVERSE
+		else:
+			return
+	elif _gear == GEAR_REVERSE:
+		next = GEAR_NEUTRAL
+	elif _gear == GEAR_NEUTRAL:
+		next = 0
+	elif _gear < _gear_count() - 1:
+		next = _gear + 1
+	else:
+		return
+	_gear = next
+	_shift_timer = float(_gearbox.get("shift_time", 0.15))
+	_overrev_time = 0.0
 
 
 func _request_shift(direction: int) -> void:
-	if _engine_blown or _shift_timer > 0.0:
+	if _engine_blown or _shift_timer > 0.0 or _gear < 0:
 		return
 	var next := _gear + direction
 	if next < 0 or next >= _gear_count():
@@ -611,12 +703,12 @@ func _update_engine_sound(throttle: bool) -> void:
 
 
 func _poll_touch_shifts() -> void:
-	if _is_automatic() or _touch == null:
+	if _touch == null:
 		return
 	if _touch.has_method(&"pop_shift_up") and _touch.pop_shift_up():
-		_request_shift(1)
+		_select_shift(1)
 	if _touch.has_method(&"pop_shift_down") and _touch.pop_shift_down():
-		_request_shift(-1)
+		_select_shift(-1)
 
 
 func _stick_to_road() -> void:

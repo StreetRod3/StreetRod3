@@ -159,7 +159,7 @@ const _TOOLTIPS := {
 	&"spares": "Spare parts (L)",
 	&"newspaper": "Newspaper (N)",
 	&"radio": "Radio (R)",
-	&"doors": "Drive out (D)",
+	&"doors": "Free roam (D)",
 	&"spray": "Paint job (P)",
 	&"fuel": "Gas station",
 	&"hood": "Under the hood (H)",
@@ -1067,7 +1067,7 @@ func _handle_interact(kind: Variant) -> void:
 			if _clock_settings.visible:
 				_clock_music.set_pressed_no_signal(GameState.music_enabled)
 		&"doors":
-			_start_drive_out(GameState.SCENE_DRIVE_IN)
+			_start_drive_out("")
 		&"spray":
 			_show_spray_picker()
 		&"fuel":
@@ -1127,7 +1127,10 @@ func _start_drive_out(destination: String) -> void:
 	_dismiss_stall_bubble()
 	var poi := _poi_for_scene(destination)
 	if _door_left == null or _door_right == null:
-		_go_to_drive_destination(destination, poi)
+		if destination.is_empty():
+			GameState.begin_roam(GameState.POI_GARAGE)
+		else:
+			_go_to_drive_destination(destination, poi)
 		return
 	_departing = true
 	_orbiting = false
@@ -1140,6 +1143,9 @@ func _start_drive_out(destination: String) -> void:
 		door_hit.disabled = true
 	await _play_drive_out()
 	if not is_instance_valid(self):
+		return
+	if destination.is_empty():
+		GameState.begin_roam(GameState.POI_GARAGE)
 		return
 	_go_to_drive_destination(destination, poi)
 

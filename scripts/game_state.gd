@@ -246,6 +246,8 @@ var drive_into_garage: bool = false
 var cruise_from_poi: String = ""
 var cruise_to_poi: String = ""
 var cruise_scene: String = ""
+## Free drive on the city, starting in front of this place. Not saved.
+var roam_from_poi: String = ""
 ## A rival's engine on the hood screen. Empty when the bay is the player's car.
 ## Not saved. Keys: engine_id, hp, parts (hood slot to part id), car_name, color.
 var hood_peek: Dictionary = {}
@@ -816,6 +818,7 @@ func new_game() -> void:
 	cruise_from_poi = ""
 	cruise_to_poi = ""
 	cruise_scene = ""
+	roam_from_poi = ""
 	hood_peek.clear()
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
@@ -983,6 +986,7 @@ func load_game(slot: int) -> bool:
 	cruise_from_poi = ""
 	cruise_to_poi = ""
 	cruise_scene = ""
+	roam_from_poi = ""
 	hood_peek.clear()
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
@@ -3359,10 +3363,22 @@ func _string_array(value: Variant) -> Array[String]:
 
 ## Play the short city drive from one place to another, then open `destination_scene`.
 func begin_cruise(from_poi: String, to_poi: String, destination_scene: String) -> void:
+	roam_from_poi = ""
 	cruise_from_poi = from_poi
 	cruise_to_poi = to_poi
 	cruise_scene = destination_scene
 	current_scene_path = destination_scene
+	var tree := get_tree()
+	if tree != null:
+		tree.change_scene_to_file(SCENE_CRUISE)
+
+
+## Drive the city yourself, starting in front of `from_poi`. A place opens when the car pulls up to it.
+func begin_roam(from_poi: String) -> void:
+	cruise_from_poi = ""
+	cruise_to_poi = ""
+	cruise_scene = ""
+	roam_from_poi = from_poi
 	var tree := get_tree()
 	if tree != null:
 		tree.change_scene_to_file(SCENE_CRUISE)
