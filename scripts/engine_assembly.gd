@@ -155,7 +155,7 @@ func _view_wires() -> bool:
 
 
 func _view_head_count() -> int:
-	return GameState.engine_head_count(_view_engine())
+	return GameState.heads_on(_view_engine())
 
 
 func _view_carb_slots() -> Array[String]:
@@ -247,7 +247,8 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.SLOT_DISTRIBUTOR:
 			out.append(Transform3D(Basis.IDENTITY, CLAMP_BOLT))
 		GameState.SLOT_AIR_CLEANER:
-			out.append(Transform3D(Basis.IDENTITY, carb_pad(GameState.SLOT_CARB) + Vector3(0.0, 0.0, _cleaner_top())))
+			for slot in _view_carb_slots():
+				out.append(Transform3D(Basis.IDENTITY, carb_pad(slot) + Vector3(0.0, 0.0, _cleaner_top())))
 		_:
 			if GameState.CARB_SLOTS.has(key):
 				# Two nuts on opposite corners of the base, front one first.
@@ -573,7 +574,8 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		_cyl_z(rig, 0.02, 0.02, h + 0.02, at, steel, 8)
 	if pads.size() == 1:
 		var label := Label3D.new()
-		label.text = "%d V8" % GameState.engine_cid(_view_engine())
+		var engine := _view_engine()
+		label.text = str(engine.get("badge", "%d V8" % GameState.cid_of(engine)))
 		label.font_size = 64
 		label.pixel_size = 0.004
 		label.modulate = Color(0.85, 0.12, 0.08) if not chrome else Color(0.15, 0.15, 0.15)

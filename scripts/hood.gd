@@ -71,8 +71,11 @@ const BOLT_NAMES := {
 	"carb_2": ["Front carburetor nut", "Rear carburetor nut"],
 	"carb_3": ["Front carburetor nut", "Rear carburetor nut"],
 	"distributor": ["Distributor hold-down bolt"],
-	"air_cleaner": ["Air cleaner wing nut"],
 }
+
+## What a rival's parts are called when the register does not know their engine. There
+## is one more than the lines they can fill, so none comes up twice.
+const MYSTERY_TERMS: Array[String] = ["Mystery", "Unknown", "Experimental", "Prototype", "Classified", "Unmarked", "Homemade", "Top secret", "One of a kind", "Don't ask"]
 
 const _CREAM := Color(0.95, 0.9, 0.78, 1)
 const _RATE := 22050
@@ -124,6 +127,8 @@ var _peek_color: Color = Color.WHITE
 var _peek_engine: Dictionary = {}
 var _peek_hp: float = 0.0
 var _peek_slots: Dictionary = {}
+## Shuffled `MYSTERY_TERMS` for a rival whose engine is unknown, otherwise empty.
+var _peek_terms: Array[String] = []
 
 
 func _ready() -> void:
@@ -161,7 +166,12 @@ func _read_peek() -> void:
 	_peek_name = str(GameState.hood_peek.get("car_name", "Car"))
 	var paint: Variant = GameState.hood_peek.get("color", null)
 	_peek_color = paint if paint is Color else Color(0.8, 0.1, 0.1)
-	_peek_engine = GameState.listing_by_id(GameState.ENGINES, str(GameState.hood_peek.get("engine_id", "")))
+	var engine_id := str(GameState.hood_peek.get("engine_id", ""))
+	_peek_engine = GameState.listing_by_id(GameState.ENGINES, engine_id)
+	if _peek_engine.is_empty() and engine_id != GameState.NO_ENGINE_ID:
+		_peek_engine = {"badge": "??? V8"}
+		_peek_terms = MYSTERY_TERMS.duplicate()
+		_peek_terms.shuffle()
 	_peek_hp = float(GameState.hood_peek.get("hp", 0.0))
 	_peek_slots.clear()
 	var parts: Dictionary = GameState.hood_peek.get("parts", {})
@@ -342,7 +352,8 @@ func _tray_xform(key: String, index: int) -> Transform3D:
 	for k in TOP_DOWN:
 		if k == key:
 			break
-		slot += GameState.hood_bolt_count(k)
+		# Room for every carburetor's wing nut, so how many are fitted moves no other bolt.
+		slot += GameState.CARB_SLOTS.size() if k == GameState.SLOT_AIR_CLEANER else _engine.bolt_spots(k).size()
 	slot += index
 	var basis := Basis(Vector3.UP, PI * 0.5) * Basis(Vector3.RIGHT, PI * 0.5)
 	return Transform3D(basis.scaled(Vector3.ONE * _EngineAssembly.ENGINE_SCALE), TRAY + Vector3(TRAY_STEP * float(slot), 0.012, 0.0))
@@ -607,7 +618,7 @@ func _target_text(target: Array) -> String:
 			return "Plug wires — pull them off"
 		return "%s — %s" % [PART_NAMES[key], _part_name(key)]
 	var turns: int = GameState.hood_bolts(key)[index]
-	var label := str(BOLT_NAMES[key][index])
+	var label := _wing_nut_name(index) if key == GameState.SLOT_AIR_CLEANER else str(BOLT_NAMES[key][index])
 	if key == GameState.SLOT_HEADS and GameState.engine_head_count() == 1:
 		label = ["Head, front bolt", "Head, rear bolt"][index % 2]
 	if turns == 0:
@@ -615,6 +626,14 @@ func _target_text(target: Array) -> String:
 	if _loosening[key][index] or turns >= GameState.GEARBOX_BOLT_TIGHT:
 		return "%s — loosen" % label
 	return "%s — tighten" % label
+
+
+## One air cleaner's wing nut, front to back along the carburetors.
+func _wing_nut_name(index: int) -> String:
+	var nuts := GameState.hood_bolt_count(GameState.SLOT_AIR_CLEANER)
+	if nuts == 1:
+		return "Air cleaner wing nut"
+	return "%s air cleaner wing nut" % ("Front" if index == 0 else ("Rear" if index == nuts - 1 else "Middle"))
 
 
 func _part_name(key: String) -> String:
@@ -754,7 +773,7 @@ func _bolt_turns(key: String) -> Array[int]:
 	if not _peek:
 		return GameState.hood_bolts(key)
 	var turns: Array[int] = []
-	for _i in GameState.hood_bolt_count(key):
+	for _i: int in _engine.bolt_spots(key).size():
 		turns.append(GameState.GEARBOX_BOLT_TIGHT)
 	return turns
 
@@ -870,13 +889,17 @@ func _refresh_ui() -> void:
 
 func _refresh_peek_ui() -> void:
 	var has_engine := not _peek_engine.is_empty()
-	_engine_label.text = "%s · %.0f hp" % [str(_peek_engine.get("name", "Engine")), _peek_hp] if has_engine else "No engine"
-	var lines: Array[String] = ["Engine: %s (tight)" % str(_peek_engine.get("name", "Engine")) if has_engine else "Engine: none"]
+	var mystery := not _peek_terms.is_empty()
+	var engine_name := _peek_terms[0] if mystery else str(_peek_engine.get("name", "Engine"))
+	var power := "???" if mystery else "%.0f" % _peek_hp
+	_engine_label.text = "%s · %s hp" % [engine_name, power] if has_engine else "No engine"
+	var lines: Array[String] = ["Engine: %s" % engine_name if has_engine else "Engine: none"]
 	for key in GameState.HOOD_SLOTS:
 		var part: Variant = _peek_slots.get(key, {})
 		if not part is Dictionary or (part as Dictionary).is_empty():
 			continue
-		lines.append("%s: %s (tight)" % [PART_NAMES[key], str((part as Dictionary).get("name", "none"))])
+		var part_name := _peek_terms[lines.size()] if mystery else str((part as Dictionary).get("name", "none"))
+		lines.append("%s: %s" % [PART_NAMES[key], part_name])
 	if has_engine:
 		lines.append("Plug wires: on")
 	_parts_label.text = "\n".join(lines)
@@ -1112,7 +1135,7 @@ func _build_bay() -> void:
 	lining.position = Vector3(-0.78, -0.02, 0.0)
 	hood.add_child(lining)
 	# Parts tray on the left fender for the bolts that are out.
-	_box(Vector3(TRAY_STEP * 9.5, 0.012, 0.09), TRAY + Vector3(TRAY_STEP * 4.0, 0.0, 0.0), tray)
+	_box(Vector3(TRAY_STEP * 11.5, 0.012, 0.09), TRAY + Vector3(TRAY_STEP * 5.0, 0.0, 0.0), tray)
 
 
 func _body_color() -> Color:

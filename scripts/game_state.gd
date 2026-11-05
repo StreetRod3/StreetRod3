@@ -152,7 +152,7 @@ const STOCK_SLOT_PARTS := {
 ## Key in `engine_bolts` for the engine's own mounts. The other keys are hood slots.
 const HOOD_ENGINE := "engine"
 ## Bolts holding each part under the hood. They turn like the bellhousing bolts, out
-## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each (`hood_bolt_count()`).
+## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each and the air cleaner one per carburetor (`hood_bolt_count()`).
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
 	SLOT_CAM: 2,
@@ -466,15 +466,29 @@ func engine_trouble() -> String:
 
 ## How many cylinder heads the fitted engine has: two on a V engine, one on an inline.
 func engine_head_count(engine: Dictionary = {}) -> int:
-	var e := get_equipped_engine() if engine.is_empty() else engine
-	return clampi(int(e.get("heads", 2)), 1, 2)
+	return heads_on(get_equipped_engine() if engine.is_empty() else engine)
 
 
-## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, and
-## `HOOD_BOLT_COUNTS` for the rest.
+## Where to click for under the hood, from the bounds of a car with its nose toward +Z:
+## the whole front from the cowl to the nose, down the fenders to the top of the gearbox
+## band, so that the hood is easy to hit. The garage and the drive-in both use this.
+static func hood_click_box(car: AABB) -> AABB:
+	var at := car.position + Vector3(0.0, car.size.y * 0.3, car.size.z * 0.62)
+	return AABB(at, Vector3(car.size.x, car.size.y * 0.42, car.size.z * 0.38))
+
+
+## Heads on this engine and no other: an empty one does not mean the active car's.
+static func heads_on(engine: Dictionary) -> int:
+	return clampi(int(engine.get("heads", 2)), 1, 2)
+
+
+## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, a wing nut on
+## each carburetor's air cleaner, and `HOOD_BOLT_COUNTS` for the rest.
 func hood_bolt_count(key: String) -> int:
 	if key == SLOT_HEADS:
 		return HEAD_BOLTS * engine_head_count()
+	if key == SLOT_AIR_CLEANER:
+		return maxi(carb_slots().size(), 1)
 	return int(HOOD_BOLT_COUNTS.get(key, 0))
 
 
@@ -690,10 +704,14 @@ func timing_degrees(step: int = -1) -> int:
 
 ## Displacement in cubic inches, from the register or the engine's name.
 func engine_cid(engine: Dictionary = {}) -> int:
-	var e := get_equipped_engine() if engine.is_empty() else engine
-	var cid := int(e.get("cid", 0))
+	return cid_of(get_equipped_engine() if engine.is_empty() else engine)
+
+
+## Displacement of this engine and no other: an empty one does not mean the active car's.
+static func cid_of(engine: Dictionary) -> int:
+	var cid := int(engine.get("cid", 0))
 	if cid <= 0:
-		cid = str(e.get("name", "")).to_int()
+		cid = str(engine.get("name", "")).to_int()
 	return cid if cid > 0 else 283
 
 

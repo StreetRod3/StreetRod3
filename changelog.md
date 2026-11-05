@@ -208,3 +208,11 @@ Driving off the road on Mulholland no longer sinks the car into the grass. Away 
 
 In the simulation, one side of the car on the grass no longer pulls it off the road. Each wheel used to feel its own drag from the grass, so the side off the road slowed harder and turned the car toward the grass, 12 degrees and about 6 m in 4 seconds with no steering. Each axle now shares that drag, so the grass still slows the car but pulls it straight back. Grip is still per wheel, and a car fully on the grass slows as it did.
 
+
+Every air cleaner now has its own wing nut. With dual quads or a tri-power there is one cleaner per carburetor, but only the front one had a nut on it, and the single nut took them all off. Now each has a nut, named front, middle, or rear when you point at it, and all of them have to come out before the cleaners lift off. Older saves load with the added nuts tight. The tray on the fender is longer to hold them, and a look under a rival's hood at the drive-in shows the right count whatever your own car runs.
+
+The look under a rival's hood no longer marks every part as tight, since a car that runs has nothing loose, and it reads nothing at all from your car now.
+
+If a rival's car ever turns up with an engine the game does not know, which would be a bug, the hood no longer guesses at it. Every part gets a random label like Mystery, Experimental, or Top secret, the power reads ??? hp, and the air cleaner lid says ??? V8.
+
+The spot to click for under the hood in the garage is bigger and farther forward. It was a thin strip that began at the windshield and stopped short of the nose, and now it takes in the whole front of the car from the cowl to the nose, across its full width and down the fender, about 1.7 to 2 times the area on screen. A rival's car at the drive-in had its own copy of the old strip, and now both use the same spot. The rival's car also had its click box turned the wrong way, so only a narrow column in the middle of the screen could be clicked at all, and it now covers the car.
