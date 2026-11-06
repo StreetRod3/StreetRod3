@@ -3,31 +3,32 @@
   "name": "Ford F100 1970",
   "model": {
     "path": "res://assets/cars/ford-f100-1970.glb",
-    "position": [0.0, 0.351, 0.0],
+    "position": [0.0, 0.38, 0.0],
     "height": 1.436,
-    "ground_clearance": 0.351
+    "ground_clearance": 0.38
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
+    "size": 1.087,
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.771, 0.338, 1.904],
+        "position": [-0.771, 0.367, 1.904],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.771, 0.338, 1.904],
+        "position": [0.771, 0.367, 1.904],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.771, 0.338, -1.413],
+        "position": [-0.771, 0.367, -1.413],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.771, 0.338, -1.413],
+        "position": [0.771, 0.367, -1.413],
         "rotation": [0, 180, -90]
       }
     ]
@@ -38,7 +39,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [0.43, 1.49, 0.51]
+    "position": [0.43, 1.52, 0.51]
   },
   "chassis": {
     "mass": 1630,

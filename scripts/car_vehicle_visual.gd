@@ -167,7 +167,7 @@ func _apply_car_file() -> void:
 	_set_overlay_wheels_visible(overlay)
 	if not overlay:
 		return
-	wheel_scale = float(wheel_dict.get("scale", wheel_scale))
+	wheel_scale = float(wheel_dict.get("scale", wheel_scale)) * _wheel_size()
 	var mounts: Variant = wheel_dict.get("mounts", [])
 	if typeof(mounts) != TYPE_ARRAY:
 		return
@@ -252,7 +252,7 @@ func apply_wheel_to_mount(mount: Node3D, wheel: Dictionary) -> void:
 	var path := str(wheel.get("path", ""))
 	if path.is_empty() or mount.get("stl_path") == null:
 		return
-	wheel_scale = float(wheel.get("scale", wheel_scale))
+	wheel_scale = float(wheel.get("scale", wheel_scale)) * _wheel_size()
 	var height := float(wheel.get("height", 0.5))
 	var changed := str(mount.get("stl_path")) != path
 	mount.visible = true
@@ -267,6 +267,14 @@ func apply_wheel_to_mount(mount: Node3D, wheel: Dictionary) -> void:
 		mount.call(&"load_model")
 	if mount is MeshInstance3D:
 		(mount as MeshInstance3D).scale = Vector3.ONE * wheel_scale
+
+
+## The car file's `wheels.size`: how much bigger than the part this car's wheels are drawn.
+func _wheel_size() -> float:
+	var wheels: Variant = _active_spec().get("wheels", {})
+	if typeof(wheels) != TYPE_DICTIONARY:
+		return 1.0
+	return float((wheels as Dictionary).get("size", 1.0))
 
 
 func _apply_wheel_scale() -> void:
