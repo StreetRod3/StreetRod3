@@ -15,6 +15,7 @@ const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
+const _AirTime := preload("res://scripts/air_time.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -72,6 +73,11 @@ const REVERSE_ENGAGE_SPEED := 2.0
 ## Reverse tops out at this share of first gear, and never slower than a brisk walk.
 const REVERSE_TOP_FRACTION := 0.38
 const REVERSE_TOP_MIN := 7.0
+## Share of how hard a landing is that comes off the car's speed.
+const LANDING_SPEED_LOSS := 0.15
+## A landing softer than this, in m/s into the road, isn't felt: a car skimming a crest at the speed
+## it starts to lift touches down every step or two.
+const LANDING_FELT_MPS := 0.5
 
 @export var debug_dynamics: bool = false
 
@@ -120,6 +126,7 @@ var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
 var _road_base_y: float = 0.0
 const _ROAD_PITCH_SPAN := 8.0
+var _air: _AirTime = _AirTime.new()
 
 func _ready() -> void:
 	_road_base_y = global_position.y
@@ -538,7 +545,9 @@ func _physics_process(delta: float) -> void:
 	if _shift_timer > 0.0:
 		_shift_timer = maxf(0.0, _shift_timer - delta)
 	_update_clutch(delta)
-	if GameState.arcade_drive:
+	if _air.airborne:
+		_physics_air(delta)
+	elif GameState.arcade_drive:
 		_physics_arcade(delta)
 		_dynamics.sample_surfaces(_race_track(), global_transform)
 		_body_motion.ride_from_motion(delta, _arcade.planar_velocity(), heading_yaw)
@@ -691,6 +700,17 @@ func _physics_arcade(delta: float) -> void:
 		)
 	forward_speed = _arcade.forward_speed
 	heading_yaw = _arcade.heading_yaw
+	_update_overrev(delta)
+	_update_engine_sound(throttle)
+
+
+## In the air the car keeps the speed and heading it took off with. The arcade and simulation models
+## sit as they were until it lands, so it comes down going the way it left.
+func _physics_air(delta: float) -> void:
+	var throttle := _throttle_down() and not _engine_blown
+	velocity.y = 0.0
+	move_and_slide()
+	_skids.end_strips()
 	_update_overrev(delta)
 	_update_engine_sound(throttle)
 
@@ -927,8 +947,21 @@ func _stick_to_road() -> void:
 		rotation.x = 0.0
 		return
 	var here: float = track.surface_height(global_position)
-	global_position.y = _road_base_y + here
 	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	if track.has_method(&"has_jumps") and track.has_jumps():
+		var planar := Vector3(velocity.x, 0.0, velocity.z)
+		var speed := planar.length()
+		var travel := planar / speed if speed > 0.1 else forward
+		var delta := get_physics_process_delta_time()
+		_air.step(track, global_position, travel, speed, delta)
+		here = _air.height
+		if _air.airborne:
+			global_position.y = _road_base_y + here
+			rotation.x = _air.flight_pitch(rotation.x, speed, delta)
+			return
+		if _air.impact > LANDING_FELT_MPS:
+			_land(_air.impact)
+	global_position.y = _road_base_y + here
 	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
 	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
 	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
@@ -936,6 +969,14 @@ func _stick_to_road() -> void:
 		rotation.z = track.surface_roll(global_position, rotation.y)
 	if track.has_method(&"bank_push") and not _parking:
 		global_position += track.bank_push(global_position) * get_physics_process_delta_time()
+
+
+## Coming down off a jump: a jolt, damage past what the springs take, and some speed gone.
+func _land(impact: float) -> void:
+	take_hit(_AirTime.landing_harm(impact))
+	scrape_road(impact * LANDING_SPEED_LOSS)
+	var jolt := clampf(impact / 8.0, 0.1, 1.0)
+	_rumble.pulse(jolt * 0.6, jolt * 0.5)
 
 
 func _race_track() -> Node:

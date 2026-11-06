@@ -91,6 +91,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	var root: Dictionary = json.data
 	result.name = str(root.get("name", ""))
 	result.style = str(root.get("style", STYLE_CIRCUIT))
+	result.jumps = bool(root.get("jumps", false))
 	if not _STYLES.has(result.style):
 		result.errors.append("Unknown track style `%s`." % result.style)
 	_parse_nodes(root, result)
@@ -122,6 +123,7 @@ static func _empty_result() -> Dictionary:
 		"poi_order": [],
 		"buildings": [], # scenery boxes: x, y, w, d, h, sign
 		"style": STYLE_CIRCUIT,
+		"jumps": false, # cars can leave the road where it drops away
 		"scenery": [], # what stands beside a street track: kind, x, y
 		"errors": [],
 		"warnings": [],
@@ -162,6 +164,7 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 			"left": float(node.get("left", 0.0)),
 			"right": float(node.get("right", 0.0)),
 			"rail": bool(node.get("rail", false)),
+			"sharp": bool(node.get("sharp", false)),
 		}
 		result.nodes[id] = parsed
 		result.node_order.append(id)

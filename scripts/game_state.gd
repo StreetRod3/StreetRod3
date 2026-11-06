@@ -70,6 +70,10 @@ const MULHOLLAND_LENGTH_M := 2950.0
 const RACE_AQUEDUCT := "aqueduct"
 const AQUEDUCT_TRACK := "res://assets/tracks/aqueduct.trk"
 const AQUEDUCT_LENGTH_M := 1670.0
+## A test course of ramps and crests, for trying out jumps.
+const RACE_STUNT := "stunt"
+const STUNT_TRACK := "res://assets/tracks/stunt.trk"
+const STUNT_LENGTH_M := 1506.0
 const QUARTER_MILE_M := 402.336
 const ROAD_RACE_LENGTH_M := QUARTER_MILE_M * 6.0
 const DRAG_STAKE_LOW := 10
@@ -231,7 +235,7 @@ var current_scene_path: String = SCENE_GARAGE
 ## Index into `opponents` for the next race.
 var selected_opponent_id: int = 0
 ## `RACE_DRAG` (straight quarter mile), `RACE_ROAD` (turning course), or Street Rod 2's three:
-## `RACE_STREET_DRAG`, `RACE_MULHOLLAND` and `RACE_AQUEDUCT`.
+## `RACE_STREET_DRAG`, `RACE_MULHOLLAND` and `RACE_AQUEDUCT`; or `RACE_STUNT`, the jumps.
 var selected_race_type: String = RACE_DRAG
 ## Which of Mulholland's courses this game has. Street Rod 2 keeps one for a whole game too.
 var mulholland_course: int = 0
@@ -2615,13 +2619,15 @@ func race_length_m(race_type: String = "") -> float:
 		return MULHOLLAND_LENGTH_M
 	if kind == RACE_AQUEDUCT:
 		return AQUEDUCT_LENGTH_M
+	if kind == RACE_STUNT:
+		return STUNT_LENGTH_M
 	return QUARTER_MILE_M
 
 
 ## True for a race on a `.trk` course, false for the hardcoded quarter mile.
 func race_on_track(race_type: String = "") -> bool:
 	var kind := selected_race_type if race_type.is_empty() else race_type
-	return kind == RACE_ROAD or race_from_sr2(kind)
+	return kind == RACE_ROAD or kind == RACE_STUNT or race_from_sr2(kind)
 
 
 ## True for Street Rod 2's cruise races, which start with no lights.
@@ -2639,6 +2645,8 @@ func race_track_path(race_type: String = "") -> String:
 		return MULHOLLAND_TRACK % mulholland_course
 	if kind == RACE_AQUEDUCT:
 		return AQUEDUCT_TRACK
+	if kind == RACE_STUNT:
+		return STUNT_TRACK
 	return ""
 
 

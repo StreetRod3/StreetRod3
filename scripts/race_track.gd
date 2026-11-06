@@ -47,6 +47,14 @@ const STREET_TERRAIN_COLOR := Color(0.16, 0.27, 0.11, 1)
 ## Mulholland's road, black in Street Rod 2.
 const MOUNTAIN_ROAD_COLOR := Color(0.045, 0.045, 0.05, 1)
 const _GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
+## The sides of a jump track's ramps, from the road's edge down to the grass.
+const _RAMP_SIDE_COLOR := Color(0.42, 0.33, 0.22, 1)
+## Road this high or less over the grass has no ramp side.
+const _RAMP_SIDE_MIN_M := 0.02
+## Yellow and black bands across the road up to each lip, so a jump shows from the car.
+const _LIP_YELLOW := Color(0.95, 0.76, 0.08, 1)
+const _LIP_BAND_LONG := 1.6
+const _LIP_BAND_ACROSS := 1.0
 ## A rival holds to this over gravel: Street Rod 2's 59 mph.
 const GRAVEL_RIVAL_MPS := 59.0 * 0.44704
 ## A car this close to the middle of a flat rock on the road has hit it.
@@ -85,6 +93,10 @@ var _sign_mesh: ArrayMesh
 var _sign_textures: Dictionary = {}
 var _street: bool = false
 var _style: String = TrackFile.STYLE_CIRCUIT
+## Cars leave the road where it drops away faster than they fall. See `air_time.gd`.
+var _jumps: bool = false
+## Where along the path each lip is: a sharp node where the road drops away more steeply than it came up.
+var _lips: PackedFloat32Array = PackedFloat32Array()
 var _scenery: Array[Dictionary] = []
 ## Each sample's hillside (up) or drop (down) on the driver's left and right, and whether the right
 ## has a guard rail. Only Mulholland has these.
@@ -104,6 +116,10 @@ var _grass_dist_sq: float = 0.0
 
 func is_road_course() -> bool:
 	return _built
+
+
+func has_jumps() -> bool:
+	return _jumps
 
 
 func get_length() -> float:
@@ -404,6 +420,9 @@ func build_road_course() -> void:
 	else:
 		_build_terrain()
 		_build_road_mesh()
+		if _jumps:
+			_build_ramp_sides()
+			_build_lip_bands()
 	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
 		_StreetScenery.build(self, _scenery, _half_ws[0] * 2.0)
 		var found: Dictionary = _CourseScenery.build(self, _scenery)
@@ -413,7 +432,9 @@ func build_road_course() -> void:
 	elif _street:
 		_StreetScenery.build(self, _scenery, get_half_width() * 2.0)
 	else:
-		_build_curbs()
+		# Curbs would stand up off the ramps' lips.
+		if not _jumps:
+			_build_curbs()
 		_build_obstacles()
 		_build_narrow_signs()
 		_build_finish_line()
@@ -481,6 +502,7 @@ func _build_path() -> void:
 			push_error("[track] %s" % error_text)
 		return
 	_style = data.style
+	_jumps = bool(data.jumps)
 	_street = _style != TrackFile.STYLE_CIRCUIT
 	_scenery.assign(data.scenery)
 	var path_ids: Array = data.path_ids
@@ -489,9 +511,12 @@ func _build_path() -> void:
 		return
 	var n := path_ids.size()
 	var pts: Array[Vector3] = []
+	var sharp := PackedByteArray()
 	var roads: Array[Dictionary] = []
 	for i in n:
-		pts.append(TrackFile.world_position(data.nodes[int(path_ids[i])]))
+		var node: Dictionary = data.nodes[int(path_ids[i])]
+		pts.append(TrackFile.world_position(node))
+		sharp.append(1 if bool(node.get("sharp", false)) else 0)
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
 	var cuts: PackedFloat32Array = PackedFloat32Array()
@@ -528,7 +553,7 @@ func _build_path() -> void:
 		_append_bezier(p0, pts[i], p2, roads[i - 1], roads[i])
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
-	_smooth_path_heights(pts)
+	_smooth_path_heights(pts, sharp)
 	_race_length = _length
 	_append_runoff()
 	_fill_sides(data, path_ids)
@@ -562,7 +587,9 @@ func _fill_sides(data: Dictionary, path_ids: Array) -> void:
 
 
 ## Replace the straight ramps between nodes with a smooth curve that still passes through each height.
-func _smooth_path_heights(nodes: Array[Vector3]) -> void:
+## At a `sharp` node the grade changes at once: the road comes in and goes out at the straight grades
+## to its neighbours, so two sharp nodes together make a straight ramp, and its top a lip.
+func _smooth_path_heights(nodes: Array[Vector3], sharp: PackedByteArray) -> void:
 	if _pts.size() < 2 or nodes.size() < 2:
 		return
 	var knot_s := PackedFloat32Array()
@@ -583,7 +610,17 @@ func _smooth_path_heights(nodes: Array[Vector3]) -> void:
 		if knot_s[i] <= knot_s[i - 1]:
 			knot_s[i] = knot_s[i - 1] + 0.5
 	_node_s = knot_s
-	var slopes := _height_slopes(knot_s, knot_y)
+	var slopes_in := _height_slopes(knot_s, knot_y)
+	var slopes_out := slopes_in.duplicate()
+	for i in mini(sharp.size(), knot_s.size()):
+		if sharp[i] == 0:
+			continue
+		if i > 0:
+			slopes_in[i] = (knot_y[i] - knot_y[i - 1]) / (knot_s[i] - knot_s[i - 1])
+		if i + 1 < knot_s.size():
+			slopes_out[i] = (knot_y[i + 1] - knot_y[i]) / (knot_s[i + 1] - knot_s[i])
+		if slopes_out[i] < slopes_in[i] - 0.01:
+			_lips.append(knot_s[i])
 	var k := 0
 	for i in _pts.size():
 		var s := _dists[i]
@@ -594,7 +631,7 @@ func _smooth_path_heights(nodes: Array[Vector3]) -> void:
 		var y := knot_y[k]
 		if span > 0.0001:
 			var t := clampf((s - knot_s[k]) / span, 0.0, 1.0)
-			y = _hermite_height(knot_y[k], slopes[k], knot_y[k1], slopes[k1], span, t)
+			y = _hermite_height(knot_y[k], slopes_out[k], knot_y[k1], slopes_in[k1], span, t)
 		var p := _pts[i]
 		p.y = y
 		_pts[i] = p
@@ -846,6 +883,10 @@ func _build_terrain() -> void:
 		for col in cols + 1:
 			var x := origin_x + span_x * float(col) / float(cols)
 			var y := _grass_height(x, z) - _TERRAIN_SINK
+			# The grass stays flat under a jump track's ramps; between its points it would come up
+			# through the road past a lip.
+			if _jumps:
+				y = minf(y, -_TERRAIN_SINK)
 			if _street and _grass_dist_sq <= _half_ws[0] * _half_ws[0]:
 				y -= _STREET_UNDER_ROAD_SINK
 			st.set_uv(Vector2(float(col), float(row)))
@@ -957,6 +998,77 @@ func _build_road_mesh() -> void:
 		_build_street_shoulders()
 	elif _style == TrackFile.STYLE_MOUNTAIN:
 		_build_gravel()
+
+
+## A jump track's ramps are solid blocks: a wall down each side from the road's edge to the grass.
+func _build_ramp_sides() -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var foot := -_TERRAIN_SINK
+	var walls := 0
+	for i in range(_pts.size() - 1):
+		if _pts[i].y <= _RAMP_SIDE_MIN_M and _pts[i + 1].y <= _RAMP_SIDE_MIN_M:
+			continue
+		walls += 1
+		var e0 := _sample_extents(i)
+		var e1 := _sample_extents(i + 1)
+		var r0 := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1]))
+		for side: float in [-1.0, 1.0]:
+			var top0 := _pts[i] + r0 * side * (e0.y if side > 0.0 else e0.x)
+			var top1 := _pts[i + 1] + r1 * side * (e1.y if side > 0.0 else e1.x)
+			var foot0 := Vector3(top0.x, foot, top0.z)
+			var foot1 := Vector3(top1.x, foot, top1.z)
+			var out := (r0 + r1).normalized() * side
+			_add_wall_tri(st, top0, foot0, top1, out)
+			_add_wall_tri(st, top1, foot0, foot1, out)
+	if walls == 0:
+		return
+	var mesh := st.commit()
+	mesh.surface_set_material(0, _make_mat(_RAMP_SIDE_COLOR, 0.9))
+	var mi := MeshInstance3D.new()
+	mi.name = "RampSides"
+	mi.mesh = mesh
+	add_child(mi)
+
+
+func _build_lip_bands() -> void:
+	var yellow_xforms: Array[Transform3D] = []
+	var black_xforms: Array[Transform3D] = []
+	for lip_s: float in _lips:
+		var top := sample_at(lip_s)
+		var foot := sample_at(lip_s - _LIP_BAND_LONG)
+		var top_p: Vector3 = top["position"]
+		var foot_p: Vector3 = foot["position"]
+		var yaw: float = top["yaw"]
+		var grade := atan2(top_p.y - foot_p.y, Vector2(top_p.x - foot_p.x, top_p.z - foot_p.z).length())
+		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -grade)
+		var middle := (top_p + foot_p) * 0.5 + Vector3.UP * 0.02
+		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
+		var ext := _sample_extents(_index_at_distance(lip_s))
+		var count := int(floor((ext.x + ext.y) / _LIP_BAND_ACROSS))
+		var from := -ext.x + ((ext.x + ext.y) - count * _LIP_BAND_ACROSS) * 0.5
+		for k in count:
+			var across := from + (float(k) + 0.5) * _LIP_BAND_ACROSS
+			var xform := Transform3D(basis, middle + right * across)
+			if k % 2 == 0:
+				yellow_xforms.append(xform)
+			else:
+				black_xforms.append(xform)
+	var size := Vector3(_LIP_BAND_ACROSS, 0.03, _LIP_BAND_LONG)
+	_add_box_multimesh(self, "LipYellow", size, _LIP_YELLOW, yellow_xforms)
+	_add_box_multimesh(self, "LipBlack", size, CHECK_BLACK, black_xforms)
+
+
+## One triangle of a wall facing `out`, wound so that side is its front.
+func _add_wall_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, out: Vector3) -> void:
+	if (b - a).cross(c - a).dot(out) > 0.0:
+		var swap := b
+		b = c
+		c = swap
+	for v: Vector3 in [a, b, c]:
+		st.set_normal(out)
+		st.add_vertex(v)
 
 
 ## Street Rod 2's road work: the pavement gone for a stretch, a gray patch the width of the road.

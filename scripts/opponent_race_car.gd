@@ -10,6 +10,7 @@ const _RacePark := preload("res://scripts/race_park.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
+const _AirTime := preload("res://scripts/air_time.gd")
 
 ## The path-following opponent from before the tire simulation.
 ## What a preset `accel_scale` of 1 gets of the pull the arcade drive gives a car. Set so
@@ -94,6 +95,8 @@ var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
 var _road_base_y: float = 0.0
 const _ROAD_PITCH_SPAN := 8.0
+## Off a jump. Only the rival's height flies: it keeps driving its line in the air.
+var _air: _AirTime = _AirTime.new()
 
 
 func _ready() -> void:
@@ -433,8 +436,19 @@ func _stick_to_road() -> void:
 		rotation.x = 0.0
 		return
 	var here: float = track.surface_height(global_position)
-	global_position.y = _road_base_y + here
 	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
+	if track.has_method(&"has_jumps") and track.has_jumps():
+		var speed := maxf(forward_speed, 0.0)
+		var delta := get_physics_process_delta_time()
+		_air.step(track, global_position, forward, speed, delta)
+		here = _air.height
+		if _air.airborne:
+			global_position.y = _road_base_y + here
+			rotation.x = _air.flight_pitch(rotation.x, speed, delta)
+			return
+		if _air.impact > 0.0:
+			take_hit(_AirTime.landing_harm(_air.impact))
+	global_position.y = _road_base_y + here
 	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
 	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
 	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
