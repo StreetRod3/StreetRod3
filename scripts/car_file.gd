@@ -10,6 +10,9 @@ extends RefCounted
 ##
 ## `model.ground_clearance` is how far the body's lowest point sits above the
 ## floor when it is snapped there, for bodies without wheels of their own.
+##
+## `wheels.size` multiplies the size of whatever wheels are fitted, for a car
+## whose tires are bigger or smaller than the wheel parts draw them (1 if left out).
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 
@@ -107,6 +110,7 @@ static func _parse_wheels(root: Dictionary, result: Dictionary) -> void:
 		"scale": 1.0,
 		"height": 0.5,
 		"overlay": bool(block.get("overlay", true)),
+		"size": float(block.get("size", 1.0)),
 		"mounts": parsed,
 	}
 
