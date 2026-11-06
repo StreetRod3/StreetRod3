@@ -1,6 +1,6 @@
 # Track file format (`.trk`)
 
-Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race, `res://assets/tracks/street_drag.trk` for the street drag, `res://assets/tracks/mulholland_0.trk` to `mulholland_9.trk` for Mulholland drive, and `res://assets/tracks/aqueduct.trk` for the Aqueduct race.
+Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race, `res://assets/tracks/street_drag.trk` for the street drag, `res://assets/tracks/mulholland_0.trk` to `mulholland_9.trk` for Mulholland drive, `res://assets/tracks/aqueduct.trk` for the Aqueduct race, and `res://assets/tracks/stunt.trk` for the stunt track.
 
 The drag strip in `scenes/race.tscn` is still a separate, hardcoded layout. It does not use this format yet.
 
@@ -35,6 +35,7 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `pois` | no | none | Points of interest. Each one is its own node, attached to a street node. |
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
 | `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. `mountain` is Mulholland: no grass grid, hillsides and drops from each node's `left` and `right`, a guard rail, and truss bridges. `aqueduct` is a concrete channel with sloped banks, where the road's width takes in the floor and both banks. |
+| `jumps` | no | `false` | Cars can leave the road. Where it drops away faster than a car can fall, at a lip or over a crest taken fast, the car flies until it lands. Only on a `circuit` track for now. It also keeps the grass flat under the road, builds the ramps' sides down to it, paints yellow and black bands up to each lip, and leaves out the curbs. Off on every other track, so their rises and dips drive as they did. |
 | `scenery` | no | none | What stands on and beside a `street`, `mountain`, or `aqueduct` track. See [Scenery](#scenery). |
 | `left_out` | no | none | Things baked from Street Rod 2 but not put on the track, with where they were and why. The game does not read this. No track has one at the moment. |
 
@@ -55,6 +56,7 @@ Unknown root fields are ignored. A race course can leave `pois` out.
 | `type` | no | `"regular"` | `start`, `finish`, or `regular`. |
 | `left`, `right` | no | `0` | On a `mountain` track, the full height of a hillside (above 0) or drop (below 0) on the driver's left or right, in meters. It runs straight from node to node. |
 | `rail` | no | `false` | On a `mountain` track, a guard rail on the driver's right from this node to the next. |
+| `sharp` | no | `false` | The road's grade changes here at once, instead of rounding through the node. Two sharp nodes together make a straight ramp. A sharp node where the road then falls away more steeply than it came up is a lip. |
 
 ### Node types
 
@@ -233,6 +235,14 @@ Oncoming traffic is not built.
 | Going over the top of a bank ends the race | A wall at the top, with damage by how hard the car hits | Street Rod 3's own crash model. |
 | Fins 33 across wide | 0.3 m wide | At Street Rod 2's 0.15 m they are hard to see. |
 | Touching the middle costs speed | Painted only | Not built yet. |
+
+## Stunt track
+
+`stunt.trk` is a test course for jumps, 1.5 km on a 14 m road, made by hand rather than baked from Street Rod 2. In order: a tabletop (a 15% kicker to a 1.5 m table 45 m long, then a ramp down), two rounded 3 m crests that throw a car past about 100 km/h, two 45 degree bends to the right, the big jump (a long climb to a 12% kicker 4 m up, with a landing that bends down after the lip like a ski jump's), and two short humps close together.
+
+How a car flies is in `scripts/air_time.gd`. In the air it keeps the speed and heading it took off with, and its nose turns to the way it is flying. Landing up to 4 m/s into the road costs nothing; past that, half the rest is a hit to the car, as if from a barrier. A rival flies too, but only its height: it keeps driving its line in the air.
+
+Measured with the stock Corvette in the arcade drive, foot down: the tabletop 20 m at 93 km/h, each crest about 47 m at 150 km/h, the big jump 64 m at 150 km/h, 3.3 m over the road at the top, with 12% damage on landing. About 17% for a whole run. At 80 km/h every jump is free.
 
 ## Example
 

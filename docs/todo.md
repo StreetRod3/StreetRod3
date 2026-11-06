@@ -19,3 +19,12 @@ Holding gas and brake with the car stopped is mostly for show so far: the rear w
 
 Street Rod 2's three races run at night for now and the other two by day (`_set_night()` in `race.gd`). Time could become a factor in races later.
 
+## Jumps
+
+The stunt track (`assets/tracks/stunt.trk`) is a first test of cars leaving the road. Not built yet:
+
+- **Gap jumps.** The road's height is one value along it, so there are no holes. A gap needs a face a car can hit when it comes up short, which is a wall rather than a road to climb.
+- **The car in the air.** It keeps its pitch to the way it is flying, with no rotation of its own from the takeoff, no throttle or brake effect, and no suspension stretching out. The wheels keep turning at road speed.
+- **The rival.** Only its height flies; it keeps driving its line, and can speed up, in the air.
+- **Other tracks.** Jumps are off everywhere else. The street drag's rises could throw a fast car if they were on there, which may suit "it can be fun to hit the peaks".
+- **Scenery.** The track is bare: no crowd, no signs, nothing beside the road.
