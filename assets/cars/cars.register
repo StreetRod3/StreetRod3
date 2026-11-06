@@ -44,6 +44,15 @@
       "hp": 280.0,
       "color": [0.15, 0.45, 0.85, 1.0],
       "car_file": "res://assets/cars/corvette-1962-1.car"
+    },
+    {
+      "id": "ford-f100-1970",
+      "name": "1970 Ford F100",
+      "price": 950,
+      "vmax": 185.0,
+      "hp": 230.0,
+      "color": [0.45, 0.62, 0.78, 1.0],
+      "car_file": "res://assets/cars/ford-f100-1970.car"
     }
   ]
 }
