@@ -13,6 +13,9 @@ const _WHEEL_RADIUS := 0.32
 var edge_i: int = 0
 var along: float = 0.0
 var next_i: int = -1
+## Street node this car is driving to, and the roads left to take to get there.
+var destination: int = -1
+var route: Array[int] = []
 var cruise_mps: float = 11.0
 var lane_bias: float = 0.0
 ## Extra meters toward the curb while a car that cannot be bumped is catching up.
