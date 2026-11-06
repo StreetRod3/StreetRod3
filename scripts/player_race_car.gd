@@ -31,6 +31,25 @@ const BURNOUT_FALL := 6.0
 const BURNOUT_RPM := 5000.0
 ## How fast the rear tires turn in a burnout at full strength, in m/s.
 const BURNOUT_WHEEL_SPEED := 30.0
+## In a full burnout the back of the car swings round the braked front wheels this fast with
+## the wheel turned all the way, and wanders up to this much on its own, in rad/s.
+const BURNOUT_SWING_RATE := 0.75
+const BURNOUT_WANDER := 0.12
+## How fast that swing builds and changes, in rad/s².
+const BURNOUT_SWING_ACCEL := 3.0
+## A rear tire sliding sideways this fast lays its burnout marks along its path, in m/s.
+const BURNOUT_MARK_SLIDE := 0.5
+## The hand brake works with the clutch in. On the gas the engine holds its revs, and climbs to
+## this if it was lower, by the first rate. Once the clutch is out the revs come down to the
+## road's by the second, in rpm per second.
+const CLUTCH_FREE_RPM := 5000.0
+const CLUTCH_REV_RATE := 6000.0
+const CLUTCH_CATCH_RATE := 5000.0
+## The clutch kick: as the clutch bites, the revs over the road's, as a share of the rev range,
+## times this is the extra share of the gear's pull. Only when the hand brake comes off faster
+## than this, in m/s, so a launch gets none.
+const CLUTCH_KICK := 1.0
+const CLUTCH_KICK_SPEED := 5.0
 
 const CAM_FAR := 0
 const CAM_CLOSE := 1
@@ -81,6 +100,13 @@ var _shifter_up_held: bool = false
 var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
 var _burnout: float = 0.0
+## How fast the back of the car is swinging in a burnout, in rad/s, before its strength.
+var _burnout_swing: float = 0.0
+var _burnout_time: float = 0.0
+var _burnout_wander := FastNoiseLite.new()
+## The engine's own revs while the clutch is in or still biting, or 0 when they follow the road.
+var _clutch_rpm: float = 0.0
+var _clutch_kicks: bool = false
 var _overrev_time: float = 0.0
 var _engine_blown: bool = false
 var _damage: _CarDamage = _CarDamage.new()
@@ -115,6 +141,8 @@ func _ready() -> void:
 	_skids = _SkidMarks.new()
 	_skids.name = "SkidMarks"
 	add_child(_skids)
+	_burnout_wander.seed = randi()
+	_burnout_wander.frequency = 0.5
 	_apply_camera_mode()
 	_gearbox = GameState.get_equipped_gearbox()
 	_gear = 0
@@ -262,14 +290,20 @@ func is_wrecked() -> bool:
 func get_rpm() -> float:
 	if _engine_blown:
 		return 0.0
+	var rpm := _road_rpm()
+	rpm = lerpf(rpm, maxf(rpm, BURNOUT_RPM), _burnout)
+	rpm = maxf(rpm, _clutch_rpm)
+	return clampf(rpm, RPM_IDLE_MIN, RPM_METER_MAX)
+
+
+## The revs the road speed turns the engine at in this gear.
+func _road_rpm() -> float:
 	if _gear == GEAR_NEUTRAL:
 		return RPM_IDLE
 	var top := _reverse_top() if _gear == GEAR_REVERSE else _gear_top_mps(_gear)
 	if top <= 0.05:
 		return RPM_IDLE
-	var rpm := RPM_IDLE + (RPM_REDLINE - RPM_IDLE) * (absf(forward_speed) / top)
-	rpm = lerpf(rpm, maxf(rpm, BURNOUT_RPM), _burnout)
-	return clampf(rpm, RPM_IDLE_MIN, RPM_METER_MAX)
+	return RPM_IDLE + (RPM_REDLINE - RPM_IDLE) * (absf(forward_speed) / top)
 
 
 func get_rpm_shift_start() -> float:
@@ -361,18 +395,22 @@ func _burnout_held() -> bool:
 	return _throttle_amount() >= BURNOUT_PEDAL and _brake_amount() >= BURNOUT_PEDAL and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
 
 
-## Only for show so far: the wheels spin, the engine revs, and the tires smoke and mark the
-## road, but it does nothing for the launch or the tires. See docs/todo.md.
+## The wheels spin, the engine revs, the tires smoke and mark the road, and the back of the car
+## can be swung round, but it does nothing for the launch or the tires yet. See docs/todo.md.
 func _update_burnout(delta: float) -> void:
 	if _burnout_held():
 		_burnout = move_toward(_burnout, 1.0, BURNOUT_RISE * delta)
 	else:
 		_burnout = move_toward(_burnout, 0.0, BURNOUT_FALL * delta)
 	if _burnout <= 0.0:
+		_burnout_swing = 0.0
 		return
+	_swing_burnout(delta)
 	var track := _race_track()
 	var wheels := _dynamics.wheels()
 	var forward := global_transform.basis.z.normalized()
+	var pivot := global_transform * _front_axle()
+	var swing := absf(_burnout_swing * _burnout)
 	for i in wheels.size():
 		var wheel: _VehicleDynamics.Wheel = wheels[i]
 		if wheel.front:
@@ -381,8 +419,84 @@ func _update_burnout(delta: float) -> void:
 		var ground_y := wheel.road_y
 		if track != null and track.has_method(&"surface_height"):
 			ground_y = float(track.surface_height(world))
-		_skids.burn(i, world, ground_y, forward, _burnout)
+		# A tire swinging round leaves its rubber along the way it slides, so the marks join up into an arc.
+		var arm := Vector3(world.x - pivot.x, 0.0, world.z - pivot.z)
+		var along := Vector3.UP.cross(arm).normalized()
+		if along.dot(forward) < 0.0:
+			along = -along
+		var mark_dir := forward.lerp(along, clampf(swing * arm.length() / BURNOUT_MARK_SLIDE, 0.0, 1.0)).normalized()
+		_skids.burn(i, world, ground_y, mark_dir, _burnout)
 	_skids.flush()
+
+
+## Rear tires spinning in a burnout have no grip left to hold the back of the car sideways, so
+## it swings round the braked front wheels: the way the wheel is turned, and a little on its own.
+func _swing_burnout(delta: float) -> void:
+	_burnout_time += delta
+	var wander := _burnout_wander.get_noise_1d(_burnout_time) * BURNOUT_WANDER
+	var wanted := _steer_input() * BURNOUT_SWING_RATE + wander
+	_burnout_swing = move_toward(_burnout_swing, wanted, BURNOUT_SWING_ACCEL * delta)
+	var turn := _burnout_swing * _burnout * delta
+	if is_zero_approx(turn):
+		return
+	var pivot := global_transform * _front_axle()
+	var moved := pivot + (global_position - pivot).rotated(Vector3.UP, turn)
+	rotation.y += turn
+	heading_yaw = rotation.y
+	_arcade.heading_yaw = rotation.y
+	_dynamics.yaw = wrapf(rotation.y, -PI, PI)
+	# Through move_and_slide, so a barrier still stops the car.
+	var kept := velocity
+	velocity = (moved - global_position) / delta
+	move_and_slide()
+	velocity = kept
+
+
+## The middle of the front axle, in the car's own space.
+func _front_axle() -> Vector3:
+	var sum := Vector3.ZERO
+	var count := 0
+	for wheel: _VehicleDynamics.Wheel in _dynamics.wheels():
+		if wheel.front:
+			sum += wheel.local_position
+			count += 1
+	if count == 0:
+		return _car_center + Vector3(0.0, 0.0, _ArcadeDrive.WHEELBASE_M * 0.5)
+	return sum / float(count)
+
+
+## The hand brake works with the clutch in, so on the gas the engine keeps revving instead of
+## falling with the road speed. When the clutch comes out the revs come down to the road's, and
+## if the car is moving, what they had over it gives a short kick of extra pull.
+func _update_clutch(delta: float) -> void:
+	var road := _road_rpm()
+	var handbrake := _handbrake_down()
+	if handbrake and _throttle_down() and not _burnout_held() and not _engine_blown and _gear != GEAR_NEUTRAL:
+		var held := maxf(_clutch_rpm, road)
+		var free := lerpf(RPM_IDLE, CLUTCH_FREE_RPM, _throttle_amount())
+		_clutch_rpm = move_toward(held, maxf(held, free), CLUTCH_REV_RATE * delta)
+		_clutch_kicks = forward_speed >= CLUTCH_KICK_SPEED
+		return
+	if handbrake or _clutch_rpm <= 0.0:
+		_clutch_kicks = false
+	_clutch_rpm = move_toward(_clutch_rpm, road, CLUTCH_CATCH_RATE * delta)
+	if _clutch_rpm <= road:
+		_clutch_rpm = 0.0
+		_clutch_kicks = false
+
+
+## How much the clutch kick adds to the gear's pull, as a factor.
+func _clutch_kick() -> float:
+	if not _clutch_kicks:
+		return 1.0
+	var over := maxf(_clutch_rpm - _road_rpm(), 0.0) / (RPM_REDLINE - RPM_IDLE)
+	return 1.0 + CLUTCH_KICK * over
+
+
+## Paving drawn over the ground where there is no track to say how high it is, as in free roam,
+## for the skid marks to lie on.
+func set_mark_paving(source: Object) -> void:
+	_skids.paving = source
 
 
 func _handbrake_down() -> bool:
@@ -398,6 +512,8 @@ func begin_park(slot: float) -> void:
 	_park_slot = slot
 	_burnout = 0.0
 	_park_speed = maxf(forward_speed, 0.0)
+	_clutch_rpm = 0.0
+	_clutch_kicks = false
 	_skids.end_strips()
 
 
@@ -421,6 +537,7 @@ func _physics_process(delta: float) -> void:
 	# Runs during the countdown too, so a gear picked on the start line is in by the green light.
 	if _shift_timer > 0.0:
 		_shift_timer = maxf(0.0, _shift_timer - delta)
+	_update_clutch(delta)
 	if GameState.arcade_drive:
 		_physics_arcade(delta)
 		_dynamics.sample_surfaces(_race_track(), global_transform)
@@ -485,7 +602,7 @@ func _physics_simulation(delta: float) -> void:
 	var drive := 0.0
 	var brake_input := 0.0
 	if throttle and _shift_timer <= 0.0 and not handbrake:
-		drive = _requested_drive_force() * _throttle_amount()
+		drive = _requested_drive_force() * _throttle_amount() * _clutch_kick()
 	elif brake:
 		brake_input = _brake_amount()
 	_dynamics.sample_surfaces(track, global_transform)
@@ -548,7 +665,7 @@ func _physics_arcade(delta: float) -> void:
 		_handbrake_down(),
 		_shift_timer > 0.0,
 		_engine_blown,
-		_signed_gear_accel(),
+		_signed_gear_accel() * _clutch_kick(),
 		limits.y,
 		_car_center,
 		limits.x,

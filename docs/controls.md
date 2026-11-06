@@ -16,7 +16,7 @@ Every control in the game: keyboard, gamepad, and steering wheel. They all work 
 | Hand brake | Space |
 | Camera | C |
 | Pause | Esc |
-| Burnout | W and S with the car stopped |
+| Burnout | W and S with the car stopped, steering to swing the back round |
 
 These can be changed under Controls in the settings. Esc always pauses, whatever else is set.
 

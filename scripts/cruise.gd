@@ -132,6 +132,8 @@ var _wrecked := false
 var _roam_doors_shut := false
 ## Each place's front apron: id, origin, facing, right, half_width, depth.
 var _roam_places: Array[Dictionary] = []
+## The paved slab in front of each place, as drawn: its place's root, and its middle and half size there.
+var _aprons: Array[Dictionary] = []
 var _hud_speed: Label
 var _hud_gear: Label
 var _hud_damage: Label
@@ -401,6 +403,7 @@ func _build_roam_car(track: Dictionary, from_poi: String) -> void:
 	body.add_child(dyn)
 	add_child(body)
 	_roam_car = body
+	body.call(&"set_mark_paving", self)
 	if _floor != null and pivot.has_method(&"align_wheels_to_floor"):
 		pivot.call(&"align_wheels_to_floor", _floor)
 
@@ -800,7 +803,7 @@ func _road_meshes(track: Dictionary) -> Array:
 		var a: Vector3 = segment["a"]
 		var b: Vector3 = segment["b"]
 		var half_w := float(segment["half"])
-		_add_ribbon(asphalt, a, b, half_w, 0.03 if int(segment["a_node"]) >= 0 else 0.04)
+		_add_ribbon(asphalt, a, b, half_w, _street_lift(segment))
 		var span := Vector3(b.x - a.x, 0.0, b.z - a.z)
 		var length := span.length()
 		if length < 0.2:
@@ -989,6 +992,32 @@ func _place_bush(pile: Array[Transform3D], pos: Vector3, radius: float, lift: fl
 	pile.append(_bush_transform(pos, radius, lift))
 
 
+## How far a street's asphalt sits over the ground. A driveway sits a little higher.
+func _street_lift(segment: Dictionary) -> float:
+	return 0.03 if int(segment["a_node"]) >= 0 else 0.04
+
+
+## The top of the paving here, over the ground, so skid marks lie on it and not under it.
+func paved_height(world: Vector3) -> float:
+	for apron: Dictionary in _aprons:
+		var root := apron["root"] as Node3D
+		if not is_instance_valid(root):
+			continue
+		var local := root.global_transform.affine_inverse() * world
+		var middle: Vector3 = apron["middle"]
+		var half: Vector3 = apron["half"]
+		if absf(local.x - middle.x) <= half.x and absf(local.z - middle.z) <= half.z:
+			return (root.global_transform * Vector3(local.x, middle.y + half.y, local.z)).y
+	var point := Vector2(world.x, world.z)
+	var top := 0.0
+	for segment: Dictionary in _streets:
+		var a: Vector3 = segment["a"]
+		var b: Vector3 = segment["b"]
+		if _gap_to_segment(point, Vector2(a.x, a.z), Vector2(b.x, b.z)) <= float(segment["half"]):
+			top = maxf(top, _street_lift(segment))
+	return top
+
+
 ## A disc overlaps a paved street or a driveway.
 func _on_pavement(point: Vector2, clearance: float) -> bool:
 	for segment: Dictionary in _streets:
@@ -1167,7 +1196,7 @@ func _build_royal_rods(root: Node3D) -> void:
 	var burgundy := Color(0.48, 0.07, 0.09)
 	var gold := Color(1.0, 0.82, 0.28)
 	var bay := Color(0.4, 0.42, 0.46)
-	_add_box(root, Vector3(11.6, 0.06, 5.2), Vector3(0.0, 0.03, -2.3), Color(0.5, 0.49, 0.46), 0.92)
+	_add_apron(root, Vector3(11.6, 0.06, 5.2), Vector3(0.0, 0.03, -2.3), Color(0.5, 0.49, 0.46), 0.92)
 	_add_box(root, Vector3(11.6, 4.3, 8.0), Vector3(0.0, 2.15, 4.2), wall, 0.88)
 	_add_box(root, Vector3(12.1, 0.2, 8.5), Vector3(0.0, 4.4, 4.2), Color(0.22, 0.2, 0.2), 0.86)
 	_add_box(root, Vector3(11.6, 0.22, 0.06), Vector3(0.0, 3.9, 0.16), burgundy, 0.45)
@@ -1197,7 +1226,7 @@ func _place_alongside(root: Node3D, stop: Vector3, away: Vector3) -> void:
 
 func _build_garage(root: Node3D) -> void:
 	_add_solid(root, Vector3(11.5, 5.4, 9.0), Vector3(-0.4, 2.7, 4.5), true)
-	_add_box(root, Vector3(8.4, 0.06, 4.6), Vector3(-0.3, 0.03, -2.2), Color(0.55, 0.54, 0.5), 0.92)
+	_add_apron(root, Vector3(8.4, 0.06, 4.6), Vector3(-0.3, 0.03, -2.2), Color(0.55, 0.54, 0.5), 0.92)
 	_add_box(root, Vector3(3.5, 5.2, 0.32), Vector3(-4.25, 2.6, 0.0), _SHOP_WALL)
 	_add_box(root, Vector3(2.0, 5.2, 0.32), Vector3(4.2, 2.6, 0.0), _SHOP_WALL)
 	_add_box(root, Vector3(0.32, 5.2, 8.8), Vector3(-5.84, 2.6, 4.4), _SHOP_WALL)
@@ -1245,7 +1274,7 @@ func _close_garage_doors() -> void:
 
 func _build_drive_in(root: Node3D) -> void:
 	_add_solid(root, Vector3(16.4, 3.5, 6.4), Vector3(0.0, 1.75, 3.2), true)
-	_add_box(root, Vector3(17.2, 0.06, 6.4), Vector3(0.0, 0.03, -3.0), Color(0.14, 0.14, 0.15), 0.94)
+	_add_apron(root, Vector3(17.2, 0.06, 6.4), Vector3(0.0, 0.03, -3.0), Color(0.14, 0.14, 0.15), 0.94)
 	for i in 5:
 		var x := -6.0 + float(i) * 3.0
 		_add_box(root, Vector3(0.08, 0.02, 4.4), Vector3(x, 0.07, -2.6), Color(0.72, 0.72, 0.68), 0.6)
@@ -1311,7 +1340,7 @@ func _diner_sign(root: Node3D) -> void:
 func _build_gas_station(root: Node3D) -> void:
 	_add_solid(root, Vector3(10.4, 4.8, 5.6), Vector3(0.0, 2.4, 2.8), true)
 	var brick := _brick_material()
-	_add_box(root, Vector3(9.2, 0.06, 5.2), Vector3(0.2, 0.03, -2.4), Color(0.58, 0.56, 0.52), 0.9)
+	_add_apron(root, Vector3(9.2, 0.06, 5.2), Vector3(0.2, 0.03, -2.4), Color(0.58, 0.56, 0.52), 0.9)
 	_add_box_mat(root, Vector3(10.2, 3.2, 0.28), Vector3(0.0, 1.6, 0.0), brick)
 	_add_box_mat(root, Vector3(0.28, 3.2, 5.5), Vector3(-5.0, 1.6, 2.75), brick)
 	_add_box_mat(root, Vector3(0.28, 3.2, 5.5), Vector3(5.0, 1.6, 2.75), brick)
@@ -1393,6 +1422,12 @@ func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough:
 		mat.emission = emission
 		mat.emission_energy_multiplier = energy
 	_add_box_mat(parent, size, pos, mat, rot, shadow)
+
+
+## The slab in front of a place, noted so skid marks can lie on top of it.
+func _add_apron(root: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough: float) -> void:
+	_add_box(root, size, pos, albedo, rough)
+	_aprons.append({"root": root, "middle": pos, "half": size * 0.5})
 
 
 func _add_box_mat(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, rot: Vector3 = Vector3.ZERO, shadow: bool = true) -> void:
