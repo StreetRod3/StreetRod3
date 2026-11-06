@@ -12,22 +12,22 @@
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.659, 0.338, 1.628],
+        "position": [-0.771, 0.338, 1.628],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.659, 0.338, 1.628],
+        "position": [0.771, 0.338, 1.628],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.659, 0.338, -1.209],
+        "position": [-0.771, 0.338, -1.209],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.659, 0.338, -1.209],
+        "position": [0.771, 0.338, -1.209],
         "rotation": [0, 180, -90]
       }
     ]
@@ -38,7 +38,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [0.37, 1.32, 0.44]
+    "position": [0.43, 1.32, 0.44]
   },
   "chassis": {
     "mass": 1630,
