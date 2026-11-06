@@ -21,7 +21,9 @@ Street Rod 2's three races run at night for now and the other two by day (`_set_
 
 ## Jumps
 
-The stunt track (`assets/tracks/stunt.trk`) is a first test of cars leaving the road. Every stunt has to be one a car can make: no gap to fall short of, nothing that only ends in a crash. A loop the car can actually drive round would be welcome, if it can be made to work. Not built yet:
+The stunt track (`assets/tracks/stunt.trk`) is a first test of cars leaving the road. Every stunt has to be one a car can make: nothing that only ends in a crash. Gap jumps are welcome as long as a car can land them, with a landing ramp it reaches at a speed it can get to, and a loop the car can actually drive round would be welcome too. Not built yet:
+
+- **Gap jumps.** The road's height is one value along it, so there are no holes yet. A gap needs the ground in it dropped away below the road, and the takeoff and landing ramps set so the arc from the takeoff clears it.
 
 - **The car in the air.** It keeps its pitch to the way it is flying, with no rotation of its own from the takeoff, no throttle or brake effect, and no suspension stretching out. The wheels keep turning at road speed.
 - **The rival on the simulation model.** On the stunt track it takes the first 45° bend too fast (180 m radius at 113 km/h), slides off on its own, spins round and sits facing backwards for the rest of the race. The same happens on a flat copy of the track, so it is the driver, not the jumps.
