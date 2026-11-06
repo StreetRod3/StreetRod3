@@ -4,7 +4,7 @@
   "model": {
     "path": "res://assets/cars/ford-f100-1970.glb",
     "position": [0.0, 0.349, 0.0],
-    "height": 1.265,
+    "height": 1.228,
     "ground_clearance": 0.349
   },
   "register": "res://assets/parts/parts.register",
@@ -12,22 +12,22 @@
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.679, 0.338, 1.676],
+        "position": [-0.659, 0.338, 1.628],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.679, 0.338, 1.676],
+        "position": [0.659, 0.338, 1.628],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.679, 0.338, -1.245],
+        "position": [-0.659, 0.338, -1.209],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.679, 0.338, -1.245],
+        "position": [0.659, 0.338, -1.209],
         "rotation": [0, 180, -90]
       }
     ]
@@ -38,11 +38,11 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [0.38, 1.35, 0.45]
+    "position": [0.37, 1.32, 0.44]
   },
   "chassis": {
     "mass": 1630,
-    "wheelbase": 2.921,
+    "wheelbase": 2.837,
     "cg_height": 0.6,
     "front_axle_fraction": 0.56,
     "max_steer_deg": 30
