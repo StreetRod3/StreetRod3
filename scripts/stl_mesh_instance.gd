@@ -157,7 +157,7 @@ func load_glb_scene() -> void:
 		(inst as Node3D).force_update_transform()
 
 	# Visual AABB includes node scale/rotation. Legacy AABB is mesh-local and is
-	# what the 1962 car file's height=5 still expects (Sketchfab Y is length).
+	# what the 1962 car file's height still expects: Sketchfab Y is length, so it is the car's length.
 	var visual := _subtree_aabb(inst as Node3D, (inst as Node3D).transform)
 	var legacy := get_aabb_recursive(inst)
 	var height := maxf(visual.size.y, legacy.size.y)

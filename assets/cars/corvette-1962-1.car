@@ -3,30 +3,31 @@
   "name": "Corvette 1962",
   "model": {
     "path": "res://assets/cars/c-1962.glb",
-    "position": [0.0, 0.0, 0.0],
-    "height": 5.0
+    "position": [0.024, 0.101, 0.0],
+    "height": 4.501,
+    "ground_clearance": 0.203
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.829, 0.889, 1.833],
+        "position": [-0.724, 0.338, 1.645],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.774, 0.889, 1.833],
+        "position": [0.724, 0.338, 1.645],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.812, 0.889, -1.056],
+        "position": [-0.7495, 0.338, -0.946],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.757, 0.889, -1.056],
+        "position": [0.7495, 0.338, -0.946],
         "rotation": [0, 180, -90]
       }
     ]
