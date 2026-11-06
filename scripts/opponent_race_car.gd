@@ -56,6 +56,12 @@ const _RAIL_SPIN_DECAY := 3.0
 const _RAIL_WOBBLE_RETURN := 3.5
 ## How hard a totaled car comes to a stop, in m/s².
 const _TOTALED_BRAKE := 11.0
+## Share of a landing's impact, in m/s, that comes off the speed. The same as the player's car.
+const LANDING_SPEED_LOSS := 0.15
+## On the arcade rails after a jump: what share of the way back to its lane the car closes in a
+## second, and how fast at most it goes across.
+const _RAIL_REJOIN_RATE := 1.2
+const _RAIL_REJOIN_MAX_MPS := 5.0
 
 var forward_speed: float = 0.0
 
@@ -95,8 +101,13 @@ var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
 var _road_base_y: float = 0.0
 const _ROAD_PITCH_SPAN := 8.0
-## Off a jump. Only the rival's height flies: it keeps driving its line in the air.
+## Off a jump. In the air the car leaves its line and flies on the way it took off, and once down
+## it drives back to the line from wherever it landed.
 var _air: _AirTime = _AirTime.new()
+## Flat velocity in the air, in m/s: the way the car was going when it left the road.
+var _flight_velocity: Vector3 = Vector3.ZERO
+## On the arcade rails: how far, in meters, the car landed from its lane. Closes as it drives back.
+var _rail_rejoin: float = 0.0
 
 
 func _ready() -> void:
@@ -220,7 +231,9 @@ func _physics_process(delta: float) -> void:
 		_body_motion.ride_from_motion(delta, _dynamics.cg_velocity, rotation.y)
 		_pose_body(delta)
 		return
-	if GameState.arcade_drive:
+	if _air.airborne:
+		_physics_flight()
+	elif GameState.arcade_drive:
 		_physics_arcade(delta)
 		_ride_rails(delta)
 	else:
@@ -245,6 +258,18 @@ func _coast_to_a_stop(delta: float) -> void:
 	_body_motion.ride_from_motion(delta, velocity, rotation.y)
 	_stick_to_road()
 	_pose_body(delta)
+
+
+## In the air neither the rails nor the tires move the car, and the springs sit as they were.
+## It flies on flat and straight until `_stick_to_road` brings it down.
+func _physics_flight() -> void:
+	velocity = _flight_velocity
+	move_and_slide()
+	_skids.end_strips()
+	_body_motion.note_velocity(_flight_velocity)
+	var track := _race_track(get_parent())
+	if track != null and track.has_method(&"closest_sample"):
+		_path_s = float(track.closest_sample(global_position).get("s", _path_s))
 
 
 ## On the arcade rails only the speed and the heading say how hard the body is being thrown.
@@ -374,12 +399,14 @@ func _physics_arcade(delta: float) -> void:
 		var lane := clampf(_lane_x, -left_room, right_room)
 		if track.has_method(&"is_tight_road") and track.is_tight_road():
 			lane = clampf(_dodging_lane(track, lane, delta), -maxf(left_ext - TIGHT_EDGE_MARGIN_M, 0.0), maxf(right_ext - TIGHT_EDGE_MARGIN_M, 0.0))
-		var dest := center + right * lane
+		var across := clampf(-_rail_rejoin * _RAIL_REJOIN_RATE, -_RAIL_REJOIN_MAX_MPS, _RAIL_REJOIN_MAX_MPS)
+		_rail_rejoin += across * delta
+		var dest := center + right * (lane + _rail_rejoin)
 		velocity = Vector3.ZERO
 		move_and_slide()
 		global_position.x = dest.x
 		global_position.z = dest.z
-		rotation.y = float(sample.get("yaw", 0.0)) + _rail_wobble
+		rotation.y = float(sample.get("yaw", 0.0)) + _rail_wobble + atan2(across, maxf(forward_speed, 3.0))
 		return
 	velocity = Vector3(0.0, velocity.y, forward_speed)
 	move_and_slide()
@@ -438,22 +465,54 @@ func _stick_to_road() -> void:
 	var here: float = track.surface_height(global_position)
 	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
 	if track.has_method(&"has_jumps") and track.has_jumps():
-		var speed := maxf(forward_speed, 0.0)
+		var was_flying := _air.airborne
+		var moving := _flight_velocity if was_flying else _ground_velocity(forward)
+		var speed := moving.length()
+		var travel := moving / speed if speed > 0.1 else forward
 		var delta := get_physics_process_delta_time()
-		_air.step(track, global_position, forward, speed, delta)
+		_air.step(track, global_position, travel, speed, delta)
 		here = _air.height
 		if _air.airborne:
+			if not was_flying:
+				_flight_velocity = moving
 			global_position.y = _road_base_y + here
 			rotation.x = _air.flight_pitch(rotation.x, speed, delta)
 			return
-		if _air.impact > 0.0:
-			take_hit(_AirTime.landing_harm(_air.impact))
+		if was_flying:
+			_rejoin_line(track)
 	global_position.y = _road_base_y + here
 	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
 	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
 	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
 	if track.has_method(&"surface_roll"):
 		rotation.z = track.surface_roll(global_position, rotation.y)
+
+
+## Flat velocity on the road, in m/s. On the rails the car only goes where its nose points.
+func _ground_velocity(forward: Vector3) -> Vector3:
+	if GameState.arcade_drive or _parking or _damage.is_totaled():
+		return forward * maxf(forward_speed, 0.0)
+	return Vector3(_dynamics.cg_velocity.x, 0.0, _dynamics.cg_velocity.z)
+
+
+## Down off a jump: the landing's damage and lost speed, and the line picked up again from the
+## closest point on it. The rails ease the car back over to its lane, and the tires steer it there.
+func _rejoin_line(track: Node) -> void:
+	take_hit(_AirTime.landing_harm(_air.impact))
+	var speed := _flight_velocity.length()
+	var kept := maxf(speed - _air.impact * LANDING_SPEED_LOSS, 0.0) / maxf(speed, 0.1)
+	forward_speed *= kept
+	_dynamics.cg_velocity = _flight_velocity * kept
+	_dynamics.yaw = rotation.y
+	if not track.has_method(&"closest_sample"):
+		return
+	var sample: Dictionary = track.closest_sample(global_position)
+	_path_s = float(sample.get("s", _path_s))
+	if GameState.arcade_drive and not _parking:
+		var left_room := maxf(float(sample.get("left_ext", 8.0)) - 1.6, 0.0)
+		var right_room := maxf(float(sample.get("right_ext", 8.0)) - 1.6, 0.0)
+		_rail_rejoin = float(sample.get("lateral", 0.0)) - clampf(_lane_x, -left_room, right_room)
+		_rail_wobble = wrapf(rotation.y - float(sample.get("yaw", rotation.y)), -PI, PI)
 
 
 func _race_track(race: Node) -> Node:
