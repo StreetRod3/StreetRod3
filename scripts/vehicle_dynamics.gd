@@ -991,7 +991,8 @@ func _integrate_suspension(dt: float) -> void:
 		_roll = clampf(_roll, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
 		_roll_vel = 0.0
 	var lean_loss := absf(_roll) / _LEAN_LIMIT_RAD * _LEAN_GRIP_LOSS
-	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * config.wheelbase_m * 0.5 + absf(_roll_vel) * config.track_width_m * 0.5
+	var track := (_front_track + _rear_track) * 0.5
+	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * _wheelbase * 0.5 + absf(_roll_vel) * track * 0.5
 	var wallow_loss := minf(corner_speed * _WALLOW_GRIP_LOSS, _WALLOW_GRIP_LOSS_MAX)
 	_ride_grip = lerpf(_ride_grip, 1.0 - lean_loss - wallow_loss, 1.0 - exp(-_RIDE_GRIP_RESPONSE * dt))
 
