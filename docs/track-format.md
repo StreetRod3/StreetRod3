@@ -240,7 +240,7 @@ Oncoming traffic is not built.
 
 `stunt.trk` is a test course for jumps, 1.5 km on a 14 m road, made by hand rather than baked from Street Rod 2. In order: a tabletop (a 15% kicker to a 1.5 m table 45 m long, then a ramp down), two rounded 3 m crests that throw a car past about 100 km/h, two 45 degree bends to the right, the big jump (a long climb to a 12% kicker 4 m up, with a landing that bends down after the lip like a ski jump's), and two short humps close together.
 
-How a car flies is in `scripts/air_time.gd`. In the air it keeps the speed and heading it took off with, and its nose turns to the way it is flying. Landing up to 4 m/s into the road costs nothing; past that, half the rest is a hit to the car, as if from a barrier. A rival flies too, but only its height: it keeps driving its line in the air.
+How a car flies is in `scripts/air_time.gd`. In the air it keeps the speed and heading it took off with, and its nose turns to the way it is flying. Landing up to 4 m/s into the road costs nothing; past that, half the rest is a hit to the car, as if from a barrier. A rival flies the same way, off its line, and once down it drives back to the line from the closest point to where it landed.
 
 Measured with the stock Corvette in the arcade drive, foot down: the tabletop 20 m at 93 km/h, each crest about 47 m at 150 km/h, the big jump 64 m at 150 km/h, 3.3 m over the road at the top, with 12% damage on landing. About 17% for a whole run. At 80 km/h every jump is free.
 

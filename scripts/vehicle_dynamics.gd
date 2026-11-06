@@ -670,6 +670,13 @@ func _slide_needs_catch() -> bool:
 	return _steer_input * yaw_rate <= 0.02
 
 
+## The steering input that turns the front wheels to `angle`, in radians, at the speed the car is
+## going: past the rack's stop at this speed it is full lock, 1 or -1.
+func steer_input_for(angle: float) -> float:
+	var share := clampf(absf(angle) / maxf(_steer_angle_limit(), 0.0001), 0.0, 1.0)
+	return signf(angle) * pow(share, 1.0 / maxf(config.steer_input_curve, 1.0))
+
+
 func _shaped_steer(amount: float) -> float:
 	var curve := maxf(config.steer_input_curve, 1.0)
 	return signf(amount) * pow(absf(amount), curve)
@@ -984,7 +991,8 @@ func _integrate_suspension(dt: float) -> void:
 		_roll = clampf(_roll, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
 		_roll_vel = 0.0
 	var lean_loss := absf(_roll) / _LEAN_LIMIT_RAD * _LEAN_GRIP_LOSS
-	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * config.wheelbase_m * 0.5 + absf(_roll_vel) * config.track_width_m * 0.5
+	var track := (_front_track + _rear_track) * 0.5
+	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * _wheelbase * 0.5 + absf(_roll_vel) * track * 0.5
 	var wallow_loss := minf(corner_speed * _WALLOW_GRIP_LOSS, _WALLOW_GRIP_LOSS_MAX)
 	_ride_grip = lerpf(_ride_grip, 1.0 - lean_loss - wallow_loss, 1.0 - exp(-_RIDE_GRIP_RESPONSE * dt))
 

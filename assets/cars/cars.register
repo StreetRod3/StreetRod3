@@ -2,7 +2,7 @@
   "cars": [
     {
       "id": "sr1-corvette-1956",
-      "name": "Corvette 1956",
+      "name": "1956 Corvette",
       "price": 1350,
       "vmax": 220.0,
       "hp": 280.0,
@@ -11,7 +11,7 @@
     },
     {
       "id": "chevy-styleline-1950",
-      "name": "Chevy Styleline 1950",
+      "name": "1950 Chevy Styleline",
       "price": 900,
       "vmax": 185.0,
       "hp": 230.0,
@@ -20,7 +20,7 @@
     },
     {
       "id": "fairlane-1957",
-      "name": "Fairlane 500",
+      "name": "1957 Fairlane 500",
       "price": 1050,
       "vmax": 185.0,
       "hp": 230.0,
@@ -29,7 +29,7 @@
     },
     {
       "id": "ford-coupe-1932",
-      "name": "Ford Coupe 1932",
+      "name": "1932 Ford Coupe",
       "price": 1250,
       "vmax": 220.0,
       "hp": 280.0,
@@ -38,7 +38,7 @@
     },
     {
       "id": "corvette-1962",
-      "name": "Corvette 1962",
+      "name": "1961 Corvette",
       "price": 1500,
       "vmax": 220.0,
       "hp": 280.0,
