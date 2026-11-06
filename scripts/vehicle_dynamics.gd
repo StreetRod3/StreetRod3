@@ -670,6 +670,13 @@ func _slide_needs_catch() -> bool:
 	return _steer_input * yaw_rate <= 0.02
 
 
+## The steering input that turns the front wheels to `angle`, in radians, at the speed the car is
+## going: past the rack's stop at this speed it is full lock, 1 or -1.
+func steer_input_for(angle: float) -> float:
+	var share := clampf(absf(angle) / maxf(_steer_angle_limit(), 0.0001), 0.0, 1.0)
+	return signf(angle) * pow(share, 1.0 / maxf(config.steer_input_curve, 1.0))
+
+
 func _shaped_steer(amount: float) -> float:
 	var curve := maxf(config.steer_input_curve, 1.0)
 	return signf(amount) * pow(absf(amount), curve)

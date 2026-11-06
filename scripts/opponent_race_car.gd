@@ -32,12 +32,16 @@ const ARCADE_CORNER_GRIP_USE := 0.8
 const STEER_FULL_ERROR_RAD := 0.175
 ## Steering per meter of drift from the chosen lane.
 const STEER_PER_LANE_M := 0.1
-## How far ahead, in seconds of travel, the driver reads the road heading.
+## How far ahead, in seconds of travel, the driver reads the road heading and how it bends.
 const STEER_LOOKAHEAD_S := 0.4
-## Steering against the current yaw rate, per rad/s.
+## Steering against turning faster or slower than the road does, per rad/s.
 const STEER_YAW_DAMPING := 0.55
 ## Body slip speed where the driver stops steering at the line and catches the slide.
 const SLIDE_LATERAL_MPS := 4.0
+## Pointing this far off the road at a crawl, after a spin, the driver turns round on full lock
+## with this much throttle, and keeps turning the same way until it is pointing up the road.
+const TURN_ROUND_ERROR_RAD := 1.2
+const TURN_ROUND_THROTTLE := 0.5
 const LANE_EDGE_MARGIN_M := 1.8
 ## How a rival moves around something on the road: how early it looks, and how fast it goes across.
 const DODGE_LOOK_S := 2.2
@@ -80,6 +84,8 @@ var _lane_x: float = 0.0
 var _dodge_lane: float = 0.0
 var _dodge_ready: bool = false
 var _lane_ready: bool = false
+## While turning round after a spin: which way, 1 or -1. 0 when not turning round.
+var _turn_round: float = 0.0
 var _path_s: float = 0.0
 var _path_yaw: float = 0.0
 var _lateral: float = 0.0
@@ -317,12 +323,12 @@ func _physics_simulation(delta: float) -> void:
 		_auto_shift()
 
 	var steer := 0.0
-	var throttle := true
+	var throttle := 1.0
 	var brake := false
 	if track != null:
 		var command := _drive_command(track)
 		steer = command.x
-		throttle = command.y > 0.5
+		throttle = command.y
 		brake = command.z > 0.5
 
 	if _escape_obstacle(track):
@@ -333,8 +339,8 @@ func _physics_simulation(delta: float) -> void:
 
 	var drive := 0.0
 	var brake_input := 0.0
-	if throttle and _shift_timer <= 0.0:
-		drive = _requested_drive_force()
+	if throttle > 0.0 and _shift_timer <= 0.0:
+		drive = _requested_drive_force() * throttle
 	elif brake:
 		brake_input = 1.0
 	_dynamics.sample_surfaces(track, global_transform)
@@ -579,7 +585,9 @@ func _project_progress(track: Node) -> void:
 	_lateral = float(sample.get("lateral", _lateral))
 
 
-## x is steering input, y is throttle (0 or 1), z is brake (0 or 1).
+## x is steering input, y is throttle (0 to 1), z is brake (0 or 1). The steering sets the wheel
+## for how the road bends ahead, so the car turns in with it rather than falling behind and
+## catching up, and corrects from there for heading, lane, and turning too fast or too slow.
 func _drive_command(track: Node) -> Vector3:
 	var planar := Vector2(_dynamics.cg_velocity.x, _dynamics.cg_velocity.z).length()
 	var here: Dictionary = track.sample_at(_path_s)
@@ -589,12 +597,22 @@ func _drive_command(track: Node) -> Vector3:
 	var ahead_yaw := float(track.sample_at(_path_s + planar * STEER_LOOKAHEAD_S).get("yaw", _path_yaw))
 	var err := wrapf(ahead_yaw - _dynamics.yaw, -PI, PI)
 	var lat_err := _lateral - lane
-	var steer := err / STEER_FULL_ERROR_RAD - lat_err * STEER_PER_LANE_M - _dynamics.yaw_rate * STEER_YAW_DAMPING
+	var turn_s := _path_s + planar * STEER_LOOKAHEAD_S
+	var curve := wrapf(float(track.sample_at(turn_s + 6.0).get("yaw", ahead_yaw)) - ahead_yaw, -PI, PI) / 6.0
+	var feed := _dynamics.steer_input_for(atan(curve * _dynamics.config.wheelbase_m))
+	var road_yaw_rate := curve * planar
+	var steer := feed + err / STEER_FULL_ERROR_RAD - lat_err * STEER_PER_LANE_M - (_dynamics.yaw_rate - road_yaw_rate) * STEER_YAW_DAMPING
 	var sliding := absf(_dynamics.lateral_speed()) > SLIDE_LATERAL_MPS and forward_speed > 6.0
 	if sliding:
 		steer = -_dynamics.yaw_rate * STEER_YAW_DAMPING
 	if planar < 4.0:
 		steer = err / (STEER_FULL_ERROR_RAD * 4.0)
+	if planar < 4.0 and absf(err) >= TURN_ROUND_ERROR_RAD:
+		if _turn_round == 0.0:
+			_turn_round = signf(err) if err != 0.0 else 1.0
+		return Vector3(_turn_round, TURN_ROUND_THROTTLE, 0.0)
+	if absf(err) < TURN_ROUND_ERROR_RAD:
+		_turn_round = 0.0
 	steer = clampf(steer, -1.0, 1.0)
 	var too_fast := planar - _corner_speed(track, planar, _dynamics.grip_accel() * CORNER_GRIP_USE)
 	var braking := (too_fast > 1.8 and absf(steer) < 0.3) or too_fast > 8.0
