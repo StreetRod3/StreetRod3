@@ -43,9 +43,9 @@ const CHECK_WHITE := Color(0.94, 0.94, 0.92, 1)
 const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const ROAD_COLOR := Color(0.18, 0.19, 0.2, 1)
 const TERRAIN_COLOR := Color(0.14, 0.16, 0.13, 1)
-## TERRAIN_COLOR in retro_look.gd's EGA colors: it is so nearly gray that it would snap to
+## TERRAIN_COLOR in retro_look.gd's palette: it is so nearly gray that it would snap to
 ## the road's dark gray, so it is the dark green of grass instead.
-const TERRAIN_RETRO_COLOR := Color(0.0, 1.0 / 3.0, 0.0, 1)
+const TERRAIN_RETRO_COLOR := Color(0.0, 0.4, 0.0, 1)
 const STREET_TERRAIN_COLOR := Color(0.16, 0.27, 0.11, 1)
 ## Mulholland's road, black in Street Rod 2.
 const MOUNTAIN_ROAD_COLOR := Color(0.045, 0.045, 0.05, 1)

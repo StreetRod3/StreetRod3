@@ -1,6 +1,6 @@
 // The car paint shader's uniforms and fragment, shared by car_paint_mask.gdshader and
-// car_paint_retro.gdshader. With RETRO defined, the color is snapped to the 64 an EGA
-// card can show, and the car is neither metallic nor normal-mapped, so its paint lights in
+// car_paint_retro.gdshader. With RETRO defined, the color is snapped to the retro palette
+// (retro_palette.gdshaderinc), and the car is neither metallic nor normal-mapped, so its paint lights in
 // flat bands.
 
 uniform vec4 paint_color : source_color = vec4(1.0);
