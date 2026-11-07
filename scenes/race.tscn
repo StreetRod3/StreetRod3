@@ -1,4 +1,4 @@
-[gd_scene load_steps=26 format=3 uid="uid://13fdlkxeccj1"]
+[gd_scene load_steps=25 format=3 uid="uid://13fdlkxeccj1"]
 
 [ext_resource type="Script" uid="uid://dmsj4ekbiqrvr" path="res://scripts/race.gd" id="1"]
 [ext_resource type="Script" uid="uid://lmu5w71pep8v" path="res://scripts/player_race_car.gd" id="2"]
@@ -11,9 +11,7 @@
 [ext_resource type="Script" path="res://scripts/engine_sound.gd" id="9"]
 [ext_resource type="Script" uid="uid://sw7j0jvrew0h" path="res://scripts/vehicle_dynamics.gd" id="10"]
 [ext_resource type="Script" path="res://scripts/rear_mirror.gd" id="11"]
-[ext_resource type="Shader" path="res://shaders/retro_mirror.gdshader" id="12"]
-[ext_resource type="Texture2D" path="res://shaders/ega_lut.png" id="13"]
-[ext_resource type="PackedScene" path="res://scenes/retro_screen.tscn" id="14"]
+[ext_resource type="Script" path="res://scripts/retro_look.gd" id="12"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.25, 0.35, 0.55, 1)
@@ -67,13 +65,16 @@ corner_radius_top_right = 14
 corner_radius_bottom_right = 16
 corner_radius_bottom_left = 16
 
+[sub_resource type="Shader" id="MirrorFlip"]
+code = "shader_type canvas_item;
+
+void fragment() {
+	COLOR = texture(TEXTURE, vec2(1.0 - UV.x, UV.y));
+}
+"
+
 [sub_resource type="ShaderMaterial" id="MirrorFlipMat"]
-shader = ExtResource("12")
-shader_parameter/ega_lut = ExtResource("13")
-shader_parameter/rows = 200.0
-shader_parameter/pixel_aspect = 1.2
-shader_parameter/saturation = 1.7
-shader_parameter/retro = true
+shader = SubResource("MirrorFlip")
 
 [node name="Race" type="Node3D"]
 script = ExtResource("1")
@@ -153,7 +154,8 @@ monitoring = true
 [node name="CollisionShape3D" type="CollisionShape3D" parent="FinishLine"]
 shape = SubResource("FinishShape")
 
-[node name="RetroScreen" parent="." instance=ExtResource("14")]
+[node name="RetroLook" type="Node" parent="."]
+script = ExtResource("12")
 
 [node name="RaceUI" type="CanvasLayer" parent="."]
 
