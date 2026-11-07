@@ -57,5 +57,3 @@ func _on_imperial_toggled(pressed: bool) -> void:
 
 func _on_controls_pressed() -> void:
 	_ControlsSetup.new().open(self, $Margin, %ControlsBtn)
-
-

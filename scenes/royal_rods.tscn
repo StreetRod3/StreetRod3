@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scripts/royal_rods.gd" id="1"]
+
+[node name="RoyalRods" type="Node3D"]
+script = ExtResource("1")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+current = true
+fov = 52.0
+far = 100.0
+
+[node name="UI" type="CanvasLayer" parent="."]
