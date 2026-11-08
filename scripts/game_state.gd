@@ -2966,6 +2966,23 @@ func fill_tank_free() -> String:
 	return "Your gas tank is filled up with premium gas."
 
 
+## The garage console's `showme`: every part on the car in the bay goes to 100%
+## condition. Spare parts are left as they are. Returns the line to show.
+func restore_car_parts() -> String:
+	if not has_active_car():
+		return "There is no car in the bay."
+	_sync_record_from_active()
+	var rec: Dictionary = car_records.get(current_car_id, {})
+	var conditions: Dictionary = rec.get("conditions", {})
+	if conditions.is_empty():
+		return "There are no parts on the car in the bay."
+	for mount: String in conditions.keys():
+		var entry: Dictionary = conditions[mount]
+		entry["c"] = 1.0
+	refresh_car_stats()
+	return "Every part on the car in the bay is now in 100% condition."
+
+
 ## `n` with commas between the thousands, "10,000".
 static func _thousands(n: int) -> String:
 	var digits := str(absi(n))

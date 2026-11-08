@@ -272,3 +272,5 @@ The main menu has a command prompt. Pressing ~ opens a line along the bottom of 
 The same ~ prompt opens in the garage, where its command is `inherit`: an uncle dies and leaves you $10,000. The prompt says which uncle it was (Uncle Earl first, then Floyd, Vern and so on, then great-uncles) and how many have gone, and it sits above the bottom bar so the bankroll can be seen going up. The save keeps the count of dead uncles, and a new game starts it at zero. `saveedit` stays on the main menu only, since it loads a save over the game being played.
 
 The garage prompt also takes `tiger`, which fills the gas tank of the car in the bay with premium gas for free. On a full tank it says the tank is already full, and with no car in the bay it says there is nothing to fill.
+
+The garage prompt also takes `showme`, which puts every part on the car in the bay (engine, gearbox, wheels, tires and everything in the slots) in 100% condition. Spare parts keep their wear.

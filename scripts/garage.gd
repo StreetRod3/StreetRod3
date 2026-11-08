@@ -962,6 +962,7 @@ func _open_console() -> void:
 	_nav.clear()
 	var console: Control = _Console.new()
 	# Above the bottom bar, so the bankroll stays in view.
+	console.call("add_command", "showme", "put every part on the car in the bay in 100% condition", _on_showme)
 	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
 	console.set("bottom_margin", _hud_bottom.size.y if _hud_bottom.visible else 0.0)
 	console.call("add_command", "inherit", "an uncle dies and leaves you money", _on_inherit)
@@ -982,6 +983,15 @@ func _on_inherit() -> String:
 	var news := GameState.inherit_from_uncle()
 	_refresh_hud()
 	return news
+
+
+## The console's `showme`. The line stays on the prompt; an open parts list shows the
+## new conditions.
+func _on_showme() -> String:
+	var line := GameState.restore_car_parts()
+	if _parts_board != null and _parts_board.visible:
+		_rebuild_parts_board()
+	return line
 
 
 ## The console's `tiger`. The line stays on the prompt.
