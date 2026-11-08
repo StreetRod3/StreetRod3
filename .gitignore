@@ -1,6 +1,10 @@
 # Godot 4.2+ specific ignores
 ~*.dll
 
+# SolidCraft's lock files, and the backup it keeps of a design it saves over
+.~*.lock
+*.sc.bak
+
 # Godot 4+ specific ignores
 .godot/
 .nomedia
@@ -26,7 +30,9 @@ mono_crash.*.json
 
 # Local directories
 backup/
-tools/
+
+# Python bytecode from the tools
+__pycache__/
 
 # Export builds
 build/

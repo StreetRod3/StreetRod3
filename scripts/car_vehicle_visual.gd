@@ -11,6 +11,9 @@ extends Node3D
 
 const _CarFile := preload("res://scripts/car_file.gd")
 const _PaintShader := preload("res://shaders/car_paint_mask.gdshader")
+## Wheel parts are the wheel alone; the tires are drawn on them from this model unless the
+## tire part names its own `model`.
+const _TIRE_MODEL := "res://assets/parts/tire-225-60r15.glb"
 
 var _waiting_for_stl: bool = false
 var _previewing: bool = false
@@ -173,12 +176,14 @@ func _apply_car_file() -> void:
 		return
 	var wheel_path := str(wheel_dict.get("path", ""))
 	var wheel_height := float(wheel_dict.get("height", 0.5))
+	var tires := _tire_state(str(wheel_dict.get("part", "")))
 	for item: Variant in mounts:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
 		var mount: Dictionary = item
 		var wheel := get_node_or_null(str(mount.get("node", ""))) as Node3D
 		_apply_mount(wheel, wheel_path, mount, wheel_height)
+		_fit_tire(wheel, str(tires["model"]), bool(tires["shown"]))
 
 
 func _set_overlay_wheels_visible(show: bool) -> void:
@@ -267,6 +272,71 @@ func apply_wheel_to_mount(mount: Node3D, wheel: Dictionary) -> void:
 		mount.call(&"load_model")
 	if mount is MeshInstance3D:
 		(mount as MeshInstance3D).scale = Vector3.ONE * wheel_scale
+	var tires := _tire_state(str(wheel.get("id", "")))
+	_fit_tire(mount, str(tires["model"]), bool(tires["shown"]))
+
+
+## The tire model for a set of wheels and whether it has tires on: a catalog car always
+## does; the player's fitted set when the tire slot is filled; a set off the car when tires
+## are shelved with it.
+func _tire_state(wheel_id: String) -> Dictionary:
+	if _previewing:
+		return {"model": _TIRE_MODEL, "shown": true}
+	var tires: Dictionary
+	if wheel_id == GameState.equipped_wheel_id:
+		tires = GameState.slot_part(GameState.SLOT_TIRES)
+	else:
+		tires = GameState.listing_by_id(GameState.PARTS, GameState.shelved_wheel_tires_id(wheel_id))
+	return {"model": str(tires.get("model", _TIRE_MODEL)), "shown": not tires.is_empty()}
+
+
+## Puts a tire on a wheel node's model, shown or hidden. A hidden tire stays on, so the car
+## sits at the same height and its wheels turn about the same axle with tires or without.
+## A wheel model loaded later gets the tire when it arrives.
+func _fit_tire(mount: Node3D, model_path: String, shown: bool) -> void:
+	if mount == null:
+		return
+	mount.set_meta(&"tire_model", model_path)
+	mount.set_meta(&"tire_shown", shown)
+	if not mount.has_meta(&"tire_watch") and mount.has_signal(&"stl_loaded"):
+		mount.set_meta(&"tire_watch", true)
+		mount.connect(&"stl_loaded", _on_wheel_model_loaded.bind(mount))
+	var model := _wheel_model(mount)
+	if model != null:
+		_place_tire(model, model_path, shown)
+
+
+func _on_wheel_model_loaded(model: Object, mount: Node3D) -> void:
+	if model is Node3D and mount.has_meta(&"tire_model"):
+		_place_tire(model as Node3D, str(mount.get_meta(&"tire_model")), bool(mount.get_meta(&"tire_shown", true)))
+
+
+## The wheel model a wheel node loaded, or null before it has.
+func _wheel_model(mount: Node3D) -> Node3D:
+	for child in mount.get_children():
+		if child is Node3D:
+			return child as Node3D
+	return null
+
+
+## The tire goes under the wheel model, so it takes the model's turn onto the axle; both
+## are real size and centered on the rim.
+func _place_tire(model: Node3D, model_path: String, shown: bool) -> void:
+	var tire := model.get_node_or_null(^"Tire") as Node3D
+	if tire != null and str(tire.get_meta(&"model", "")) != model_path:
+		model.remove_child(tire)
+		tire.free()
+		tire = null
+	if tire == null:
+		var scene := load(model_path) as PackedScene
+		if scene == null:
+			push_warning("[Tire] Failed to load: " + model_path)
+			return
+		tire = scene.instantiate() as Node3D
+		tire.name = "Tire"
+		tire.set_meta(&"model", model_path)
+		model.add_child(tire)
+	tire.visible = shown
 
 
 ## The car file's `wheels.size`: how much bigger than the part this car's wheels are drawn.

@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bupwxrkw1xx7x"
-path="res://.godot/imported/wheel-c1.glb-ab403270b1e2aba42c2b82d899057d64.scn"
+uid="uid://csnhvtdq00685"
+path="res://.godot/imported/tire-225-60r15.glb-d6649005f40977ba78913b0c69934498.scn"
 
 [deps]
 
-source_file="res://assets/parts/wheel-c1.glb"
-dest_files=["res://.godot/imported/wheel-c1.glb-ab403270b1e2aba42c2b82d899057d64.scn"]
+source_file="res://assets/parts/tire-225-60r15.glb"
+dest_files=["res://.godot/imported/tire-225-60r15.glb-d6649005f40977ba78913b0c69934498.scn"]
 
 [params]
 
@@ -39,4 +39,4 @@ materials/extract_format=0
 materials/extract_path=""
 _subresources={}
 gltf/naming_version=2
-gltf/embedded_image_handling=3
+gltf/embedded_image_handling=1
