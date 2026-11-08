@@ -130,12 +130,12 @@ def mid(a, b):
 
 
 class Profile:
-    """A closed outline of lines and three-point arcs, chained by reference.
+    """A closed outline of lines, three-point arcs and splines, chained by reference.
 
-    line(point) and arc(through, point) add a segment from the point reached so far;
-    a label names the point a segment reaches so a corner can be filleted later.
-    close_arc() ends on the start point. After commands(), labels maps each label to
-    a curve end.
+    line(point), arc(through, point) and spline([through...], point) add a segment
+    from the point reached so far; a label names the point a segment reaches so a
+    corner can be filleted later. close_arc() ends on the start point. After
+    commands(), labels maps each label to a curve end.
     """
 
     def __init__(self, start):
@@ -149,12 +149,15 @@ class Profile:
     def arc(self, through, pt, label=None):
         self.segs.append(("arc", pt, through, label))
 
+    def spline(self, through, pt, label=None):
+        self.segs.append(("spline", pt, through, label))
+
     def close_arc(self, through):
         self.segs.append(("arc", None, through, None))
 
     def commands(self):
         out = []
-        nl = na = 0
+        nl = na = ns = 0
         first = None
         last = self.start
         chain, chain_labels = [], []
@@ -180,12 +183,18 @@ class Profile:
                 chain_labels.append(label)
                 continue
             flush()
-            out.append(cmd("sketch.arc.three_point", start=last,
-                           end=pt if pt is not None else first, through=through))
-            na += 1
+            end = pt if pt is not None else first
+            if kind == "spline":
+                out.append(cmd("sketch.spline.fit_point", points=[last] + through + [end]))
+                ns += 1
+                curve = f"s{ns}"
+            else:
+                out.append(cmd("sketch.arc.three_point", start=last, end=end, through=through))
+                na += 1
+                curve = f"a{na}"
             if first is None:
-                first = f"a{na}.start"
-            last = f"a{na}.end"
+                first = f"{curve}.start"
+            last = f"{curve}.end"
             if label:
                 self.labels[label] = last
         flush()
@@ -365,8 +374,12 @@ def read_obj(path):
             np.array(index, dtype=np.uint32))
 
 
-def write_glb(path, name, pos, nrm, index):
-    """One mesh, one aluminum material."""
+ALUMINUM = {"name": "aluminum", "pbrMetallicRoughness": {
+    "baseColorFactor": [0.8, 0.8, 0.8, 1], "metallicFactor": 1.0, "roughnessFactor": 0.3}}
+
+
+def write_glb(path, name, pos, nrm, index, material=ALUMINUM):
+    """One mesh, one material."""
     pos = pos.astype(np.float32)
     nrm = (nrm / np.linalg.norm(nrm, axis=1, keepdims=True)).astype(np.float32)
     blobs = [pos.tobytes(), nrm.tobytes(), index.tobytes()]
@@ -375,13 +388,11 @@ def write_glb(path, name, pos, nrm, index):
         views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(b), "target": target})
         offset += len(b)
     gltf = {
-        "asset": {"version": "2.0", "generator": "tools/make_wheels.py"},
+        "asset": {"version": "2.0", "generator": "tools/" + os.path.basename(sys.argv[0])},
         "scene": 0,
         "scenes": [{"nodes": [0]}],
         "nodes": [{"mesh": 0, "name": name}],
-        "materials": [{"name": "aluminum", "pbrMetallicRoughness": {
-            "baseColorFactor": [0.8, 0.8, 0.8, 1], "metallicFactor": 1.0,
-            "roughnessFactor": 0.3}}],
+        "materials": [material],
         "meshes": [{"name": name, "primitives": [{
             "attributes": {"POSITION": 0, "NORMAL": 1}, "indices": 2, "material": 0}]}],
         "accessors": [

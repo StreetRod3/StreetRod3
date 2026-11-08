@@ -19,3 +19,5 @@ assets/parts/wheel-mag-15x7.glb filter=lfs diff=lfs merge=lfs -text
 assets/parts/wheel-torq-15x7.glb filter=lfs diff=lfs merge=lfs -text
 resources/wheels/wheel-mag-15x7.sc filter=lfs diff=lfs merge=lfs -text
 resources/wheels/wheel-torq-15x7.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/tire-225-60r15.glb filter=lfs diff=lfs merge=lfs -text
+resources/tires/tire-225-60r15.sc filter=lfs diff=lfs merge=lfs -text
