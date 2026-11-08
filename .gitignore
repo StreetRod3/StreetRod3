@@ -1,6 +1,9 @@
 # Godot 4.2+ specific ignores
 ~*.dll
 
+# Lock files
+.~*.lock
+
 # Godot 4+ specific ignores
 .godot/
 .nomedia
