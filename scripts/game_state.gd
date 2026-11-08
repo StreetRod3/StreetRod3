@@ -2935,7 +2935,7 @@ const _UNCLES: Array[String] = [
 	"Earl", "Floyd", "Vern", "Leroy", "Clem", "Homer",
 	"Buford", "Delbert", "Otis", "Wendell", "Rufus", "Merle",
 	"Junior", "Philip", "Jay", "Bobby", "Jerry", "Jimmy", "Jack",
-	"Charles",
+	"Charles", "Ricky",
 ]
 
 
@@ -2952,6 +2952,18 @@ func inherit_from_uncle() -> String:
 	if uncles_dead == 1:
 		return line
 	return "%s That's %d uncles gone now." % [line, uncles_dead]
+
+
+## The garage console's `tiger`: fills the tank of the car in the bay, free. Returns
+## the line to show.
+func fill_tank_free() -> String:
+	if not has_active_car():
+		return "There is no car in the bay to fill up."
+	if fuel >= DEFAULT_TANK_L:
+		return "The tank is already full of premium gas."
+	set_fuel(DEFAULT_TANK_L)
+	commit_fuel()
+	return "Your gas tank is filled up with premium gas."
 
 
 ## `n` with commas between the thousands, "10,000".

@@ -962,6 +962,7 @@ func _open_console() -> void:
 	_nav.clear()
 	var console: Control = _Console.new()
 	# Above the bottom bar, so the bankroll stays in view.
+	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
 	console.set("bottom_margin", _hud_bottom.size.y if _hud_bottom.visible else 0.0)
 	console.call("add_command", "inherit", "an uncle dies and leaves you money", _on_inherit)
 	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
@@ -981,6 +982,11 @@ func _on_inherit() -> String:
 	var news := GameState.inherit_from_uncle()
 	_refresh_hud()
 	return news
+
+
+## The console's `tiger`. The line stays on the prompt.
+func _on_tiger() -> String:
+	return GameState.fill_tank_free()
 
 
 func _gui_has_text_focus() -> bool:
