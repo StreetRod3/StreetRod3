@@ -2934,6 +2934,8 @@ const INHERITANCE := 10000
 const _UNCLES: Array[String] = [
 	"Earl", "Floyd", "Vern", "Leroy", "Clem", "Homer",
 	"Buford", "Delbert", "Otis", "Wendell", "Rufus", "Merle",
+	"Junior", "Philip", "Jay", "Bobby", "Jerry", "Jimmy", "Jack",
+	"Charles",
 ]
 
 
