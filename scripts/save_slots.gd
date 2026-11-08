@@ -15,6 +15,10 @@ const _MONTHS := ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep",
 
 ## Saving (rows with a save ask before being saved over) or loading (empty rows are off).
 var saving: bool = false
+## A heading and hint in place of "Load game" and "Pick a save to load.", for other
+## uses of the list such as the save editor.
+var heading: String = ""
+var hint: String = ""
 
 var _rows: Array[Button] = []
 var _back: Button
@@ -39,7 +43,9 @@ func _ready() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 8)
 	panel.add_child(box)
-	box.add_child(_label("Save game" if saving else "Load game", 24))
+	if heading.is_empty():
+		heading = "Save game" if saving else "Load game"
+	box.add_child(_label(heading, 24))
 	_hint = _label("", 16)
 	box.add_child(_hint)
 	for slot in range(1, GameState.SAVE_SLOTS + 1):
@@ -97,7 +103,7 @@ func _refresh() -> void:
 	if saving:
 		_hint.text = "Pick a slot to save to."
 	else:
-		_hint.text = "Pick a save to load." if any else "There are no saves yet."
+		_hint.text = (hint if not hint.is_empty() else "Pick a save to load.") if any else "There are no saves yet."
 
 
 func _describe(info: Dictionary) -> String:

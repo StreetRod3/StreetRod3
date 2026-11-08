@@ -2924,6 +2924,31 @@ func buy_or_select_car(model_id: String) -> String:
 	return ""
 
 
+## The save editor's "add a car": a stock copy of `model_id` in its listed paint, free.
+## The car in the bay stays there; with no car in the bay, the new one goes in.
+func editor_add_car(model_id: String) -> String:
+	if listing_by_id(USED_CARS, model_id).is_empty():
+		return "That car is not listed."
+	if owned_car_ids.size() >= MAX_OWNED_CARS:
+		return "The garage holds %d cars." % MAX_OWNED_CARS
+	if has_active_car():
+		_sync_record_from_active()
+	var instance_id := _add_owned_car(model_id, _listed_color(model_id))
+	if not has_active_car():
+		_install_car(instance_id)
+	return ""
+
+
+## The save editor's "add a spare part": a new copy of `id` into spare parts, free.
+## `kind` is "engine", "transmission", "wheels" or "part", as in the newspaper.
+func editor_add_spare(kind: String, id: String) -> String:
+	if listing_for(kind, id).is_empty():
+		return "That part is not listed."
+	_owned_list(kind).append(id)
+	_push_spare_condition(kind, id, 1.0)
+	return ""
+
+
 ## What a car is worth, as in Street Rod 2: what the paper asks for it, plus the price of
 ## each part put on it, less the price of each stock part no longer on it. Wear does not
 ## come into it. A stripped car still has its body, so it never falls below a tenth of
