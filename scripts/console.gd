@@ -10,6 +10,8 @@ signal closed
 
 const _CREAM := Color(0.95, 0.9, 0.78, 1)
 
+## How far above the bottom edge the prompt sits, to leave a bar there in view.
+var bottom_margin: float = 0.0
 var _commands: Dictionary = {}
 var _line: LineEdit
 var _output: Label
@@ -26,6 +28,8 @@ func _ready() -> void:
 	panel.add_theme_stylebox_override(&"panel", _panel_style())
 	panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
 	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	panel.offset_top -= bottom_margin
+	panel.offset_bottom -= bottom_margin
 	add_child(panel)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 4)

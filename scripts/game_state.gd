@@ -293,6 +293,9 @@ const DRIVER_TRAITS_DEFAULT := {"sex": "M", "hair": "BRN", "eyes": "BRN", "heigh
 var driver_traits: Dictionary = DRIVER_TRAITS_DEFAULT.duplicate()
 ## Cash on hand for classifieds (parts and used cars).
 var money: int = 2500
+## How many uncles have died and left their money to the player, through the garage
+## console's `inherit`. Kept in the save.
+var uncles_dead: int = 0
 ## Instance id of the car currently in the garage. Empty when the bay is empty.
 var current_car_id: String = DEFAULT_CAR_ID
 ## Instance ids. The same model can appear more than once.
@@ -865,6 +868,7 @@ func new_game() -> void:
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
 	money = 2500
+	uncles_dead = 0
 	_next_car_serial = 1
 	owned_car_ids.clear()
 	current_car_id = ""
@@ -961,6 +965,7 @@ func save_game(slot: int) -> bool:
 		"driver_name": driver_name,
 		"driver_traits": driver_traits,
 		"money": money,
+		"uncles_dead": uncles_dead,
 		"current_car_id": current_car_id,
 		"owned_car_ids": owned_car_ids,
 		"next_car_serial": _next_car_serial,
@@ -1035,6 +1040,7 @@ func load_game(slot: int) -> bool:
 	driver_name = str(d.get("driver_name", ""))
 	driver_traits = DRIVER_TRAITS_DEFAULT.merged(d.get("driver_traits", {}), true)
 	money = int(d.get("money", money))
+	uncles_dead = maxi(int(d.get("uncles_dead", 0)), 0)
 	_next_car_serial = maxi(int(d.get("next_car_serial", 1)), 1)
 	current_car_id = _migrate_car_id(str(d.get("current_car_id", current_car_id)))
 	owned_car_ids = _string_array(d.get("owned_car_ids", owned_car_ids))
@@ -2922,6 +2928,38 @@ func buy_or_select_car(model_id: String) -> String:
 	current_car_id = _add_owned_car(model_id, newspaper_color(model_id))
 	_install_car(current_car_id)
 	return ""
+
+
+const INHERITANCE := 10000
+const _UNCLES: Array[String] = [
+	"Earl", "Floyd", "Vern", "Leroy", "Clem", "Homer",
+	"Buford", "Delbert", "Otis", "Wendell", "Rufus", "Merle",
+]
+
+
+## The garage console's `inherit`: another uncle dies and leaves the player
+## INHERITANCE dollars. Returns the news.
+func inherit_from_uncle() -> String:
+	uncles_dead += 1
+	money += INHERITANCE
+	var uncle := _UNCLES[(uncles_dead - 1) % _UNCLES.size()]
+	var who := "Uncle %s" % uncle
+	if uncles_dead > _UNCLES.size():
+		who = "great-uncle %s" % uncle
+	var line := "Sad news: your %s has passed away and left you $%s." % [who, _thousands(INHERITANCE)]
+	if uncles_dead == 1:
+		return line
+	return "%s That's %d uncles gone now." % [line, uncles_dead]
+
+
+## `n` with commas between the thousands, "10,000".
+static func _thousands(n: int) -> String:
+	var digits := str(absi(n))
+	var out := ""
+	while digits.length() > 3:
+		out = "," + digits.right(3) + out
+		digits = digits.left(digits.length() - 3)
+	return ("-" if n < 0 else "") + digits + out
 
 
 ## The save editor's "add a car": a stock copy of `model_id` in its listed paint, free.

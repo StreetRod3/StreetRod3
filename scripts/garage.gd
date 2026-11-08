@@ -6,6 +6,7 @@ const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
+const _Console := preload("res://scripts/console.gd")
 const _CarSale := preload("res://scripts/car_sale.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
 
@@ -141,6 +142,8 @@ var _sale_take: Button
 var _sale_refuse: Button
 var _say_bubble: Control
 var _say_after: Callable = Callable()
+## The ~ prompt, while it is up.
+var _console: Control
 ## The map's "you're already here" line is up.
 var _map_here: bool = false
 ## The engine heard rolling out of and into the bay.
@@ -674,6 +677,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _bay_busy:
 		_handle_camera_only(event)
 		return
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		if _console != null:
+			# The garage's own keys wait while the prompt is up.
+			get_viewport().set_input_as_handled()
+			return
+		if key.pressed and not key.echo and _Console.is_toggle_key(key):
+			_open_console()
+			get_viewport().set_input_as_handled()
+			return
 	if _car_sale != null:
 		_nav.handle_event(self, event)
 		get_viewport().set_input_as_handled()
@@ -943,6 +956,31 @@ func _car_management_available() -> bool:
 	if _offer_panel != null and _offer_panel.visible:
 		return false
 	return true
+
+
+func _open_console() -> void:
+	_nav.clear()
+	var console: Control = _Console.new()
+	# Above the bottom bar, so the bankroll stays in view.
+	console.set("bottom_margin", _hud_bottom.size.y if _hud_bottom.visible else 0.0)
+	console.call("add_command", "inherit", "an uncle dies and leaves you money", _on_inherit)
+	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
+	_console = console
+	_garage_ui.add_child(console)
+
+
+func _on_console_closed() -> void:
+	if _console != null:
+		_console.queue_free()
+		_console = null
+	_sync_menu_nav()
+
+
+## The console's `inherit`. The news stays on the prompt.
+func _on_inherit() -> String:
+	var news := GameState.inherit_from_uncle()
+	_refresh_hud()
+	return news
 
 
 func _gui_has_text_focus() -> bool:
