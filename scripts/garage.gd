@@ -252,6 +252,10 @@ const _TIRE_WAIT_Z := {
 	"WheelBackRight": 4.2,
 }
 const _TIRE_ROLL_SPEED := 5.0
+## Rolling radius of a wheel with the game's 225/60R15 tires on, and of a bare rim on its
+## flange tips (16.62 in across), in meters.
+const _TIRE_RADIUS := 0.3255
+const _RIM_RADIUS := 0.211
 ## The new set waits beside the machine, and the old set piles up on the other side.
 const _TIRE_STACK_NEW := Vector3(1.0, 0.0, 6.75)
 const _TIRE_STACK_OLD := Vector3(2.8, 0.0, 6.75)
@@ -3062,8 +3066,8 @@ func _run_wheel_change(wheel: Dictionary) -> void:
 	await _jack_up(car_start)
 	if not is_instance_valid(self):
 		return
-	var old_radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
-	var radius := maxf(float(wheel.get("height", 0.5)) * 0.5, 0.18)
+	var old_radius := _roll_radius(GameState.get_equipped_wheel(), GameState.has_tires())
+	var radius := _roll_radius(wheel, not GameState.shelved_wheel_tires_id(str(wheel.get("id", ""))).is_empty())
 	var wheels := _take_wheels_off(had_wheels)
 	if had_wheels:
 		var off: Array[Callable] = []
@@ -3144,7 +3148,7 @@ func _run_wheels_off() -> void:
 	await _jack_up(car_start)
 	if not is_instance_valid(self):
 		return
-	var radius := maxf(float(GameState.get_equipped_wheel().get("height", 0.5)) * 0.5, 0.18)
+	var radius := _roll_radius(GameState.get_equipped_wheel(), GameState.has_tires())
 	var wheels := _take_wheels_off(true)
 	var off: Array[Callable] = []
 	for wheel in wheels:
@@ -3193,7 +3197,7 @@ func _start_shelf_tire_change(wheel_id: String, tire_id: String) -> void:
 
 
 func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> void:
-	var radius := maxf(float(GameState.listing_by_id(GameState.WHEELS, wheel_id).get("height", 0.5)) * 0.5, 0.18)
+	var radius := _roll_radius(GameState.listing_by_id(GameState.WHEELS, wheel_id), true)
 	var on_table := _TIRE_MACHINE_SPOT + Vector3(0.0, _TIRE_TABLE_Y + _TIRE_THICK * 0.5, 0.0)
 	var rim := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
@@ -3225,6 +3229,11 @@ func _run_shelf_tire_change(wheel_id: String, has_old: bool, has_new: bool) -> v
 	for ring in rings:
 		ring.queue_free()
 	rim.queue_free()
+
+
+## How far a set's axles sit off the floor as it rolls: on its tires, or on bare rims.
+func _roll_radius(wheel: Dictionary, with_tires: bool) -> float:
+	return (_TIRE_RADIUS if with_tires else _RIM_RADIUS) * float(wheel.get("scale", 1.0))
 
 
 ## Runs the coroutines side by side and waits for them all.

@@ -30,10 +30,8 @@ import shutil
 import sys
 import tempfile
 
-import numpy as np
-
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from make_wheels import ROOT, Profile, SolidCraft, cmd, mid, read_obj, write_glb  # noqa: E402
+from make_wheels import ROOT, Profile, SolidCraft, cmd, read_obj, to_game, write_glb  # noqa: E402
 
 PARAMS = [
     # name, expression, comment
@@ -165,12 +163,8 @@ def main():
         os.makedirs(os.path.dirname(sc), exist_ok=True)
         print(f"building {stem}")
         scraft.run(script, "--save", sc)
-        pos, nrm, index = read_obj(obj)
-    # SolidCraft (x, y, z) in mm, axle along z  ->  glTF (z, y, -x) in m, axle along x.
-    swap = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]], dtype=float)
-    pos = pos @ swap * 0.001
-    nrm = nrm @ swap
-    write_glb(glb, stem, pos, nrm, index, RUBBER)
+        pos, nrm, index = to_game(read_obj(obj))["Tire"]
+    write_glb(glb, [(stem, pos, nrm, index, RUBBER)])
     print(f"{os.path.relpath(sc, ROOT)}\n{os.path.relpath(glb, ROOT)}: {len(index) // 3} triangles, "
           f"{(pos[:, 1].max() - pos[:, 1].min()) * 1000:.1f} mm across, "
           f"{(pos[:, 0].max() - pos[:, 0].min()) * 1000:.1f} mm wide")

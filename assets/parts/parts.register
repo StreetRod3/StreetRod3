@@ -94,27 +94,45 @@
       "name": "Premium magnesium wheels",
       "price": 300,
       "path": "res://assets/parts/wheel-premium.glb",
-      "scale": 1.35,
-      "height": 0.5,
+      "scale": 1.0,
+      "height": 0,
       "mass": 24
     },
     {
       "id": "wheel-c1",
       "name": "C1 steel wheel",
       "price": 200,
-      "path": "res://assets/parts/wheel-c1.glb",
-      "scale": 1.35,
-      "height": 0.5,
+      "path": "res://assets/parts/wheel-c1-15x7.glb",
+      "scale": 1.0,
+      "height": 0,
       "mass": 44
     },
     {
       "id": "wheel-std",
       "name": "standard steel wheel",
       "price": 120,
-      "path": "res://assets/parts/wheel-standard.stl",
-      "scale": 1.35,
-      "height": 0.5,
+      "path": "res://assets/parts/wheel-steel-15x7.glb",
+      "scale": 1.0,
+      "height": 0,
       "mass": 48
+    },
+    {
+      "id": "wheel-torq",
+      "name": "Five-spoke aluminum wheels",
+      "price": 260,
+      "path": "res://assets/parts/wheel-torq-15x7.glb",
+      "scale": 1.0,
+      "height": 0,
+      "mass": 36
+    },
+    {
+      "id": "wheel-mag",
+      "name": "Magnesium drag wheels",
+      "price": 340,
+      "path": "res://assets/parts/wheel-mag-15x7.glb",
+      "scale": 1.0,
+      "height": 0,
+      "mass": 28
     }
   ],
   "parts": [
@@ -136,8 +154,8 @@
     {"id": "air-cleaner-chrome", "slot": "air_cleaner", "style": "chrome", "name": "Chrome open-element air cleaner", "price": 60, "hp": 4, "vmax": 1},
     {"id": "cam-stock", "slot": "cam", "stock": true, "style": "stock", "name": "Stock camshaft", "price": 120, "hp": 0, "vmax": 0},
     {"id": "cam", "slot": "cam", "style": "racing", "name": "Racing camshaft", "price": 520, "hp": 30, "vmax": 6},
-    {"id": "tires-bias", "slot": "tires", "stock": true, "style": "bias", "name": "Bias-ply tires", "price": 160, "hp": 0, "vmax": 0, "grip": 3},
-    {"id": "tires-radial", "slot": "tires", "style": "radial", "name": "Radial tires", "price": 220, "hp": 0, "vmax": 4, "grip": 4},
+    {"id": "tires-bias", "slot": "tires", "stock": true, "style": "bias", "model": "res://assets/parts/tire-225-60r15.glb", "name": "Bias-ply tires", "price": 160, "hp": 0, "vmax": 0, "grip": 3},
+    {"id": "tires-radial", "slot": "tires", "style": "radial", "model": "res://assets/parts/tire-225-60r15.glb", "name": "Radial tires", "price": 220, "hp": 0, "vmax": 4, "grip": 4},
     {"id": "tires", "slot": "tires", "style": "slick", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8, "grip": 5},
     {"id": "manifold-iron", "slot": "manifold", "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 90, "hp": 0, "vmax": 0},
     {"id": "exhaust", "slot": "manifold", "style": "shorty", "name": "Tube headers", "price": 380, "hp": 18, "vmax": 5},

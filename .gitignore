@@ -1,8 +1,9 @@
 # Godot 4.2+ specific ignores
 ~*.dll
 
-# Lock files
+# SolidCraft's lock files, and the backup it keeps of a design it saves over
 .~*.lock
+*.sc.bak
 
 # Godot 4+ specific ignores
 .godot/
