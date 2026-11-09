@@ -36,7 +36,7 @@ internals, and nothing under the intake. It has:
   oil filler    the tube out of the intake's front, forward and up, with its breather cap
   headers       long tubes (or shorties): a flange on each head, four 1 5/8 primaries
                 out of the ports, one bend each, into a merge cone and a 3 inch collector
-  front         stamped timing cover, the long water pump with its lower hose inlet, the
+  front         stamped timing cover, the long water pump with its open hose necks, the
                 balancer and a two-groove crank pulley, a two-groove pump pulley, the
                 fan on a spacer, a Delco alternator high on the right on its bracket, and
                 the belt round crank, pump and alternator
@@ -200,7 +200,9 @@ FILTER_CAN = {"name": "oil filter", "pbrMetallicRoughness": {
 FINISHES = [
     ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
-    ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON), ("thermostat", CAST_IRON),
+    ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON),
+    ("thermostat_neck_bore", BLACK), ("water_pump_inlet_bore", BLACK),
+    ("water_pump_heater_bore", BLACK), ("thermostat", CAST_IRON),
     ("ignition_coil_bracket", STEEL), ("ignition_coil_foot", STEEL), ("ignition_coil", BLACK),
     ("oil_filler", CHROME),
     ("carb_throat", BLACK), ("carburetor", ZINC),
@@ -540,8 +542,18 @@ def intake(d):
     d.extrude(sk, "thermostat_ears", 0.45)
     neck = np.array([tx, ty, 12.9])
     dirn = unit([-0.6, 0.0, 0.8])
-    d.cylinder("thermostat_neck", neck, dirn, 1.55, 2.25)
+    hose_neck(d, "thermostat_neck", neck, dirn, 0.775, 0.6, 2.25, 1.4)
     d.cylinder("thermostat_bead", neck + 1.75 * dirn, dirn, 1.72, 0.18)
+
+
+def hose_neck(d, name, base, dirn, r, bore, length, depth):
+    """A hose neck from base along dirn, open at its end: a bore depth deep, and a dark
+    floor in the bore so the hollow shows."""
+    radial = unit(np.cross(dirn, [1.0, 0.0, 0.0]) if abs(dirn[0]) < 0.9 else np.cross(dirn, [0, 1.0, 0]))
+    d.revolve(name, base, dirn, radial,
+              [(0.0, 0.0), (0.0, r), (length, r), (length, bore), (length - depth, bore),
+               (length - depth, 0.0)])
+    d.cylinder(f"{name}_bore", base + (length - depth) * dirn, dirn, 2 * bore - 0.02, 0.02)
 
 
 def coil(d):
@@ -756,8 +768,9 @@ def front(d):
     d.cylinder("water_pump_hub", (-14.3, py, pz), (-1, 0, 0), 3.4, 0.15)
     inlet = np.array([snout0 + 0.6, 2.4, 5.0])
     dirn = unit([-0.55, 0.62, -0.56])
-    d.cylinder("water_pump_inlet", inlet, dirn, 1.75, 3.2)
-    d.cylinder("water_pump_heater", (snout0 - 0.4, -1.6, 8.6), (-1, 0, 0), 0.8, 1.4)
+    hose_neck(d, "water_pump_inlet", inlet, dirn, 0.875, 0.7, 3.2, 1.6)
+    hose_neck(d, "water_pump_heater", np.array([snout0 - 0.4, -1.6, 8.6]), np.array([-1.0, 0, 0]),
+              0.4, 0.27, 1.4, 0.8)
 
     # Balancer and the pulleys, turned about the X axis: (x, r) outlines.
     def turned(name, yz, profile):
