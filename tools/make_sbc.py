@@ -20,11 +20,12 @@ internals, and nothing under the intake. It has:
                 plugs out of the exhaust face below the ports, leaning down and back
   valve covers  the 327's: a flange round the rail with four bolts on spreader bars, a
                 plain body with a rounded top
-  intake        the L79's dual plane: the flange traced from above, the upper runners
-                across the front and the back, the lower ones into the plenum's sides,
-                the plenum under a square-flange pad, the bolts along each flange, the
-                water crossover and thermostat housing with its outlet forward and up,
-                the distributor boss at the back
+  intake        the L79's dual plane: the flange and valley floor traced from above;
+                round runners rising out of the ports, the upper ones across the front
+                and the back and into the plenum, the lower ones into its sides; the
+                plenum under a square-flange pad with ears for its studs; the bolts on
+                bosses along each side; the water crossover tube and thermostat housing
+                at the front, the heat crossover, choke well and distributor boss
   carburetor    a square-flange four-barrel: throttle body, main body, fuel bowls front
                 and back, and the 5 1/8 air cleaner ring on top
   air cleaner   14 inches round: the pan, a pleated paper element and a chrome lid with
@@ -114,11 +115,8 @@ COVER_BODY = (0.3, 4.45, 9.47)            # across, half length
 COVER_H = 2.25
 COVER_BOLTS = [(-4.4, 0.26), (4.4, 0.26), (-4.4, 4.46), (4.4, 4.46)]  # (x, across)
 
-# Intake, after the L79's: the flange and valley cover, its outline from above (x, y)
-# traced off the L79 and smoothed; then rounded humps along Y over it, (x0, x1, y0, y1,
-# top): the upper plane's runners across the front and the back, the lower plane's into
-# the plenum's sides, the necks joining the front and back runners to the plenum, and the
-# water crossover at the front.
+# Intake, after the L79's: the flange and valley floor, its outline from above (x, y)
+# traced off the L79 and smoothed, with round tubes over it.
 INTAKE_FLANGE = [
     (-11.38, -0.1), (-11.33, 0.31), (-11.13, 0.62), (-10.5, 0.95), (-9.78, 0.99), (-9.57, 1.17),
     (-9.44, 1.79), (-10.09, 2.66), (-10.18, 3.26), (-9.89, 3.64), (-9.78, 4.3), (-9.58, 4.43),
@@ -141,13 +139,23 @@ INTAKE_FLANGE = [
     (-9.85, -3.17), (-9.91, -2.95), (-10.77, -2.63), (-11.22, -2.63), (-11.45, -2.43),
     (-11.44, -2.13), (-11.07, -1.86), (-10.98, -1.62), (-10.98, -0.84), (-11.25, -0.47),
 ]
-INTAKE_HUMPS = [
-    (-6.6, -4.2, -4.6, 4.6, 12.95), (2.6, 5.7, -4.6, 4.6, 12.95),
-    (-4.3, -3.1, 2.1, 4.6, 12.15), (-4.1, -3.0, -4.6, -2.1, 12.15),
-    (-4.5, -2.8, -1.4, 1.4, 12.6), (2.0, 3.0, -1.4, 1.4, 12.6),
-    (-9.8, -7.1, -4.4, 4.4, 11.9),
+# The runners, round tubes rising out of the ports and across: (x, the bank they leave,
+# the y they end at, the height of their top, diameter, a rounded end). The upper plane's
+# reach the middle and join the plenum through the branches; the lower plane's run into
+# the plenum's sides.
+INTAKE_RUNNERS = [
+    (-5.85, -1, 0.3, 13.1, 1.55, True), (-4.6, -1, 0.2, 12.45, 1.5, False),
+    (-5.1, 1, 0.3, 12.6, 1.5, True), (-3.75, 1, 2.3, 12.15, 1.4, False),
+    (4.2, -1, -0.3, 13.1, 1.55, True), (2.8, -1, -2.3, 12.4, 1.45, False),
+    (5.0, 1, -0.3, 12.7, 1.5, True), (3.65, 1, 2.3, 12.45, 1.45, False),
+    (-1.25, -1, -2.4, 11.7, 1.2, False),          # the exhaust heat passage
 ]
-INTAKE_BASE = (9.9, 10.75)   # the flange's underside (inside the heads) and top
+# The branches from the upper runners' ends into the plenum: (x0, x1, y, top, diameter).
+INTAKE_BRANCHES = [(-6.1, -2.6, 0.1, 12.75, 1.5), (5.3, 1.9, -0.1, 12.75, 1.5)]
+WATER_CROSSOVER = (-8.95, 11.25, 1.7)          # x, z of its axis, diameter
+HEAT_CROSSOVER = ((7.6, -4.6), (8.35, 2.4), 10.85, 1.2)  # ends (x, y), z, diameter
+CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
+INTAKE_BASE = (9.9, 10.65)   # the flange's underside (inside the heads) and top
 PAD_X = -0.3            # the carb pad's middle
 PAD_Z = 13.15           # the carb pad's underside
 PAD = (2.65, 2.6, 0.4)  # half length, half width, thickness
@@ -485,6 +493,18 @@ def valve_covers(d):
 
 # The intake.
 
+def pipe(d, name, p0, out, target, lead, radius, dia):
+    """A round tube from p0: straight along out for lead, one bend of radius, then
+    straight to target."""
+    e1, e2, (a0, a1, c, q, t) = tube_path(p0, out, target, lead, radius)
+    sk, _ = d.plane(p0, e1, np.cross(e1, e2), f"{name} path")
+    d.c.append(cmd("sketch.line", infer=False, points=[skp(*a0), skp(*a1)]))
+    d.c.append(cmd("sketch.arc.center_point", center=skp(*c), start="l1.end", end=skp(*q)))
+    d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*t)]))
+    d.finish()
+    d.body(name, "solid.pipe", path_sketch=sk, path=["l1", "a1", "l2"], diameter=inch(dia))
+
+
 def intake(d):
     # The flange and valley cover; its underside is inside the heads and never seen.
     z0, z1 = INTAKE_BASE
@@ -493,14 +513,30 @@ def intake(d):
     d.finish()
     d.extrude(sk, "intake_manifold", z1 - z0)
 
-    # The runners and crossover, each a hump along Y rounded over the top.
-    for k, (x0, x1, y0, y1, top) in enumerate(INTAKE_HUMPS):
-        origin = np.array([x0, y0, z1 - 0.6])
-        sk, to2d = d.plane(origin, (1, 0, 0), (0, 1, 0), f"Intake hump {k}")
-        r = min(0.9, (x1 - x0) / 2 - 0.05, (top - origin[2]) / 2 - 0.05)
-        d.rounded(to2d(origin), to2d((x1, y0, top)), r)
-        d.finish()
-        d.extrude(sk, f"intake_manifold_runner_{k}", y1 - y0)
+    # The runners: out of each port, square to the face, then bending across.
+    for k, (x, s, y_end, top, dia, round_end) in enumerate(INTAKE_RUNNERS):
+        p0 = np.array([x, s * 4.15, 10.5])
+        out = unit([0.0, -s * 0.6, 0.8])
+        end = np.array([x, y_end, top - dia / 2])
+        pipe(d, f"intake_manifold_runner_{k}", p0, out, end, 0.2, 1.6, dia)
+        if round_end:
+            d.sphere(f"intake_manifold_end_{k}", end, dia)
+    for k, (x0, x1, y, top, dia) in enumerate(INTAKE_BRANCHES):
+        d.cylinder(f"intake_manifold_branch_{k}", (x0, y, top - dia / 2), (np.sign(x1 - x0), 0, 0),
+                   dia, abs(x1 - x0))
+    # The water crossover across the front, between the heads' front water ports.
+    x, z, dia = WATER_CROSSOVER
+    d.cylinder("intake_manifold_crossover", (x, -4.7, z), (0, 1, 0), dia, 9.4)
+    # The exhaust heat crossover at the back, under the distributor, and the choke's
+    # stove well on the right.
+    (hx0, hy0), (hx1, hy1), hz, hdia = HEAT_CROSSOVER
+    a, b_ = np.array([hx0, hy0, hz]), np.array([hx1, hy1, hz])
+    d.cylinder("intake_manifold_heat_crossover", a, b_ - a, hdia, float(np.linalg.norm(b_ - a)))
+    (cx0, cy0), (cx1, cy1), ctop = CHOKE_WELL
+    sk = d.sketch("XY", "Choke well", offset=z1 - 0.1)
+    d.rounded((cx0, cy0), (cx1, cy1), 0.3)
+    d.finish()
+    d.extrude(sk, "intake_manifold_choke_well", ctop - z1 + 0.1, taper="-4 deg")
 
     # The plenum under the pad.
     px, py, pt = PAD
@@ -511,7 +547,7 @@ def intake(d):
 
     # The carb pad and its four bolt bosses.
     sk = d.sketch("XY", "Carb pad", offset=PAD_Z)
-    d.rounded((PAD_X - px, -py), (PAD_X + px, py), 0.45)
+    d.c += outline_commands(*hull_outline([((x, y), 0.55) for x, y in PAD_BOSSES]))
     d.finish()
     d.extrude(sk, "intake_manifold_pad", pt)
     # The pad's bolt bosses stand at the plenum's corners, cast up from the flange
@@ -522,8 +558,14 @@ def intake(d):
     d.finish()
     d.extrude(sk, "intake_manifold_pad_bosses", PAD_Z + pt + 0.12 - (z1 - 0.1))
 
-    # Bolts down through the flange along each side.
-    sk = d.sketch("XY", "Intake bolts", offset=z1)
+    # Bolts down through the flange along each side, on round bosses.
+    sk = d.sketch("XY", "Intake bolt bosses", offset=z1 - 0.05)
+    for s in (1, -1):
+        for x in INTAKE_BOLT_X:
+            d.circle((bank_x(s, s * x), s * INTAKE_BOLT_Y), 0.48)
+    d.finish()
+    d.extrude(sk, "intake_manifold_bolt_bosses", 0.3)
+    sk = d.sketch("XY", "Intake bolts", offset=z1 + 0.25)
     for s in (1, -1):
         for x in INTAKE_BOLT_X:
             d.hexagon((bank_x(s, s * x), s * INTAKE_BOLT_Y), 0.5)
@@ -1009,7 +1051,11 @@ REDUCE_FACTORS = [
     ("fan_hub", ROUND), ("water_pump_snout", ROUND), ("water_pump_hub", ROUND),
     ("water_pump_inlet", ROUND), ("water_pump_heater", ROUND), ("carburetor_ring", ROUND),
     ("carb_throat", ROUND), ("carburetor_bowl_screw", ROUND), ("exhaust_collector", ROUND),
-    ("exhaust_runner", "r0.2"), ("intake_manifold_pad_bosses", ROUND),
+    ("exhaust_runner", "r0.08"), ("intake_manifold_runner", "r0.15"),
+    ("intake_manifold_end", "r0.03"),
+    ("intake_manifold_branch", ROUND), ("intake_manifold_crossover", ROUND),
+    ("intake_manifold_heat", ROUND), ("intake_manifold_bolt_bosses", ROUND),
+    ("intake_manifold_pad_bosses", ROUND), ("intake_manifold_pad", 0), ("intake_manifold_choke", 0),
     ("intake_manifold_distributor", ROUND), ("fan_blades", 2), ("belt", 3),
 ]
 
