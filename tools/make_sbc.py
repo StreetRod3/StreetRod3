@@ -117,6 +117,20 @@ PORT_T = 0.675          # the exhaust ports' middles up that face, a fraction of
 PLUG = (1.22, 0.955)    # where each plug's axis passes, (a, h)
 PLUG_DIR = (0.23, 0.96, -0.14)  # out of the head (x, out, up): down a little and back
 RAIL = ((3.05, 4.4), (7.7, 3.25))         # the valve cover rail, outer and inner, (a, h)
+# The heads' ends, after the L79's: each end's face stands this far back of its bosses, and
+# the exhaust side's corner is bevelled off, in from the exhaust face and from the low edge
+# under it (a notch at the bottom corner), over this far along the head.
+HEAD_END_RECESS = 0.15
+HEAD_BEVEL = (0.6, 0.65, 0.75)
+# The bosses on each end, (a, h): a low one with two lobes for accessory bolts, and a tall
+# one up the intake side, its top outer corner rounded. A tapped hole in each lobe and in
+# the tall one.
+HEAD_END_LOBES = [(4.4, 1.0), (3.15, 1.0)]   # right to left, on the low boss's top edge
+HEAD_END_LOBE_R = 0.35
+HEAD_END_LOW = (2.8, 4.75, 1.0)             # from, to, height (a, a, h)
+HEAD_END_TALL = (6.75, 2.65, 0.5)           # from a, up to h, the corner's radius
+HEAD_END_HOLES = [(4.4, 1.0), (3.15, 1.0), (7.35, 1.3)]
+HEAD_END_HOLE_R = 0.19
 
 # Valve covers, in the rail's frame: across from its outer edge, up off it.
 COVER_FLANGE = (-0.07, 4.8, 9.81, 0.1)    # across, half length, thickness
@@ -214,6 +228,7 @@ FINISHES = [
     ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
     ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON),
+    ("cylinder_head_holes", BLACK),
     ("thermostat_neck_bore", BLACK), ("intake_manifold_plenum_floor", BLACK),
     ("thermostat_bolts", STEEL), ("water_pump_inlet_bore", BLACK),
     ("water_pump_heater_bore", BLACK), ("thermostat", CAST_IRON),
@@ -450,16 +465,82 @@ def block(d):
 
 # The heads.
 
-def head_outline(s):
-    return [tuple(on_head(s, a, h)) for a, h in HEAD]
+def head_outline(s, outline=HEAD):
+    return [tuple(on_head(s, a, h)) for a, h in outline]
+
+
+def head_end_outline():
+    """HEAD at the very ends, (a, h): its exhaust side's edges moved in by the bevel, the
+    rest where they are. HEAD runs counterclockwise, so in is to each edge's left."""
+    c, low, _ = HEAD_BEVEL
+    moves = [0.0, 0.0, 0.0, c, c, low]      # edge k runs from HEAD[k] to HEAD[k + 1]
+    lines = []
+    for k, m in enumerate(moves):
+        p, q = np.array(HEAD[k], float), np.array(HEAD[(k + 1) % len(HEAD)], float)
+        e = unit(q - p)
+        lines.append((p + m * np.array([-e[1], e[0]]), e))
+    pts = []
+    for k in range(len(lines)):
+        (p, e), (q, f) = lines[k - 1], lines[k]
+        t, _ = np.linalg.solve(np.column_stack([e, -f]), q - p)
+        pts.append(tuple(p + t * e))
+    return pts
+
+
+def arc_pts(c, r, a0, a1, n):
+    """n + 1 points round center c from a0 to a1 degrees, counterclockwise."""
+    return [(c[0] + r * math.cos(math.radians(a0 + (a1 - a0) * i / n)),
+             c[1] + r * math.sin(math.radians(a0 + (a1 - a0) * i / n))) for i in range(n + 1)]
+
+
+def head_end_bosses():
+    """The end bosses' outlines, (a, h), counterclockwise."""
+    a0, a1, top = HEAD_END_LOW
+    low = [(a0, 0.0), (a1, 0.0)]
+    for c in HEAD_END_LOBES:
+        low += arc_pts(c, HEAD_END_LOBE_R, 0, 180, 12)
+    a0, h1, r = HEAD_END_TALL
+    (ia0, ih0), (ia1, ih1) = HEAD[1], HEAD[2]
+    tall = [(a0, 0.0), (ia0, ih0), (ia0 + (ia1 - ia0) * h1 / (ih1 - ih0), h1)]
+    tall += arc_pts((a0 + r, h1 - r), r, 90, 180, 8)
+    return [low, tall]
 
 
 def heads(d):
+    rec, (_, _, bevel) = HEAD_END_RECESS, HEAD_BEVEL
+    end = head_end_outline()
     for s in (1, -1):
-        sk = d.sketch("YZ", f"Head {s}", offset=bank_x(s, -HEAD_HALF))
+        x0, x1 = bank_x(s, -HEAD_HALF), bank_x(s, HEAD_HALF)
+        # The middle, then each end lofted from its face's bevelled outline to the full
+        # one; the bosses and the ends go into the head's own body.
+        sk = d.sketch("YZ", f"Head {s}", offset=x0 + rec + bevel)
         d.poly(ccw(head_outline(s)))
         d.finish()
-        d.extrude(sk, f"cylinder_head_{s}", 2 * HEAD_HALF)
+        d.extrude(sk, f"cylinder_head_{s}", x1 - x0 - 2 * (rec + bevel))
+        for k, (xf, xb) in enumerate(((x0 + rec, x0 + rec + bevel), (x1 - rec, x1 - rec - bevel))):
+            sks = []
+            for x, outline in ((xf, end), (xb, HEAD)):
+                sk = d.sketch("YZ", f"Head {s} end {k} at {x:.3f}", offset=x)
+                d.poly(ccw(head_outline(s, outline)))
+                d.finish()
+                sks.append(sk)
+            d.loft(f"cylinder_head_{s} ({k + 2})", sks)
+            # The bosses, standing out of the face, their holes dark at the bottom.
+            sk = d.sketch("YZ", f"Head {s} end {k} bosses", offset=x0 if k == 0 else x1 - rec)
+            for boss in head_end_bosses():
+                d.poly(ccw(head_outline(s, boss)))
+            # The holes are 20-sided: SolidCraft's circles come out in 128 facets, and the
+            # heads are not thinned.
+            for c in HEAD_END_HOLES:
+                d.poly(ccw(arc_pts(on_head(s, *c), HEAD_END_HOLE_R, 0, 360, 20)[:-1]))
+            d.finish()
+            d.extrude(sk, f"cylinder_head_{s} ({k + 4})", rec)
+            sk = d.sketch("YZ", f"Head {s} end {k} holes",
+                          offset=x0 + rec - 0.02 if k == 0 else x1 - rec)
+            for c in HEAD_END_HOLES:
+                d.poly(ccw(arc_pts(on_head(s, *c), HEAD_END_HOLE_R - 0.005, 0, 360, 20)[:-1]))
+            d.finish()
+            d.extrude(sk, f"cylinder_head_holes_{s}_{k}", 0.02)
 
         # Spark plugs out of the exhaust face below the ports, leaning down and back:
         # the hex where the axis leaves the face, the insulator, the terminal.
@@ -1086,8 +1167,9 @@ def alternator(d):
     turned("alternator", [(-12.62, 0.0), (-12.62, 2.75), (-12.35, 3.15), (-11.2, 3.15),
                           (-11.2, 0.0)])
     turned("alternator_stator", [(-11.2, 0.0), (-11.2, 3.35), (-10.6, 3.35), (-10.6, 0.0)])
-    turned("alternator_back", [(-10.6, 0.0), (-10.6, 3.1), (-10.1, 3.0), (-9.85, 2.55),
-                               (-9.85, 1.0), (-9.6, 1.0), (-9.6, 0.0)])
+    # The back housing, its bearing boss short of the right head's front.
+    turned("alternator_back", [(-10.6, 0.0), (-10.6, 3.1), (-10.1, 3.0), (-9.9, 2.55),
+                               (-9.9, 1.0), (-9.8, 1.0), (-9.8, 0.0)])
     # Dark vent slots round the front housing's face.
     sk = d.sketch("YZ", "Alternator vents", offset=-12.64)
     for k in range(8):
@@ -1217,6 +1299,7 @@ bpy.ops.wm.obj_export(filepath=dst, apply_modifiers=True, export_normals=False, 
 ROUND = "r0.35"
 REDUCE_FACTORS = [
     ("air_cleaner_element", 0), ("alternator_fan_vanes", 0),
+    ("cylinder_head", 0),
     ("air_cleaner", ROUND), ("crank_pulley", ROUND), ("upper_pulley", ROUND),
     ("alternator", ROUND), ("harmonic_balancer", ROUND), ("crank_bolt", ROUND),
     ("distributor_clamp", 1), ("distributor", ROUND), ("spark_plug", ROUND),
@@ -1297,11 +1380,12 @@ def main():
         bodies = read_tris(thin)
 
     # Design mm -> engine units (0.22 m), crank down to the models' Z. A sketch of several
-    # separate shapes extrudes into a body each, "name (2)" and on: put them back in one.
+    # separate shapes extrudes into a body each, "name (2)" and on: put them back in one,
+    # as the heads' ends and bosses, named "cylinder_head_1 (2)" and on, go into their heads.
     merged = {}
     for name, (p, t) in bodies.items():
         p, nr, i = crease_normals(p, t)
-        base = re.sub(r"[ _]\(\d+\)$", "", name)
+        base = re.sub(r"([ _]\(\d+\))+$", "", name)
         if base in merged:
             mp, mn, mi = merged[base]
             merged[base] = (np.vstack([mp, p]), np.vstack([mn, nr]), np.concatenate([mi, i + len(mp)]))
