@@ -147,6 +147,9 @@ func _rebuild_parts() -> void:
 
 
 func _add_part_ads(item: Dictionary, kind: String) -> void:
+	# Engine mounts and the like are the speed shop's, not the paper's.
+	if item.has("shop"):
+		return
 	var id := str(item.get("id", ""))
 	var count := GameState.newspaper_copies(kind, id).size()
 	for index: int in count:
@@ -193,7 +196,7 @@ func _make_gearbox_card(box: Dictionary, index: int) -> Control:
 	var top_pct := int(round(float(box.get("top_speed", 1.0)) * 100.0))
 	var card := _card()
 	card.add_child(_heading(str(box.get("name", "Gearbox"))))
-	card.add_child(_body(_with_wear("%d gears · %s · top speed %d%%" % [gear_count, kind, top_pct], "transmission", gearbox_id, index)))
+	card.add_child(_body(_with_wear("%s · %d gears · %s · top speed %d%%" % [GameState.fits_text(box), gear_count, kind, top_pct], "transmission", gearbox_id, index)))
 	card.add_child(_body("Ratios  %s" % GameState.gearbox_ratio_text(box)))
 	card.add_child(_buy_button("transmission", gearbox_id, index))
 	_watch_part(card, gearbox_id, "transmission", index)
@@ -471,7 +474,7 @@ func _body(text: String) -> Label:
 
 func _make_engine_card(engine: Dictionary, index: int) -> Control:
 	var engine_id := str(engine.get("id", ""))
-	var card := _make_copy_card(engine, _with_wear("%.0f hp" % float(engine.get("hp", 0.0)), "engine", engine_id, index), "engine", index)
+	var card := _make_copy_card(engine, _with_wear("%s · %.0f hp" % [GameState.fits_text(engine), float(engine.get("hp", 0.0))], "engine", engine_id, index), "engine", index)
 	_watch_part(card, engine_id, "engine", index)
 	return card
 

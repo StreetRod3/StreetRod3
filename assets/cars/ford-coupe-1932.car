@@ -1,6 +1,7 @@
 {
   "id": "ford-coupe-1932",
   "name": "Ford Coupe 1932",
+  "make": "Ford",
   "model": {
     "path": "res://assets/cars/sr1-ford-customized-coupe-1932.glb",
     "position": [0.0, 0.213, 0.0],
@@ -33,8 +34,8 @@
     ]
   },
   "parts": {
-    "engine": "v8-283",
-    "transmission": "gb_man3",
+    "engine": "ford-239",
+    "transmission": "gb_man3-ford",
     "wheels": "wheel-c1"
   },
   "driver": {

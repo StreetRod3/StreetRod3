@@ -32,3 +32,12 @@ The stunt track (`assets/tracks/stunt.trk`) is a first test of cars leaving the 
 ## Round the Torq Thrust spokes
 
 The torq wheel's spokes (`tools/make_wheels.py`) have square front edges, where the real wheel's are rounded, which is a big part of its look. Filleting them in SolidCraft 0.30.1 works for one window (78 seconds) but took over half an hour for five and then failed on the second ("the blend is larger than the neighbouring faces"), and patterning one window's fillet round the wheel fails too. A bevel on the exported mesh in Blender, which `tools/sbc_to_glb.py` already drives, could do it instead, or a later SolidCraft.
+
+## Engines for every make and era
+
+Engines come in families now (`families` in `parts.register`), and only the Ford flathead is drawn for its era. Its numbers (150 hp, $600) sit well below the Chevy small-blocks on purpose: it is meant to line up against period Chevys that are coming, not against the 265 and up. Still to come:
+
+- **Period Chevys** to match the flathead, each a family with its own stock heads, intake, camshaft, distributor and manifolds, and speed parts like the flathead's finned heads and three two-barrel intake.
+- **Real Ford Y-block and small-block.** The 292 and the 302 are stand-ins drawn with the Chevy models, and their speed parts are Ford copies of the Chevy ones with the same stats and looks.
+- **Chrysler.** The issue names it as a third make (issue #8); there are no Chrysler cars or engines yet.
+- **The speed shop**, the only place to buy engine mounts for a swap across makes (`mounts` parts, `"shop": "speed"`).

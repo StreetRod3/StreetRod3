@@ -1,6 +1,7 @@
 {
   "id": "corvette-1962-1",
   "name": "Corvette 1962",
+  "make": "GM",
   "model": {
     "path": "res://assets/cars/c-1962.glb",
     "position": [0.024, 0.101, 0.0],

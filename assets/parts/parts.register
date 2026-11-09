@@ -1,8 +1,27 @@
 {
+  "families": {
+    "chevy-sbc": {
+      "name": "Chevy small-block",
+      "make": "GM"
+    },
+    "ford-flathead": {
+      "name": "Ford flathead",
+      "make": "Ford"
+    },
+    "ford-yblock": {
+      "name": "Ford Y-block",
+      "make": "Ford"
+    },
+    "ford-windsor": {
+      "name": "Ford small-block",
+      "make": "Ford"
+    }
+  },
   "engines": [
     {
       "id": "v8-265",
-      "concern": "GM",
+      "make": "GM",
+      "family": "chevy-sbc",
       "name": "265 V8",
       "price": 900,
       "hp": 230,
@@ -12,7 +31,8 @@
     },
     {
       "id": "v8-283",
-      "concern": "GM",
+      "make": "GM",
+      "family": "chevy-sbc",
       "name": "283 V8",
       "price": 1600,
       "hp": 280,
@@ -22,7 +42,8 @@
     },
     {
       "id": "v8-327",
-      "concern": "GM",
+      "make": "GM",
+      "family": "chevy-sbc",
       "name": "327 V8",
       "price": 2400,
       "hp": 350,
@@ -32,18 +53,57 @@
     },
     {
       "id": "v8-350",
-      "concern": "GM",
+      "make": "GM",
+      "family": "chevy-sbc",
       "name": "350 V8",
       "price": 3100,
       "hp": 370,
       "vmax": 262,
       "cid": 350,
       "model": "res://assets/parts/engine-v8-327.glb"
+    },
+    {
+      "id": "ford-239",
+      "make": "Ford",
+      "family": "ford-flathead",
+      "name": "239 flathead V8",
+      "price": 600,
+      "hp": 150,
+      "vmax": 170,
+      "cid": 239,
+      "model": "res://assets/parts/engine-flathead-239.glb",
+      "charger": "generator",
+      "stock": {
+        "carb": "carb-2bbl"
+      }
+    },
+    {
+      "id": "ford-292",
+      "make": "Ford",
+      "family": "ford-yblock",
+      "name": "292 Y-block V8",
+      "price": 1300,
+      "hp": 260,
+      "vmax": 210,
+      "cid": 292,
+      "model": "res://assets/parts/engine-v8-283.glb"
+    },
+    {
+      "id": "ford-302",
+      "make": "Ford",
+      "family": "ford-windsor",
+      "name": "302 V8",
+      "price": 2000,
+      "hp": 300,
+      "vmax": 230,
+      "cid": 302,
+      "model": "res://assets/parts/engine-v8-327.glb"
     }
   ],
   "transmissions": [
     {
       "id": "gb_auto3",
+      "makes": ["GM", "Ford"],
       "name": "Automatic 3-speed",
       "price": 260,
       "automatic": true,
@@ -53,6 +113,7 @@
     },
     {
       "id": "gb_man3",
+      "makes": ["GM", "Ford"],
       "name": "3-speed manual",
       "price": 420,
       "automatic": false,
@@ -62,6 +123,7 @@
     },
     {
       "id": "gb_man4",
+      "makes": ["GM", "Ford"],
       "name": "4-speed manual",
       "price": 740,
       "automatic": false,
@@ -71,6 +133,7 @@
     },
     {
       "id": "gb_man5",
+      "makes": ["GM", "Ford"],
       "name": "5-speed manual",
       "price": 1150,
       "automatic": false,
@@ -80,6 +143,7 @@
     },
     {
       "id": "gb_race5",
+      "makes": ["GM", "Ford"],
       "name": "5-speed racing",
       "price": 1850,
       "automatic": false,
@@ -136,45 +200,53 @@
     }
   ],
   "parts": [
-    {"id": "heads-iron", "slot": "heads", "stock": true, "name": "Cast-iron heads", "price": 240, "hp": 0, "vmax": 0},
-    {"id": "heads-ported", "slot": "heads", "name": "Ported cast-iron heads", "price": 280, "hp": 18, "vmax": 2},
-    {"id": "heads-aluminum", "slot": "heads", "finish": "aluminum", "name": "Aluminum heads", "price": 650, "hp": 30, "vmax": 3},
-    {"id": "intake-iron4", "slot": "intake", "stock": true, "style": "iron4", "carbs": 1, "barrels": 4, "name": "Cast-iron four-barrel intake", "price": 85, "hp": 0, "vmax": 0},
-    {"id": "intake", "slot": "intake", "style": "highrise", "carbs": 1, "barrels": 4, "name": "Aluminum high-rise intake", "price": 320, "hp": 15, "vmax": 2},
-    {"id": "intake-tripower", "slot": "intake", "style": "tripower", "carbs": 3, "barrels": 2, "name": "Tri-power intake", "price": 420, "hp": 22, "vmax": 3},
-    {"id": "intake-dualquad", "slot": "intake", "style": "dualquad", "carbs": 2, "barrels": 4, "name": "Dual-quad intake", "price": 560, "hp": 30, "vmax": 4},
+    {"id": "heads-iron", "slot": "heads", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "stock": true, "name": "Cast-iron heads", "price": 240, "hp": 0, "vmax": 0},
+    {"id": "heads-ported", "slot": "heads", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "name": "Ported cast-iron heads", "price": 280, "hp": 18, "vmax": 2},
+    {"id": "heads-aluminum", "slot": "heads", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "finish": "aluminum", "name": "Aluminum heads", "price": 650, "hp": 30, "vmax": 3},
+    {"id": "heads-flathead-iron", "slot": "heads", "family": "ford-flathead", "name": "Flathead iron heads", "price": 150, "stock": true, "hp": 0, "vmax": 0},
+    {"id": "heads-flathead-finned", "slot": "heads", "family": "ford-flathead", "name": "Finned aluminum heads", "price": 380, "finish": "finned", "model": "res://assets/parts/flathead-heads-finned.glb", "hp": 16, "vmax": 2},
+    {"id": "intake-iron4", "slot": "intake", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "stock": true, "style": "iron4", "carbs": 1, "barrels": 4, "name": "Cast-iron four-barrel intake", "price": 85, "hp": 0, "vmax": 0},
+    {"id": "intake", "slot": "intake", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "style": "highrise", "carbs": 1, "barrels": 4, "name": "Aluminum high-rise intake", "price": 320, "hp": 15, "vmax": 2},
+    {"id": "intake-tripower", "slot": "intake", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "style": "tripower", "carbs": 3, "barrels": 2, "name": "Tri-power intake", "price": 420, "hp": 22, "vmax": 3},
+    {"id": "intake-dualquad", "slot": "intake", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "style": "dualquad", "carbs": 2, "barrels": 4, "name": "Dual-quad intake", "price": 560, "hp": 30, "vmax": 4},
+    {"id": "intake-flathead-stock", "slot": "intake", "family": "ford-flathead", "name": "Flathead intake", "price": 110, "stock": true, "style": "flathead", "carbs": 1, "barrels": 2, "hp": 0, "vmax": 0},
+    {"id": "intake-flathead-3x2", "slot": "intake", "family": "ford-flathead", "name": "Flathead three two-barrel intake", "price": 340, "style": "flathead-3x2", "carbs": 3, "barrels": 2, "model": "res://assets/parts/flathead-intake-3x2.glb", "hp": 20, "vmax": 3},
     {"id": "carb-4bbl-stock", "slot": "carb", "stock": true, "style": "4bbl", "barrels": 4, "cfm": 450, "name": "Stock four-barrel carburetor", "price": 110, "hp": 0, "vmax": 0},
     {"id": "carb", "slot": "carb", "style": "4bbl", "finish": "bright", "barrels": 4, "cfm": 650, "name": "650 cfm four-barrel carburetor", "price": 450, "hp": 25, "vmax": 4},
     {"id": "carb-750", "slot": "carb", "style": "4bbl", "finish": "silver", "barrels": 4, "cfm": 750, "name": "750 cfm double-pumper four-barrel", "price": 620, "hp": 34, "vmax": 5},
     {"id": "carb-2bbl", "slot": "carb", "style": "2bbl", "barrels": 2, "cfm": 260, "name": "Two-barrel carburetor", "price": 90, "hp": 12, "vmax": 2},
-    {"id": "dist-points", "slot": "distributor", "stock": true, "cap": "black", "drift": 1.0, "name": "Points distributor", "price": 45, "hp": 0, "vmax": 0},
-    {"id": "dist-dualpoint", "slot": "distributor", "cap": "red", "drift": 0.6, "name": "Dual-point distributor", "price": 140, "hp": 6, "vmax": 1},
-    {"id": "dist-transistor", "slot": "distributor", "cap": "blue", "drift": 0.3, "name": "Transistor ignition", "price": 260, "hp": 10, "vmax": 2},
+    {"id": "dist-points", "slot": "distributor", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "stock": true, "cap": "black", "drift": 1.0, "name": "Points distributor", "price": 45, "hp": 0, "vmax": 0},
+    {"id": "dist-dualpoint", "slot": "distributor", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "cap": "red", "drift": 0.6, "name": "Dual-point distributor", "price": 140, "hp": 6, "vmax": 1},
+    {"id": "dist-transistor", "slot": "distributor", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "cap": "blue", "drift": 0.3, "name": "Transistor ignition", "price": 260, "hp": 10, "vmax": 2},
+    {"id": "dist-flathead", "slot": "distributor", "family": "ford-flathead", "name": "Flathead distributor", "price": 70, "stock": true, "cap": "black", "drift": 1.0, "hp": 0, "vmax": 0},
     {"id": "air-cleaner-stock", "slot": "air_cleaner", "stock": true, "style": "stock", "name": "Stock air cleaner", "price": 25, "hp": 0, "vmax": 0},
     {"id": "air-cleaner-chrome", "slot": "air_cleaner", "style": "chrome", "name": "Chrome open-element air cleaner", "price": 60, "hp": 4, "vmax": 1},
-    {"id": "cam-stock", "slot": "cam", "stock": true, "style": "stock", "name": "Stock camshaft", "price": 120, "hp": 0, "vmax": 0},
-    {"id": "cam", "slot": "cam", "style": "racing", "name": "Racing camshaft", "price": 520, "hp": 30, "vmax": 6},
+    {"id": "cam-stock", "slot": "cam", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "stock": true, "style": "stock", "name": "Stock camshaft", "price": 120, "hp": 0, "vmax": 0},
+    {"id": "cam", "slot": "cam", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "style": "racing", "name": "Racing camshaft", "price": 520, "hp": 30, "vmax": 6},
+    {"id": "cam-flathead-stock", "slot": "cam", "family": "ford-flathead", "name": "Flathead camshaft", "price": 90, "stock": true, "style": "stock", "hp": 0, "vmax": 0},
     {"id": "tires-bias", "slot": "tires", "stock": true, "style": "bias", "model": "res://assets/parts/tire-225-60r15.glb", "name": "Bias-ply tires", "price": 160, "hp": 0, "vmax": 0, "grip": 3},
     {"id": "tires-radial", "slot": "tires", "style": "radial", "model": "res://assets/parts/tire-225-60r15.glb", "name": "Radial tires", "price": 220, "hp": 0, "vmax": 4, "grip": 4},
     {"id": "tires", "slot": "tires", "style": "slick", "name": "Stickier slicks", "price": 280, "hp": 0, "vmax": 8, "grip": 5},
-    {"id": "manifold-iron", "slot": "manifold", "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 90, "hp": 0, "vmax": 0},
-    {"id": "exhaust", "slot": "manifold", "style": "shorty", "name": "Tube headers", "price": 380, "hp": 18, "vmax": 5},
-    {"id": "headers-long", "slot": "manifold", "style": "long-tube", "name": "Long-tube headers, ceramic coated", "price": 690, "hp": 28, "vmax": 7},
+    {"id": "manifold-iron", "slot": "manifold", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "stock": true, "style": "log", "name": "Cast-iron manifolds", "price": 90, "hp": 0, "vmax": 0},
+    {"id": "exhaust", "slot": "manifold", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "style": "shorty", "name": "Tube headers", "price": 380, "hp": 18, "vmax": 5},
+    {"id": "headers-long", "slot": "manifold", "families": ["chevy-sbc", "ford-yblock", "ford-windsor"], "style": "long-tube", "name": "Long-tube headers, ceramic coated", "price": 690, "hp": 28, "vmax": 7},
+    {"id": "manifold-flathead-iron", "slot": "manifold", "family": "ford-flathead", "name": "Flathead exhaust manifolds", "price": 90, "stock": true, "style": "log", "hp": 0, "vmax": 0},
     {"id": "exhaust-single", "slot": "exhaust", "stock": true, "style": "single", "name": "Single exhaust", "price": 70, "hp": 0, "vmax": 0},
     {"id": "exhaust-dual", "slot": "exhaust", "style": "dual", "dual": true, "name": "Dual exhaust", "price": 340, "hp": 12, "vmax": 3},
     {"id": "muffler-stock", "slot": "muffler", "stock": true, "style": "oval", "name": "Stock muffler", "price": 40, "hp": 0, "vmax": 0, "loud_db": 0.0},
     {"id": "muffler-turbo", "slot": "muffler", "style": "turbo", "name": "Turbo muffler", "price": 150, "hp": 6, "vmax": 1, "loud_db": 1.5},
     {"id": "muffler-glasspack", "slot": "muffler", "style": "glasspack", "name": "Glasspack muffler", "price": 110, "hp": 9, "vmax": 2, "loud_db": 4.0},
-    {"id": "diff-308", "slot": "differential", "stock": true, "style": "iron", "name": "3.08 rear end", "price": 160, "ratio": 3.08, "accel": 1.0, "top_speed": 1.0},
-    {"id": "diff-355", "slot": "differential", "style": "chrome", "name": "3.55 rear end", "price": 260, "ratio": 3.55, "accel": 1.1, "top_speed": 0.96},
-    {"id": "diff-411", "slot": "differential", "style": "finned", "name": "4.11 Positraction rear end", "price": 480, "ratio": 4.11, "accel": 1.2, "top_speed": 0.91},
-    {"id": "diff-456", "slot": "differential", "style": "girdle", "name": "4.56 drag rear end", "price": 620, "ratio": 4.56, "accel": 1.28, "top_speed": 0.86},
+    {"id": "diff-308", "slot": "differential", "makes": ["GM", "Ford"], "stock": true, "style": "iron", "name": "3.08 rear end", "price": 160, "ratio": 3.08, "accel": 1.0, "top_speed": 1.0},
+    {"id": "diff-355", "slot": "differential", "makes": ["GM", "Ford"], "style": "chrome", "name": "3.55 rear end", "price": 260, "ratio": 3.55, "accel": 1.1, "top_speed": 0.96},
+    {"id": "diff-411", "slot": "differential", "makes": ["GM", "Ford"], "style": "finned", "name": "4.11 Positraction rear end", "price": 480, "ratio": 4.11, "accel": 1.2, "top_speed": 0.91},
+    {"id": "diff-456", "slot": "differential", "makes": ["GM", "Ford"], "style": "girdle", "name": "4.56 drag rear end", "price": 620, "ratio": 4.56, "accel": 1.28, "top_speed": 0.86},
     {"id": "springs-stock", "slot": "springs", "stock": true, "style": "stock", "name": "Stock springs", "price": 80, "spring_rate": 1.0},
     {"id": "springs-heavy", "slot": "springs", "style": "heavy", "name": "Heavy-duty springs", "price": 190, "spring_rate": 1.35},
     {"id": "springs-lowering", "slot": "springs", "style": "lowering", "name": "Lowering springs", "price": 280, "spring_rate": 1.5, "lower_m": 0.04},
     {"id": "springs-racing", "slot": "springs", "style": "racing", "name": "Racing springs", "price": 460, "spring_rate": 1.9, "lower_m": 0.03},
     {"id": "shocks-stock", "slot": "shocks", "stock": true, "style": "stock", "name": "Stock shocks", "price": 60, "shock_rate": 1.0},
     {"id": "shocks-gas", "slot": "shocks", "style": "gas", "name": "Gas shocks", "price": 140, "shock_rate": 1.35},
-    {"id": "shocks-racing", "slot": "shocks", "style": "racing", "name": "Racing shocks", "price": 320, "shock_rate": 1.7}
+    {"id": "shocks-racing", "slot": "shocks", "style": "racing", "name": "Racing shocks", "price": 320, "shock_rate": 1.7},
+    {"id": "mounts", "families": ["chevy-sbc", "ford-flathead", "ford-yblock", "ford-windsor"], "name": "Engine mounts", "price": 150, "shop": "speed", "mounts": true}
   ]
 }

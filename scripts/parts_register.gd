@@ -3,11 +3,23 @@ extends RefCounted
 
 ## Catalog of engines, transmissions, wheels, and bolt-on parts.
 ## `.car` files reference entries by id instead of copying them.
+##
+## Makes and engine families: an engine has a `make` ("GM", "Ford") and a `family`
+## (a key of the register's `families`, each with a name and a make). Parts that bolt to
+## an engine have the `family` they fit; transmissions and rear ends have a `make`.
+## Anything with neither fits every car.
+##
+## One entry can stand for a part made for several families or makes: `families` or
+## `makes` as a list expands it into a copy for each. The first copy keeps the entry's
+## id, so saves that name it still find it; the others are "<id>-<family>", or
+## "<id>-<make in lower case>", with the same everything else. Each copy keeps the
+## entry's id as `base`.
 
 const ENGINES := "engines"
 const TRANSMISSIONS := "transmissions"
 const WHEELS := "wheels"
 const PARTS := "parts"
+const FAMILIES := "families"
 
 static var _cache: Dictionary = {}
 
@@ -59,6 +71,11 @@ static func _read(path: String) -> Dictionary:
 		result.errors.append("Parts register root must be a JSON object.")
 		return result
 	var root: Dictionary = json.data
+	var families: Variant = root.get(FAMILIES, {})
+	if typeof(families) == TYPE_DICTIONARY:
+		result.families = families
+	else:
+		result.errors.append("Parts register 'families' must be an object.")
 	result.engines = _rows(root.get(ENGINES, []), ENGINES, result)
 	result.transmissions = _rows(root.get(TRANSMISSIONS, []), TRANSMISSIONS, result)
 	result.wheels = _rows(root.get(WHEELS, []), WHEELS, result)
@@ -81,14 +98,42 @@ static func _rows(value: Variant, category: String, result: Dictionary) -> Array
 		if part_id.is_empty():
 			result.errors.append("A %s entry is missing an id." % category)
 			continue
-		if seen.has(part_id):
-			result.errors.append("Duplicate %s id '%s'." % [category, part_id])
-			continue
-		seen[part_id] = true
-		var copy: Dictionary = part.duplicate()
-		copy["id"] = part_id
-		rows.append(copy)
+		for copy: Dictionary in _expand(part, part_id, result):
+			var copy_id := str(copy["id"])
+			if seen.has(copy_id):
+				result.errors.append("Duplicate %s id '%s'." % [category, copy_id])
+				continue
+			seen[copy_id] = true
+			rows.append(copy)
 	return rows
+
+
+## The copies an entry stands for: one per family in `families` or make in `makes`, or
+## the entry alone.
+static func _expand(part: Dictionary, part_id: String, result: Dictionary) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for key: String in ["families", "makes"]:
+		if not part.has(key):
+			continue
+		var listed: Variant = part[key]
+		if typeof(listed) != TYPE_ARRAY or (listed as Array).is_empty():
+			result.errors.append("'%s' of '%s' must be a list that is not empty." % [key, part_id])
+			return out
+		var field := "family" if key == "families" else "make"
+		for i: int in (listed as Array).size():
+			var value := str((listed as Array)[i])
+			var copy: Dictionary = part.duplicate()
+			copy.erase(key)
+			copy[field] = value
+			copy["base"] = part_id
+			copy["id"] = part_id if i == 0 else "%s-%s" % [part_id, value.to_lower()]
+			out.append(copy)
+		return out
+	var copy: Dictionary = part.duplicate()
+	copy["id"] = part_id
+	copy["base"] = part_id
+	out.append(copy)
+	return out
 
 
 static func _empty() -> Dictionary:
@@ -98,5 +143,6 @@ static func _empty() -> Dictionary:
 		"transmissions": [],
 		"wheels": [],
 		"parts": [],
+		"families": {},
 		"errors": [],
 	}

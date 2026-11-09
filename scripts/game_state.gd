@@ -126,6 +126,10 @@ const SLOT_DISTRIBUTOR := "distributor"
 const SLOT_AIR_CLEANER := "air_cleaner"
 const CARB_SLOTS: Array[String] = [SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3]
 const HOOD_SLOTS: Array[String] = [SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER]
+## Slots whose parts bolt to the engine and fit only its family (`PartsRegister`).
+const FAMILY_SLOTS: Array[String] = [SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_DISTRIBUTOR, SLOT_MANIFOLD]
+## Slots whose parts fit only the car's make.
+const MAKE_SLOTS: Array[String] = [SLOT_DIFFERENTIAL]
 const ALL_SLOTS: Array[String] = [
 	SLOT_MANIFOLD, SLOT_EXHAUST, SLOT_MUFFLER, SLOT_MUFFLER_LEFT, SLOT_DIFFERENTIAL, SLOT_SPRINGS, SLOT_SHOCKS, SLOT_TIRES,
 	SLOT_CAM, SLOT_HEADS, SLOT_INTAKE, SLOT_CARB, SLOT_CARB_2, SLOT_CARB_3, SLOT_DISTRIBUTOR, SLOT_AIR_CLEANER,
@@ -314,6 +318,10 @@ var slot_part_ids: Dictionary = STOCK_SLOT_PARTS.duplicate()
 var engine_bolts: Dictionary = {}
 ## The spark plug wires run from the distributor cap to the plugs.
 var plug_wires: bool = true
+## The belt and what it drives off the front of the engine (fan, generator or alternator,
+## pump pulleys): pulled off and put back like the wires, and the engine won't run
+## without them. They come and go with the engine.
+var front_drive: bool = true
 var owned_engine_ids: Array[String] = ["v8-283"]
 var equipped_engine_id: String = "v8-283"
 var owned_wheel_ids: Array[String] = ["wheel-c1"]
@@ -363,6 +371,8 @@ const DEFAULT_GEARBOX_ID := "gb_auto3"
 var PARTS: Array[Dictionary] = []
 var GEARBOXES: Array[Dictionary] = []
 var ENGINES: Array[Dictionary] = []
+## Engine families by id: {name, make}.
+var FAMILIES: Dictionary = {}
 var WHEELS: Array[Dictionary] = []
 var USED_CARS: Array[Dictionary] = []
 
@@ -398,6 +408,173 @@ func load_parts_register() -> void:
 	GEARBOXES = _dict_list(register.get("transmissions", []))
 	ENGINES = _dict_list(register.get("engines", []))
 	WHEELS = _dict_list(register.get("wheels", []))
+	var families: Variant = register.get("families", {})
+	FAMILIES = families if typeof(families) == TYPE_DICTIONARY else {}
+
+
+# Makes and engine families. A car has a make; its engine must be that make unless the
+# car has mounts for the engine's family (a bolt-on, `mounts`), and its rear end must be
+# that make. The transmission is the engine's make. Heads, intake, camshaft,
+# distributor, and exhaust manifolds fit only their engine family. The rules are checked
+# when a part goes on, so a car from an older save keeps what it has.
+
+## Who built the car `instance_or_model` ("GM", "Ford"), or "" if it does not say.
+func car_make(instance_or_model: String) -> String:
+	if instance_or_model == current_car_id and not car_spec.is_empty():
+		return str(car_spec.get("make", ""))
+	return str(_CarFile.load_path(car_file_path(instance_or_model)).get("make", ""))
+
+
+func family_name(family: String) -> String:
+	var row: Variant = FAMILIES.get(family, {})
+	return str((row as Dictionary).get("name", family)) if typeof(row) == TYPE_DICTIONARY else family
+
+
+func family_make(family: String) -> String:
+	var row: Variant = FAMILIES.get(family, {})
+	return str((row as Dictionary).get("make", "")) if typeof(row) == TYPE_DICTIONARY else ""
+
+
+static func engine_family(engine: Dictionary) -> String:
+	return str(engine.get("family", ""))
+
+
+func engine_make(engine: Dictionary) -> String:
+	var make := str(engine.get("make", ""))
+	return make if not make.is_empty() else family_make(engine_family(engine))
+
+
+## The engine families the bolt-ons `part_ids` have mounts for.
+func mounted_families(part_ids: Array) -> Array[String]:
+	var out: Array[String] = []
+	for part_id: Variant in part_ids:
+		var part := listing_by_id(PARTS, str(part_id))
+		if bool(part.get("mounts", false)) and not out.has(engine_family(part)):
+			out.append(engine_family(part))
+	return out
+
+
+## The mounts part for an engine family, or "".
+func mounts_for(family: String) -> String:
+	for part in PARTS:
+		if bool(part.get("mounts", false)) and engine_family(part) == family:
+			return str(part.get("id", ""))
+	return ""
+
+
+## Whether a car of `make` with mounts for `mounted` takes `engine`.
+func engine_fits_car(engine: Dictionary, make: String, mounted: Array[String]) -> bool:
+	var engine_mk := engine_make(engine)
+	return make.is_empty() or engine_mk.is_empty() or engine_mk == make \
+			or mounted.has(engine_family(engine))
+
+
+## Why `engine` cannot go in the active car, or "".
+func engine_fit_trouble(engine: Dictionary) -> String:
+	var make := car_make(current_car_id)
+	if not engine_fits_car(engine, make, mounted_families(equipped_part_ids)):
+		return "A %s won't go in a %s car without engine mounts for it." % [family_name(engine_family(engine)), make]
+	var box_make := str(get_equipped_gearbox().get("make", "")) if has_gearbox() else ""
+	var engine_mk := engine_make(engine)
+	if not box_make.is_empty() and not engine_mk.is_empty() and box_make != engine_mk:
+		return "The %s transmission in the car won't bolt to a %s engine." % [box_make, engine_mk]
+	return ""
+
+
+## Why the gearbox `box` cannot go in the active car, or "": it must be the engine's make,
+## or with no engine in, a make the car could take an engine of.
+func gearbox_fit_trouble(box: Dictionary) -> String:
+	var box_make := str(box.get("make", ""))
+	if box_make.is_empty():
+		return ""
+	if has_engine():
+		var engine_mk := engine_make(get_equipped_engine())
+		if not engine_mk.is_empty() and engine_mk != box_make:
+			return "A %s transmission won't bolt to the %s engine in the car." % [box_make, engine_mk]
+		return ""
+	var make := car_make(current_car_id)
+	if make.is_empty() or make == box_make:
+		return ""
+	for family in mounted_families(equipped_part_ids):
+		if family_make(family) == box_make:
+			return ""
+	return "A %s transmission won't fit this %s car." % [box_make, make]
+
+
+## Why `part` cannot go on the active car for its family or make, or "".
+func part_fit_trouble(part: Dictionary) -> String:
+	var kind := str(part.get("slot", ""))
+	var family := engine_family(part)
+	if FAMILY_SLOTS.has(kind) and not family.is_empty() and has_engine():
+		var fitted := engine_family(get_equipped_engine())
+		if not fitted.is_empty() and fitted != family:
+			return "That part is for a %s, not the %s in the car." % [family_name(family), family_name(fitted)]
+	var make := str(part.get("make", ""))
+	var car_mk := car_make(current_car_id)
+	if MAKE_SLOTS.has(kind) and not make.is_empty() and not car_mk.is_empty() and make != car_mk:
+		return "That part is for a %s car, not a %s." % [make, car_mk]
+	return ""
+
+
+## The stock part for slot kind `kind` whose `field` is `value`, or "".
+func _stock_part_where(kind: String, field: String, value: String) -> String:
+	for part in PARTS:
+		if str(part.get("slot", "")) == kind and bool(part.get("stock", false)) \
+				and str(part.get(field, "")) == value:
+			return str(part.get("id", ""))
+	return ""
+
+
+## What a car of `make` with the engine `engine_id` comes with in every slot: the
+## engine family's stock heads, intake, camshaft, distributor and manifolds, the make's
+## stock rear end, and whatever the engine names in its `stock` (a two-barrel, say).
+func stock_slot_parts(engine_id: String, make: String) -> Dictionary:
+	var slots := STOCK_SLOT_PARTS.duplicate()
+	var engine := listing_by_id(ENGINES, engine_id)
+	var family := engine_family(engine)
+	if not family.is_empty():
+		for slot in FAMILY_SLOTS:
+			var part_id := _stock_part_where(slot, "family", family)
+			if not part_id.is_empty():
+				slots[slot] = part_id
+	if not make.is_empty():
+		for slot in MAKE_SLOTS:
+			var part_id := _stock_part_where(slot, "make", make)
+			if not part_id.is_empty():
+				slots[slot] = part_id
+	var listed: Variant = engine.get("stock", {})
+	if typeof(listed) == TYPE_DICTIONARY:
+		for slot: String in (listed as Dictionary):
+			if slots.has(slot) and not listing_by_id(PARTS, str(listed[slot])).is_empty():
+				slots[slot] = str(listed[slot])
+	return slots
+
+
+## The copy of `part_id` made for `family`: itself if it fits, the same entry's copy for
+## that family, or "" if there is none.
+func part_for_family(part_id: String, family: String) -> String:
+	var part := listing_by_id(PARTS, part_id)
+	if part.is_empty() or family.is_empty() or engine_family(part).is_empty() or engine_family(part) == family:
+		return part_id
+	var base := str(part.get("base", part_id))
+	for other in PARTS:
+		if str(other.get("base", "")) == base and engine_family(other) == family:
+			return str(other.get("id", ""))
+	return ""
+
+
+## Puts the parts in `slots` that bolt to the engine onto `engine_id`'s family: each
+## becomes its copy for that family, or the family's stock part where there is none.
+func _refit_family_parts(slots: Dictionary, engine_id: String) -> void:
+	var family := engine_family(listing_by_id(ENGINES, engine_id))
+	if family.is_empty():
+		return
+	var stock := stock_slot_parts(engine_id, "")
+	for slot in FAMILY_SLOTS:
+		if not slots.has(slot) or str(slots[slot]) == NO_PART_ID:
+			continue
+		var mapped := part_for_family(str(slots[slot]), family)
+		slots[slot] = mapped if not mapped.is_empty() else str(stock[slot])
 
 
 func load_cars_register() -> void:
@@ -489,6 +666,8 @@ func engine_trouble() -> String:
 		return "The distributor is loose."
 	if not plug_wires:
 		return "The plug wires are off."
+	if not front_drive:
+		return "The belt and %s are off." % charger_name()
 	if slot_part(SLOT_MANIFOLD).is_empty():
 		return "There are no exhaust manifolds."
 	return ""
@@ -646,6 +825,9 @@ func fit_hood_part(part_id: String, slot: String) -> String:
 		return err
 	if CARB_SLOTS.has(slot) and not carb_fits_intake(part):
 		return "That carburetor does not fit this intake."
+	var trouble := part_fit_trouble(part)
+	if not trouble.is_empty():
+		return trouble
 	if not owns_part(part_id):
 		return "That part is not in spare parts."
 	if spare_count(part_id) <= 0:
@@ -665,9 +847,13 @@ func fit_engine(engine_id: String) -> String:
 		return "Take the old engine out first."
 	if free_spare_count("engine", engine_id) <= 0 or listing_by_id(ENGINES, engine_id).is_empty():
 		return "That engine is not in spare parts."
+	var trouble := engine_fit_trouble(listing_by_id(ENGINES, engine_id))
+	if not trouble.is_empty():
+		return trouble
 	equipped_engine_id = engine_id
 	engine_bolts = {HOOD_ENGINE: _loose_bolts(HOOD_ENGINE)}
 	plug_wires = false
+	front_drive = true
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -696,6 +882,20 @@ func remove_hood_part(key: String) -> String:
 			plug_wires = false
 	_sync_record_from_active()
 	refresh_car_stats()
+	return ""
+
+
+## What the engine's belt drives to charge: "generator" or "alternator".
+func charger_name(engine: Dictionary = {}) -> String:
+	return str((get_equipped_engine() if engine.is_empty() else engine).get("charger", "alternator"))
+
+
+## Puts the belt and what it drives back on the front of the engine, or pulls them off.
+func set_front_drive(on: bool) -> String:
+	if not has_engine():
+		return "There is no engine."
+	front_drive = on
+	_sync_record_from_active()
 	return ""
 
 
@@ -882,6 +1082,7 @@ func new_game() -> void:
 	slot_part_ids = STOCK_SLOT_PARTS.duplicate()
 	engine_bolts = {}
 	plug_wires = true
+	front_drive = true
 	equipped_engine_id = ""
 	equipped_wheel_id = ""
 	car_records.clear()
@@ -1268,6 +1469,9 @@ func _fit_rival_engine(opp: Dictionary) -> void:
 	if typeof(taken) == TYPE_DICTIONARY:
 		(taken as Dictionary)["engine_id"] = str(stock["engine"])
 		slots = (taken as Dictionary)["slot_parts"]
+	_refit_family_parts(slots, str(stock["engine"]))
+	if typeof(taken) != TYPE_DICTIONARY:
+		opp["hood_parts"] = slots
 	var build := {"hp": float(stock["hp"]), "vmax": float(stock["vmax"])}
 	_add_rival_parts(build, slots)
 	var diff := listing_by_id(PARTS, str(slots.get(SLOT_DIFFERENTIAL, NO_PART_ID)))
@@ -1360,7 +1564,7 @@ func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
 		build["engine"] = str(engine.get("id", ""))
 		build["hp"] = float(engine.get("hp", 280.0))
 		build["vmax"] = float(engine.get("vmax", 220.0))
-	var hood := _rival_hood_parts(row.get("parts", {}))
+	var hood := _rival_hood_parts(row.get("parts", {}), str(build["engine"]))
 	_add_rival_parts(build, hood)
 	build["engine_hp"] = build["hp"]
 	build["hood_parts"] = hood
@@ -1389,23 +1593,26 @@ func _add_rival_parts(build: Dictionary, slots: Dictionary) -> void:
 		build["vmax"] += float(part.get("vmax", 0.0)) * share
 
 
-## A rival's own hood parts by slot: stock wherever `listed` names nothing.
-func _rival_hood_parts(listed: Variant) -> Dictionary:
+## A rival's own hood parts by slot for the engine `engine_id`: its family's stock
+## wherever `listed` names nothing, and the family's copy of whatever it names.
+func _rival_hood_parts(listed: Variant, engine_id: String = "") -> Dictionary:
 	var hood := {}
+	var stock := stock_slot_parts(engine_id, "")
 	for slot in HOOD_SLOTS:
-		hood[slot] = str(STOCK_SLOT_PARTS[slot])
+		hood[slot] = str(stock[slot])
 	if typeof(listed) != TYPE_DICTIONARY:
 		return hood
 	for slot: String in hood.keys():
 		var part_id := str((listed as Dictionary).get(slot, hood[slot]))
 		if part_id == NO_PART_ID or not listing_by_id(PARTS, part_id).is_empty():
 			hood[slot] = part_id
+	_refit_family_parts(hood, engine_id)
 	return hood
 
 
 ## What is under a rival's hood, slot to part id.
 func opponent_hood_parts(opp: Dictionary) -> Dictionary:
-	return _rival_hood_parts(opp.get("hood_parts", {}))
+	return _rival_hood_parts(opp.get("hood_parts", {}), str(opp.get("engine", "")))
 
 
 ## Marks the selected rival as beaten, which brings the next one along.
@@ -1545,7 +1752,7 @@ func _load_saved_opponents(d: Dictionary) -> void:
 		var saved_build := row if row.has("hp") else _opponent_stock_build(str(row.get("car_file", "")))
 		opponents[i]["hp"] = float(saved_build.get("hp", 280.0))
 		opponents[i]["engine_hp"] = float(saved_build.get("engine_hp", opponents[i]["hp"]))
-		opponents[i]["hood_parts"] = _rival_hood_parts(row.get("hood_parts", {}))
+		opponents[i]["hood_parts"] = _rival_hood_parts(row.get("hood_parts", {}), str(opponents[i].get("engine", "")))
 		var taken: Variant = row.get("taken_car", null)
 		if typeof(taken) == TYPE_DICTIONARY:
 			# A player's car with no engine loads with its parts off. This one waits with them on.
@@ -2252,6 +2459,9 @@ func fit_gearbox(gearbox_id: String) -> String:
 		return "Take the old transmission out first."
 	if free_spare_count("transmission", gearbox_id) <= 0 or listing_by_id(GEARBOXES, gearbox_id).is_empty():
 		return "That gearbox is not in spare parts."
+	var trouble := gearbox_fit_trouble(listing_by_id(GEARBOXES, gearbox_id))
+	if not trouble.is_empty():
+		return trouble
 	equipped_gearbox_id = gearbox_id
 	gearbox_bolts.clear()
 	for i in GEARBOX_BOLT_COUNT:
@@ -2332,8 +2542,25 @@ func spare_slot_parts(slot: String) -> Array[Dictionary]:
 	return out
 
 
-## One line on what a part does, for ads and lists.
+## Whom a part, engine or gearbox fits, for ads and lists: its engine family or make,
+## or "" for one that fits anything.
+func fits_text(item: Dictionary) -> String:
+	var family := engine_family(item)
+	if not family.is_empty():
+		return family_name(family)
+	return str(item.get("make", ""))
+
+
+## One line on what a part does, for ads and lists, ending with whom it fits.
 func part_detail(part: Dictionary) -> String:
+	var fits := fits_text(part)
+	if bool(part.get("mounts", false)):
+		return "puts a %s in any car" % fits
+	var detail := _part_stats_text(part)
+	return detail if fits.is_empty() else "%s   for %s" % [detail, fits]
+
+
+func _part_stats_text(part: Dictionary) -> String:
 	if part.has("spring_rate"):
 		var lower_cm := roundi(float(part.get("lower_m", 0.0)) * 100.0)
 		var stiffer := "stock rate" if is_equal_approx(float(part["spring_rate"]), 1.0) else "%d%% stiffer" % roundi((float(part["spring_rate"]) - 1.0) * 100.0)
@@ -2394,6 +2621,9 @@ func fit_slot_part(part_id: String, slot: String = "") -> String:
 	var part := listing_by_id(PARTS, part_id)
 	if spare_count(part_id) <= 0:
 		return "That part is on a car, not in spare parts."
+	var trouble := part_fit_trouble(part)
+	if not trouble.is_empty():
+		return trouble
 	slot_part_ids[slot] = part_id
 	if slot == SLOT_EXHAUST and not bool(part.get("dual", false)):
 		slot_part_ids[SLOT_MUFFLER_LEFT] = NO_PART_ID
@@ -3097,11 +3327,12 @@ func _record_mounts(rec: Dictionary) -> Array:
 ## What a model comes with, as [kind, id] pairs.
 func _stock_mounts(model_id: String) -> Array:
 	var gearbox_id := _stock_part_id(model_id, "transmission")
+	var engine_id := _stock_part_id(model_id, "engine")
 	return _record_mounts({
-		"engine_id": _stock_part_id(model_id, "engine"),
+		"engine_id": engine_id,
 		"gearbox_id": gearbox_id if not gearbox_id.is_empty() else DEFAULT_GEARBOX_ID,
 		"wheel_id": _stock_part_id(model_id, "wheels"),
-		"slot_parts": STOCK_SLOT_PARTS,
+		"slot_parts": stock_slot_parts(engine_id, car_make(model_id)),
 	})
 
 
@@ -3121,6 +3352,8 @@ func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: 
 	rec["slot_parts"].merge(hood, true)
 	if not listing_by_id(ENGINES, engine).is_empty():
 		rec["engine_id"] = engine
+		_refit_family_parts(rec["slot_parts"], engine)
+		_grant_swap_mounts(rec, false)
 	if not listing_by_id(GEARBOXES, gearbox).is_empty():
 		rec["gearbox_id"] = gearbox
 	return _add_owned_record(rec)
@@ -3164,9 +3397,10 @@ func _make_car_record(model_id: String, paint: Color) -> Dictionary:
 		"gearbox_bolts": _tight_bolts(),
 		"wheel_id": wheel_id,
 		"part_ids": parts,
-		"slot_parts": STOCK_SLOT_PARTS.duplicate(),
+		"slot_parts": stock_slot_parts(engine_id, car_make(model_id)),
 		"engine_bolts": {},
 		"plug_wires": true,
+		"front_drive": true,
 		"engine_tune": ENGINE_TUNE_DEFAULT,
 	}
 
@@ -3317,6 +3551,7 @@ func _sync_record_from_active() -> void:
 	rec["slot_parts"] = slot_part_ids.duplicate()
 	rec["engine_bolts"] = engine_bolts.duplicate(true)
 	rec["plug_wires"] = plug_wires
+	rec["front_drive"] = front_drive
 	rec["engine_tune"] = engine_tune
 	_settle_conditions(rec)
 	car_records[current_car_id] = rec
@@ -3348,6 +3583,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 		_clear_engine_parts(slot_part_ids)
 	engine_bolts = _hood_bolts_from(rec.get("engine_bolts", null))
 	plug_wires = bool(rec.get("plug_wires", true))
+	front_drive = bool(rec.get("front_drive", true))
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
 
 
@@ -3379,6 +3615,7 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 		"slot_parts": _slots_from(rec.get("slot_parts", null)),
 		"engine_bolts": _hood_bolts_from(rec.get("engine_bolts", null)),
 		"plug_wires": bool(rec.get("plug_wires", true)),
+		"front_drive": bool(rec.get("front_drive", true)),
 		"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
 	}
 	if rec.has("conditions"):
@@ -3403,6 +3640,7 @@ func _load_saved_cars(d: Dictionary) -> void:
 			else:
 				model = _migrate_car_id(model)
 			car_records[instance_id] = _record_from_save(row_d, model)
+			_grant_swap_mounts(car_records[instance_id])
 			_note_instance_serial(instance_id)
 	var kept: Array[String] = []
 	for car_id in owned_car_ids:
@@ -3424,6 +3662,23 @@ func _load_saved_cars(d: Dictionary) -> void:
 	_apply_fields_from_record(current_car_id)
 
 
+## A car whose engine is another make's (from a save from before makes, or won off a
+## rival) gets the mounts for it, as if whoever swapped it in had fitted them. With `own`
+## the mounts are counted as owned here; a car still being added owns them with the rest.
+func _grant_swap_mounts(rec: Dictionary, own: bool = true) -> void:
+	var engine := listing_by_id(ENGINES, str(rec.get("engine_id", "")))
+	var bolt_ons := _string_array(rec.get("part_ids", []))
+	if engine.is_empty() or engine_fits_car(engine, car_make(str(rec.get("model_id", ""))), mounted_families(bolt_ons)):
+		return
+	var mounts := mounts_for(engine_family(engine))
+	if mounts.is_empty():
+		return
+	bolt_ons.append(mounts)
+	rec["part_ids"] = bolt_ons
+	if own:
+		owned_part_ids.append(mounts)
+
+
 func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 	var rec := {
 		"model_id": model_id,
@@ -3437,6 +3692,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"slot_parts": _slots_from(row.get("slot_parts", null)),
 		"engine_bolts": _hood_bolts_from(row.get("engine_bolts", null)),
 		"plug_wires": bool(row.get("plug_wires", true)),
+		"front_drive": bool(row.get("front_drive", true)),
 		"engine_tune": clampi(int(row.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),
 	}
 	if row.has("conditions"):

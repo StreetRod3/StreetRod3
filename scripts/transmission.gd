@@ -525,7 +525,7 @@ func _box_detail(box: Dictionary) -> String:
 	if typeof(ratios) == TYPE_ARRAY:
 		gears = (ratios as Array).size()
 	var kind := "automatic" if bool(box.get("automatic", false)) else "manual"
-	return "%s · %d gears · ratios %s" % [kind, gears, GameState.gearbox_ratio_text(box)]
+	return "%s · %s · %d gears · ratios %s" % [GameState.fits_text(box), kind, gears, GameState.gearbox_ratio_text(box)]
 
 
 func _refresh_ui() -> void:
