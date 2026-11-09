@@ -12,6 +12,8 @@ extends Node3D
 const ENGINE_SCALE := 0.22
 const CRANK_Z := -0.36
 const WIRES := "wires"
+## The belt and what it drives off the front of the engine, which pull off like the wires.
+const FRONT := "front"
 
 ## Where the cast-iron intake's carburetor pad is, and the distributor's base on any intake.
 ## The engine models carry their stock intake, carburetor and distributor at these spots.
@@ -108,7 +110,10 @@ const FH_WIRE_A := 8.0
 const FH_WIRE_H := 2.5
 ## Model nodes that are not the long block's: they are other parts' rigs, or the crank
 ## pulley the balancer stands in for.
-const _FH_NODES_OFF_BLOCK: Array[String] = ["cylinder_head", "spark_plug", "water_outlet", "plug_conduit", "intake_manifold", "carburetor", "carb_throat", "distributor", "pulley_crank", "crank_snout"]
+const _FH_NODES_OFF_BLOCK: Array[String] = ["cylinder_head", "spark_plug", "water_outlet", "plug_conduit", "intake_manifold", "carburetor", "carb_throat", "distributor", "pulley_crank", "crank_snout", "belt", "generator", "pulley_generator", "pulley_pump", "fan_"]
+## The flathead's front drive in its model: belt, generator, fan, and the pulleys the belt
+## turns. The water pump housings stay on the block.
+const _FH_NODES_FRONT: Array[String] = ["belt", "generator", "pulley_generator", "pulley_pump", "fan_"]
 const _FH_NODES_HEADS: Array[String] = ["cylinder_head", "spark_plug", "water_outlet", "plug_conduit"]
 
 const _MODEL_DEFAULT := "res://assets/parts/engine-v8-283.glb"
@@ -228,6 +233,12 @@ func _view_wires() -> bool:
 	return GameState.plug_wires
 
 
+func _view_front() -> bool:
+	if _spec_on:
+		return true
+	return GameState.front_drive
+
+
 func _view_head_count() -> int:
 	return GameState.heads_on(_view_engine())
 
@@ -255,7 +266,7 @@ func build() -> void:
 
 
 static func all_keys() -> Array[String]:
-	var keys: Array[String] = [GameState.HOOD_ENGINE]
+	var keys: Array[String] = [GameState.HOOD_ENGINE, FRONT]
 	keys.append_array(GameState.HOOD_SLOTS)
 	keys.append(WIRES)
 	return keys
@@ -275,6 +286,8 @@ func rebuild(key: String) -> Node3D:
 	match key:
 		GameState.HOOD_ENGINE:
 			_build_engine(rig)
+		FRONT:
+			_build_front(rig)
 		GameState.SLOT_CAM:
 			_build_cam(rig, _view_part(key))
 		GameState.SLOT_HEADS:
@@ -293,6 +306,8 @@ func rebuild(key: String) -> Node3D:
 
 
 func _present(key: String) -> bool:
+	if key == FRONT:
+		return _view_fitted(GameState.HOOD_ENGINE) and _view_front()
 	if key == WIRES:
 		return _view_fitted(GameState.HOOD_ENGINE) and _view_wires() and not _view_part(GameState.SLOT_DISTRIBUTOR).is_empty() and not _view_part(GameState.SLOT_HEADS).is_empty()
 	return _view_fitted(key)
@@ -414,7 +429,6 @@ func _build_engine(rig: Node3D) -> void:
 		leave.append_array(nodes)
 	_add_model_nodes(rig, leave, false)
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
-	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
 	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
 	var paint := _paint()
 	# The boss in the valley behind the intake that the distributor stands in.
@@ -424,9 +438,20 @@ func _build_engine(rig: Node3D) -> void:
 		_box(rig, Vector3(0.18, 0.2, 0.06), Vector3(p.x + 0.02, p.y, p.z - 0.03), steel)
 		_box(rig, Vector3(0.14, 0.16, 0.12), Vector3(p.x, p.y, p.z - 0.12), rubber)
 	_build_balancer(rig, 0.3)
-	# Water pump above the crank, and its pulley.
+	# Water pump above the crank. Its pulley is the front drive's.
 	_cyl_x(rig, 0.17, 0.3, COVER_X, paint, 24, PUMP_CENTER.x, PUMP_CENTER.y)
 	_cyl_x(rig, 0.06, 0.06, COVER_X - 0.3, steel, 12, PUMP_CENTER.x, PUMP_CENTER.y)
+
+
+## The belt and what it drives: on a flathead its model's belt, generator, fan and
+## pulleys; on the others the water pump pulley, the alternator on its bracket, and the belt.
+func _build_front(rig: Node3D) -> void:
+	if is_flathead():
+		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _FH_NODES_FRONT))
+		return
+	var steel := _mat("steel", _STEEL, 0.6, 0.35)
+	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
+	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
 	_cyl_x(rig, 0.3, 0.08, BELT_X + 0.04, steel, 36, PUMP_CENTER.x, PUMP_CENTER.y)
 	# Alternator on the right, on a bracket off the head.
 	_cyl_x(rig, 0.26, 0.48, -1.28, _mat("alternator", Color(0.62, 0.62, 0.6), 0.6, 0.45), 24, ALTERNATOR_CENTER.x, ALTERNATOR_CENTER.y)

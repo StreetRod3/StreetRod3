@@ -33,6 +33,9 @@ const _FH_OUTLET := Vector3(-8.375, 9.042, 0.45)
 const _FH_LOG_X := Vector2(-9.375, 9.8)
 const _FH_LOG_Z := 3.951
 const _FH_BELL_BACK := 15.3
+## Engine model nodes that come off with the belt (`GameState.front_drive`): the
+## flathead's belt, generator, fan and pulleys, and the small-block's pulleys and bracket.
+const _FRONT_NODES: Array[String] = ["belt", "generator", "pulley_generator", "pulley_pump", "fan_", "upper_pulley", "alternator_pulley", "accessory_bracket"]
 ## Exhaust ports along each head, and how far out from the crank line the heads are.
 const PORT_COUNT := 4
 const PORT_STEP := 0.13
@@ -746,11 +749,19 @@ func _build_engine() -> void:
 	var engine := packed.instantiate() as Node3D
 	if engine == null:
 		return
-	# A flathead's exhaust logs are the manifold slot's, drawn with it.
+	# A flathead's exhaust logs are the manifold slot's, drawn with it; and with the belt
+	# off, what it drives is off too.
+	var off: Array[String] = []
 	if _is_flathead():
-		for node in engine.find_children("exhaust*", "MeshInstance3D", true, false):
-			node.get_parent().remove_child(node)
-			node.free()
+		off.append("exhaust")
+	if not GameState.front_drive:
+		off.append_array(_FRONT_NODES)
+	for node in engine.find_children("*", "MeshInstance3D", true, false):
+		for prefix in off:
+			if str(node.name).begins_with(prefix):
+				node.get_parent().remove_child(node)
+				node.free()
+				break
 	add_child(engine)
 	engine.transform = _engine_xform()
 

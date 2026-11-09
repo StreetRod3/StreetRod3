@@ -63,6 +63,7 @@ With the city map up close, 1 drives to the drive-in and 2 to the gas station.
 | --- | --- | --- |
 | Under the hood | P | Parts |
 | Under the hood | W | Plug wires on or off |
+| Under the hood | B | Belt and generator or alternator on or off |
 | Under the hood | T | Timing light |
 | Timing light | A or Up | Advance the timing a step |
 | Timing light | R or Down | Retard the timing a step |

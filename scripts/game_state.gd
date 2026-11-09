@@ -318,6 +318,10 @@ var slot_part_ids: Dictionary = STOCK_SLOT_PARTS.duplicate()
 var engine_bolts: Dictionary = {}
 ## The spark plug wires run from the distributor cap to the plugs.
 var plug_wires: bool = true
+## The belt and what it drives off the front of the engine (fan, generator or alternator,
+## pump pulleys): pulled off and put back like the wires, and the engine won't run
+## without them. They come and go with the engine.
+var front_drive: bool = true
 var owned_engine_ids: Array[String] = ["v8-283"]
 var equipped_engine_id: String = "v8-283"
 var owned_wheel_ids: Array[String] = ["wheel-c1"]
@@ -662,6 +666,8 @@ func engine_trouble() -> String:
 		return "The distributor is loose."
 	if not plug_wires:
 		return "The plug wires are off."
+	if not front_drive:
+		return "The belt and %s are off." % charger_name()
 	if slot_part(SLOT_MANIFOLD).is_empty():
 		return "There are no exhaust manifolds."
 	return ""
@@ -847,6 +853,7 @@ func fit_engine(engine_id: String) -> String:
 	equipped_engine_id = engine_id
 	engine_bolts = {HOOD_ENGINE: _loose_bolts(HOOD_ENGINE)}
 	plug_wires = false
+	front_drive = true
 	_sync_record_from_active()
 	refresh_car_stats()
 	return ""
@@ -875,6 +882,20 @@ func remove_hood_part(key: String) -> String:
 			plug_wires = false
 	_sync_record_from_active()
 	refresh_car_stats()
+	return ""
+
+
+## What the engine's belt drives to charge: "generator" or "alternator".
+func charger_name(engine: Dictionary = {}) -> String:
+	return str((get_equipped_engine() if engine.is_empty() else engine).get("charger", "alternator"))
+
+
+## Puts the belt and what it drives back on the front of the engine, or pulls them off.
+func set_front_drive(on: bool) -> String:
+	if not has_engine():
+		return "There is no engine."
+	front_drive = on
+	_sync_record_from_active()
 	return ""
 
 
@@ -1061,6 +1082,7 @@ func new_game() -> void:
 	slot_part_ids = STOCK_SLOT_PARTS.duplicate()
 	engine_bolts = {}
 	plug_wires = true
+	front_drive = true
 	equipped_engine_id = ""
 	equipped_wheel_id = ""
 	car_records.clear()
@@ -3378,6 +3400,7 @@ func _make_car_record(model_id: String, paint: Color) -> Dictionary:
 		"slot_parts": stock_slot_parts(engine_id, car_make(model_id)),
 		"engine_bolts": {},
 		"plug_wires": true,
+		"front_drive": true,
 		"engine_tune": ENGINE_TUNE_DEFAULT,
 	}
 
@@ -3528,6 +3551,7 @@ func _sync_record_from_active() -> void:
 	rec["slot_parts"] = slot_part_ids.duplicate()
 	rec["engine_bolts"] = engine_bolts.duplicate(true)
 	rec["plug_wires"] = plug_wires
+	rec["front_drive"] = front_drive
 	rec["engine_tune"] = engine_tune
 	_settle_conditions(rec)
 	car_records[current_car_id] = rec
@@ -3559,6 +3583,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 		_clear_engine_parts(slot_part_ids)
 	engine_bolts = _hood_bolts_from(rec.get("engine_bolts", null))
 	plug_wires = bool(rec.get("plug_wires", true))
+	front_drive = bool(rec.get("front_drive", true))
 	engine_tune = clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX)
 
 
@@ -3590,6 +3615,7 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 		"slot_parts": _slots_from(rec.get("slot_parts", null)),
 		"engine_bolts": _hood_bolts_from(rec.get("engine_bolts", null)),
 		"plug_wires": bool(rec.get("plug_wires", true)),
+		"front_drive": bool(rec.get("front_drive", true)),
 		"engine_tune": int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)),
 	}
 	if rec.has("conditions"):
@@ -3666,6 +3692,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"slot_parts": _slots_from(row.get("slot_parts", null)),
 		"engine_bolts": _hood_bolts_from(row.get("engine_bolts", null)),
 		"plug_wires": bool(row.get("plug_wires", true)),
+		"front_drive": bool(row.get("front_drive", true)),
 		"engine_tune": clampi(int(row.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),
 	}
 	if row.has("conditions"):

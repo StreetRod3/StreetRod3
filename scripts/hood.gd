@@ -7,8 +7,9 @@ extends Node3D
 ## held by bolts: click a bolt hole to thread a bolt in, click the bolt again to tighten
 ## it, and click a tight bolt to back it out. With all of a part's bolts out and nothing
 ## on top of it, it lifts off into spare parts. Parts puts a spare into an empty spot,
-## its bolts in but loose. Wires pulls the plug wires or puts them back. Tune opens the
-## timing light when the engine will run.
+## its bolts in but loose. Wires pulls the plug wires or puts them back, and Belt the belt
+## and what it drives off the front of the engine (fan, generator or alternator,
+## pulleys). Tune opens the timing light when the engine will run.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _EngineAssembly := preload("res://scripts/engine_assembly.gd")
@@ -107,6 +108,7 @@ var _hint: Label
 var _tooltip: Label
 var _parts_btn: Button
 var _wires_btn: Button
+var _front_btn: Button
 var _tune_btn: Button
 var _done_btn: Button
 var _picker: Control
@@ -250,6 +252,9 @@ func _handle_key(key: InputEventKey) -> void:
 		KEY_W:
 			if not _peek and not _picker.visible:
 				_on_wires_pressed()
+		KEY_B:
+			if not _peek and not _picker.visible:
+				_on_front_pressed()
 		KEY_T:
 			if not _peek and not _picker.visible:
 				get_viewport().set_input_as_handled()
@@ -473,11 +478,15 @@ func _lift_out(key: String) -> void:
 		return
 	var rig: Node3D = _engine.rigs.get(key, null)
 	_engine.rigs.erase(key)
-	# A camshaft still in the block comes up with the engine.
+	# A camshaft still in the block comes up with the engine, and so does the belt and
+	# what it drives on the front.
 	if key == GameState.HOOD_ENGINE and _engine.rigs.has(GameState.SLOT_CAM):
 		(_engine.rigs[GameState.SLOT_CAM] as Node3D).reparent(rig, false)
 		_engine.rigs.erase(GameState.SLOT_CAM)
 		_build_bolts(GameState.SLOT_CAM)
+	if key == GameState.HOOD_ENGINE and _engine.rigs.has(_EngineAssembly.FRONT):
+		(_engine.rigs[_EngineAssembly.FRONT] as Node3D).reparent(rig, false)
+		_engine.rigs.erase(_EngineAssembly.FRONT)
 	if key == GameState.SLOT_DISTRIBUTOR:
 		_engine.rebuild(_EngineAssembly.WIRES)
 	_hint.text = "Lifting the %s off…" % str(PART_NAMES[key]).to_lower()
@@ -573,6 +582,9 @@ func _on_target(target: Array) -> void:
 	if key == _EngineAssembly.WIRES:
 		_on_wires_pressed()
 		return
+	if key == _EngineAssembly.FRONT:
+		_on_front_pressed()
+		return
 	# A part left free with its bolts out, as an older save can have it, lifts off when
 	# clicked.
 	if not _busy and GameState.hood_part_blocker(key).is_empty() and GameState.hood_bolts(key).max() <= 0:
@@ -616,6 +628,8 @@ func _target_text(target: Array) -> String:
 	if index < 0:
 		if key == _EngineAssembly.WIRES:
 			return "Plug wires — pull them off"
+		if key == _EngineAssembly.FRONT:
+			return "Belt and %s — pull them off" % GameState.charger_name()
 		return "%s — %s" % [PART_NAMES[key], _part_name(key)]
 	var turns: int = GameState.hood_bolts(key)[index]
 	var label := _wing_nut_name(index) if key == GameState.SLOT_AIR_CLEANER else str(BOLT_NAMES[key][index])
@@ -653,8 +667,11 @@ func _refresh_part_bodies() -> void:
 		if not is_instance_valid(rig):
 			continue
 		# The heads are one part but a box each, so the one box does not take in the
-		# whole top of the engine between them.
+		# whole top of the engine between them; the front drive a box for each piece
+		# (belt, fan, generator, pulleys), so it does not cover the front of the engine.
 		var pieces: Array = rig.get_children() if key == GameState.SLOT_HEADS else [rig]
+		if key == _EngineAssembly.FRONT:
+			pieces = rig.find_children("*", "MeshInstance3D", true, false)
 		var bodies: Array[Node3D] = []
 		for piece: Node in pieces:
 			var box := _world_bounds(piece)
@@ -724,6 +741,22 @@ func _on_wires_pressed() -> void:
 	# come off now.
 	if not GameState.plug_wires:
 		await _settle_now()
+
+
+## Pulls the belt and what it drives off the front of the engine, or puts them back.
+func _on_front_pressed() -> void:
+	if _busy:
+		return
+	var err := GameState.set_front_drive(not GameState.front_drive)
+	if not err.is_empty():
+		_hint.text = err
+		return
+	_play(_sfx_snap)
+	_engine.rebuild(_EngineAssembly.FRONT)
+	_refresh_part_bodies()
+	var what := "Belt and %s" % GameState.charger_name()
+	_hint.text = "%s on." % what if GameState.front_drive else "%s off." % what
+	_refresh_ui()
 
 
 ## Lifts off whatever is free to come off, keeping the screen busy while it goes.
@@ -853,7 +886,7 @@ func _sync_nav() -> void:
 	if _picker.visible:
 		_nav.setup(_nav.collect_buttons(_picker))
 	else:
-		_nav.setup([_parts_btn, _wires_btn, _tune_btn, _done_btn])
+		_nav.setup([_parts_btn, _wires_btn, _front_btn, _tune_btn, _done_btn])
 
 
 func _refresh_ui() -> void:
@@ -877,9 +910,11 @@ func _refresh_ui() -> void:
 		lines.append("%s: %s (%s)" % [PART_NAMES[key], name, _bolt_state(key)])
 	if GameState.has_engine():
 		lines.append("Plug wires: %s" % ("on" if GameState.plug_wires else "off"))
+		lines.append("Belt and %s: %s" % [GameState.charger_name(), "on" if GameState.front_drive else "off"])
 	_parts_label.text = "\n".join(lines)
 	_wires_btn.text = "Wires off (W)" if GameState.plug_wires else "Wires on (W)"
-	for b: Button in [_parts_btn, _wires_btn, _tune_btn, _done_btn]:
+	_front_btn.text = "Belt off (B)" if GameState.front_drive else "Belt on (B)"
+	for b: Button in [_parts_btn, _wires_btn, _front_btn, _tune_btn, _done_btn]:
 		(b as Button).disabled = _busy
 	if _busy:
 		return
@@ -907,6 +942,7 @@ func _refresh_peek_ui() -> void:
 	_hint.text = "Close the hood when you've seen enough."
 	_parts_btn.visible = false
 	_wires_btn.visible = false
+	_front_btn.visible = false
 	_tune_btn.visible = false
 	_done_btn.text = "Close"
 	_done_btn.disabled = false
@@ -954,6 +990,7 @@ func _build_ui() -> void:
 	bar.add_child(_hint)
 	_parts_btn = _button("Parts (P)", _on_parts_pressed, bar)
 	_wires_btn = _button("Wires (W)", _on_wires_pressed, bar)
+	_front_btn = _button("Belt (B)", _on_front_pressed, bar)
 	_tune_btn = _button("Tune (T)", _on_tune_pressed, bar)
 	_done_btn = _button("Done", _on_done_pressed, bar)
 	_done_btn.custom_minimum_size = Vector2(96, 0)

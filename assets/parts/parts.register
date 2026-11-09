@@ -72,6 +72,7 @@
       "vmax": 170,
       "cid": 239,
       "model": "res://assets/parts/engine-flathead-239.glb",
+      "charger": "generator",
       "stock": {
         "carb": "carb-2bbl"
       }
