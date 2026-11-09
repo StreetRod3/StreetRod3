@@ -553,7 +553,7 @@ def heads(d):
                 d.poly(ccw(head_outline(s, outline)))
                 d.finish()
                 sks.append(sk)
-            d.loft(f"cylinder_head_{s} ({k + 2})", sks)
+            d.loft(f"cylinder_head_{s} ({10 + 10 * k})", sks)
             # The bosses, standing out of the face, their holes dark at the bottom.
             sk = d.sketch("YZ", f"Head {s} end {k} bosses", offset=x0 if k == 0 else x1 - rec)
             for boss in head_end_bosses():
@@ -563,7 +563,7 @@ def heads(d):
             for c in HEAD_END_HOLES:
                 d.poly(ccw(arc_pts(on_head(s, *c), HEAD_END_HOLE_R, 0, 360, 20)[:-1]))
             d.finish()
-            d.extrude(sk, f"cylinder_head_{s} ({k + 4})", rec)
+            d.extrude(sk, f"cylinder_head_{s} ({30 + 10 * k})", rec)
             sk = d.sketch("YZ", f"Head {s} end {k} holes",
                           offset=x0 + rec - 0.02 if k == 0 else x1 - rec)
             for c in HEAD_END_HOLES:
@@ -1102,7 +1102,7 @@ def iron_manifolds(d):
         log.sort(key=lambda cr: math.atan2(*(cr[0] - mid2)[::-1]))   # counterclockwise
         d.c += outline_commands(*hull_outline(log))
         d.finish()
-        d.extrude(sk, f"exhaust_manifold_{s} (3)", MANIFOLD_LOG_OUT - 0.5)
+        d.extrude(sk, f"exhaust_manifold_{s} (10)", MANIFOLD_LOG_OUT - 0.5)
         # Its outer face rounded over: lofted from the outline out to one drawn in by the
         # same corners' radii less 0.35 (the planes are only moved out along the normal, so
         # the outlines' sketch coordinates carry over).
@@ -1112,7 +1112,7 @@ def iron_manifolds(d):
             d.c += outline_commands(*hull_outline([(c, r - shrink) for c, r in log]))
             d.finish()
             caps.append(sk)
-        d.loft(f"exhaust_manifold_{s} (9)", caps)
+        d.loft(f"exhaust_manifold_{s} (20)", caps)
         (_, vb), rb = MANIFOLD_LOG[2]
         bottom = origin + (vb - rb) * v3(up)
         hx, past, t = MANIFOLD_OUTLET
@@ -1121,7 +1121,7 @@ def iron_manifolds(d):
         sk = d.sketch("XY", f"Manifold outlet {s}", offset=bottom[2] - t)
         d.rounded((mid - hx, min(y0, y1)), (mid + hx, max(y0, y1)), 0.4)
         d.finish()
-        d.extrude(sk, f"exhaust_manifold_{s} (4)", t + 0.3)
+        d.extrude(sk, f"exhaust_manifold_{s} (30)", t + 0.3)
 
         # The arms: up and out of each end port, round, and in along the engine.
         rise = unit([s * ARM_RISE[0], ARM_RISE[1]])
@@ -1146,7 +1146,7 @@ def iron_manifolds(d):
             cx, cy = to2d(start)
             d.rounded((cx - aw / 2, cy - ah / 2), (cx + aw / 2, cy + ah / 2), ar)
             d.finish()
-            d.body(f"exhaust_manifold_{s} ({5 + k})", "solid.sweep", sketch=prof,
+            d.body(f"exhaust_manifold_{s} ({40 + 10 * k})", "solid.sweep", sketch=prof,
                    path_sketch=sk, path=["l1", "a1", "l2"])
 
 
@@ -1493,7 +1493,8 @@ def main():
 
     # Design mm -> engine units (0.22 m), crank down to the models' Z. A sketch of several
     # separate shapes extrudes into a body each, "name (2)" and on: put them back in one,
-    # as the heads' ends and bosses, named "cylinder_head_1 (2)" and on, go into their heads.
+    # as the heads' ends and bosses and the manifolds' pieces, named "cylinder_head_1 (10)"
+    # and on (by tens, clear of the numbers SolidCraft gives a sketch's shapes), go into theirs.
     merged = {}
     for name, (p, t) in bodies.items():
         p, nr, i = crease_normals(p, t)
