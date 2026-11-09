@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Build a small-block Chevy V8 in SolidCraft and export it as a game GLB.
 
-    python3 tools/make_sbc.py
+    python3 tools/make_sbc.py                           # the engine
+    python3 tools/make_sbc.py headers --headers long    # or shorty: a set of headers alone
 
 The engine is a small-block as it came in the sixties, measured from the CAD assembly of a
 1965 L79 327 that tools/l79_to_glb.py reads (the block, the heads, the valve covers, the
-intake, the distributor, the plugs, the coil, the oil filter and the starter are where and
-the size they are on it), with long-tube headers, a 14 inch air cleaner, a Delco
-alternator and a four-blade fan of its own. Only what shows from outside is drawn: no
+intake, the distributor, the plugs, the coil, the oil filter, the starter and the exhaust
+manifolds are where and the size they are on it), with a 14 inch air cleaner, a Delco
+alternator and a four-blade fan of its own. Headers are built on their own, for the
+header parts to take the manifolds' place. Only what shows from outside is drawn: no
 internals, and nothing under the intake. It has:
 
   block         one outline across the engine, extruded front to back: the 45 degree
@@ -36,8 +38,13 @@ internals, and nothing under the intake. It has:
                 coil tower, the hold-down clamp
   coil          standing on the intake behind the carburetor, on the left
   oil filler    the tube out of the intake's front, forward and up, with its breather cap
-  headers       long tubes (or shorties): a flange on each head, four 1 5/8 primaries
-                out of the ports, one bend each, into a merge cone and a 3 inch collector
+  manifolds     the L79's right-hand center-dump ram's horn on both banks: flanges on the
+                end ports and across the middle pair, a square arm up and out of each end
+                port and in along the head into the center log, which drops below the
+                head to the outlet flange
+  headers       (built alone) long tubes or shorties: a flange on each head, four 1 5/8
+                primaries out of the ports, one bend each, into a merge cone and a 3 inch
+                collector
   front         stamped timing cover, the long water pump with its open hose necks, the
                 balancer and a two-groove crank pulley, a two-groove pump pulley, the
                 fan on a spacer, a Delco alternator high on the right on its bracket, and
@@ -51,7 +58,8 @@ Every part is a body of its own (SolidCraft's kernel takes minutes to join bodie
 from numbers in this script, so to change the engine change the numbers and run it again.
 
 Writes resources/engines/engine-sbc-350.sc, the SolidCraft design, and
-assets/parts/engine-sbc-350.glb. Needs SolidCraft's command line (--solidcraft) and
+assets/parts/engine-sbc-350.glb; headers go to sbc-headers-long or sbc-headers-shorty
+there instead. Needs SolidCraft's command line (--solidcraft) and
 Blender, as tools/make_flathead.py does.
 
 The design is in inches with the crank on the X axis: +X toward the back of the car, +Y
@@ -208,6 +216,26 @@ SUMP = (0.8, 9.9, -4.3, 3.4, -7.3)  # x0, x1, y0, y1, bottom
 OIL_FILTER = (8.88, -6.4)
 
 # Headers: the collectors' front ends (x along the bank, |y|, z) and their axis.
+# Cast-iron exhaust manifolds, the stock exhaust: the L79's right-hand center-dump ram's
+# horn, on both banks. In each exhaust face's own frame: x along the engine, v up the face
+# from the ports' middles, out off it. A flange on each end port and one across the middle
+# pair; an arm out of each end port, rising out and up (ARM_RISE, out and up off the port)
+# then turning to run in along the engine into the center log, which drops below the head
+# to the outlet flange.
+MANIFOLD_FLANGE = (0.95, 0.875, 0.45, 0.35)   # half wide, half tall, thick, corner radius
+MANIFOLD_ARM = (1.7, 1.7, 0.5)                # wide, tall, corner radius
+ARM_RISE = (2.22, 1.86)
+ARM_BEND = 1.2
+ARM_START = 1.3            # the arm's path starts this far back of the port, in the head
+ARM_END_X = 1.6            # and ends inside the center log, this far out of the middle
+# The center log's side outline in the face (x, v): round corners top and bottom, out to
+# this deep; then the outlet flange under it, (half along the engine, how far either side
+# of the log across, thick).
+MANIFOLD_LOG = [((1.85, 1.95), 0.6), ((-1.85, 1.95), 0.6), ((-0.95, -3.6), 0.45),
+                ((0.95, -3.6), 0.45)]
+MANIFOLD_LOG_OUT = 2.8
+MANIFOLD_OUTLET = (1.6, 0.3, 0.4)
+
 COLLECTOR = {"long": ((9.0, 10.4, -6.8), (0.72, 0.0, -0.69)),
              "shorty": ((1.5, 11.4, -2.6), (0.8, 0.0, -0.6))}
 PRIMARY_D = 1.625
@@ -228,6 +256,7 @@ FINISHES = [
     ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
     ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON),
+    ("exhaust_manifold", CAST_IRON),
     ("cylinder_head_holes", BLACK),
     ("thermostat_neck_bore", BLACK), ("intake_manifold_plenum_floor", BLACK),
     ("thermostat_bolts", STEEL), ("water_pump_inlet_bore", BLACK),
@@ -1044,6 +1073,83 @@ def headers(d, style):
         d.cylinder(f"exhaust_collector_flange_{s}", front + 6.0 * axis, axis, 4.6, 0.375)
 
 
+def iron_manifolds(d):
+    fw, fh_, ft, fr = MANIFOLD_FLANGE
+    aw, ah, ar = MANIFOLD_ARM
+    for s in (1, -1):
+        f0, up, n = exhaust_face(s)
+        port = port_center(s)
+        mid = bank_x(s, 0.0)
+        # The face's own frame at the ports' middle: x along the engine, v up the face.
+        origin = p3(mid, port)
+        sk, to2d = d.plane(origin, (1, 0, 0), v3(n), f"Manifold flanges {s}")
+
+        def at(x, v):
+            return to2d(origin + np.array([x, 0, 0]) + v * v3(up))
+
+        ends = [bank_x(s, EXHAUST_PORT_X[0]) - mid, bank_x(s, EXHAUST_PORT_X[-1]) - mid]
+        middle = [bank_x(s, x) - mid for x in EXHAUST_PORT_X[1:3]]
+        for x in ends:
+            d.rounded(at(x - fw, -fh_), at(x + fw, fh_), fr)
+        d.rounded(at(min(middle) - fw, -fh_), at(max(middle) + fw, fh_), fr)
+        d.finish()
+        d.extrude(sk, f"exhaust_manifold_{s}", ft)
+
+        # The center log, out from the face, and the outlet flange under it.
+        sk, to2d = d.plane(origin, (1, 0, 0), v3(n), f"Manifold log {s}")
+        log = [(np.array(at(*c)), r) for c, r in MANIFOLD_LOG]
+        mid2 = sum(c for c, _ in log) / len(log)
+        log.sort(key=lambda cr: math.atan2(*(cr[0] - mid2)[::-1]))   # counterclockwise
+        d.c += outline_commands(*hull_outline(log))
+        d.finish()
+        d.extrude(sk, f"exhaust_manifold_{s} (3)", MANIFOLD_LOG_OUT - 0.5)
+        # Its outer face rounded over: lofted from the outline out to one drawn in by the
+        # same corners' radii less 0.35 (the planes are only moved out along the normal, so
+        # the outlines' sketch coordinates carry over).
+        caps = []
+        for out, shrink in ((MANIFOLD_LOG_OUT - 0.5, 0.0), (MANIFOLD_LOG_OUT, 0.35)):
+            sk, _ = d.plane(origin + out * v3(n), (1, 0, 0), v3(n), f"Manifold log face {s} {out}")
+            d.c += outline_commands(*hull_outline([(c, r - shrink) for c, r in log]))
+            d.finish()
+            caps.append(sk)
+        d.loft(f"exhaust_manifold_{s} (9)", caps)
+        (_, vb), rb = MANIFOLD_LOG[2]
+        bottom = origin + (vb - rb) * v3(up)
+        hx, past, t = MANIFOLD_OUTLET
+        y0 = bottom[1] - s * past
+        y1 = bottom[1] + s * (MANIFOLD_LOG_OUT + past)
+        sk = d.sketch("XY", f"Manifold outlet {s}", offset=bottom[2] - t)
+        d.rounded((mid - hx, min(y0, y1)), (mid + hx, max(y0, y1)), 0.4)
+        d.finish()
+        d.extrude(sk, f"exhaust_manifold_{s} (4)", t + 0.3)
+
+        # The arms: up and out of each end port, round, and in along the engine.
+        rise = unit([s * ARM_RISE[0], ARM_RISE[1]])
+        run = float(np.linalg.norm(ARM_RISE))
+        d1 = v3(rise)
+        for k, x in enumerate(ends):
+            inward = np.array([-math.copysign(1.0, x), 0.0, 0.0])
+            start = origin + np.array([x, 0, 0]) - ARM_START * d1
+            lead = ARM_START + run - ARM_BEND
+            length = abs(x) - ARM_BEND - ARM_END_X
+            name = f"exhaust_manifold_{s}_arm_{k}"
+            # Its path in the plane of the rise and the engine's length, drawn so the bend
+            # turns counterclockwise.
+            sk, _ = d.plane(start, d1, np.cross(d1, inward), f"{name} path")
+            d.c.append(cmd("sketch.line", infer=False, points=[skp(0.0, 0.0), skp(lead, 0.0)]))
+            d.c.append(cmd("sketch.arc.center_point", center=skp(lead, ARM_BEND), start="l1.end",
+                           end=skp(lead + ARM_BEND, ARM_BEND)))
+            d.c.append(cmd("sketch.line", infer=False,
+                           points=["a1.end", skp(lead + ARM_BEND, ARM_BEND + length)]))
+            d.finish()
+            prof, to2d = d.plane(start, (1, 0, 0), d1, f"{name} section")
+            cx, cy = to2d(start)
+            d.rounded((cx - aw / 2, cy - ah / 2), (cx + aw / 2, cy + ah / 2), ar)
+            d.finish()
+            d.body(f"exhaust_manifold_{s} ({5 + k})", "solid.sweep", sketch=prof,
+                   path_sketch=sk, path=["l1", "a1", "l2"])
+
+
 # The front of the engine.
 
 def front(d):
@@ -1334,15 +1440,18 @@ def finish_for(name):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "headers"),
+                    help="the whole engine with its cast-iron manifolds (default), or only "
+                         "a set of headers")
     ap.add_argument("--headers", default="long", choices=sorted(COLLECTOR),
-                    help="long tubes (default) or shorties")
+                    help="which headers: long tubes (default) or shorties")
     ap.add_argument("--sc", help="design file (default resources/engines/STEM.sc)")
     ap.add_argument("--glb", help="mesh (default assets/parts/STEM.glb)")
     ap.add_argument("--solidcraft", default="solidcraft-cli",
                     help="solidcraft-cli, or the SolidCraft AppImage")
     ap.add_argument("--blender", default="blender", help="Blender, which thins the mesh")
     args = ap.parse_args()
-    stem = STEM if args.headers == "long" else f"{STEM}-{args.headers}"
+    stem = STEM if args.what == "engine" else f"sbc-headers-{args.headers}"
     sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", stem + ".sc"))
     glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", stem + ".glb"))
     tool = shutil.which(args.solidcraft) or args.solidcraft
@@ -1353,17 +1462,20 @@ def main():
         sys.exit(f"no Blender at {args.blender}")
 
     d = SBC()
-    block(d)
-    heads(d)
-    valve_covers(d)
-    intake(d)
-    air_cleaner(d, carburetor(d))
-    distributor(d)
-    coil(d)
-    oil_filler(d)
-    headers(d, args.headers)
-    front(d)
-    bottom(d)
+    if args.what == "headers":
+        headers(d, args.headers)
+    else:
+        block(d)
+        heads(d)
+        valve_covers(d)
+        intake(d)
+        air_cleaner(d, carburetor(d))
+        distributor(d)
+        coil(d)
+        oil_filler(d)
+        iron_manifolds(d)
+        front(d)
+        bottom(d)
 
     with tempfile.TemporaryDirectory() as tmp:
         obj = os.path.join(tmp, "engine.obj")

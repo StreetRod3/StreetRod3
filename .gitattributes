@@ -33,3 +33,7 @@ resources/engines/flathead-intake-3x2.sc filter=lfs diff=lfs merge=lfs -text
 assets/parts/engine-sbc-350.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/engine-sbc-350.sc filter=lfs diff=lfs merge=lfs -text
 assets/parts/engine-sbc-l79.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/sbc-headers-long.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/sbc-headers-shorty.glb filter=lfs diff=lfs merge=lfs -text
+resources/engines/sbc-headers-long.sc filter=lfs diff=lfs merge=lfs -text
+resources/engines/sbc-headers-shorty.sc filter=lfs diff=lfs merge=lfs -text
