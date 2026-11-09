@@ -91,15 +91,23 @@ DECK = 9.034            # crank to deck along the bank's axis
 DECK_OUT = 3.258        # bank axis out to the deck's outer edge
 DECK_IN = 3.4           # bank axis in to the deck's inner edge
 VALLEY_Z = 8.6          # valley floor, under the intake
-SKIRT_Y = 5.5           # crankcase sides
-RAIL_Y = 5.95           # pan rail lip
-RAIL_T = 0.4            # pan rail's thickness, up from the crank's height
+WALL_FOOT = (4.95, 1.0)  # where each bank's outer wall comes down to the skirt (|y|, z)
+RAIL_Y = 5.1            # pan rail lip
+RAIL_T = 0.25           # pan rail's thickness, up from the crank's height
+# The valley's end walls, which the intake's ends sit on: x spans and their top.
+CHINA_WALLS = [(-10.6, -9.55), (8.55, 10.6)]
+CHINA_TOP = 9.81
+HEAD_BOLT_X = [-8.8, -4.4, 0.0, 4.4, 8.8]   # the heads' lower bolts, under each deck's edge
+# The bellhousing flange across the back, (y, z) for the right half, and its bolt bosses.
+BELL_FLANGE = [(9.0, -0.15), (9.0, 4.35), (8.4, 4.8), (1.2, 9.0)]
+BELL_BOSSES = [(7.7, 0.45), (8.3, 2.3), (7.8, 4.2), (4.0, 7.0)]
 BORE_MID = -0.49        # the bores' middle along the crank, both banks
 BANK_SHIFT = 0.425      # the right bank sits this far back of that, the left forward
 BORE_X = [-6.6, -2.2, 2.2, 6.6]
 # The exhaust ports along each bank: at the ends, and the middle pair.
 EXHAUST_PORT_X = [-7.6, -0.86, 0.86, 7.6]
-FREEZE_PLUG_X = [-4.4, 0.0, 4.4]
+FREEZE_PLUG_X = [-2.2, 2.2, 6.6]   # under the bores, between the head bolts' bosses
+FREEZE_PLUG_T = 0.5     # how far down the outer wall from the deck's edge
 
 # The heads, in each deck's own frame: a in from the deck's outer edge, h up off it.
 HEAD_HALF = 9.83
@@ -116,22 +124,15 @@ COVER_BODY = (0.3, 4.45, 9.47)            # across, half length
 COVER_H = 2.25
 COVER_BOLTS = [(-4.4, 0.26), (4.4, 0.26), (-4.4, 4.46), (4.4, 4.46)]  # (x, across)
 
-# Intake, after the L79's: the flange and valley floor, its outline from above (x, y): a
-# plain plate under the heads' faces with a lobe round each bolt and the distributor's
-# boss, its ends stepping in over each head so nothing reaches past one (the banks are
-# offset: the right head starts behind the left and ends behind it too).
-INTAKE_FLANGE = [
-    (-10.50, -4.60), (-10.61, -4.57), (-10.68, -4.48), (-10.72, -4.08), (-10.70, -3.88),
-    (-10.70, 2.22), (-10.67, 2.31), (-10.58, 2.38), (-10.10, 2.41), (-9.99, 2.48), (-9.92, 2.59),
-    (-9.89, 4.42), (-9.86, 4.51), (-9.77, 4.58), (-7.56, 4.60), (-7.17, 4.69), (-6.77, 4.60),
-    (-1.26, 4.60), (-0.87, 4.69), (-0.47, 4.60), (1.06, 4.60), (1.45, 4.69), (1.85, 4.60),
-    (6.64, 4.60), (7.04, 4.69), (7.43, 4.60), (9.57, 4.60), (9.66, 4.57), (9.73, 4.48),
-    (9.75, 2.52), (9.79, 2.41), (9.94, 2.19), (10.04, 1.98), (10.12, 1.55), (10.04, 1.12),
-    (9.94, 0.91), (9.79, 0.69), (9.75, 0.57), (9.75, -2.22), (9.72, -2.31), (9.63, -2.38),
-    (9.13, -2.41), (9.02, -2.47), (8.94, -2.59), (8.91, -4.42), (8.88, -4.51), (8.79, -4.58),
-    (6.58, -4.60), (6.19, -4.69), (5.79, -4.60), (0.28, -4.60), (-0.11, -4.69), (-0.51, -4.60),
-    (-2.04, -4.60), (-2.43, -4.69), (-2.83, -4.60), (-7.62, -4.60), (-8.01, -4.69),
-    (-8.41, -4.60),
+# Intake, after the L79's: a flange lying on each head's intake face along the head, and
+# the floor over the valley between them, its outline from above (x, y) with a lobe round
+# the distributor's boss, its ends stepping in by each head (the banks are offset: the
+# right head starts behind the left and ends behind it too).
+INTAKE_FLOOR = [
+    (-10.70, -3.85), (-10.70, 2.22), (-10.67, 2.31), (-10.58, 2.38), (-10.11, 2.41),
+    (-10.00, 2.47), (-9.94, 2.57), (-9.90, 3.85), (9.74, 3.85), (9.75, 2.53), (10.04, 1.98),
+    (10.12, 1.55), (10.04, 1.12), (9.79, 0.70), (9.75, 0.56), (9.75, -2.22), (9.72, -2.31),
+    (9.63, -2.38), (9.13, -2.41), (9.03, -2.47), (8.96, -2.57), (8.92, -3.85),
 ]
 # The runners, square tubes with rounded corners, each one piece: up out of its port, a
 # bend over level, across toward the middle, then a turn into the plenum's front or back:
@@ -150,7 +151,8 @@ RUNNER_BENDS = (1.0, 1.0)          # radius over level, radius of the turn into 
 WATER_CROSSOVER = (-8.35, 11.25, 1.7, 4.15)    # x, z of its axis, diameter, |y| of its ends
 HEAT_CROSSOVER = (7.75, 11.05, 1.0, 3.3)       # (the heat crossover's ends inside the bolts)
 CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
-INTAKE_BASE = (9.9, 10.65)   # the flange's underside (inside the heads) and top
+INTAKE_BASE = (9.9, 10.65)   # the floor's underside (on the end walls) and top
+INTAKE_FLANGE = (0.15, 2.55, 0.45)   # up each head's intake face from the deck, thickness
 PAD_X = -0.45           # the carb pad's middle
 PAD_Z = 13.15           # the carb pad's underside
 PAD = (2.65, 2.6, 0.4)  # half length, half width, thickness
@@ -162,7 +164,7 @@ PAD_HOLE_R = 0.8
 PAD_SLOT = ((-0.99, 0.95), (0.99, 0.95), 0.82)
 PLENUM_FLOOR = 1.1      # how far down the openings the plenum's dark floor is
 INTAKE_BOLT_X = [-9.42, -7.1, -0.8, 1.52, 7.1, 9.42]   # the right bank's; the left's mirrored
-INTAKE_BOLT_Y = 4.07    # the bolts' line along each side of the flange
+INTAKE_BOLT_T = 1.4     # the bolts' line up each flange
 DIST = (8.87, 1.55)     # distributor's axis (x, y)
 THERMOSTAT = (-8.9, 0.06)
 COIL = (6.7, -1.9)
@@ -341,20 +343,6 @@ class SBC(Design):
         self.body(name, "solid.loft", sections=[{"sketch": s} for s in sketches])
 
 
-def offset_poly(pts, d):
-    """A closed outline moved d outward (counterclockwise outlines), corners mitred."""
-    pts = [np.array(p, float) for p in pts]
-    n = len(pts)
-    out = []
-    for i in range(n):
-        a, b, c = pts[i - 1], pts[i], pts[(i + 1) % n]
-        n1 = unit([(b - a)[1], -(b - a)[0]])
-        n2 = unit([(c - b)[1], -(c - b)[0]])
-        m = unit(n1 + n2)
-        out.append(tuple(b + m * d / max(m @ n1, 0.3)))
-    return out
-
-
 def ccw(pts):
     area = sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(pts, pts[1:] + pts[:1]))
     return pts if area > 0 else pts[::-1]
@@ -362,15 +350,29 @@ def ccw(pts):
 
 # The block.
 
+def wall_foot(s):
+    return np.array([s * WALL_FOOT[0], WALL_FOOT[1]])
+
+
+def outer_wall(s, t):
+    """A point t of the way down bank s's outer wall from the deck's edge to its foot, and
+    the wall's outward normal, both (y, z)."""
+    a, b = deck_edge(s), wall_foot(s)
+    along = unit(b - a)
+    n = np.array([along[1], -along[0]])
+    if n[0] * s < 0:
+        n = -n
+    return a + t * (b - a), n
+
+
 def block_outline():
-    """The block's outline across the engine (y, z), counterclockwise."""
+    """The block's outline across the engine (y, z), counterclockwise: the outer walls from
+    the decks down to the skirts and the pan rail, the inner walls down to the valley."""
     edge = deck_edge(1)
     inner = on_head(1, DECK_OUT + DECK_IN, 0.0)
-    # The bank's outer wall runs down its axis from the deck's outer edge to the skirt;
-    # the inner one down to the valley floor.
-    skirt_z = edge[1] - (edge[0] - SKIRT_Y)
     valley_y = inner[0] - (inner[1] - VALLEY_Z)
-    right = [(RAIL_Y, 0.0), (RAIL_Y, RAIL_T), (SKIRT_Y, RAIL_T), (SKIRT_Y, skirt_z),
+    fy, fz = WALL_FOOT
+    right = [(RAIL_Y, 0.0), (RAIL_Y, RAIL_T), (fy, RAIL_T), (fy, fz),
              tuple(edge), tuple(inner), (valley_y, VALLEY_Z)]
     left = [(-y, z) for y, z in reversed(right)]
     return ccw(right + left)
@@ -383,28 +385,65 @@ def block(d):
     d.finish()
     d.extrude(sk, "engine_block", BLOCK_BACK - BLOCK_FRONT)
 
-    # The bellhousing flange across the back, wider than the block, down round the crank.
-    flange = offset_poly(outline, 0.45)
+    # The valley's front and back walls, up to where the intake's ends sit.
+    for k, (x0, x1) in enumerate(CHINA_WALLS):
+        sk = d.sketch("YZ", f"China wall {k}", offset=x0)
+        # Up the inner walls and the decks to the heads' inner corners, flat across.
+        inner = on_head(1, DECK_OUT + DECK_IN, 0.0)
+        corner = on_head(1, HEAD[1][0], 0.0)
+        foot = inner - (inner[1] - (VALLEY_Z - 0.2)) * np.array([1.0, 1.0])
+        right = [tuple(foot), tuple(inner), (corner[0], CHINA_TOP)]
+        d.poly(ccw(right + [(-y, z) for y, z in reversed(right)]))
+        d.finish()
+        d.extrude(sk, f"engine_block_end_wall_{k}", x1 - x0)
+
+    # The bellhousing flange across the back: tall and square-shouldered, its top
+    # rising to the middle, bolt bosses round it on its front.
+    half = BELL_FLANGE
+    pts = half + [(-y, z) for y, z in reversed(half)]
     sk = d.sketch("YZ", "Bell flange", offset=BLOCK_BACK)
-    d.poly(flange)
+    d.poly(ccw(pts))
     d.finish()
     d.extrude(sk, "engine_block_bell_flange", 0.35)
+    sk = d.sketch("YZ", "Bell bosses", offset=BLOCK_BACK)
+    for y, z in BELL_BOSSES:
+        for side in (1, -1):
+            d.circle((side * y, z), 0.45)
+    d.finish()
+    d.extrude(sk, "engine_block_bell_bosses", 0.4, "negative")
 
     for s in (1, -1):
-        u, _, inn = bank(s)
-        # Freeze plugs in the outer bank wall, and the side mount's pad lower down.
-        wall = deck_edge(s) - 2.6 * u
-        sk, to2d = d.plane(p3(0.0, wall), (1, 0, 0), v3(-inn), f"Freeze plugs {s}")
+        # The heads' lower bolt bosses, half round, down the outer wall from the deck.
+        top, n = outer_wall(s, 0.0)
+        down = unit(wall_foot(s) - deck_edge(s))
+        for k, x in enumerate(HEAD_BOLT_X):
+            d.cylinder(f"engine_block_bolt_boss_{s}_{k}", p3(bank_x(s, x), top - 0.05 * down),
+                       v3(down), 0.85, 1.1)
+        # Freeze plugs set in raised rings in the outer wall.
+        c, n = outer_wall(s, FREEZE_PLUG_T)
+        sk, to2d = d.plane(p3(0.0, c), (1, 0, 0), v3(n), f"Freeze plug rings {s}")
         for x in FREEZE_PLUG_X:
-            d.circle(to2d(p3(bank_x(s, x), wall)), 0.81)
+            d.circle(to2d(p3(bank_x(s, x), c)), 1.05)
+            d.circle(to2d(p3(bank_x(s, x), c)), 0.82)
         d.finish()
-        d.extrude(sk, f"freeze_plug_{s}", 0.08)
-        pad = deck_edge(s) - 4.4 * u
-        sk, to2d = d.plane(p3(0.0, pad), (1, 0, 0), v3(-inn), f"Mount pad {s}")
-        c = to2d(p3(-6.2, pad))
-        d.rounded((c[0] - 1.6, c[1] - 0.7), (c[0] + 1.6, c[1] + 0.7), 0.35)
+        d.extrude(sk, f"engine_block_plug_rings_{s}", 0.14)
+        sk, to2d = d.plane(p3(0.0, c), (1, 0, 0), v3(n), f"Freeze plugs {s}")
+        for x in FREEZE_PLUG_X:
+            d.circle(to2d(p3(bank_x(s, x), c)), 0.81)
         d.finish()
-        d.extrude(sk, f"engine_block_mount_{s}", 0.3)
+        d.extrude(sk, f"freeze_plug_{s}", 0.05)
+        # The side mount's pad lower down, with its two bolt bosses.
+        c, n = outer_wall(s, 0.82)
+        sk, to2d = d.plane(p3(0.0, c), (1, 0, 0), v3(n), f"Mount pad {s}")
+        m = to2d(p3(-6.2, c))
+        d.rounded((m[0] - 1.6, m[1] - 0.6), (m[0] + 1.6, m[1] + 0.6), 0.35)
+        d.finish()
+        d.extrude(sk, f"engine_block_mount_{s}", 0.25)
+        sk, to2d = d.plane(p3(0.0, c), (1, 0, 0), v3(n), f"Mount bosses {s}")
+        for dx in (-1.05, 1.05):
+            d.circle(to2d(p3(-6.2 + dx, c)), 0.38)
+        d.finish()
+        d.extrude(sk, f"engine_block_mount_bosses_{s}", 0.4)
 
 
 # The heads.
@@ -555,6 +594,18 @@ def runner(d, name, x, s, top, w, h, entry_y, to_x):
     d.body(f"{name}_turn", "solid.sweep", sketch=prof, path_sketch=sk, path=["a1", "l1"])
 
 
+def intake_face(s):
+    """Bank s's head's intake face: its foot on the deck (y, z), the way up it, and its
+    normal toward the valley, all (y, z)."""
+    (a0, h0), (a1, h1) = HEAD[1], HEAD[2]
+    f0 = on_head(s, a0, h0)
+    up = unit(on_head(s, a1, h1) - f0)
+    n = np.array([-up[1], up[0]]) if s == 1 else np.array([up[1], -up[0]])
+    if n @ (np.array([0.0, 10.0]) - f0) < 0:
+        n = -n
+    return f0, up, n
+
+
 def crossover(d, name, x, zc, dia, y0):
     """A round passage across the engine at x between y = -y0 and y0: up out of the flange
     as the runners leave their ports, level across at zc, and back down into it."""
@@ -586,12 +637,34 @@ def crossover(d, name, x, zc, dia, y0):
 
 
 def intake(d):
-    # The flange and valley cover; its underside is inside the heads and never seen.
+    # The floor over the valley, its ends on the block's end walls.
     z0, z1 = INTAKE_BASE
-    sk = d.sketch("XY", "Intake flange", offset=z0)
-    d.poly(ccw([tuple(p) for p in INTAKE_FLANGE]))
+    sk = d.sketch("XY", "Intake floor", offset=z0)
+    d.poly(ccw([tuple(p) for p in INTAKE_FLOOR]))
     d.finish()
     d.extrude(sk, "intake_manifold", z1 - z0)
+
+    # The flange on each head's intake face, the length of the head, the bolts down
+    # through it on round bosses.
+    t0, t1, thick = INTAKE_FLANGE
+    for s in (1, -1):
+        f0, up, n = intake_face(s)
+        x0, x1 = bank_x(s, -HEAD_HALF) + 0.05, bank_x(s, HEAD_HALF) - 0.05
+        sk, to2d = d.plane(p3(0.0, f0), (1, 0, 0), v3(n), f"Intake flange {s}")
+        d.rounded(to2d(p3(x0, f0 + t0 * up)), to2d(p3(x1, f0 + t1 * up)), 0.3)
+        d.finish()
+        d.extrude(sk, f"intake_manifold_flange_{s}", thick)
+        bolt = f0 + INTAKE_BOLT_T * up + thick * n
+        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolt bosses {s}")
+        for x in INTAKE_BOLT_X:
+            d.circle(to2d(p3(bank_x(s, s * x), bolt)), 0.48)
+        d.finish()
+        d.extrude(sk, f"intake_manifold_bolt_bosses_{s}", 0.15, start_offset=inch(-0.05))
+        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolts {s}")
+        for x in INTAKE_BOLT_X:
+            d.hexagon(to2d(p3(bank_x(s, s * x), bolt)), 0.5)
+        d.finish()
+        d.extrude(sk, f"intake_manifold_bolts_{s}", 0.28, start_offset=inch(0.1))
 
     # The runners, out of each port and round into the plenum.
     for k, (x, s, top, w, h, entry_y, to_x) in enumerate(INTAKE_RUNNERS):
@@ -652,20 +725,6 @@ def intake(d):
         d.circle((x, y), 0.45)
     d.finish()
     d.extrude(sk, "intake_manifold_pad_bosses", PAD_Z + pt + 0.12 - (z1 - 0.1))
-
-    # Bolts down through the flange along each side, on round bosses.
-    sk = d.sketch("XY", "Intake bolt bosses", offset=z1 - 0.05)
-    for s in (1, -1):
-        for x in INTAKE_BOLT_X:
-            d.circle((bank_x(s, s * x), s * INTAKE_BOLT_Y), 0.48)
-    d.finish()
-    d.extrude(sk, "intake_manifold_bolt_bosses", 0.3)
-    sk = d.sketch("XY", "Intake bolts", offset=z1 + 0.25)
-    for s in (1, -1):
-        for x in INTAKE_BOLT_X:
-            d.hexagon((bank_x(s, s * x), s * INTAKE_BOLT_Y), 0.5)
-    d.finish()
-    d.extrude(sk, "intake_manifold_bolts", 0.3)
 
     # The distributor's boss at the back, the housing's collar sitting on it.
     d.cylinder("intake_manifold_distributor_boss", (DIST[0], DIST[1], 10.2), (0, 0, 1), 2.1, 0.8)
@@ -1103,7 +1162,7 @@ def bottom(d):
     # the left, beside the pan.
     ox, oy = OIL_FILTER
     sk = d.sketch("XY", "Filter boss", offset=0.85)
-    d.rounded((ox - 1.6, oy - 1.6), (ox + 1.6, -5.3), 0.6)
+    d.rounded((ox - 1.6, oy - 1.6), (ox + 1.6, -WALL_FOOT[0] + 0.15), 0.6)
     d.finish()
     d.extrude(sk, "engine_block_filter_boss", 1.3)
     d.cylinder("oil_filter_adapter", (ox, oy, 0.9), (0, 0, -1), 2.9, 0.45)
