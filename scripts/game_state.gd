@@ -11,6 +11,7 @@ const SCENE_MAIN_MENU := "res://scenes/main_menu.tscn"
 const SCENE_GARAGE := "res://scenes/garage.tscn"
 const SCENE_GAS_STATION := "res://scenes/gas_station.tscn"
 const SCENE_DRIVE_IN := "res://scenes/drive-in.tscn"
+const SCENE_ROYAL_RODS := "res://scenes/royal_rods.tscn"
 const SCENE_RACE := "res://scenes/race.tscn"
 const SCENE_NEWSPAPER := "res://scenes/newspaper.tscn"
 const SCENE_DRIVER_LICENSE := "res://scenes/driver_license.tscn"
@@ -1386,6 +1387,34 @@ func buy_newspaper_copy(kind: String, id: String, index: int) -> String:
 			money += price
 			return _paper_missing(kind)
 	claim_newspaper_condition(kind, id, index)
+	return ""
+
+
+## A new copy goes to the same spare inventory as a used newspaper purchase.
+func buy_new_part(kind: String, id: String) -> String:
+	if kind not in ["engine", "transmission", "wheels", "part"]:
+		return "Unknown part category."
+	var item := listing_for(kind, id)
+	if item.is_empty():
+		return "That part is not in the catalog."
+	if not item.has("price") or typeof(item["price"]) not in [TYPE_INT, TYPE_FLOAT]:
+		return "That part has an invalid price."
+	var price := int(item["price"])
+	if price < 0:
+		return "That part has an invalid price."
+	if money < price:
+		return "Not enough cash."
+	money -= price
+	match kind:
+		"engine":
+			owned_engine_ids.append(id)
+		"transmission":
+			owned_gearbox_ids.append(id)
+		"wheels":
+			owned_wheel_ids.append(id)
+		"part":
+			owned_part_ids.append(id)
+	_push_spare_condition(kind, id, 1.0)
 	return ""
 
 

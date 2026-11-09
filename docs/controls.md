@@ -55,7 +55,7 @@ With the mouse, drag with the right button to turn the view, and scroll to zoom.
 
 In lists of cars and spare parts, the number keys pick an entry. In your cars, S switches to the car, L sells it, and F closes the list. In spare parts, S sells the part. When selling a car, type the price or move it by $50 with Up and Down, then Enter or O offers it and Esc or N walks away.
 
-With the city map up close, 1 drives to the drive-in and 2 to the gas station.
+With the city map up close, 1 drives to the drive-in, 2 to the gas station, and 3 to Royal Rods.
 
 ### Other places
 
@@ -77,8 +77,13 @@ With the city map up close, 1 drives to the drive-in and 2 to the gas station.
 | Drive-in | O | The list of rivals |
 | Drive-in | Enter | Race the rival who is there |
 | Drive-in | H | Look under the rival's hood |
-| Gas station, drive-in | G | Back to the garage |
-| Gas station, drive-in | D | Town cruise |
+| Royal Rods | P | Open the new-parts catalog |
+| Gas station, drive-in, Royal Rods | G | Back to the garage |
+| Gas station, drive-in, Royal Rods | D | Town cruise |
+
+At Royal Rods, click a labeled shelf or the wheel and tire stands on the left wall to browse that type of part, or click the folder on the counter to open the full catalog.
+Click a poster to view it larger; use the close button or Esc to return to the store.
+Hover over an interactive item or button to see its action in the bottom status bar.
 
 Esc leaves each of these places, or first closes whatever list is open.
 

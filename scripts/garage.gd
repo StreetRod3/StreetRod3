@@ -1283,15 +1283,18 @@ func _poi_for_scene(destination: String) -> String:
 		return GameState.POI_DRIVE_IN
 	if destination == GameState.SCENE_GAS_STATION:
 		return GameState.POI_GAS_STATION
+	if destination == GameState.SCENE_ROYAL_RODS:
+		return GameState.POI_ROYAL_RODS
 	return ""
 
 
-## Royal Rods is on the sheet, and has no place to arrive at yet.
 func _scene_for_poi(poi: String) -> String:
 	if poi == GameState.POI_DRIVE_IN:
 		return GameState.SCENE_DRIVE_IN
 	if poi == GameState.POI_GAS_STATION:
 		return GameState.SCENE_GAS_STATION
+	if poi == GameState.POI_ROYAL_RODS:
+		return GameState.SCENE_ROYAL_RODS
 	return ""
 
 
@@ -3741,7 +3744,7 @@ func _map_number_key(event: InputEvent) -> bool:
 
 
 func _choose_map_poi(poi: String) -> void:
-	if not _map_inspecting or poi == GameState.POI_ROYAL_RODS:
+	if not _map_inspecting:
 		return
 	if poi == GameState.POI_GARAGE:
 		_show_map_here()

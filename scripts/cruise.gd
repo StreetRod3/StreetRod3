@@ -7,6 +7,9 @@ extends Node3D
 ## Other cars drive the streets in a lane and turn off at random.
 
 const CITY_MAP := "res://assets/maps/city.trk"
+const _KING_CAR_TEXTURE := preload("res://assets/locations/city/king.png")
+const _KING2_CAR_TEXTURE := preload("res://assets/locations/city/king2.png")
+const _RoyalRodsSign := preload("res://scripts/royal_rods_sign.gd")
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
@@ -518,6 +521,8 @@ func _scene_for_roam(place_id: String) -> String:
 		return GameState.SCENE_DRIVE_IN
 	if place_id == GameState.POI_GAS_STATION:
 		return GameState.SCENE_GAS_STATION
+	if place_id == GameState.POI_ROYAL_RODS:
+		return GameState.SCENE_ROYAL_RODS
 	return ""
 
 
@@ -1236,6 +1241,9 @@ func _build_royal_rods(root: Node3D) -> void:
 	for i in 5:
 		var rib_y := 0.45 + float(i) * 0.52
 		_add_box(root, Vector3(3.5, 0.06, 0.04), Vector3(-3.15, rib_y, 0.1), Color(0.62, 0.64, 0.68), 0.4, 0.45)
+	# The visible car widths leave 0.4 m margins on each end of the 8 m walls.
+	_add_royal_rods_mural(root, _KING_CAR_TEXTURE, -1.0, 7.2 / 1966.0)
+	_add_royal_rods_mural(root, _KING2_CAR_TEXTURE, 1.0, 7.2 / 2087.0)
 	_add_box(root, Vector3(1.1, 2.15, 0.1), Vector3(-0.15, 1.12, 0.16), Color(0.16, 0.1, 0.09), 0.5)
 	_add_box(root, Vector3(0.08, 0.22, 0.04), Vector3(0.22, 1.08, 0.09), gold, 0.35, 0.65)
 	_add_box(root, Vector3(4.2, 2.3, 0.08), Vector3(3.15, 1.85, 0.16), Color(0.72, 0.74, 0.76), 0.32, 0.55)
@@ -1243,11 +1251,25 @@ func _build_royal_rods(root: Node3D) -> void:
 	var metal := Color(0.2, 0.2, 0.22)
 	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(-3.5, 5.05, 0.25), metal, 0.4, 0.65)
 	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(3.5, 5.05, 0.25), metal, 0.4, 0.65)
-	_add_box(root, Vector3(7.8, 1.15, 0.12), Vector3(0.0, 5.1, 0.2), Color(0.06, 0.03, 0.04))
-	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 5.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
-	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 4.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
-	_add_label(root, "ROYAL RODS", Vector3(0.0, 5.1, 0.1), 40, 0.014, Color(2.3, 1.75, 0.45), Color(0.4, 0.1, 0.04), 6)
+	_add_box(root, Vector3(9.2, 2.6, 0.12), Vector3(0.0, 5.85, 0.2), wall)
+	var sign := _RoyalRodsSign.new()
+	sign.position = Vector3(0.0, 5.7, 0.1)
+	sign.rotation.y = PI
+	sign.scale = Vector3.ONE * 1.35
+	root.add_child(sign)
 	_add_light(root, Vector3(0.0, 4.5, -1.6), Color(1.0, 0.78, 0.4), 0.85, 12.0)
+
+
+func _add_royal_rods_mural(root: Node3D, texture: Texture2D, side: float, pixel_size: float) -> void:
+	var mural := Sprite3D.new()
+	mural.texture = texture
+	mural.pixel_size = pixel_size
+	mural.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
+	mural.shaded = false
+	mural.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mural.rotation.y = side * PI / 2.0
+	mural.position = Vector3(side * 5.82, 2.15, 4.2)
+	root.add_child(mural)
 
 
 func _place_alongside(root: Node3D, stop: Vector3, away: Vector3) -> void:
