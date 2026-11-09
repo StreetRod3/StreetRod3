@@ -116,29 +116,26 @@ COVER_BODY = (0.3, 4.45, 9.47)            # across, half length
 COVER_H = 2.25
 COVER_BOLTS = [(-4.4, 0.26), (4.4, 0.26), (-4.4, 4.46), (4.4, 4.46)]  # (x, across)
 
-# Intake, after the L79's: the flange and valley floor, its outline from above (x, y)
-# traced off the L79 and smoothed, with round tubes over it.
+# Intake, after the L79's: the flange and valley floor, its outline from above (x, y): a
+# plain plate under the heads' faces, square across the front and back, with a lobe round
+# each bolt and the distributor's boss.
 INTAKE_FLANGE = [
-    (-11.38, -0.1), (-11.33, 0.31), (-11.13, 0.62), (-10.5, 0.95), (-9.78, 0.99), (-9.57, 1.17),
-    (-9.44, 1.79), (-10.09, 2.66), (-10.18, 3.26), (-9.89, 3.64), (-9.78, 4.3), (-9.58, 4.43),
-    (-9.21, 4.48), (-8.79, 4.81), (-7.8, 4.81), (-7.4, 4.47), (-7.04, 4.43), (-6.65, 4.14),
-    (-6.34, 4.1), (-6.04, 4.26), (-5.88, 4.8), (-5.54, 4.98), (-3.35, 4.97), (-2.62, 4.46),
-    (-0.7, 4.48), (-0.18, 4.89), (0.69, 4.9), (0.9, 4.84), (1.27, 4.48), (2.49, 4.46),
-    (2.73, 4.54), (3, 4.88), (3.22, 4.97), (5.39, 4.98), (5.78, 4.82), (5.94, 4.29),
-    (6.18, 4.11), (6.53, 4.13), (6.85, 4.39), (7.31, 4.48), (7.6, 4.76), (7.8, 4.82),
-    (8.72, 4.81), (9.12, 4.47), (9.57, 4.38), (9.73, 4.15), (9.73, 3.83), (9.61, 3.62),
-    (9.42, 3.55), (8.78, 3.57), (8.24, 2.91), (8.38, 2.56), (9.23, 2.37), (9.57, 2.11),
-    (9.73, 1.7), (9.74, 1.38), (9.56, 0.96), (9.23, 0.7), (8.89, 0.6), (8.2, 0.75), (7.91, 0.5),
-    (7.91, -3.3), (8.1, -3.53), (8.56, -3.56), (8.77, -3.67), (8.9, -4.07), (8.73, -4.38),
-    (8.25, -4.48), (7.97, -4.76), (7.7, -4.85), (6.82, -4.82), (6.42, -4.49), (6.01, -4.42),
-    (5.72, -4.18), (5.51, -4.13), (5.15, -4.21), (4.94, -4.78), (4.57, -4.98), (2.31, -4.97),
-    (1.85, -4.56), (1.64, -4.5), (-0.32, -4.51), (-0.71, -4.86), (-0.97, -4.94), (-1.76, -4.9),
-    (-2.25, -4.51), (-3.54, -4.5), (-4.16, -4.97), (-6.46, -4.98), (-6.79, -4.79),
-    (-6.94, -4.26), (-7.22, -4.13), (-7.49, -4.15), (-7.85, -4.41), (-8.27, -4.48),
-    (-8.66, -4.81), (-9.58, -4.85), (-9.81, -4.76), (-10.1, -4.49), (-10.57, -4.39),
-    (-10.73, -4.16), (-10.73, -3.85), (-10.62, -3.65), (-10.08, -3.53), (-9.91, -3.4),
-    (-9.85, -3.17), (-9.91, -2.95), (-10.77, -2.63), (-11.22, -2.63), (-11.45, -2.43),
-    (-11.44, -2.13), (-11.07, -1.86), (-10.98, -1.62), (-10.98, -0.84), (-11.25, -0.47),
+    (-10.79, -3.61), (-10.50, -3.38), (-10.45, -3.22), (-10.45, 4.35), (-10.41, 4.49),
+    (-10.30, 4.58), (-9.89, 4.61), (-9.67, 4.69), (-9.49, 4.72), (-9.33, 4.70), (-9.02, 4.60),
+    (-7.60, 4.60), (-7.33, 4.70), (-7.17, 4.72), (-7.01, 4.70), (-6.70, 4.60), (-1.33, 4.60),
+    (-1.02, 4.70), (-0.87, 4.72), (-0.71, 4.70), (-0.40, 4.60), (1.02, 4.60), (1.29, 4.70),
+    (1.45, 4.72), (1.61, 4.70), (1.92, 4.60), (6.57, 4.60), (6.88, 4.70), (7.03, 4.72),
+    (7.20, 4.70), (7.47, 4.60), (8.89, 4.60), (9.20, 4.70), (9.36, 4.72), (9.55, 4.69),
+    (9.74, 4.60), (9.88, 4.46), (9.96, 4.30), (10.00, 4.10), (9.99, 3.91), (9.75, 3.46),
+    (9.75, 2.53), (9.79, 2.41), (9.94, 2.19), (10.05, 1.97), (10.11, 1.73), (10.12, 1.49),
+    (10.03, 1.08), (9.79, 0.69), (9.75, 0.57), (9.75, -4.35), (9.71, -4.49), (9.60, -4.58),
+    (8.93, -4.60), (8.67, -4.70), (8.51, -4.72), (8.35, -4.70), (8.04, -4.60), (6.62, -4.60),
+    (6.35, -4.70), (6.19, -4.72), (6.03, -4.70), (5.72, -4.60), (0.35, -4.60), (0.04, -4.70),
+    (-0.11, -4.72), (-0.27, -4.70), (-0.58, -4.60), (-2.00, -4.60), (-2.27, -4.70),
+    (-2.43, -4.72), (-2.59, -4.70), (-2.90, -4.60), (-7.55, -4.60), (-7.86, -4.70),
+    (-8.01, -4.72), (-8.18, -4.70), (-8.45, -4.60), (-9.87, -4.60), (-10.18, -4.70),
+    (-10.37, -4.72), (-10.58, -4.67), (-10.75, -4.57), (-10.89, -4.40), (-10.97, -4.20),
+    (-10.98, -3.98), (-10.92, -3.79),
 ]
 # The runners, square tubes with rounded corners, each one piece: up out of its port, a
 # bend over level, across toward the middle, then a turn into the plenum's front or back:
@@ -154,9 +151,10 @@ INTAKE_RUNNERS = [
 RUNNER_CORNER = 0.38
 RUNNER_PORT = (4.15, 10.5, 53.0)   # where each leaves its port: |y|, z, its climb (degrees)
 RUNNER_BENDS = (1.0, 1.0)          # radius over level, radius of the turn into the plenum
-WATER_CROSSOVER = (-8.95, 11.25, 1.7)          # x, z of its axis, diameter
-HEAT_CROSSOVER = ((7.6, -4.6), (8.35, 2.4), 10.85, 1.2)  # ends (x, y), z, diameter
+WATER_CROSSOVER = (-8.35, 11.25, 1.7, 4.15)    # x, z of its axis, diameter, |y| of its ends
+HEAT_CROSSOVER = (7.75, 11.05, 1.0, 3.3)       # (the heat crossover's ends inside the bolts)
 CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
+INTAKE_END_WALLS = [(-10.42, -9.8), (8.8, 9.72)]   # x spans, front and back
 INTAKE_BASE = (9.9, 10.65)   # the flange's underside (inside the heads) and top
 PAD_X = -0.45           # the carb pad's middle
 PAD_Z = 13.15           # the carb pad's underside
@@ -562,6 +560,36 @@ def runner(d, name, x, s, top, w, h, entry_y, to_x):
     d.body(f"{name}_turn", "solid.sweep", sketch=prof, path_sketch=sk, path=["a1", "l1"])
 
 
+def crossover(d, name, x, zc, dia, y0):
+    """A round passage across the engine at x between y = -y0 and y0: up out of the flange
+    as the runners leave their ports, level across at zc, and back down into it."""
+    _, z0, climb = RUNNER_PORT
+    th = math.radians(climb)
+    rise = zc - z0
+    r = min(RUNNER_BENDS[0], 0.9 * rise / (1 - math.cos(th)))
+    lead = max((rise - r * (1 - math.cos(th))) / math.sin(th), 0.05)
+    p0 = np.array([x, -y0, z0])
+    # Drawn with the sketch's y down, so both bends turn counterclockwise.
+    sk, _ = d.plane(p0, (0, 1, 0), (-1, 0, 0), f"{name} path")
+    u1 = lead * np.array([math.cos(th), math.sin(th)])
+    c1 = u1 + r * np.array([math.sin(th), -math.cos(th)])
+    u2 = c1 + np.array([0.0, r])
+    span = 2 * y0
+    u3 = np.array([span - u2[0], u2[1]])
+    c2 = np.array([span - c1[0], c1[1]])
+    u4 = np.array([span - u1[0], u1[1]])
+    flip = np.array([1.0, -1.0])
+    f = lambda u: skp(*(u * flip))
+    d.c.append(cmd("sketch.line", infer=False, points=[skp(0.0, 0.0), f(u1)]))
+    d.c.append(cmd("sketch.arc.center_point", center=f(c1), start="l1.end", end=f(u2)))
+    d.c.append(cmd("sketch.line", infer=False, points=["a1.end", f(u3)]))
+    d.c.append(cmd("sketch.arc.center_point", center=f(c2), start="l2.end", end=f(u4)))
+    d.c.append(cmd("sketch.line", infer=False, points=["a2.end", f(np.array([span, 0.0]))]))
+    d.finish()
+    d.body(name, "solid.pipe", path_sketch=sk, path=["l1", "a1", "l2", "a2", "l3"],
+           diameter=inch(dia))
+
+
 def intake(d):
     # The flange and valley cover; its underside is inside the heads and never seen.
     z0, z1 = INTAKE_BASE
@@ -569,18 +597,22 @@ def intake(d):
     d.poly(ccw([tuple(p) for p in INTAKE_FLANGE]))
     d.finish()
     d.extrude(sk, "intake_manifold", z1 - z0)
+    # Its end walls down onto the block's front and back where it reaches past a head:
+    # the right head ends short of it at the front, the left at the back.
+    sk = d.sketch("XY", "Intake end walls", offset=8.2)
+    for x0, x1 in INTAKE_END_WALLS:
+        d.rounded((x0, -4.45), (x1, 4.45), 0.2)
+    d.finish()
+    d.extrude(sk, "intake_manifold_end_walls", z1 - 0.05 - 8.2)
 
     # The runners, out of each port and round into the plenum.
     for k, (x, s, top, w, h, entry_y, to_x) in enumerate(INTAKE_RUNNERS):
         runner(d, f"intake_manifold_runner_{k}", x, s, top, w, h, entry_y, to_x)
     # The water crossover across the front, between the heads' front water ports.
-    x, z, dia = WATER_CROSSOVER
-    d.cylinder("intake_manifold_crossover", (x, -4.7, z), (0, 1, 0), dia, 9.4)
+    crossover(d, "intake_manifold_crossover", *WATER_CROSSOVER)
     # The exhaust heat crossover at the back, under the distributor, and the choke's
     # stove well on the right.
-    (hx0, hy0), (hx1, hy1), hz, hdia = HEAT_CROSSOVER
-    a, b_ = np.array([hx0, hy0, hz]), np.array([hx1, hy1, hz])
-    d.cylinder("intake_manifold_heat_crossover", a, b_ - a, hdia, float(np.linalg.norm(b_ - a)))
+    crossover(d, "intake_manifold_heat_crossover", *HEAT_CROSSOVER)
     (cx0, cy0), (cx1, cy1), ctop = CHOKE_WELL
     sk = d.sketch("XY", "Choke well", offset=z1 - 0.1)
     d.rounded((cx0, cy0), (cx1, cy1), 0.3)
@@ -1139,14 +1171,15 @@ REDUCE_FACTORS = [
     ("air_cleaner", ROUND), ("crank_pulley", ROUND), ("upper_pulley", ROUND),
     ("alternator", ROUND), ("harmonic_balancer", ROUND), ("crank_bolt", ROUND),
     ("distributor_clamp", 1), ("distributor", ROUND), ("spark_plug", ROUND),
-    ("ignition_coil", ROUND), ("oil_filler", ROUND), ("oil_filter", ROUND), ("thermostat", ROUND),
+    ("ignition_coil", ROUND), ("oil_filler", ROUND), ("oil_filter", ROUND),
+    ("thermostat_bolts", 0), ("thermostat_housing", 0), ("thermostat", ROUND),
     ("starter_nose_mount", 1), ("starter", ROUND), ("flywheel", ROUND), ("fan_spacer", ROUND),
     ("fan_hub", ROUND), ("water_pump_snout", ROUND), ("water_pump_hub", ROUND),
     ("water_pump_inlet", ROUND), ("water_pump_heater", ROUND), ("carburetor_ring", ROUND),
     ("carb_throat", ROUND), ("carburetor_bowl_screw", ROUND), ("exhaust_collector", ROUND),
     ("exhaust_runner", "r0.08"), ("intake_manifold_runner", "r0.12"),
-    ("intake_manifold_crossover", ROUND),
-    ("intake_manifold_heat", ROUND), ("intake_manifold_bolt_bosses", ROUND),
+    ("intake_manifold_crossover", "r0.2"),
+    ("intake_manifold_heat", "r0.2"), ("intake_manifold_bolt_bosses", ROUND),
     ("intake_manifold_pad_bosses", ROUND), ("intake_manifold_pad", 0), ("intake_manifold_choke", 0),
     ("intake_manifold_plenum", 0), ("intake_manifold_thermostat_seat", 0),
     ("intake_manifold_distributor", ROUND), ("fan_blades", 2), ("belt", 3),
