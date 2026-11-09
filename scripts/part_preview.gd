@@ -32,10 +32,18 @@ static func _engine(part: Dictionary) -> Node3D:
 	return asm
 
 
+## A hood part on its own, on an engine of its family when it has one: the flathead's
+## parts are drawn from the flathead's layout.
 static func _hood(part: Dictionary) -> Node3D:
 	var slot := str(part.get("slot", ""))
+	var engine := {"model": _ENGINE_MODEL, "heads": 2}
+	var family := GameState.engine_family(part)
+	for listed: Dictionary in GameState.ENGINES:
+		if not family.is_empty() and GameState.engine_family(listed) == family:
+			engine = listed
+			break
 	var asm := _EngineAssembly.new()
-	asm.show_spec({"model": _ENGINE_MODEL, "heads": 2}, {slot: part})
+	asm.show_spec(engine, {slot: part})
 	asm.rebuild(slot)
 	return asm
 

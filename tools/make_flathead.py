@@ -153,7 +153,7 @@ FINISHES = [
     ("spark_plug", PORCELAIN), ("exhaust", CAST_IRON), ("carb_throat", BLACK),
     ("carburetor", ZINC), ("distributor_body", STEEL), ("distributor_cap", BLACK),
     ("generator", BLACK), ("fan_blades", BLACK),
-    ("fan_hub", BLACK), ("pulley", BLACK), ("belt", RUBBER), ("oil_filler_cap", BLACK),
+    ("fan_hub", BLACK), ("pulley", BLACK), ("belt", RUBBER), ("intake_manifold_oil_filler_cap", BLACK),
 ]
 
 
@@ -313,7 +313,7 @@ def heads(d, style="stock"):
                            p1=skp(x1, HEAD_A[1] - inset), radius=inch(radius)))
             d.finish()
             kw = {"taper": draft} if draft else {}
-            name = f"cylinder_head_{s}" if k == 0 else f"cylinder_head_{s}_step_{k}"
+            name = f"cylinder_head_{s}" if k == 0 else f"cylinder_head_body_{s}"
             d.extrude(sk, name, thick, **kw)
 
         # Nuts, with their studs standing up out of them.
@@ -424,7 +424,7 @@ def finned_heads(d):
                            p1=skp(x1, HEAD_A[1] - inset), radius=inch(radius)))
             d.finish()
             kw = {"taper": draft} if draft else {}
-            name = f"cylinder_head_{s}" if k == 0 else f"cylinder_head_{s}_step_{k}"
+            name = f"cylinder_head_{s}" if k == 0 else f"cylinder_head_body_{s}"
             d.extrude(sk, name, thick, **kw)
 
         sk = d.head_plane(s, FIN_BODY, f"Fins {s}")
@@ -558,8 +558,8 @@ def intake(d, style="stock"):
 
     # The generator's stand at the front of the intake, the oil filler behind it.
     generator_stand(d, top)
-    d.cylinder("oil_filler", (-5.6, -2.2, top), (0, 0, 1), 1.6, 4.0)
-    d.cylinder("oil_filler_cap", (-5.6, -2.2, top + 4.0), (0, 0, 1), 2.5, 0.8)
+    d.cylinder("intake_manifold_oil_filler", (-5.6, -2.2, top), (0, 0, 1), 1.6, 4.0)
+    d.cylinder("intake_manifold_oil_filler_cap", (-5.6, -2.2, top + 4.0), (0, 0, 1), 2.5, 0.8)
 
 
 # Three two-barrel intake, after the aftermarket ones for the flathead, in the 59A
@@ -626,8 +626,8 @@ def intake_3x2(d):
     d.extrude(sk, "intake_manifold_bosses", 0.45)
 
     generator_stand(d, top)
-    d.cylinder("oil_filler", (8.2, 0.0, top), (0, 0, 1), 1.6, 3.6)
-    d.cylinder("oil_filler_cap", (8.2, 0.0, top + 3.6), (0, 0, 1), 2.5, 0.8)
+    d.cylinder("intake_manifold_oil_filler", (8.2, 0.0, top), (0, 0, 1), 1.6, 3.6)
+    d.cylinder("intake_manifold_oil_filler_cap", (8.2, 0.0, top + 3.6), (0, 0, 1), 2.5, 0.8)
 
 
 LOG_D = 2.0
@@ -839,7 +839,7 @@ def finish_for(name, styles=None):
     if styles.get("heads") == "finned" and name.startswith(("cylinder_head", "water_outlet_neck")) \
             and not name.startswith(("cylinder_head_nuts", "cylinder_head_studs")):
         return SATIN_ALUMINUM
-    if styles.get("intake") == "3x2" and name.startswith("intake_manifold"):
+    if styles.get("intake") == "3x2" and name.startswith("intake_manifold") and not name.endswith("_cap"):
         return SATIN_ALUMINUM
     for prefix, mat in FINISHES:
         if name.startswith(prefix):

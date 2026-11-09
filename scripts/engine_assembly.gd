@@ -71,6 +71,46 @@ const TAB_ARC_PER_DEG := 3.0
 const TAB_BTDC_MAX := 20
 const TAB_ATDC_MAX := 4
 
+## The Ford flathead, laid out as tools/make_flathead.py builds its model: measurements
+## in inches there, from the crank, +X back, +Y right, +Z up; `fh()` turns them into
+## engine units. Its model carries the whole engine, and its own front drive (timing
+## cover, water pumps, generator, fan, belt) stays with the long block; the balancer and
+## the timing tab are built here on its crank, ahead of the belt.
+const FH_FAMILY := "ford-flathead"
+const FH_IN := 0.0254 / ENGINE_SCALE
+const FH_DECK := 10.45
+const FH_DECK_OUT := 2.6
+const FH_HEAD_INNER := 8.6
+const FH_BANK_SHIFT := 0.5
+const FH_BORES_X: Array[float] = [-6.375, -2.125, 2.125, 6.375]
+const FH_PLUG_X: Array[float] = [-8.3, -2.8, 2.8, 8.3]
+const FH_PLUG_IN := 3.15
+## Height off the deck of the top the head bolts go into, and of the plugs' seats, by
+## the heads' finish.
+const FH_HEAD_TOP := {"": 1.9, "finned": 2.0}
+const FH_PLUG_SEAT := {"": 1.9, "finned": 1.4}
+const FH_HEAD_BOLT_X := 9.0
+const FH_HEAD_BOLT_IN := 4.25
+const FH_COVER_X := -12.5
+const FH_BELT_X := -13.6
+const FH_PULLEY_R := 3.2
+## Middle of the distributor cap's face, lying forward off the cam's nose.
+const FH_CAP := Vector3(-14.6, 1.8, 5.2)
+const FH_CAP_R := 1.8
+const FH_DIST_BOLT := Vector3(-12.5, 3.5, 5.2)
+const FH_MOUNTS: Array[Vector3] = [Vector3(-11.5, 6.9, 0.0), Vector3(-11.5, -6.9, 0.0)]
+## The camshaft lies on the valley floor once the intake and heads are off.
+const FH_CAM := Vector3(-9.5, 9.5, 11.0)
+const FH_INTAKE_TOP := 12.0
+const FH_INTAKE_BOLTS: Array[Vector3] = [Vector3(-8.5, 2.92, 12.0), Vector3(8.5, -2.92, 12.0)]
+## Plug wires run along the heads' inner edges, this far in from the outer edge and up.
+const FH_WIRE_A := 8.0
+const FH_WIRE_H := 2.5
+## Model nodes that are not the long block's: they are other parts' rigs, or the crank
+## pulley the balancer stands in for.
+const _FH_NODES_OFF_BLOCK: Array[String] = ["cylinder_head", "spark_plug", "water_outlet", "plug_conduit", "intake_manifold", "carburetor", "carb_throat", "distributor", "pulley_crank", "crank_snout"]
+const _FH_NODES_HEADS: Array[String] = ["cylinder_head", "spark_plug", "water_outlet", "plug_conduit"]
+
 const _MODEL_DEFAULT := "res://assets/parts/engine-v8-283.glb"
 ## Nodes of an engine model by part. The long block is everything else, less the front
 ## drive the assembly builds itself.
@@ -123,6 +163,40 @@ func show_spec(engine: Dictionary, slots: Dictionary) -> void:
 	_spec_on = true
 	_spec_engine = engine
 	_spec_slots = slots
+
+
+## A point of the flathead in inches as engine units.
+static func fh(p: Vector3) -> Vector3:
+	return Vector3(p.x * FH_IN, p.y * FH_IN, p.z * FH_IN + CRANK_Z)
+
+
+## A point on the flathead's bank `side` (+1 right): `x` along the head from its middle,
+## `a` in across the deck from its outer edge, `h` up off the deck, as engine units.
+static func fh_head(side: float, x: float, a: float, h: float) -> Vector3:
+	var s45 := sqrt(0.5)
+	var up := Vector2(side * s45, s45)
+	var across := Vector2(-side * s45, s45)
+	var p := up * FH_DECK - across * FH_DECK_OUT + across * a + up * h
+	return fh(Vector3(x - side * FH_BANK_SHIFT, p.x, p.y))
+
+
+## Straight up out of a flathead head's deck on bank `side`.
+static func fh_head_up(side: float) -> Vector3:
+	return Vector3(0.0, side, 1.0).normalized()
+
+
+## Whether the engine on view is a Ford flathead.
+func is_flathead() -> bool:
+	return GameState.engine_family(_view_engine()) == FH_FAMILY
+
+
+## Where the balancer's back face is along the crank, and the crank pulley's belt line.
+func balancer_x() -> float:
+	return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x - 0.05 if is_flathead() else COVER_X
+
+
+func belt_x() -> float:
+	return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x if is_flathead() else BELT_X
 
 
 func _view_engine() -> Dictionary:
@@ -226,6 +300,8 @@ func _present(key: String) -> bool:
 
 ## Where each bolt of a part goes, in engine units: origin at the hole, +Z out of it.
 func bolt_spots(key: String) -> Array[Transform3D]:
+	if is_flathead():
+		return _fh_bolt_spots(key)
 	var out: Array[Transform3D] = []
 	match key:
 		GameState.HOOD_ENGINE:
@@ -259,9 +335,44 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 	return out
 
 
+func _fh_bolt_spots(key: String) -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	match key:
+		GameState.HOOD_ENGINE:
+			for p in FH_MOUNTS:
+				out.append(Transform3D(Basis.IDENTITY, fh(p)))
+		GameState.SLOT_CAM:
+			for y: float in [-0.12, 0.12]:
+				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(FH_CAM.x + 1.0, 0.0, FH_CAM.z)) + Vector3(0.0, y, -0.035)))
+		GameState.SLOT_HEADS:
+			var top := float(FH_HEAD_TOP.get(str(_view_part(GameState.SLOT_HEADS).get("finish", "")), FH_HEAD_TOP[""]))
+			for side in head_sides():
+				for x: float in [-FH_HEAD_BOLT_X, FH_HEAD_BOLT_X]:
+					var at := fh_head(side, x, FH_HEAD_INNER - FH_HEAD_BOLT_IN, top)
+					out.append(Transform3D(_axis_basis(fh_head_up(side)), at))
+		GameState.SLOT_INTAKE:
+			var lift := 0.45 if str(_view_part(GameState.SLOT_INTAKE).get("style", "")) == "flathead-3x2" else 0.0
+			for p in FH_INTAKE_BOLTS:
+				out.append(Transform3D(Basis.IDENTITY, fh(p + Vector3(0.0, 0.0, lift))))
+		GameState.SLOT_DISTRIBUTOR:
+			out.append(Transform3D(_axis_basis(Vector3(-1.0, 0.0, 0.0)), fh(FH_DIST_BOLT)))
+		GameState.SLOT_AIR_CLEANER:
+			for slot in _view_carb_slots():
+				out.append(Transform3D(Basis.IDENTITY, carb_pad(slot) + Vector3(0.0, 0.0, _cleaner_top())))
+		_:
+			if GameState.CARB_SLOTS.has(key):
+				for corner: Vector3 in [Vector3(-0.15, -0.21, 0.09), Vector3(0.15, 0.21, 0.09)]:
+					out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + corner))
+	return out
+
+
 ## The carburetor pads of an intake style, front to back.
 static func pads_for(style: String) -> Array[Vector3]:
 	match style:
+		"flathead":
+			return [fh(Vector3(0.0, 0.0, FH_INTAKE_TOP + 1.8))]
+		"flathead-3x2":
+			return [fh(Vector3(-5.0, 0.0, FH_INTAKE_TOP + 2.7)), fh(Vector3(0.0, 0.0, FH_INTAKE_TOP + 2.7)), fh(Vector3(5.0, 0.0, FH_INTAKE_TOP + 2.7))]
 		"highrise":
 			return [Vector3(0.0, 0.0, 1.26)]
 		"tripower":
@@ -295,6 +406,9 @@ static func mark_angle(degrees: float) -> float:
 
 
 func _build_engine(rig: Node3D) -> void:
+	if is_flathead():
+		_build_flathead_block(rig)
+		return
 	var leave: Array[String] = []
 	for nodes: Array[String] in [_NODES_HEADS, _NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
 		leave.append_array(nodes)
@@ -302,7 +416,6 @@ func _build_engine(rig: Node3D) -> void:
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
 	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
 	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
-	var white := _mat("mark", Color(0.95, 0.95, 0.9), 0.0, 0.5)
 	var paint := _paint()
 	# The boss in the valley behind the intake that the distributor stands in.
 	_box(rig, Vector3(0.5, 0.2, DISTRIBUTOR_BASE.z - 0.7), Vector3((DISTRIBUTOR_BASE.x + CLAMP_BOLT.x) * 0.5, 0.0, (DISTRIBUTOR_BASE.z + 0.7) * 0.5), paint)
@@ -310,25 +423,7 @@ func _build_engine(rig: Node3D) -> void:
 	for p in MOUNT_BOLTS:
 		_box(rig, Vector3(0.18, 0.2, 0.06), Vector3(p.x + 0.02, p.y, p.z - 0.03), steel)
 		_box(rig, Vector3(0.14, 0.16, 0.12), Vector3(p.x, p.y, p.z - 0.12), rubber)
-	# Balancer: steel hub, rubber ring, steel rim with the mark across its face.
-	balancer = Node3D.new()
-	balancer.name = "Balancer"
-	balancer.position = Vector3(0.0, 0.0, CRANK_Z)
-	rig.add_child(balancer)
-	_cyl_x(balancer, BALANCER_R, 0.16, COVER_X - 0.01, steel, 40)
-	_cyl_x(balancer, BALANCER_R - 0.06, 0.012, COVER_X - 0.17, rubber, 40)
-	_cyl_x(balancer, BALANCER_R - 0.08, 0.02, COVER_X - 0.18, steel, 40)
-	_cyl_x(balancer, 0.12, 0.14, COVER_X - 0.17, dark, 20)
-	# The mark: a white line on the face out to the rim, and on across the rim.
-	var mark_face := _box(balancer, Vector3(0.016, 0.045, 0.12), Vector3(COVER_X - 0.19, 0.0, BALANCER_R - 0.055), white)
-	mark_face.name = "MarkFace"
-	var mark_rim := _box(balancer, Vector3(0.16, 0.045, 0.012), Vector3(COVER_X - 0.09, 0.0, BALANCER_R + 0.003), white)
-	mark_rim.name = "MarkRim"
-	# Crank pulley out on the hub, in line with the belt.
-	_cyl_x(balancer, 0.3, 0.035, BELT_X + 0.04, steel, 36)
-	_cyl_x(balancer, 0.24, 0.02, BELT_X + 0.01, steel, 36)
-	_cyl_x(balancer, 0.3, 0.035, BELT_X - 0.025, steel, 36)
-	_build_timing_tab(rig)
+	_build_balancer(rig, 0.3)
 	# Water pump above the crank, and its pulley.
 	_cyl_x(rig, 0.17, 0.3, COVER_X, paint, 24, PUMP_CENTER.x, PUMP_CENTER.y)
 	_cyl_x(rig, 0.06, 0.06, COVER_X - 0.3, steel, 12, PUMP_CENTER.x, PUMP_CENTER.y)
@@ -354,12 +449,57 @@ func _build_engine(rig: Node3D) -> void:
 	rig.add_child(belt)
 
 
+## The flathead's long block from its model, less the other parts' nodes and its crank
+## pulley, with mount ears off the front corners and the balancer on the crank.
+func _build_flathead_block(rig: Node3D) -> void:
+	_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return not _begins_any(n, _FH_NODES_OFF_BLOCK))
+	var steel := _mat("steel", _STEEL, 0.6, 0.35)
+	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
+	for p in FH_MOUNTS:
+		var at := fh(p)
+		_box(rig, Vector3(0.18, 0.2, 0.06), at + Vector3(0.02, 0.0, -0.03), steel)
+		_box(rig, Vector3(0.14, 0.16, 0.12), at + Vector3(0.0, 0.0, -0.12), rubber)
+	# The crank's snout from the timing cover out to the balancer.
+	var cover := fh(Vector3(FH_COVER_X, 0.0, 0.0)).x
+	_cyl_x(rig, 0.1, cover - balancer_x(), cover, steel, 16, 0.0, CRANK_Z)
+	_build_balancer(rig, FH_PULLEY_R * FH_IN)
+
+
+## Balancer: steel hub, rubber ring, steel rim with the mark across its face, its back at
+## `balancer_x()`, and the crank pulley of `pulley_r` on the belt line; and the timing tab.
+func _build_balancer(rig: Node3D, pulley_r: float) -> void:
+	var steel := _mat("steel", _STEEL, 0.6, 0.35)
+	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
+	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
+	var white := _mat("mark", Color(0.95, 0.95, 0.9), 0.0, 0.5)
+	var bx := balancer_x()
+	balancer = Node3D.new()
+	balancer.name = "Balancer"
+	balancer.position = Vector3(0.0, 0.0, CRANK_Z)
+	rig.add_child(balancer)
+	_cyl_x(balancer, BALANCER_R, 0.16, bx - 0.01, steel, 40)
+	_cyl_x(balancer, BALANCER_R - 0.06, 0.012, bx - 0.17, rubber, 40)
+	_cyl_x(balancer, BALANCER_R - 0.08, 0.02, bx - 0.18, steel, 40)
+	_cyl_x(balancer, 0.12, 0.14, bx - 0.17, dark, 20)
+	# The mark: a white line on the face out to the rim, and on across the rim.
+	var mark_face := _box(balancer, Vector3(0.016, 0.045, 0.12), Vector3(bx - 0.19, 0.0, BALANCER_R - 0.055), white)
+	mark_face.name = "MarkFace"
+	var mark_rim := _box(balancer, Vector3(0.16, 0.045, 0.012), Vector3(bx - 0.09, 0.0, BALANCER_R + 0.003), white)
+	mark_rim.name = "MarkRim"
+	# Crank pulley on the hub, in line with the belt.
+	var belt := belt_x()
+	_cyl_x(balancer, pulley_r, 0.035, belt + 0.04, steel, 36)
+	_cyl_x(balancer, pulley_r - 0.06, 0.02, belt + 0.01, steel, 36)
+	_cyl_x(balancer, pulley_r, 0.035, belt - 0.025, steel, 36)
+	_build_timing_tab(rig)
+
+
 ## Plate over the balancer's rim with a mark each two degrees, 0 to 20 before top dead
 ## center and a few after, numbered every ten.
 func _build_timing_tab(rig: Node3D) -> void:
 	var steel := _mat("tab", Color(0.3, 0.3, 0.3), 0.7, 0.4)
 	var white := _mat("mark", Color(0.95, 0.95, 0.9), 0.0, 0.5)
-	var x := COVER_X - 0.2
+	var x := balancer_x() - 0.2
 	for deg in range(-TAB_ATDC_MAX, TAB_BTDC_MAX + 1, 2):
 		var a := mark_angle(float(deg))
 		var long := deg % 10 == 0
@@ -399,18 +539,26 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 	var racing := str(part.get("style", "stock")) == "racing"
 	var metal := _mat("cam_racing", _CHROME, 0.9, 0.2) if racing else _mat("steel", _STEEL, 0.6, 0.35)
 	var lobe_r := 0.09 if racing else 0.075
-	_cyl_x(rig, 0.045, CAM_BACK_X - CAM_FRONT_X, CAM_BACK_X, metal, 12, 0.0, CAM_Z)
+	var flathead := is_flathead()
+	var cam_z := fh(FH_CAM).z if flathead else CAM_Z
+	var front := fh(FH_CAM).x if flathead else CAM_FRONT_X
+	var back := fh(Vector3(FH_CAM.y, 0.0, 0.0)).x if flathead else CAM_BACK_X
+	_cyl_x(rig, 0.045, back - front, back, metal, 12, 0.0, cam_z)
+	var bores: Array[float] = []
+	for b in (FH_BORES_X if flathead else BORES_X):
+		bores.append(b * FH_IN if flathead else b)
 	var phase := 0.0
-	for bore in BORES_X:
+	for bore in bores:
 		for offset: float in [-0.21, -0.07, 0.07, 0.21]:
 			var turned := Node3D.new()
-			turned.position = Vector3(bore + offset, 0.0, CAM_Z)
+			turned.position = Vector3(bore + offset, 0.0, cam_z)
 			turned.rotation.x = phase
 			rig.add_child(turned)
 			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
 			lobe.scale.x = 0.62
 			phase += 2.4
-	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(CAM_BOLTS[0].x, 0.0, CAM_BOLTS[0].z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
+	var plate := bolt_spots(GameState.SLOT_CAM)[0].origin if flathead else CAM_BOLTS[0]
+	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(plate.x, 0.0, plate.z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 
 
 # --- Heads -------------------------------------------------------------------------
@@ -428,6 +576,9 @@ func head_sides() -> Array[float]:
 ## Each head with its valve cover, in a node of its own (`Head_1`, `Head_-1`) so the
 ## hood screen can tell them apart. Aluminum heads are left bare.
 func _build_heads(rig: Node3D, part: Dictionary) -> void:
+	if is_flathead():
+		_build_flathead_heads(rig, part)
+		return
 	var aluminum := str(part.get("finish", "")) == "aluminum"
 	for side in head_sides():
 		var bank := "%d" % int(side)
@@ -443,6 +594,18 @@ func _build_heads(rig: Node3D, part: Dictionary) -> void:
 			casting.material_override = _mat("aluminum", _ALUMINUM, 0.75, 0.35)
 
 
+## A flathead's heads from the part's own model, or the engine's for the stock ones: each
+## bank's nodes (their names end in its side) in a node of its own.
+func _build_flathead_heads(rig: Node3D, part: Dictionary) -> void:
+	var path := _part_model(part)
+	for side in head_sides():
+		var bank := "%d" % int(side)
+		var head := Node3D.new()
+		head.name = "Head_%s" % bank
+		rig.add_child(head)
+		_add_model_filtered(head, path, func(n: String) -> bool: return _begins_any(n, _FH_NODES_HEADS) and n.get_slice("_", n.get_slice_count("_") - 1) == bank)
+
+
 # --- Intake ------------------------------------------------------------------------
 
 
@@ -450,6 +613,9 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	var style := str(part.get("style", "iron4"))
 	if style == "iron4":
 		_add_model_nodes(rig, _NODES_INTAKE, true)
+		return
+	if style.begins_with("flathead"):
+		_add_model_filtered(rig, _part_model(part), func(n: String) -> bool: return n.begins_with("intake_manifold"))
 		return
 	var metal := _paint() if style == "tripower" else _mat("aluminum", _ALUMINUM, 0.75, 0.35)
 	var pads := pads_for(style)
@@ -529,6 +695,11 @@ func _build_distributor(rig: Node3D, part: Dictionary) -> void:
 	var cap := model.find_child("distributor_cap", true, false) as MeshInstance3D
 	if cap != null:
 		cap.material_override = cap_mat
+	if is_flathead():
+		# The flathead's lies forward with its towers round the cap's face.
+		for tower in cap_towers():
+			_cyl_x(rig, 0.03, 0.08, tower.x + 0.08, cap_mat, 10, tower.y, tower.z)
+		return
 	# The plug towers round the top of the cap.
 	for tower in cap_towers():
 		_cyl_z(rig, 0.03, 0.025, 0.08, DISTRIBUTOR_BASE + tower - Vector3(0.0, 0.0, 0.08), cap_mat, 10)
@@ -561,6 +732,8 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		r = 0.45
 	elif pads.size() == 3:
 		r = 0.3
+	if is_flathead():
+		r = 0.5 if pads.size() == 1 else 0.26
 	var base := _carb_height()
 	var h := _cleaner_top() - base
 	for pad in pads:
@@ -589,8 +762,15 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 
 
 ## Where each spark plug stands out of its head, as a boot end and the direction it points.
-static func plug_spots() -> Array[Transform3D]:
+func plug_spots() -> Array[Transform3D]:
 	var out: Array[Transform3D] = []
+	if is_flathead():
+		var seat := float(FH_PLUG_SEAT.get(str(_view_part(GameState.SLOT_HEADS).get("finish", "")), FH_PLUG_SEAT[""]))
+		for side: float in [1.0, -1.0]:
+			for x in FH_PLUG_X:
+				var at := fh_head(side, x, FH_HEAD_INNER - FH_PLUG_IN, seat + 0.35)
+				out.append(Transform3D(_axis_basis(fh_head_up(side)), at))
+		return out
 	for side: float in [1.0, -1.0]:
 		for i in BORES_X.size():
 			var x: float = BORES_X[i] + (0.08 if side > 0.0 else -0.08)
@@ -603,6 +783,9 @@ static func plug_spots() -> Array[Transform3D]:
 func _build_wires(rig: Node3D) -> void:
 	var rubber := _mat("wire", Color(0.08, 0.07, 0.07), 0.0, 0.6)
 	var boot := _mat("boot", Color(0.75, 0.3, 0.1), 0.0, 0.7)
+	if is_flathead():
+		_build_flathead_wires(rig, rubber, boot)
+		return
 	var plugs := plug_spots()
 	var free := plugs.duplicate()
 	var towers: Array[Vector3] = []
@@ -639,14 +822,65 @@ func _build_wires(rig: Node3D) -> void:
 		rig.add_child(b)
 
 
+## The flathead's wires: forward out of the cap's face, up over the front of each head,
+## back along its inner edge, and down onto the plugs. The towers on the right of the cap
+## go to the right bank, front to back from the top.
+func _build_flathead_wires(rig: Node3D, rubber: Material, boot: Material) -> void:
+	var plugs := plug_spots()
+	var towers := cap_towers()
+	var centre := fh(FH_CAP)
+	towers.sort_custom(func(a: Vector3, b: Vector3) -> bool: return atan2(a.z - centre.z, a.y - centre.y) < atan2(b.z - centre.z, b.y - centre.y))
+	var right: Array[Vector3] = []
+	var left: Array[Vector3] = []
+	for t in towers:
+		(right if t.y >= centre.y else left).append(t)
+	for side: float in [1.0, -1.0]:
+		var own := right if side > 0.0 else left
+		var bank: Array[Transform3D] = []
+		for p in plugs:
+			if signf(p.origin.y) == side:
+				bank.append(p)
+		for i in mini(own.size(), bank.size()):
+			var tower := own[i]
+			var plug := bank[i]
+			var out := plug.origin + plug.basis.z * 0.25
+			var edge_front := fh_head(side, -10.0, FH_WIRE_A, FH_WIRE_H) + Vector3(0.0, 0.0, 0.03 * float(i))
+			var edge := fh_head(side, 0.0, FH_WIRE_A, FH_WIRE_H)
+			edge.x = plug.origin.x
+			var points := _bezier(tower, tower + Vector3(-0.25, 0.0, 0.1), edge_front, 8)
+			points.append_array(_bezier(edge_front, (edge_front + edge) * 0.5 + Vector3(0.0, 0.0, 0.04), edge, 6).slice(1))
+			points.append_array(_bezier(edge, out + plug.basis.z * 0.2, out, 6).slice(1))
+			var wire := MeshInstance3D.new()
+			wire.mesh = sweep_mesh(points, 0.025, 8, false)
+			wire.material_override = rubber
+			rig.add_child(wire)
+			var b := MeshInstance3D.new()
+			var bm := CylinderMesh.new()
+			bm.top_radius = 0.04
+			bm.bottom_radius = 0.036
+			bm.height = 0.25
+			b.mesh = bm
+			b.material_override = boot
+			b.transform = Transform3D(plug.basis * Basis(Vector3.RIGHT, PI * 0.5), plug.origin + plug.basis.z * 0.125)
+			rig.add_child(b)
+
+
 static func _wire_cost(tower: Vector3, plug: Vector3) -> float:
 	var side_miss := 0.0 if signf(tower.y - DISTRIBUTOR_BASE.y) == signf(plug.y) else 2.0
 	return absf(plug.x - (tower.x - DISTRIBUTOR_BASE.x) * 9.0) + side_miss
 
 
-## Tops of the distributor cap's plug towers, from its base.
-static func cap_towers() -> Array[Vector3]:
+## Tops of the distributor cap's plug towers, from its base; on a flathead, where they
+## stand out of the cap's face, in engine units.
+func cap_towers() -> Array[Vector3]:
 	var out: Array[Vector3] = []
+	if is_flathead():
+		var face := fh(FH_CAP)
+		for k in 8:
+			var a := TAU * (float(k) + 0.5) / 8.0
+			var r := FH_CAP_R * 0.65 * FH_IN
+			out.append(face + Vector3(-0.08, r * cos(a), r * sin(a)))
+		return out
 	for k in 8:
 		var a := TAU * (float(k) + 0.5) / 8.0
 		out.append(Vector3(CAP_TOWER_R * cos(a), CAP_TOWER_R * sin(a), CAP_TOWER_TOP))
@@ -659,25 +893,44 @@ static func cap_towers() -> Array[Vector3]:
 ## The fitted engine's model with only the nodes named by `prefixes` in it (`keep`), or
 ## with those taken out.
 func _add_model_nodes(rig: Node3D, prefixes: Array[String], keep: bool) -> Node3D:
+	return _add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, prefixes) == keep)
+
+
+## The fitted engine's model file.
+func _model_path() -> String:
 	var path := str(_view_engine().get("model", ""))
 	if path.is_empty() or not ResourceLoader.exists(path):
 		path = _MODEL_DEFAULT
+	return path
+
+
+## A part's own model file, or the engine's when it has none (the stock parts are in the
+## engine's model).
+func _part_model(part: Dictionary) -> String:
+	var path := str(part.get("model", ""))
+	return path if not path.is_empty() and ResourceLoader.exists(path) else _model_path()
+
+
+## The model at `path` with only the mesh nodes whose names `keep` takes.
+func _add_model_filtered(rig: Node3D, path: String, keep: Callable) -> Node3D:
 	var packed := load(path) as PackedScene
 	if packed == null:
 		push_warning("Engine model missing: %s" % path)
 		return null
 	var model := packed.instantiate() as Node3D
 	for node in model.find_children("*", "MeshInstance3D", true, false):
-		var named := false
-		for prefix in prefixes:
-			if str(node.name).begins_with(prefix):
-				named = true
-				break
-		if named != keep:
+		if not bool(keep.call(str(node.name))):
 			node.get_parent().remove_child(node)
 			node.free()
 	rig.add_child(model)
 	return model
+
+
+static func _begins_any(name: String, prefixes: Array[String]) -> bool:
+	for prefix in prefixes:
+		if name.begins_with(prefix):
+			return true
+	return false
 
 
 func _paint() -> StandardMaterial3D:

@@ -202,7 +202,7 @@ func _box(size: Vector3, pos: Vector3, mat: Material) -> void:
 func _tab_point() -> Vector3:
 	var a := _EngineAssembly.mark_angle(10.0)
 	var r := _EngineAssembly.BALANCER_R
-	var local := Vector3(_EngineAssembly.COVER_X - 0.2, -r * sin(a), _EngineAssembly.CRANK_Z + r * cos(a))
+	var local := Vector3(_engine.balancer_x() - 0.2, -r * sin(a), _EngineAssembly.CRANK_Z + r * cos(a))
 	return _engine.frame.global_transform * local
 
 
@@ -210,7 +210,7 @@ func _tab_point() -> Vector3:
 ## you would crouch at the grille with the light.
 func _place_camera() -> void:
 	var tab := _tab_point()
-	var crank: Vector3 = _engine.frame.global_transform * Vector3(_EngineAssembly.COVER_X - 0.2, 0.0, _EngineAssembly.CRANK_Z)
+	var crank: Vector3 = _engine.frame.global_transform * Vector3(_engine.balancer_x() - 0.2, 0.0, _EngineAssembly.CRANK_Z)
 	var look := crank.lerp(tab, 0.85)
 	_camera.fov = 40.0
 	_camera.global_position = look + Vector3(-0.3, 0.02, 0.09)
@@ -226,7 +226,7 @@ func _build_pointer() -> void:
 	red.emission = Color(1.0, 0.12, 0.06)
 	red.emission_energy_multiplier = 1.6
 	var a := _EngineAssembly.mark_angle(float(GameState.timing_degrees(GameState.engine_sweet_tune())))
-	var x := _EngineAssembly.COVER_X - 0.215
+	var x: float = _engine.balancer_x() - 0.215
 	var pointer := Node3D.new()
 	pointer.name = "Pointer"
 	pointer.position = Vector3(x, 0.0, _EngineAssembly.CRANK_Z)
