@@ -80,6 +80,10 @@ With the city map up close, 1 drives to the drive-in, 2 to the gas station, and 
 | Gas station, drive-in, Royal Rods | G | Back to the garage |
 | Gas station, drive-in, Royal Rods | D | Town cruise |
 
+At Royal Rods, click a labeled shelf or the wheel and tire stands on the left wall to browse that type of part, or click the folder on the counter to open the full catalog.
+Click a poster to view it larger; use the close button or Esc to return to the store.
+Hover over an interactive item or button to see its action in the bottom status bar.
+
 Esc leaves each of these places, or first closes whatever list is open.
 
 ## Gamepad

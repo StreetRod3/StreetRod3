@@ -9,6 +9,7 @@ extends Node3D
 const CITY_MAP := "res://assets/maps/city.trk"
 const _KING_CAR_TEXTURE := preload("res://assets/locations/city/king.png")
 const _KING2_CAR_TEXTURE := preload("res://assets/locations/city/king2.png")
+const _RoyalRodsSign := preload("res://scripts/royal_rods_sign.gd")
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
@@ -1250,10 +1251,12 @@ func _build_royal_rods(root: Node3D) -> void:
 	var metal := Color(0.2, 0.2, 0.22)
 	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(-3.5, 5.05, 0.25), metal, 0.4, 0.65)
 	_add_box(root, Vector3(0.1, 1.2, 0.1), Vector3(3.5, 5.05, 0.25), metal, 0.4, 0.65)
-	_add_box(root, Vector3(7.8, 1.15, 0.12), Vector3(0.0, 5.1, 0.2), Color(0.06, 0.03, 0.04))
-	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 5.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
-	_add_box(root, Vector3(7.3, 0.07, 0.04), Vector3(0.0, 4.6, 0.12), gold, 0.3, 0.0, gold, 1.8)
-	_add_label(root, "ROYAL RODS", Vector3(0.0, 5.1, 0.1), 40, 0.014, Color(2.3, 1.75, 0.45), Color(0.4, 0.1, 0.04), 6)
+	_add_box(root, Vector3(9.2, 2.6, 0.12), Vector3(0.0, 5.85, 0.2), wall)
+	var sign := _RoyalRodsSign.new()
+	sign.position = Vector3(0.0, 5.7, 0.1)
+	sign.rotation.y = PI
+	sign.scale = Vector3.ONE * 1.35
+	root.add_child(sign)
 	_add_light(root, Vector3(0.0, 4.5, -1.6), Color(1.0, 0.78, 0.4), 0.85, 12.0)
 
 
