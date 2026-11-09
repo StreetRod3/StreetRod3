@@ -117,25 +117,21 @@ COVER_H = 2.25
 COVER_BOLTS = [(-4.4, 0.26), (4.4, 0.26), (-4.4, 4.46), (4.4, 4.46)]  # (x, across)
 
 # Intake, after the L79's: the flange and valley floor, its outline from above (x, y): a
-# plain plate under the heads' faces, square across the front and back, with a lobe round
-# each bolt and the distributor's boss.
+# plain plate under the heads' faces with a lobe round each bolt and the distributor's
+# boss, its ends stepping in over each head so nothing reaches past one (the banks are
+# offset: the right head starts behind the left and ends behind it too).
 INTAKE_FLANGE = [
-    (-10.79, -3.61), (-10.50, -3.38), (-10.45, -3.22), (-10.45, 4.35), (-10.41, 4.49),
-    (-10.30, 4.58), (-9.89, 4.61), (-9.67, 4.69), (-9.49, 4.72), (-9.33, 4.70), (-9.02, 4.60),
-    (-7.60, 4.60), (-7.33, 4.70), (-7.17, 4.72), (-7.01, 4.70), (-6.70, 4.60), (-1.33, 4.60),
-    (-1.02, 4.70), (-0.87, 4.72), (-0.71, 4.70), (-0.40, 4.60), (1.02, 4.60), (1.29, 4.70),
-    (1.45, 4.72), (1.61, 4.70), (1.92, 4.60), (6.57, 4.60), (6.88, 4.70), (7.03, 4.72),
-    (7.20, 4.70), (7.47, 4.60), (8.89, 4.60), (9.20, 4.70), (9.36, 4.72), (9.55, 4.69),
-    (9.74, 4.60), (9.88, 4.46), (9.96, 4.30), (10.00, 4.10), (9.99, 3.91), (9.75, 3.46),
-    (9.75, 2.53), (9.79, 2.41), (9.94, 2.19), (10.05, 1.97), (10.11, 1.73), (10.12, 1.49),
-    (10.03, 1.08), (9.79, 0.69), (9.75, 0.57), (9.75, -4.35), (9.71, -4.49), (9.60, -4.58),
-    (8.93, -4.60), (8.67, -4.70), (8.51, -4.72), (8.35, -4.70), (8.04, -4.60), (6.62, -4.60),
-    (6.35, -4.70), (6.19, -4.72), (6.03, -4.70), (5.72, -4.60), (0.35, -4.60), (0.04, -4.70),
-    (-0.11, -4.72), (-0.27, -4.70), (-0.58, -4.60), (-2.00, -4.60), (-2.27, -4.70),
-    (-2.43, -4.72), (-2.59, -4.70), (-2.90, -4.60), (-7.55, -4.60), (-7.86, -4.70),
-    (-8.01, -4.72), (-8.18, -4.70), (-8.45, -4.60), (-9.87, -4.60), (-10.18, -4.70),
-    (-10.37, -4.72), (-10.58, -4.67), (-10.75, -4.57), (-10.89, -4.40), (-10.97, -4.20),
-    (-10.98, -3.98), (-10.92, -3.79),
+    (-10.50, -4.60), (-10.61, -4.57), (-10.68, -4.48), (-10.72, -4.08), (-10.70, -3.88),
+    (-10.70, 2.22), (-10.67, 2.31), (-10.58, 2.38), (-10.10, 2.41), (-9.99, 2.48), (-9.92, 2.59),
+    (-9.89, 4.42), (-9.86, 4.51), (-9.77, 4.58), (-7.56, 4.60), (-7.17, 4.69), (-6.77, 4.60),
+    (-1.26, 4.60), (-0.87, 4.69), (-0.47, 4.60), (1.06, 4.60), (1.45, 4.69), (1.85, 4.60),
+    (6.64, 4.60), (7.04, 4.69), (7.43, 4.60), (9.57, 4.60), (9.66, 4.57), (9.73, 4.48),
+    (9.75, 2.52), (9.79, 2.41), (9.94, 2.19), (10.04, 1.98), (10.12, 1.55), (10.04, 1.12),
+    (9.94, 0.91), (9.79, 0.69), (9.75, 0.57), (9.75, -2.22), (9.72, -2.31), (9.63, -2.38),
+    (9.13, -2.41), (9.02, -2.47), (8.94, -2.59), (8.91, -4.42), (8.88, -4.51), (8.79, -4.58),
+    (6.58, -4.60), (6.19, -4.69), (5.79, -4.60), (0.28, -4.60), (-0.11, -4.69), (-0.51, -4.60),
+    (-2.04, -4.60), (-2.43, -4.69), (-2.83, -4.60), (-7.62, -4.60), (-8.01, -4.69),
+    (-8.41, -4.60),
 ]
 # The runners, square tubes with rounded corners, each one piece: up out of its port, a
 # bend over level, across toward the middle, then a turn into the plenum's front or back:
@@ -154,7 +150,6 @@ RUNNER_BENDS = (1.0, 1.0)          # radius over level, radius of the turn into 
 WATER_CROSSOVER = (-8.35, 11.25, 1.7, 4.15)    # x, z of its axis, diameter, |y| of its ends
 HEAT_CROSSOVER = (7.75, 11.05, 1.0, 3.3)       # (the heat crossover's ends inside the bolts)
 CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
-INTAKE_END_WALLS = [(-10.42, -9.8), (8.8, 9.72)]   # x spans, front and back
 INTAKE_BASE = (9.9, 10.65)   # the flange's underside (inside the heads) and top
 PAD_X = -0.45           # the carb pad's middle
 PAD_Z = 13.15           # the carb pad's underside
@@ -597,13 +592,6 @@ def intake(d):
     d.poly(ccw([tuple(p) for p in INTAKE_FLANGE]))
     d.finish()
     d.extrude(sk, "intake_manifold", z1 - z0)
-    # Its end walls down onto the block's front and back where it reaches past a head:
-    # the right head ends short of it at the front, the left at the back.
-    sk = d.sketch("XY", "Intake end walls", offset=8.2)
-    for x0, x1 in INTAKE_END_WALLS:
-        d.rounded((x0, -4.45), (x1, 4.45), 0.2)
-    d.finish()
-    d.extrude(sk, "intake_manifold_end_walls", z1 - 0.05 - 8.2)
 
     # The runners, out of each port and round into the plenum.
     for k, (x, s, top, w, h, entry_y, to_x) in enumerate(INTAKE_RUNNERS):
