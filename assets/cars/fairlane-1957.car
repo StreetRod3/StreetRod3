@@ -1,6 +1,7 @@
 {
   "id": "fairlane-1957",
   "name": "Fairlane 500",
+  "make": "Ford",
   "model": {
     "path": "res://assets/cars/sr1-fairlane-1957.glb",
     "position": [0.0, 0.185, 0.0],
@@ -33,8 +34,8 @@
     ]
   },
   "parts": {
-    "engine": "v8-265",
-    "transmission": "gb_auto3",
+    "engine": "ford-292",
+    "transmission": "gb_auto3-ford",
     "wheels": "wheel-c1"
   },
   "driver": {

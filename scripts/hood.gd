@@ -810,7 +810,8 @@ func _open_picker() -> void:
 			spares = GameState.spare_engines()
 		else:
 			for part in GameState.spare_slot_parts(key):
-				if not GameState.CARB_SLOTS.has(key) or GameState.carb_fits_intake(part):
+				if (not GameState.CARB_SLOTS.has(key) or GameState.carb_fits_intake(part)) \
+						and GameState.part_fit_trouble(part).is_empty():
 					spares.append(part)
 		if spares.is_empty():
 			_picker_rows.add_child(_ui_label("None in spare parts. The newspaper sells them.", 15))
@@ -829,7 +830,7 @@ func _picker_row(key: String, part: Dictionary) -> HBoxContainer:
 	row.add_theme_constant_override(&"separation", 12)
 	var label := _ui_label("", 16)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var detail := "%.0f hp" % float(part.get("hp", 0.0)) if key == GameState.HOOD_ENGINE else GameState.part_detail(part)
+	var detail := "%s   %.0f hp" % [GameState.fits_text(part), float(part.get("hp", 0.0))] if key == GameState.HOOD_ENGINE else GameState.part_detail(part)
 	label.text = "%s\n%s" % [str(part.get("name", "Part")), detail]
 	row.add_child(label)
 	var fit := Button.new()

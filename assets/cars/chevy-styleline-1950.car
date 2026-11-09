@@ -1,6 +1,7 @@
 {
   "id": "chevy-styleline-1950",
   "name": "Chevy Styleline 1950",
+  "make": "GM",
   "model": {
     "path": "res://assets/cars/chevy-styleline-1950.glb",
     "position": [0.0, 0.24, 0.0],

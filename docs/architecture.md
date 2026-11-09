@@ -109,6 +109,12 @@ The garage's spare-parts list has a Sell button for copies on no car, stock part
 
 Scenes talk to each other only through `GameState` and scene changes. Race scripts duck-type neighbors with `has_method` (`is_race_started`, `get_race_track`, `sample_at`, `closest_sample`).
 
+#### Makes and engine families
+
+A car has a `make` in its `.car` file ("GM", "Ford"). Engines have a `make` and a `family` (a key of `families` in `parts.register`, each with a name and a make: Chevy small-block, Ford flathead, Ford Y-block, Ford small-block). The heads, intake, camshaft, distributor and exhaust manifolds (`FAMILY_SLOTS`) fit only their engine family; the rear end (`MAKE_SLOTS`) and the transmission have a make; carburetors, air cleaners, wheels, tires, exhaust, mufflers, springs and shocks fit anything. An engine must be the car's make unless the car has engine mounts for its family, a bolt-on with `mounts` that only the speed shop sells (`shop`, so the paper leaves it out). The transmission must be the engine's make. The rules are checked when a part goes on (`engine_fit_trouble()`, `gearbox_fit_trouble()`, `part_fit_trouble()`), and the hood screen's picker leaves out parts for another family, so a car keeps whatever it already has. A car from an older save, or one won off a rival, whose engine is another make's gets the mounts for it (`_grant_swap_mounts()`).
+
+A register entry with `families` or `makes` as a list stands for one copy per family or make. The first copy keeps the entry's id, so old saves still find it; the rest are `<id>-<family>` or `<id>-<make>`, and each keeps the entry's id as `base`. The Ford Y-block and small-block are stand-ins drawn with the Chevy models, with Ford copies of the Chevy speed parts, until Ford ones are modeled. `stock_slot_parts()` gives what a car comes with: the engine family's stock parts, the make's stock rear end, and anything the engine names under `stock` (the flathead's two-barrel). Rivals keep their swapped engines without mounts, and their hood parts become their engine family's copies (`_refit_family_parts()`).
+
 ### Garage
 
 `garage.gd` raycasts from the orbit camera. Colliders carry a `garage_interact` meta tag:

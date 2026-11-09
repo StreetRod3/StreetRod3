@@ -1,6 +1,7 @@
 {
   "id": "ford-f100-1970",
   "name": "Ford F100 1970",
+  "make": "Ford",
   "model": {
     "path": "res://assets/cars/ford-f100-1970.glb",
     "position": [0.0, 0.38, 0.0],
@@ -34,8 +35,8 @@
     ]
   },
   "parts": {
-    "engine": "v8-265",
-    "transmission": "gb_man3",
+    "engine": "ford-302",
+    "transmission": "gb_man3-ford",
     "wheels": "wheel-c1"
   },
   "driver": {

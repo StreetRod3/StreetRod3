@@ -22,8 +22,8 @@
       "id": "fairlane-1957",
       "name": "1957 Fairlane 500",
       "price": 1050,
-      "vmax": 185.0,
-      "hp": 230.0,
+      "vmax": 210.0,
+      "hp": 260.0,
       "color": [0.91, 0.89, 0.82, 1.0],
       "car_file": "res://assets/cars/fairlane-1957.car"
     },
@@ -31,8 +31,8 @@
       "id": "ford-coupe-1932",
       "name": "1932 Ford Coupe",
       "price": 1250,
-      "vmax": 220.0,
-      "hp": 280.0,
+      "vmax": 170.0,
+      "hp": 150.0,
       "color": [0.62, 0.08, 0.07, 1.0],
       "car_file": "res://assets/cars/ford-coupe-1932.car"
     },
@@ -49,8 +49,8 @@
       "id": "ford-f100-1970",
       "name": "1970 Ford F100",
       "price": 950,
-      "vmax": 185.0,
-      "hp": 230.0,
+      "vmax": 230.0,
+      "hp": 300.0,
       "color": [0.45, 0.62, 0.78, 1.0],
       "car_file": "res://assets/cars/ford-f100-1970.car"
     }

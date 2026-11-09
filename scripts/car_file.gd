@@ -11,6 +11,9 @@ extends RefCounted
 ## `model.ground_clearance` is how far the body's lowest point sits above the
 ## floor when it is snapped there, for bodies without wheels of their own.
 ##
+## `make` is who built the car ("GM", "Ford"): its engine must be that make unless the
+## car has mounts for another one, and so must its rear end.
+##
 ## `wheels.size` multiplies the size of whatever wheels are fitted, for a car
 ## whose tires are bigger or smaller than the wheel parts draw them (1 if left out).
 
@@ -52,6 +55,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	var root: Dictionary = json.data
 	result.id = str(root.get("id", ""))
 	result.name = str(root.get("name", ""))
+	result.make = str(root.get("make", ""))
 	if result.id.is_empty():
 		result.errors.append("Car is missing an id.")
 	_parse_model(root, result)
@@ -213,6 +217,7 @@ static func _empty_result() -> Dictionary:
 		"source": "",
 		"id": "",
 		"name": "",
+		"make": "",
 		"register": "",
 		"model": {},
 		"wheels": {},
