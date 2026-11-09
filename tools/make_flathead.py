@@ -142,6 +142,8 @@ PORCELAIN = {"name": "porcelain", "pbrMetallicRoughness": {
     "baseColorFactor": [0.85, 0.85, 0.82, 1], "metallicFactor": 0.0, "roughnessFactor": 0.25}}
 CAST_ALUMINUM = {"name": "cast aluminum", "pbrMetallicRoughness": {
     "baseColorFactor": [0.58, 0.58, 0.56, 1], "metallicFactor": 0.6, "roughnessFactor": 0.6}}
+SATIN_ALUMINUM = {"name": "satin aluminum", "pbrMetallicRoughness": {
+    "baseColorFactor": [0.78, 0.78, 0.76, 1], "metallicFactor": 0.8, "roughnessFactor": 0.4}}
 RUBBER = {"name": "rubber", "pbrMetallicRoughness": {
     "baseColorFactor": [0.05, 0.05, 0.05, 1], "metallicFactor": 0.0, "roughnessFactor": 0.9}}
 # Body name prefixes to finishes, first match wins; anything else is the block's paint.
@@ -288,21 +290,20 @@ def outline_commands(lines, arcs, first=1):
 
 
 def block(d):
-    right = []
     out_r, in_r = deck_edges(1)
     wall_z = out_r[1] - (out_r[0] - SKIRT_Y)  # outer bank wall meets the crankcase side
-    valley_y = in_r[0] - (in_r[1] - VALLEY_Z)
     right = [(RAIL_Y, RAIL_Z), (RAIL_Y, RAIL_Z + 0.6), (SKIRT_Y, RAIL_Z + 0.6), (SKIRT_Y, wall_z),
-             tuple(out_r), tuple(in_r), (valley_y, VALLEY_Z)]
+             tuple(out_r), tuple(in_r), (valley_y(), VALLEY_Z)]
     left = [(-y, z) for y, z in reversed(right)]
     sk = d.sketch("YZ", "Block")
     d.poly(right + left)
     d.finish()
     d.extrude(sk, "engine_block", BLOCK_LEN, "symmetric")
-    return valley_y
 
 
-def heads(d):
+def heads(d, style="stock"):
+    if style == "finned":
+        return finned_heads(d)
     half = HEAD_LEN / 2
     for s in (1, -1):
         for k, (inset, h, thick, draft, radius) in enumerate(HEAD_STEPS):
@@ -382,16 +383,168 @@ def heads(d):
                        name=f"plug_conduit_bend_{s}", body_name=f"plug_conduit_bend_{s}"))
 
 
-def intake(d, valley_y):
+# Finned heads, after Offenhauser's for the flathead: the stock heads' outline and stud
+# pattern, a lower body with fins along it, a round boss standing above the fins round
+# every stud, the plugs down in ringed pockets, and the water neck at the middle of the
+# inner edge.
+FIN_BODY = 1.4          # body top, where the fins and bosses stand
+FIN_H = 0.45
+FIN_W = 0.24
+FIN_PITCH = 0.6
+FIN_EDGE = 0.55         # plain band round the fins, in from the body top's edge
+STUD_BOSS_R = 0.5
+STUD_BOSS_H = 0.6
+PLUG_POCKET_R = (0.58, 0.85)
+NECK = (0.0, 8.4)       # (x, a) at the middle of the inner edge
+NECK_R = (0.7, 1.0)
+NECK_H = 2.0
+NECK_PAD_R = 1.45
+
+
+def rounded_span(half_x, a0, a1, r, a):
+    """Half-length along x of a rounded rectangle (half_x by a0..a1, corner radius r) at a."""
+    dy = max(a0 + r - a, a - (a1 - r), 0.0)
+    return half_x - (r - math.sqrt(max(r * r - dy * dy, 0.0)))
+
+
+def finned_heads(d):
+    half = HEAD_LEN / 2
+    body = [(0.0, 0.0, 0.3, None, 1.8), (0.25, 0.3, FIN_BODY - 0.3, "-8 deg", 1.6)]
+    top_in = 0.25 + (FIN_BODY - 0.3) * math.tan(math.radians(8))
+    fin_half = half - top_in - FIN_EDGE
+    fin_a = (HEAD_A[0] + top_in + FIN_EDGE, HEAD_A[1] - top_in - FIN_EDGE)
+    fin_r = 1.6 - top_in
+    studs = [(x, HEAD_A[1] - dd) for dd, xs in STUD_ROWS for x in xs]
+    top = FIN_BODY + STUD_BOSS_H
+    for s in (1, -1):
+        for k, (inset, h, thick, draft, radius) in enumerate(body):
+            sk = d.head_plane(s, h, f"Finned head {s} step {k}")
+            x0, x1 = sorted((-s * (-half + inset), -s * (half - inset)))
+            d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x0, HEAD_A[0] + inset),
+                           p1=skp(x1, HEAD_A[1] - inset), radius=inch(radius)))
+            d.finish()
+            kw = {"taper": draft} if draft else {}
+            name = f"cylinder_head_{s}" if k == 0 else f"cylinder_head_{s}_step_{k}"
+            d.extrude(sk, name, thick, **kw)
+
+        sk = d.head_plane(s, FIN_BODY, f"Fins {s}")
+        n = int((fin_a[1] - fin_a[0] - FIN_W) / FIN_PITCH) + 1
+        a_first = (fin_a[0] + fin_a[1]) / 2 - (n - 1) * FIN_PITCH / 2
+        for i in range(n):
+            a = a_first + i * FIN_PITCH
+            hx = min(rounded_span(fin_half, fin_a[0], fin_a[1], fin_r, a - FIN_W / 2),
+                     rounded_span(fin_half, fin_a[0], fin_a[1], fin_r, a + FIN_W / 2))
+            d.c.append(cmd("sketch.rectangle.two_point", p0=skp(-hx, a - FIN_W / 2),
+                           p1=skp(hx, a + FIN_W / 2)))
+        d.finish()
+        d.extrude(sk, f"cylinder_head_fins_{s}", FIN_H)
+
+        sk = d.head_plane(s, FIN_BODY, f"Stud bosses {s}")
+        for x, a in studs:
+            d.c.append(cmd("sketch.circle.center", center=skp(-s * x, a), radius=inch(STUD_BOSS_R)))
+        d.finish()
+        d.extrude(sk, f"cylinder_head_bosses_{s}", STUD_BOSS_H)
+
+        plug_a = HEAD_A[1] - PLUG_IN
+        sk = d.head_plane(s, FIN_BODY, f"Plug pockets {s}")
+        for x in PLUG_X:
+            d.c.append(cmd("sketch.circle.center", center=skp(-s * x, plug_a),
+                           radius=inch(PLUG_POCKET_R[1])))
+            d.c.append(cmd("sketch.circle.center", center=skp(-s * x, plug_a),
+                           radius=inch(PLUG_POCKET_R[0])))
+        d.finish()
+        d.extrude(sk, f"cylinder_head_plug_pockets_{s}", STUD_BOSS_H)
+
+        sk = d.head_plane(s, top, f"Head nuts {s}")
+        for x, a in studs:
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(-s * x, a),
+                           radius=NUT_R * MM, sides=6))
+        d.finish()
+        d.extrude(sk, f"cylinder_head_nuts_{s}", 0.5)
+        sk = d.head_plane(s, top, f"Head studs {s}")
+        for x, a in studs:
+            d.c.append(cmd("sketch.circle.center", center=skp(-s * x, a), radius=inch(0.2)))
+        d.finish()
+        d.extrude(sk, f"cylinder_head_studs_{s}", 0.35, start_offset=inch(0.5))
+
+        # Plugs stand from the pocket floors.
+        for part, size, start, length in (("spark_plug_base", 0.45, 0.0, 0.35),
+                                          ("spark_plug", 0.28, 0.35, 1.2),
+                                          ("spark_plug_tip", 0.13, 1.55, 0.35)):
+            sk = d.head_plane(s, FIN_BODY, f"{part} {s}")
+            for x in PLUG_X:
+                if part == "spark_plug_base":
+                    d.c.append(cmd("sketch.polygon.inscribed", center=skp(-s * x, plug_a),
+                                   radius=size * MM, sides=6))
+                else:
+                    d.c.append(cmd("sketch.circle.center", center=skp(-s * x, plug_a),
+                                   radius=inch(size)))
+            d.finish()
+            d.extrude(sk, f"{part}_{s}", length, start_offset=inch(start))
+
+        # Water neck: a pad over the fins, the neck standing up off it, a dark floor.
+        nx, na = NECK
+        sk = d.head_plane(s, FIN_BODY, f"Neck pad {s}")
+        d.c.append(cmd("sketch.circle.center", center=skp(-s * nx, na), radius=inch(NECK_PAD_R)))
+        d.finish()
+        d.extrude(sk, f"cylinder_head_neck_pad_{s}", FIN_H + 0.1)
+        sk = d.head_plane(s, FIN_BODY, f"Neck {s}")
+        d.c.append(cmd("sketch.circle.center", center=skp(-s * nx, na), radius=inch(NECK_R[1])))
+        d.c.append(cmd("sketch.circle.center", center=skp(-s * nx, na), radius=inch(NECK_R[0])))
+        d.finish()
+        d.extrude(sk, f"water_outlet_neck_{s}", NECK_H)
+        sk = d.head_plane(s, FIN_BODY + FIN_H + 0.1, f"Neck port {s}")
+        d.c.append(cmd("sketch.circle.center", center=skp(-s * nx, na), radius=inch(NECK_R[0])))
+        d.finish()
+        d.extrude(sk, f"water_outlet_port_{s}", 0.05)
+
+
+def valley_y():
+    """Where the valley floor meets the bank's inner wall, out from the middle."""
+    _, in_r = deck_edges(1)
+    return in_r[0] - (in_r[1] - VALLEY_Z)
+
+
+def intake_base(d):
+    """The plate down the valley, its sides along the heads' inner edges; its top's z."""
     gap = 0.05
     top = VALLEY_Z + 1.4
-    y0 = valley_y - gap
+    y0 = valley_y() - gap
     y1 = y0 + (top - VALLEY_Z)
     sk = d.sketch("YZ", "Intake")
     d.poly([(y0, VALLEY_Z), (y1, top), (-y1, top), (-y0, VALLEY_Z)])
     d.finish()
     d.extrude(sk, "intake_manifold", 19.0, "symmetric")
+    return top, y1
 
+
+def carburetor(d, x, z, suffix="", across=False):
+    """A Ford two-barrel on a pad at z: base flange, body, air horn, two throats, side by
+    side along the engine, or across it. Across, it sits straight on the intake's own
+    shaped pad, without a square base flange of its own."""
+    if not across:
+        d.box(f"carburetor_base{suffix}", (x - 1.5, -1.4, z), (x + 1.5, 1.4, z + 0.25))
+        z += 0.25
+    sk = d.sketch("XY", f"Carburetor{suffix}", offset=z)
+    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x - 1.2, -1.1), p1=skp(x + 1.2, 1.1),
+                   radius=inch(0.4)))
+    d.finish()
+    d.extrude(sk, f"carburetor{suffix}", 1.6)
+    d.cylinder(f"carburetor_horn{suffix}", (x, 0, z + 1.6), (0, 0, 1), 2.3, 0.7)
+    for end, off in (("front", -0.55), ("back", 0.55)):
+        cx, cy = (x, off) if across else (x + off, 0)
+        d.cylinder(f"carb_throat{suffix}_{end}", (cx, cy, z + 1.6), (0, 0, 1), 0.85, 0.72)
+
+
+def generator_stand(d, top):
+    gz = GENERATOR[1] - GENERATOR_R + 0.1
+    d.box("intake_manifold_generator_stand", (-10.5, -1.6, top), (-7.5, 1.6, gz))
+
+
+def intake(d, style="stock"):
+    if style == "3x2":
+        return intake_3x2(d)
+    top, _ = intake_base(d)
     sk = d.sketch("XY", "Intake spine", offset=top)
     d.c.append(cmd("sketch.rectangle.rounded", p0=skp(-8.5, -1.0), p1=skp(8.5, 1.0), radius=inch(0.9)))
     d.finish()
@@ -401,23 +554,80 @@ def intake(d, valley_y):
     d.finish()
     riser_top = top + 1.8
     d.extrude(sk, "intake_manifold_riser", 1.8)
-
-    # The carburetor: base flange, body, air horn, and its two throats.
-    d.box("carburetor_base", (-1.5, -1.4, riser_top), (1.5, 1.4, riser_top + 0.25))
-    z = riser_top + 0.25
-    sk = d.sketch("XY", "Carburetor", offset=z)
-    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(-1.2, -1.1), p1=skp(1.2, 1.1), radius=inch(0.4)))
-    d.finish()
-    d.extrude(sk, "carburetor", 1.6)
-    d.cylinder("carburetor_horn", (0, 0, z + 1.6), (0, 0, 1), 2.3, 0.7)
-    for end, x in (("front", -0.55), ("back", 0.55)):
-        d.cylinder(f"carb_throat_{end}", (x, 0, z + 1.6), (0, 0, 1), 0.85, 0.72)
+    carburetor(d, 0.0, riser_top)
 
     # The generator's stand at the front of the intake, the oil filler behind it.
-    gz = GENERATOR[1] - GENERATOR_R + 0.1
-    d.box("intake_manifold_generator_stand", (-10.5, -1.6, top), (-7.5, 1.6, gz))
+    generator_stand(d, top)
     d.cylinder("oil_filler", (-5.6, -2.2, top), (0, 0, 1), 1.6, 4.0)
     d.cylinder("oil_filler_cap", (-5.6, -2.2, top + 4.0), (0, 0, 1), 2.5, 0.8)
+
+
+# Three two-barrel intake, after the aftermarket ones for the flathead, in the 59A
+# pattern: a plenum log down the middle, three tall drafted risers with a two-bore pad
+# on each (the bores across the engine), a bulge over each runner out to the ports,
+# bolt bosses along the edges, the generator's stand at the front and the oil filler
+# at the back. The carburetors stand back enough to clear the generator.
+CARB_X = (-5.0, 0.0, 5.0)
+PLENUM = (8.6, 1.5, 1.4)    # half length, half width, height
+RISER = (1.7, 1.55, 2.4)    # half length, half width at the base, height
+PAD_BORE = (0.72, 1.0)      # bores' offset across the engine, radius
+PAD_EAR = (1.35, 0.4)       # ears' offset along the engine, radius
+RUNNER = (0.9, 0.8)         # bulges' half length, height
+
+
+def intake_3x2(d):
+    top, edge_y = intake_base(d)
+    sk = d.sketch("XY", "Plenum", offset=top)
+    hl, hw, ph = PLENUM
+    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(-hl, -hw), p1=skp(hl, hw),
+                   radius=inch(hw * 0.9)))
+    d.finish()
+    d.extrude(sk, "intake_manifold_plenum", ph, taper="-6 deg")
+
+    # Runner bulges from the plenum out toward each port.
+    sk = d.sketch("XY", "Runners", offset=top)
+    for x in BORE_X:
+        for sy in (1, -1):
+            y0, y1 = sorted((sy * (hw - 0.3), sy * (edge_y - 0.5)))
+            d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x - RUNNER[0], y0),
+                           p1=skp(x + RUNNER[0], y1), radius=inch(RUNNER[0] * 0.9)))
+    d.finish()
+    d.extrude(sk, "intake_manifold_runners", RUNNER[1], taper="-10 deg")
+
+    rl, rw, rh = RISER
+    riser_top = top + rh
+    for i, x in enumerate(CARB_X):
+        sk = d.sketch("XY", f"Riser {i}", offset=top)
+        d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x - rl, -rw), p1=skp(x + rl, rw),
+                       radius=inch(0.6)))
+        d.finish()
+        d.extrude(sk, f"intake_manifold_riser_{i}", rh, taper="-4 deg")
+
+        # The pad: round the two bores and an ear front and back, with the bores and
+        # the ears' bolt holes through it.
+        by, br = PAD_BORE
+        ex, er = PAD_EAR
+        circles = [((x + ex, 0.0), er), ((x, by), br), ((x - ex, 0.0), er), ((x, -by), br)]
+        sk = d.sketch("XY", f"Carb pad {i}", offset=riser_top)
+        d.c += outline_commands(*hull_outline(circles))
+        for (cx, cy), _ in circles[::2]:
+            d.c.append(cmd("sketch.circle.center", center=skp(cx, cy), radius=inch(0.16)))
+        d.finish()
+        d.extrude(sk, f"intake_manifold_pad_{i}", 0.3)
+        carburetor(d, x, riser_top + 0.3, f"_{i}", across=True)
+
+    # Bolt bosses along both edges, between the runners.
+    sk = d.sketch("XY", "Intake bolt bosses", offset=top)
+    for x in (-8.5, -4.25, 0.0, 4.25, 8.5):
+        for sy in (1, -1):
+            d.c.append(cmd("sketch.circle.center", center=skp(x, sy * (edge_y - 0.55)),
+                           radius=inch(0.42)))
+    d.finish()
+    d.extrude(sk, "intake_manifold_bosses", 0.45)
+
+    generator_stand(d, top)
+    d.cylinder("oil_filler", (8.2, 0.0, top), (0, 0, 1), 1.6, 3.6)
+    d.cylinder("oil_filler_cap", (8.2, 0.0, top + 3.6), (0, 0, 1), 2.5, 0.8)
 
 
 LOG_D = 2.0
@@ -624,23 +834,43 @@ def crease_normals(pos, tri, crease_deg=40.0):
     return np.array(out_p), np.array(out_n), np.array(index, dtype=np.uint32)
 
 
-def finish_for(name):
+def finish_for(name, styles=None):
+    styles = styles or {}
+    if styles.get("heads") == "finned" and name.startswith(("cylinder_head", "water_outlet_neck")) \
+            and not name.startswith(("cylinder_head_nuts", "cylinder_head_studs")):
+        return SATIN_ALUMINUM
+    if styles.get("intake") == "3x2" and name.startswith("intake_manifold"):
+        return SATIN_ALUMINUM
     for prefix, mat in FINISHES:
         if name.startswith(prefix):
             return mat
     return PAINT
 
 
+HEAD_STYLES = ("stock", "finned")
+INTAKE_STYLES = ("stock", "3x2")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--sc", help=f"design file (default resources/engines/{STEM}.sc)")
-    ap.add_argument("--glb", help=f"mesh (default assets/parts/{STEM}.glb)")
+    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "heads", "intake"),
+                    help="the whole engine (default), or only its heads or its intake")
+    ap.add_argument("--heads", default="stock", choices=HEAD_STYLES)
+    ap.add_argument("--intake", default="stock", choices=INTAKE_STYLES)
+    ap.add_argument("--sc", help="design file (default resources/engines/STEM.sc)")
+    ap.add_argument("--glb", help="mesh (default assets/parts/STEM.glb)")
     ap.add_argument("--solidcraft", default="solidcraft-cli",
                     help="solidcraft-cli, or the SolidCraft AppImage")
     ap.add_argument("--blender", default="blender", help="Blender, which thins the mesh")
     args = ap.parse_args()
-    sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", STEM + ".sc"))
-    glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", STEM + ".glb"))
+    if args.what == "heads":
+        stem = f"flathead-heads-{args.heads}"
+    elif args.what == "intake":
+        stem = f"flathead-intake-{args.intake}"
+    else:
+        stem = "-".join([STEM] + [v for v in (args.heads, args.intake) if v != "stock"])
+    sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", stem + ".sc"))
+    glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", stem + ".glb"))
     tool = shutil.which(args.solidcraft) or args.solidcraft
     if not os.path.exists(tool):
         sys.exit(f"no SolidCraft command line at {args.solidcraft}")
@@ -649,13 +879,18 @@ def main():
         sys.exit(f"no Blender at {args.blender}")
 
     d = Design()
-    valley_y = block(d)
-    heads(d)
-    intake(d, valley_y)
-    exhaust(d)
-    bell_housing(d)
-    oil_pan(d)
-    front(d)
+    if args.what == "heads":
+        heads(d, args.heads)
+    elif args.what == "intake":
+        intake(d, args.intake)
+    else:
+        block(d)
+        heads(d, args.heads)
+        intake(d, args.intake)
+        exhaust(d)
+        bell_housing(d)
+        oil_pan(d)
+        front(d)
 
     with tempfile.TemporaryDirectory() as tmp:
         obj = os.path.join(tmp, "engine.obj")
@@ -664,7 +899,7 @@ def main():
         with open(script, "w") as f:
             json.dump({"commands": d.c}, f)
         os.makedirs(os.path.dirname(sc), exist_ok=True)
-        print(f"building {STEM}")
+        print(f"building {stem}")
         SolidCraft(tool).run(script, "--save", sc)
         print("thinning the mesh")
         thin = os.path.join(tmp, "thin.obj")
@@ -686,7 +921,7 @@ def main():
     parts = []
     for name, (p, nr, i) in merged.items():
         p = p * 0.001 / 0.22 + np.array([0.0, 0.0, -0.36])
-        parts.append((name, p, nr, i, finish_for(name)))
+        parts.append((name, p, nr, i, finish_for(name, {"heads": args.heads, "intake": args.intake})))
     write_glb(glb, parts)
     allp = np.concatenate([p for _, p, *_ in parts])
     print(f"{os.path.relpath(sc, ROOT)}\n{os.path.relpath(glb, ROOT)}: {len(parts)} bodies, "
