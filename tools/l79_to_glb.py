@@ -13,7 +13,8 @@ nodes the game uses, thins each node to a triangle budget in Blender, and writes
 assets/parts/engine-sbc-l79.glb.
 
 Left out: the rotating assembly, cam, valvetrain, timing chain, bearings and main caps,
-oil pump, gaskets and seals, clutch, the distributor's insides, and most fasteners.
+oil pump, gaskets and seals, clutch, the distributor's insides, the air cleaner (the game
+fits its own), the dipstick, the fuel filter and its lines, and most fasteners.
 
 The STEP is in millimetres with Y up, the crank along Z, the front of the engine toward
 +Z and the car's right toward -X. The GLB is in the frame of the other engine models
@@ -46,6 +47,7 @@ STEM = "engine-sbc-l79"
 CACHE = os.path.expanduser("~/.cache/sr3/l79")
 ENGINE_UNIT = 0.22      # metres per engine unit
 CRANK_Z = -0.36
+STEP_CRANK_Y = -32.54   # the crank's height in the STEP, mm (the balancer's middle)
 
 # freecadcmd script: import the STEP and write every solid's assembly path, bounds and a
 # coarse mesh.
@@ -160,8 +162,7 @@ RULES = [
     (r"motor mount", "engine_mount_{s}"),
     (r"fuel pump rod", None),
     (r"fuel pump|5220k292", "fuel_pump"),
-    (r"fuel filter", "fuel_filter"),
-    (r"compound271", "fuel_line"),
+    (r"fuel filter|compound271", None),                # the filter and its lines
     (r"flywheel v6 / flywheel", "flywheel"),
     (r"flywheel", None),
     (r"spring-band clamps|spring clamps|pipe fitting|hex head screw|oil pressure sender|coolant temp", None),
@@ -179,7 +180,7 @@ BUDGETS = [
     ("water_pump_housing", 1500), ("exhaust_manifold", 2500), ("starter_solenoid", 500),
     ("starter", 1500), ("timing_cover", 800), ("oil_pan", 2500), ("oil_filter", 500),
     ("road_draft_tube", 300), ("oil_filler", 300), ("pcv_valve", 150),
-    ("engine_mount", 300), ("fuel_pump", 900), ("fuel_filter", 200), ("fuel_line", 400),
+    ("engine_mount", 300), ("fuel_pump", 900),
     ("flywheel", 900), ("spark_plug", 600),
 ]
 # Solids smaller than this across (mm) are left out: screws, clips, springs.
@@ -196,7 +197,7 @@ FINISHES = [
     ("harmonic_balancer", STEEL), ("fan", BLACK), ("belt", RUBBER), ("water_hose", RUBBER),
     ("starter_solenoid", ZINC), ("starter", BLACK), ("oil_filter", PAINT),
     ("road_draft_tube", BLACK), ("oil_filler", CHROME),
-    ("pcv_valve", BLACK), ("engine_mount", BLACK), ("fuel_line", STEEL), ("fuel_filter", ZINC),
+    ("pcv_valve", BLACK), ("engine_mount", BLACK),
     ("flywheel", STEEL),
 ]
 
@@ -332,7 +333,7 @@ def extract(args):
 
 def to_engine(v, z_mid):
     """STEP millimetres to engine units: (x, y, z) -> (back, right, up)."""
-    out = np.stack([-(v[:, 2] - z_mid), -v[:, 0], v[:, 1]], axis=1) * 0.001 / ENGINE_UNIT
+    out = np.stack([-(v[:, 2] - z_mid), -v[:, 0], v[:, 1] - STEP_CRANK_Y], axis=1) * 0.001 / ENGINE_UNIT
     out[:, 2] += CRANK_Z
     return out
 

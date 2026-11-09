@@ -3,43 +3,47 @@
 
     python3 tools/make_sbc.py
 
-The engine is a 350 small-block as it came in the sixties and seventies, with the user's
-3ds Max model (Smallblockchevy.max, exported as Smallblockchevy.3DS) as the reference for
-the parts it does well: the block, the heads, the valve covers, the oil pan and the
-intake. The rest is drawn from real ones. Dimensions are the real engine's where they are
-known (4.400 bore spacing, 9.025 deck height, 90 degree V, the left bank ahead of the
-right); the rest are close enough to look right. It has:
+The engine is a small-block as it came in the sixties, measured from the CAD assembly of a
+1965 L79 327 that tools/l79_to_glb.py reads (the block, the heads, the valve covers, the
+intake, the distributor, the plugs, the coil, the oil filter and the starter are where and
+the size they are on it), with long-tube headers, a 14 inch air cleaner, a Delco
+alternator and a four-blade fan of its own. Only what shows from outside is drawn: no
+internals, and nothing under the intake. It has:
 
   block         one outline across the engine, extruded front to back: the 45 degree
                 bank walls down to the crankcase and the pan rail at the crank's height,
                 the decks, and the valley under the intake; three freeze plugs in each
                 bank wall, the side mount pads, the bellhousing flange at the back
-  heads         one casting each, square to its deck: the exhaust face outward, the
-                intake face leaning in at 30 degrees from upright, four spark plugs below
-                the exhaust ports
-  valve covers  stamped, as on the reference: a flange with four bolt tabs, a drafted
-                body, a raised panel on top; the oil filler cap on the left one and the
-                PCV valve on the right
-  intake        the cast-iron dual plane: a valley cover between the heads' flanges, the
-                water crossover across the front with the thermostat housing on it, the
-                plenum under a square-flange four-barrel pad, eight runners on two
-                levels, the distributor boss at the back
+  heads         the L79 head's outline across the bank, square to its deck: the exhaust
+                face nearly upright with the ports high on it, the intake face square to
+                the deck, the valve cover rail sloping down toward the valley; the spark
+                plugs out of the exhaust face below the ports, leaning down and back
+  valve covers  the 327's: a flange round the rail with four bolts on spreader bars, a
+                plain body with a rounded top
+  intake        the L79's dual plane: the flange traced from above, the upper runners
+                across the front and the back, the lower ones into the plenum's sides,
+                the plenum under a square-flange pad, the bolts along each flange, the
+                water crossover and thermostat housing with its outlet forward and up,
+                the distributor boss at the back
   carburetor    a square-flange four-barrel: throttle body, main body, fuel bowls front
                 and back, and the 5 1/8 air cleaner ring on top
   air cleaner   14 inches round: the pan, a pleated paper element and a chrome lid with
                 a rolled edge and a wing nut
-  distributor   points type: the housing, the vacuum advance on its arm, and the cap
-                with eight towers round the coil tower
+  distributor   the housing standing in the intake at the back, right of the middle, the
+                vacuum advance off its side, the cap with eight towers on top round the
+                coil tower, the hold-down clamp
+  coil          standing on the intake behind the carburetor, on the left
+  oil filler    the tube out of the intake's front, forward and up, with its breather cap
   headers       long tubes (or shorties): a flange on each head, four 1 5/8 primaries
                 out of the ports, one bend each, into a merge cone and a 3 inch collector
   front         stamped timing cover, the long water pump with its lower hose inlet, the
                 balancer and a two-groove crank pulley, a two-groove pump pulley, the
                 fan on a spacer, a Delco alternator high on the right on its bracket, and
                 the belt round crank, pump and alternator
-  starter       under the right side at the back: the motor, the solenoid on top, the
-                nose into the flywheel
-  bottom        oil pan with the sump at the back (notched for the starter), the oil
-                filter at the back on the left, and the flywheel
+  starter       on the right below the pan rail: the motor, the solenoid above it on the
+                outside, the nose back to the flywheel
+  bottom        oil pan with the sump at the back, the oil filter hanging straight down
+                at the back on the left, and the flywheel
 
 Every part is a body of its own (SolidCraft's kernel takes minutes to join bodies), drawn
 from numbers in this script, so to change the engine change the numbers and run it again.
@@ -78,52 +82,87 @@ from make_wheels import SolidCraft, cmd, write_glb  # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STEM = "engine-sbc-350"
 
-# The block.
+# The block. Bores, ports and bolts are along each bank from the bank's middle.
 BLOCK_FRONT = -10.6
 BLOCK_BACK = 10.6
-DECK = 9.025            # crank to deck along the bank's axis
-DECK_OUT = 3.3          # bank axis out to the deck's outer edge
+DECK = 9.034            # crank to deck along the bank's axis
+DECK_OUT = 3.258        # bank axis out to the deck's outer edge
 DECK_IN = 3.4           # bank axis in to the deck's inner edge
 VALLEY_Z = 8.6          # valley floor, under the intake
 SKIRT_Y = 5.5           # crankcase sides
 RAIL_Y = 5.95           # pan rail lip
 RAIL_T = 0.4            # pan rail's thickness, up from the crank's height
-BANK_SHIFT = 0.45       # the right bank sits this far back of the middle, the left forward
+BORE_MID = -0.49        # the bores' middle along the crank, both banks
+BANK_SHIFT = 0.425      # the right bank sits this far back of that, the left forward
 BORE_X = [-6.6, -2.2, 2.2, 6.6]
-# The ports along each bank, before the shift: exhaust valves at the ends of each pair
-# (E I I E E I I E), intakes in between.
-EXHAUST_PORT_X = [-7.5, -1.3, 1.3, 7.5]
-INTAKE_PORT_X = [-5.7, -3.1, 3.1, 5.7]
+# The exhaust ports along each bank: at the ends, and the middle pair.
+EXHAUST_PORT_X = [-7.6, -0.86, 0.86, 7.6]
 FREEZE_PLUG_X = [-4.4, 0.0, 4.4]
 
-# The heads, in each deck's own frame: a from the deck's outer edge in, h up off the deck.
-HEAD_LEN = 20.2
-HEAD_DECK = (-0.25, 6.9)
-HEAD_TOP = 4.15
-INTAKE_LEAN = math.radians(30)  # the intake face from upright, its top further out
-PORT_H = 2.3            # exhaust ports up the exhaust face
-PLUG_H = 0.95           # spark plugs up the exhaust face
+# The heads, in each deck's own frame: a in from the deck's outer edge, h up off it.
+HEAD_HALF = 9.83
+HEAD = [(0.5, 0.0), (8.1, 0.0), (7.7, 3.25), (3.05, 4.4), (2.9, 3.6), (0.5, 1.0)]
+EXHAUST_FACE = ((0.5, 1.0), (2.9, 3.6))   # bottom and top, (a, h)
+PORT_T = 0.675          # the exhaust ports' middles up that face, a fraction of it
+PLUG = (1.22, 0.955)    # where each plug's axis passes, (a, h)
+PLUG_DIR = (0.23, 0.96, -0.14)  # out of the head (x, out, up): down a little and back
+RAIL = ((3.05, 4.4), (7.7, 3.25))         # the valve cover rail, outer and inner, (a, h)
 
-# Valve covers on the head's top: (a0, a1) across, half length, and heights.
-COVER_A = (0.15, 6.05)
-COVER_HALF = 9.7
-COVER_H = 2.6
-COVER_TABS = [(-5.2, 0.0), (5.2, 0.0), (-5.2, 6.2), (5.2, 6.2)]  # (x, a) of the bolt tabs
+# Valve covers, in the rail's frame: across from its outer edge, up off it.
+COVER_FLANGE = (-0.07, 4.8, 9.81, 0.1)    # across, half length, thickness
+COVER_BODY = (0.3, 4.45, 9.47)            # across, half length
+COVER_H = 2.25
+COVER_BOLTS = [(-4.4, 0.26), (4.4, 0.26), (-4.4, 4.46), (4.4, 4.46)]  # (x, across)
 
-# Intake.
-INTAKE_HALF = 8.2       # the flanges' half length
-PLENUM = (3.0, 2.9)     # half length, half width
-PAD_Z = 14.7            # carb pad's underside
-PAD = (2.85, 2.7, 0.35)
-RUNNER_Z = (13.4, 11.8)  # upper and lower plane runners where they leave the plenum
-DIST = (9.6, 0.0)       # distributor's axis (x, y)
-THERMOSTAT_X = -8.9
+# Intake, after the L79's: the flange and valley cover, its outline from above (x, y)
+# traced off the L79 and smoothed; then rounded humps along Y over it, (x0, x1, y0, y1,
+# top): the upper plane's runners across the front and the back, the lower plane's into
+# the plenum's sides, the necks joining the front and back runners to the plenum, and the
+# water crossover at the front.
+INTAKE_FLANGE = [
+    (-11.38, -0.1), (-11.33, 0.31), (-11.13, 0.62), (-10.5, 0.95), (-9.78, 0.99), (-9.57, 1.17),
+    (-9.44, 1.79), (-10.09, 2.66), (-10.18, 3.26), (-9.89, 3.64), (-9.78, 4.3), (-9.58, 4.43),
+    (-9.21, 4.48), (-8.79, 4.81), (-7.8, 4.81), (-7.4, 4.47), (-7.04, 4.43), (-6.65, 4.14),
+    (-6.34, 4.1), (-6.04, 4.26), (-5.88, 4.8), (-5.54, 4.98), (-3.35, 4.97), (-2.62, 4.46),
+    (-0.7, 4.48), (-0.18, 4.89), (0.69, 4.9), (0.9, 4.84), (1.27, 4.48), (2.49, 4.46),
+    (2.73, 4.54), (3, 4.88), (3.22, 4.97), (5.39, 4.98), (5.78, 4.82), (5.94, 4.29),
+    (6.18, 4.11), (6.53, 4.13), (6.85, 4.39), (7.31, 4.48), (7.6, 4.76), (7.8, 4.82),
+    (8.72, 4.81), (9.12, 4.47), (9.57, 4.38), (9.73, 4.15), (9.73, 3.83), (9.61, 3.62),
+    (9.42, 3.55), (8.78, 3.57), (8.24, 2.91), (8.38, 2.56), (9.23, 2.37), (9.57, 2.11),
+    (9.73, 1.7), (9.74, 1.38), (9.56, 0.96), (9.23, 0.7), (8.89, 0.6), (8.2, 0.75), (7.91, 0.5),
+    (7.91, -3.3), (8.1, -3.53), (8.56, -3.56), (8.77, -3.67), (8.9, -4.07), (8.73, -4.38),
+    (8.25, -4.48), (7.97, -4.76), (7.7, -4.85), (6.82, -4.82), (6.42, -4.49), (6.01, -4.42),
+    (5.72, -4.18), (5.51, -4.13), (5.15, -4.21), (4.94, -4.78), (4.57, -4.98), (2.31, -4.97),
+    (1.85, -4.56), (1.64, -4.5), (-0.32, -4.51), (-0.71, -4.86), (-0.97, -4.94), (-1.76, -4.9),
+    (-2.25, -4.51), (-3.54, -4.5), (-4.16, -4.97), (-6.46, -4.98), (-6.79, -4.79),
+    (-6.94, -4.26), (-7.22, -4.13), (-7.49, -4.15), (-7.85, -4.41), (-8.27, -4.48),
+    (-8.66, -4.81), (-9.58, -4.85), (-9.81, -4.76), (-10.1, -4.49), (-10.57, -4.39),
+    (-10.73, -4.16), (-10.73, -3.85), (-10.62, -3.65), (-10.08, -3.53), (-9.91, -3.4),
+    (-9.85, -3.17), (-9.91, -2.95), (-10.77, -2.63), (-11.22, -2.63), (-11.45, -2.43),
+    (-11.44, -2.13), (-11.07, -1.86), (-10.98, -1.62), (-10.98, -0.84), (-11.25, -0.47),
+]
+INTAKE_HUMPS = [
+    (-6.6, -4.2, -4.6, 4.6, 12.95), (2.6, 5.7, -4.6, 4.6, 12.95),
+    (-4.3, -3.1, 2.1, 4.6, 12.15), (-4.1, -3.0, -4.6, -2.1, 12.15),
+    (-4.5, -2.8, -1.4, 1.4, 12.6), (2.0, 3.0, -1.4, 1.4, 12.6),
+    (-9.8, -7.1, -4.4, 4.4, 11.9),
+]
+INTAKE_BASE = (9.9, 10.75)   # the flange's underside (inside the heads) and top
+PAD_X = -0.3            # the carb pad's middle
+PAD_Z = 13.15           # the carb pad's underside
+PAD = (2.65, 2.6, 0.4)  # half length, half width, thickness
+PAD_BOSSES = [(2.3, 2.58), (2.3, -2.58), (-3.3, 2.58), (-3.3, -2.58)]
+INTAKE_BOLT_X = [-9.42, -7.1, -0.8, 1.52, 7.1, 9.42]   # the right bank's; the left's mirrored
+INTAKE_BOLT = (8.45, 1.39)  # (a, h) of the bolt heads on each head's intake face
+DIST = (8.87, 1.55)     # distributor's axis (x, y)
+THERMOSTAT = (-8.9, 0.06)
+COIL = (6.7, -1.9)
 
 # Front of the engine: the belt's plane and what it goes round, (y, z).
 COVER_FACE = -11.4
 BELT_X = -13.35
 CRANK_PULLEY_R = 3.2
-PUMP = (0.0, 7.2)
+PUMP = (0.0, 7.03)
 PUMP_PULLEY_R = 3.3
 ALTERNATOR = (8.6, 10.6)
 ALT_PULLEY_R = 1.45
@@ -131,18 +170,23 @@ FAN_X = -16.75
 FAN_R = 9.0
 FAN_PITCH = math.radians(28)
 
-# Starter, under the right side at the back: its axis (y, z).
-STARTER = (5.9, -4.9)
-FLYWHEEL = (10.95, 0.5, 7.0)    # front face, thickness, radius
+# Starter, on the right below the rail: its axis (y, z).
+STARTER = (6.88, -1.77)
+FLYWHEEL = (11.85, 0.86, 7.09)    # front face, thickness, radius
 
-# Oil pan: the tray under the whole rail, the sump at the back.
-PAN_TRAY = (10.2, 5.4, 1.8)
-SUMP = (0.8, 9.9, -4.6, 3.4, -7.3)  # x0, x1, y0, y1, bottom
+# Oil pan: the tray under the rail, the sump at the back. The oil filter hangs straight
+# down beside it at the back on the left.
+PAN_TRAY = (10.2, 4.3, 1.8)
+SUMP = (0.8, 9.9, -4.3, 3.4, -7.3)  # x0, x1, y0, y1, bottom
+OIL_FILTER = (8.88, -6.4)
 
-# Headers: the collectors' front ends (x before the bank's shift, |y|, z) and their axis.
-COLLECTOR = {"long": ((9.0, 9.9, -6.8), (0.72, 0.0, -0.69)),
-             "shorty": ((1.5, 10.6, -2.6), (0.8, 0.0, -0.6))}
+# Headers: the collectors' front ends (x along the bank, |y|, z) and their axis.
+COLLECTOR = {"long": ((9.0, 10.4, -6.8), (0.72, 0.0, -0.69)),
+             "shorty": ((1.5, 11.4, -2.6), (0.8, 0.0, -0.6))}
 PRIMARY_D = 1.625
+PRIMARY_OUT = (1.0, 1.8)    # each primary straight out of its port, then its bend's radius
+PRIMARY_MID_Z = 3.5         # down to here outside the plugs before bending back
+PRIMARY_LEAN = (-0.3, 0.0, 0.0, 0.3)  # front to back: the end tubes lean off their plugs
 
 CHROME = {"name": "chrome", "pbrMetallicRoughness": {
     "baseColorFactor": [0.9, 0.9, 0.92, 1], "metallicFactor": 1.0, "roughnessFactor": 0.12}}
@@ -154,9 +198,11 @@ FILTER_CAN = {"name": "oil filter", "pbrMetallicRoughness": {
     "baseColorFactor": [0.75, 0.75, 0.73, 1], "metallicFactor": 0.1, "roughnessFactor": 0.4}}
 # Body name prefixes to finishes, first match wins; anything else is the block's paint.
 FINISHES = [
-    ("valve_bolt", STEEL), ("valve_cover_filler", BLACK), ("valve_cover_pcv", BLACK),
+    ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
     ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON), ("thermostat", CAST_IRON),
+    ("ignition_coil_bracket", STEEL), ("ignition_coil_foot", STEEL), ("ignition_coil", BLACK),
+    ("oil_filler", CHROME),
     ("carb_throat", BLACK), ("carburetor", ZINC),
     ("air_cleaner_element", FILTER), ("air_cleaner_wingnut", CHROME), ("air_cleaner", CHROME),
     ("distributor_cap", BLACK), ("distributor", STEEL),
@@ -194,7 +240,32 @@ def on_head(s, a, h):
 
 
 def bank_x(s, x):
-    return x + s * BANK_SHIFT
+    return x + BORE_MID + s * BANK_SHIFT
+
+
+def head_dir(s, a, h):
+    """A direction in bank s's head frame, (a, h), as (y, z)."""
+    u, _, inn = bank(s)
+    return a * inn + h * u
+
+
+def lerp(p, q, t):
+    return np.asarray(p, float) + t * (np.asarray(q, float) - np.asarray(p, float))
+
+
+def exhaust_face(s):
+    """Bank s's exhaust face: a point on it (y, z), its direction up the face, and its
+    outward normal, as (y, z)."""
+    f0, f1 = (on_head(s, *p) for p in EXHAUST_FACE)
+    up = unit(f1 - f0)
+    n = np.array([up[1], -up[0]])
+    if n[0] * s < 0:
+        n = -n
+    return f0, up, n
+
+
+def port_center(s):
+    return on_head(s, *lerp(*EXHAUST_FACE, PORT_T))
 
 
 def p3(x, yz):
@@ -327,227 +398,213 @@ def block(d):
 # The heads.
 
 def head_outline(s):
-    # The intake face, from the deck's inner end, leans INTAKE_LEAN off upright: in the
-    # head's frame it climbs mostly along h and a little inward.
-    up = np.array([S45, S45])                       # upright in (a, h)
-    out = np.array([-S45, S45])                     # level and outward in (a, h)
-    face = math.cos(INTAKE_LEAN) * up + math.sin(INTAKE_LEAN) * out
-    top_a = HEAD_DECK[1] + face[0] / face[1] * HEAD_TOP
-    pts = [(HEAD_DECK[0], 0.0), (HEAD_DECK[1], 0.0), (top_a, HEAD_TOP),
-           (HEAD_DECK[0] + 0.55, HEAD_TOP), (HEAD_DECK[0], HEAD_TOP - 0.55)]
-    return [tuple(on_head(s, a, h)) for a, h in pts]
-
-
-def intake_face(s):
-    """Bottom and top of bank s's intake face, (y, z)."""
-    o = head_outline(s)
-    return np.array(o[1]), np.array(o[2])
+    return [tuple(on_head(s, a, h)) for a, h in HEAD]
 
 
 def heads(d):
     for s in (1, -1):
-        sk = d.sketch("YZ", f"Head {s}", offset=bank_x(s, -HEAD_LEN / 2))
+        sk = d.sketch("YZ", f"Head {s}", offset=bank_x(s, -HEAD_HALF))
         d.poly(ccw(head_outline(s)))
         d.finish()
-        d.extrude(sk, f"cylinder_head_{s}", HEAD_LEN)
+        d.extrude(sk, f"cylinder_head_{s}", 2 * HEAD_HALF)
 
-        # Spark plugs out of the exhaust face, below the ports, square to it.
-        _, _, inn = bank(s)
-        face = on_head(s, HEAD_DECK[0], PLUG_H)
-        for part, size, start, length in (("spark_plug_base", 0.63, 0.0, 0.4),
-                                          ("spark_plug", 0.5, 0.4, 1.25),
-                                          ("spark_plug_tip", 0.22, 1.65, 0.35)):
-            sk, to2d = d.plane(p3(0.0, face), (1, 0, 0), v3(-inn), f"{part} {s}")
-            for x in BORE_X:
-                c = to2d(p3(bank_x(s, x), face))
-                if part == "spark_plug_base":
-                    d.hexagon(c, size)
-                else:
-                    d.circle(c, size / 2)
+        # Spark plugs out of the exhaust face below the ports, leaning down and back:
+        # the hex where the axis leaves the face, the insulator, the terminal.
+        f0, up, n = exhaust_face(s)
+        dirn = unit([PLUG_DIR[0], s * PLUG_DIR[1], PLUG_DIR[2]])
+        p_yz = on_head(s, *PLUG)
+        # Where the axis, run outward from p, crosses the face's line.
+        m = np.array([[dirn[1], -up[0]], [dirn[2], -up[1]]])
+        t, _ = np.linalg.solve(m, f0 - p_yz)
+        for k, x in enumerate(BORE_X):
+            exit_ = p3(bank_x(s, x), p_yz) + t * dirn
+            sk, to2d = d.plane(exit_, (1, 0, 0), dirn, f"Spark plug hex {s} {k}")
+            d.hexagon(to2d(exit_), 0.63)
             d.finish()
-            d.extrude(sk, f"{part}_{s}", length, start_offset=inch(start))
+            d.extrude(sk, f"spark_plug_base_{s}_{k}", 0.4, start_offset=inch(-0.1))
+            d.cylinder(f"spark_plug_{s}_{k}", exit_ + 0.3 * dirn, dirn, 0.5, 1.0)
+            d.cylinder(f"spark_plug_tip_{s}_{k}", exit_ + 1.3 * dirn, dirn, 0.25, 0.32)
+
+
+def rail_frame(s):
+    """Bank s's valve cover rail: its outer edge (y, z), across it toward the valley,
+    and up off it, as (y, z)."""
+    r0, r1 = (np.array(p, float) for p in RAIL)
+    across = unit(r1 - r0)
+    upa = np.array([-across[1], across[0]])
+    return on_head(s, *r0), head_dir(s, *across), head_dir(s, *upa)
 
 
 def valve_covers(d):
     for s in (1, -1):
-        u, _, _ = bank(s)
-        top = on_head(s, 0.0, HEAD_TOP)
+        o, across, up = rail_frame(s)
+        mid = bank_x(s, 0.0)
 
         def plane(lift, name):
-            origin = p3(bank_x(s, 0.0), top) + lift * v3(u)
-            sk, to2d = d.plane(origin, (1, 0, 0), v3(u), name)
-            return sk, lambda x, a: to2d(origin + np.array([x, 0, 0]) + a * v3(bank(s)[2]))
+            origin = p3(mid, o + lift * up)
+            sk, to2d = d.plane(origin, (1, 0, 0), v3(up), name)
+            return sk, lambda x, c: to2d(origin + np.array([x, 0, 0]) + c * v3(across))
 
-        a0, a1 = COVER_A
+        c0, c1, half, t = COVER_FLANGE
         sk, at = plane(0.0, f"Cover flange {s}")
-        d.rounded(at(-COVER_HALF, a0), at(COVER_HALF, a1), 0.7)
-        for x, a in COVER_TABS:
-            d.circle(at(x, a), 0.5)
+        d.rounded(at(-half, c0), at(half, c1), 0.75)
         d.finish()
-        d.extrude(sk, f"valve_cover_{s}", 0.16)
+        d.extrude(sk, f"valve_cover_{s}", t)
 
-        sk, at = plane(0.16, f"Cover body {s}")
-        d.rounded(at(-COVER_HALF + 0.15, a0 + 0.15), at(COVER_HALF - 0.15, a1 - 0.15), 0.6)
+        # The body, a little drafted, and its top rounded over by a steep second draft.
+        c0, c1, half = COVER_BODY
+        sk, at = plane(t, f"Cover body {s}")
+        d.rounded(at(-half, c0), at(half, c1), 0.9)
         d.finish()
-        d.extrude(sk, f"valve_cover_body_{s}", COVER_H, taper="-4 deg")
-
-        # The raised panel on top, as on the reference's covers.
-        shrink = 0.15 + COVER_H * math.tan(math.radians(4)) + 0.45
-        sk, at = plane(0.16 + COVER_H, f"Cover panel {s}")
-        d.rounded(at(-COVER_HALF + shrink, a0 + shrink), at(COVER_HALF - shrink, a1 - shrink), 0.4)
+        side = COVER_H - t - 0.45
+        d.extrude(sk, f"valve_cover_body_{s}", side, taper="-2 deg")
+        shrink = side * math.tan(math.radians(2))
+        sk, at = plane(t + side, f"Cover top {s}")
+        d.rounded(at(-half + shrink, c0 + shrink), at(half - shrink, c1 - shrink), 0.9 - shrink)
         d.finish()
-        d.extrude(sk, f"valve_cover_panel_{s}", 0.14)
+        d.extrude(sk, f"valve_cover_top_{s}", 0.45, taper="-42 deg")
 
-        for i, (x, a) in enumerate(COVER_TABS):
-            sk, at = plane(0.16, f"Cover bolt {s} {i}")
-            d.hexagon(at(x, a), 0.44)
+        # Four bolts on spreader bars along the flange's edges.
+        for i, (x, c) in enumerate(COVER_BOLTS):
+            sk, at = plane(t, f"Cover bar {s} {i}")
+            p = at(x, c)
+            q = at(x + 1.0, c)
+            if abs(q[0] - p[0]) > abs(q[1] - p[1]):
+                d.rounded((p[0] - 0.75, p[1] - 0.22), (p[0] + 0.75, p[1] + 0.22), 0.2)
+            else:
+                d.rounded((p[0] - 0.22, p[1] - 0.75), (p[0] + 0.22, p[1] + 0.75), 0.2)
             d.finish()
-            d.extrude(sk, f"valve_bolt_{s}_{i}", 0.3)
-
-        # The oil filler's breather cap at the front of the left cover, the PCV valve's
-        # grommet at the back of the right one.
-        lift = 0.16 + COVER_H + 0.14
-        if s == -1:
-            sk, at = plane(lift, "Filler")
-            d.circle(at(-6.3, 3.1), 1.3)
+            d.extrude(sk, f"valve_bolt_bar_{s}_{i}", 0.06)
+            sk, at = plane(t + 0.06, f"Cover bolt {s} {i}")
+            d.hexagon(at(x, c), 0.44)
             d.finish()
-            d.extrude(sk, "valve_cover_filler_cap", 1.1, taper="-6 deg")
-        else:
-            sk, at = plane(lift, "PCV")
-            d.circle(at(6.6, 3.1), 0.55)
-            d.finish()
-            d.extrude(sk, "valve_cover_pcv", 0.9)
+            d.extrude(sk, f"valve_bolt_{s}_{i}", 0.25)
 
 
 # The intake.
 
 def intake(d):
-    # The base: each head's flange against its intake face, 0.55 thick, and the valley
-    # cover between them.
-    pts = {}
-    for s in (1, -1):
-        f0, f1 = intake_face(s)
-        along = unit(f1 - f0)
-        n = np.array([-along[1], along[0]]) if s == 1 else np.array([along[1], -along[0]])
-        inner_top = f1 + 0.55 * n
-        k = (inner_top[1] - (VALLEY_Z + 0.85)) / along[1]
-        pts[s] = (f0, f1, inner_top, inner_top - k * along, n, along)
-    r, l = pts[1], pts[-1]
-    base = [tuple(r[0]), tuple(r[1]), tuple(r[2]), tuple(r[3]), tuple(l[3]), tuple(l[2]),
-            tuple(l[1]), tuple(l[0])]
-    sk = d.sketch("YZ", "Intake", offset=-INTAKE_HALF)
-    d.poly(ccw(base))
+    # The flange and valley cover; its underside is inside the heads and never seen.
+    z0, z1 = INTAKE_BASE
+    sk = d.sketch("XY", "Intake flange", offset=z0)
+    d.poly(ccw([tuple(p) for p in INTAKE_FLANGE]))
     d.finish()
-    d.extrude(sk, "intake_manifold", 2 * INTAKE_HALF)
+    d.extrude(sk, "intake_manifold", z1 - z0)
 
-    # The water crossover across the front and the wall across the back, the full width
-    # between the faces up to the crossover's top.
-    def wedge(top_z):
-        out = []
-        for f0, f1, *_ in (r, l):
-            t = (top_z - f0[1]) / (f1[1] - f0[1])
-            out.append((tuple(f0), tuple(f0 + t * (f1 - f0))))
-        (r0, rt), (l0, lt) = out
-        return ccw([r0, rt, lt, l0])
-    sk = d.sketch("YZ", "Crossover", offset=-INTAKE_HALF - 1.1)
-    d.poly(wedge(12.2))
-    d.finish()
-    d.extrude(sk, "intake_manifold_crossover", 1.1)
-    sk = d.sketch("YZ", "Back wall", offset=INTAKE_HALF)
-    d.poly(wedge(10.6))
-    d.finish()
-    d.extrude(sk, "intake_manifold_back", 0.7)
+    # The runners and crossover, each a hump along Y rounded over the top.
+    for k, (x0, x1, y0, y1, top) in enumerate(INTAKE_HUMPS):
+        origin = np.array([x0, y0, z1 - 0.6])
+        sk, to2d = d.plane(origin, (1, 0, 0), (0, 1, 0), f"Intake hump {k}")
+        r = min(0.9, (x1 - x0) / 2 - 0.05, (top - origin[2]) / 2 - 0.05)
+        d.rounded(to2d(origin), to2d((x1, y0, top)), r)
+        d.finish()
+        d.extrude(sk, f"intake_manifold_runner_{k}", y1 - y0)
 
-    # Thermostat housing on the crossover, its outlet neck up and forward.
-    d.cylinder("thermostat_housing", (THERMOSTAT_X, 0, 12.2), (0, 0, 1), 3.0, 0.7)
-    neck = np.array([THERMOSTAT_X, 0.0, 12.75])
-    dirn = unit([-0.7, 0.0, 0.72])
-    d.cylinder("thermostat_neck", neck, dirn, 2.2, 1.4)
-    d.cylinder("thermostat_hose_neck", neck + 1.4 * dirn, dirn, 1.55, 1.3)
-
-    # The plenum under the pad, and the pad.
-    hx, hy = PLENUM
-    sk = d.sketch("XY", "Plenum", offset=VALLEY_Z + 0.85)
-    d.rounded((-hx, -hy), (hx, hy), 0.9)
-    d.finish()
-    d.extrude(sk, "intake_manifold_plenum", PAD_Z - VALLEY_Z - 0.85, taper="-3 deg")
+    # The plenum under the pad.
     px, py, pt = PAD
+    sk = d.sketch("XY", "Plenum", offset=z1 - 0.1)
+    d.rounded((PAD_X - px - 0.1, -py - 0.1), (PAD_X + px + 0.1, py + 0.1), 0.8)
+    d.finish()
+    d.extrude(sk, "intake_manifold_plenum", PAD_Z - z1 + 0.1, taper="-3 deg")
+
+    # The carb pad and its four bolt bosses.
     sk = d.sketch("XY", "Carb pad", offset=PAD_Z)
-    d.rounded((-px, -py), (px, py), 0.35)
+    d.rounded((PAD_X - px, -py), (PAD_X + px, py), 0.45)
     d.finish()
     d.extrude(sk, "intake_manifold_pad", pt)
+    sk = d.sketch("XY", "Pad bosses", offset=PAD_Z)
+    for x, y in PAD_BOSSES:
+        d.circle((x, y), 0.36)
+    d.finish()
+    d.extrude(sk, "intake_manifold_pad_bosses", pt + 0.12)
 
-    # Runners, from inside the plenum out to each port, the two planes taking alternate
-    # cylinders on each bank.
+    # Bolts along each head's intake face, their heads toward the valley.
     for s in (1, -1):
-        f0, f1, _, _, n, along = pts[s]
-        port = f0 + 0.55 * (f1 - f0) + 0.25 * n
-        for i, x in enumerate(INTAKE_PORT_X):
-            upper = (i in (0, 3)) == (s == 1)
-            z = RUNNER_Z[0] if upper else RUNNER_Z[1]
-            px_ = bank_x(s, x)
-            x0 = px_ * 0.35
-            start = np.array([x0, s * (hy - 0.9), z])
-            sk0, to0 = d.plane(start, (1, 0, 0), (0, s, 0), f"Runner {s} {i} start")
-            c = to0(start)
-            d.rounded((c[0] - 0.6, c[1] - 0.85), (c[0] + 0.6, c[1] + 0.85), 0.4)
+        _, _, inn = bank(s)
+        for k, x in enumerate(INTAKE_BOLT_X):
+            c = p3(bank_x(s, s * x), on_head(s, *INTAKE_BOLT))
+            sk, to2d = d.plane(c, (1, 0, 0), v3(inn), f"Intake bolt {s} {k}")
+            d.hexagon(to2d(c), 0.5)
             d.finish()
-            end = p3(px_, port)
-            sk1, to1 = d.plane(end, (1, 0, 0), v3(-n), f"Runner {s} {i} end")
-            c = to1(end)
-            up = to1(end + v3(along))
-            # The port's rectangle stands along the face.
-            ax = np.array(up) - np.array(c)
-            if abs(ax[1]) >= abs(ax[0]):
-                d.rounded((c[0] - 0.62, c[1] - 0.95), (c[0] + 0.62, c[1] + 0.95), 0.4)
-            else:
-                d.rounded((c[0] - 0.95, c[1] - 0.62), (c[0] + 0.95, c[1] + 0.62), 0.4)
-            d.finish()
-            d.loft(f"intake_manifold_runner_{s}_{i}", [sk0, sk1])
-
-        # Bolts through the flange's top, square to the face, between the runners.
-        bolt = f0 + 0.86 * (f1 - f0) + 0.55 * n
-        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolts {s}")
-        for x in (-7.3, -4.4, 0.0, 4.4, 7.3):
-            d.hexagon(to2d(p3(bank_x(s, x), bolt)), 0.5)
-        d.finish()
-        d.extrude(sk, f"intake_manifold_bolts_{s}", 0.3)
+            d.extrude(sk, f"intake_manifold_bolts_{s}_{k}", 0.3)
 
     # The distributor's boss at the back.
-    d.cylinder("intake_manifold_distributor_boss", (DIST[0], DIST[1], VALLEY_Z + 0.4), (0, 0, 1),
-               2.7, 11.2 - VALLEY_Z - 0.4)
+    d.cylinder("intake_manifold_distributor_boss", (DIST[0], DIST[1], 10.2), (0, 0, 1), 2.1, 1.25)
+
+    # The thermostat housing on the front crossover, its outlet neck forward and up.
+    tx, ty = THERMOSTAT
+    d.cylinder("thermostat_housing", (tx, ty - 0.35, 11.6), (0, 0, 1), 2.6, 1.7)
+    sk = d.sketch("XY", "Thermostat ears", offset=12.3)
+    d.c += outline_commands(*hull_outline([((tx, ty - 1.9), 0.45), ((tx, ty + 1.2), 0.45)]))
+    d.finish()
+    d.extrude(sk, "thermostat_ears", 0.45)
+    neck = np.array([tx, ty, 12.9])
+    dirn = unit([-0.6, 0.0, 0.8])
+    d.cylinder("thermostat_neck", neck, dirn, 1.55, 2.25)
+    d.cylinder("thermostat_bead", neck + 1.75 * dirn, dirn, 1.72, 0.18)
+
+
+def coil(d):
+    """The ignition coil on its bracket on the intake, behind the carburetor on the left."""
+    x, y = COIL
+    d.cylinder("ignition_coil_foot", (x, y, 11.0), (0, 0, 1), 1.4, 0.55)
+    d.revolve("ignition_coil", (x, y, 0.0), (0, 0, 1), (1, 0, 0),
+              [(11.5, 0.0), (11.5, 1.05), (16.4, 1.05), (16.6, 1.15), (16.95, 1.15),
+               (17.05, 0.95), (17.05, 0.0)])
+    d.revolve("ignition_coil_tower", (x, y, 0.0), (0, 0, 1), (1, 0, 0),
+              [(17.0, 0.0), (17.0, 0.42), (17.55, 0.38), (17.65, 0.25), (17.65, 0.0)])
+    d.revolve("ignition_coil_bracket", (x, y, 0.0), (0, 0, 1), (1, 0, 0),
+              [(13.3, 1.0), (13.3, 1.17), (14.0, 1.17), (14.0, 1.0)])
+    for k, ang in enumerate((90, 270)):
+        t = math.radians(ang)
+        c = (x + 1.3 * math.cos(t), y + 1.3 * math.sin(t))
+        d.cylinder(f"ignition_coil_post_{k}", (c[0], c[1], 16.95), (0, 0, 1), 0.3, 0.3)
+
+
+def oil_filler(d):
+    """The oil filler tube out of the intake's front, forward and up, and its cap."""
+    p0 = np.array([-10.0, -0.3, 10.6])
+    p1 = np.array([-13.55, -1.65, 16.2])
+    dirn = unit(p1 - p0)
+    d.cylinder("oil_filler", p0, dirn, 1.2, float(np.linalg.norm(p1 - p0)))
+    across = unit(np.cross(dirn, [0, 1, 0]))
+    d.revolve("oil_filler_cap", p1, dirn, across,
+              [(-0.2, 0.0), (-0.2, 0.75), (0.1, 1.45), (0.55, 1.5), (0.9, 1.35), (1.1, 0.9),
+               (1.15, 0.0)])
 
 
 # The carburetor and air cleaner.
 
 def carburetor(d):
     z = PAD_Z + PAD[2]
-    d.box("carburetor_base", (-2.8, -2.65, z), (2.8, 2.65, z + 0.75))
+    x = PAD_X
+    d.box("carburetor_base", (x - 2.8, -2.65, z), (x + 2.8, 2.65, z + 0.75))
     z += 0.75
-    d.box("carburetor", (-2.25, -2.5, z), (2.25, 2.5, z + 1.5))
+    d.box("carburetor", (x - 2.25, -2.5, z), (x + 2.25, 2.5, z + 1.5))
     for end, x0, x1 in (("front", -4.0, -2.25), ("back", 2.25, 4.0)):
         sk = d.sketch("XY", f"Bowl {end}", offset=z - 0.15)
-        d.rounded((x0, -2.35), (x1, 2.35), 0.45)
+        d.rounded((x + x0, -2.35), (x + x1, 2.35), 0.45)
         d.finish()
         d.extrude(sk, f"carburetor_bowl_{end}", 2.55)
         sx = x0 if end == "front" else x1
-        d.cylinder(f"carburetor_bowl_screw_{end}", (sx, 1.6, z + 1.9), (np.sign(sx), 0, 0), 0.4, 0.15)
+        d.cylinder(f"carburetor_bowl_screw_{end}", (x + sx, 1.6, z + 1.9), (np.sign(sx), 0, 0), 0.4, 0.15)
     z += 1.5
-    d.box("carburetor_air_horn", (-2.25, -2.5, z), (2.25, 2.5, z + 0.35))
+    d.box("carburetor_air_horn", (x - 2.25, -2.5, z), (x + 2.25, 2.5, z + 0.35))
     z += 0.35
     sk = d.sketch("XY", "Air cleaner ring", offset=z)
-    d.circle((0, 0), 2.5625)
-    d.circle((0, 0), 2.35)
+    d.circle((x, 0), 2.5625)
+    d.circle((x, 0), 2.35)
     d.finish()
     d.extrude(sk, "carburetor_ring", 0.55)
-    for x in (-0.85, 0.85):
-        for y in (-0.85, 0.85):
-            d.cylinder(f"carb_throat_{x}_{y}", (x, y, z), (0, 0, 1), 1.56 if x < 0 else 1.69, 0.04)
+    for tx in (-0.85, 0.85):
+        for ty in (-0.85, 0.85):
+            d.cylinder(f"carb_throat_{tx}_{ty}", (x + tx, ty, z), (0, 0, 1), 1.56 if tx < 0 else 1.69, 0.04)
     return z + 0.55
 
 
 def air_cleaner(d, zb):
-    o = np.array([0.0, 0.0, zb])
+    x = PAD_X
+    o = np.array([x, 0.0, zb])
     d.revolve("air_cleaner_base", o, (0, 0, 1), (1, 0, 0),
               [(0.0, 2.6), (0.0, 7.3), (0.6, 7.3), (0.6, 7.15), (0.12, 7.15), (0.12, 2.6)])
     # The pleated paper element, round a solid inner ring.
@@ -556,48 +613,54 @@ def air_cleaner(d, zb):
     for i in range(2 * n):
         t = math.pi * i / n
         r = 7.0 if i % 2 == 0 else 6.78
-        pleats.append((r * math.cos(t), r * math.sin(t)))
+        pleats.append((x + r * math.cos(t), r * math.sin(t)))
     sk = d.sketch("XY", "Element", offset=zb + 0.12)
     d.poly(pleats)
-    d.circle((0, 0), 6.2)
+    d.circle((x, 0), 6.2)
     d.finish()
     d.extrude(sk, "air_cleaner_element", 3.0)
     zl = zb + 3.12
     d.revolve("air_cleaner_lid", o, (0, 0, 1), (1, 0, 0),
               [(3.12 - 0.5, 7.3), (3.12 + 0.05, 7.3), (3.12 + 0.35, 6.7), (3.12 + 0.78, 0.45),
                (3.12 + 0.64, 0.45), (3.12 + 0.22, 6.65), (3.12 - 0.05, 7.15), (3.12 - 0.5, 7.15)])
-    d.cylinder("air_cleaner_stud", (0, 0, zl + 0.5), (0, 0, 1), 0.3, 1.2)
-    d.cylinder("air_cleaner_wingnut", (0, 0, zl + 0.78), (0, 0, 1), 0.75, 0.5)
+    d.cylinder("air_cleaner_stud", (x, 0, zl + 0.5), (0, 0, 1), 0.3, 1.2)
+    d.cylinder("air_cleaner_wingnut", (x, 0, zl + 0.78), (0, 0, 1), 0.75, 0.5)
     sk = d.sketch("XZ", "Wing nut", offset=0.0)
     for side in (1, -1):
-        d.poly([(side * 0.3, -(zl + 0.8)), (side * 1.25, -(zl + 1.05)), (side * 1.35, -(zl + 1.6)),
-                (side * 0.95, -(zl + 1.65)), (side * 0.3, -(zl + 1.25))])
+        d.poly([(x + side * 0.3, -(zl + 0.8)), (x + side * 1.25, -(zl + 1.05)),
+                (x + side * 1.35, -(zl + 1.6)), (x + side * 0.95, -(zl + 1.65)),
+                (x + side * 0.3, -(zl + 1.25))])
     d.finish()
     d.extrude(sk, "air_cleaner_wingnut_wings", 0.12, "symmetric")
 
 
 def distributor(d):
+    """Only the outside: the housing out of the intake's boss, the cap, the vacuum advance
+    and the hold-down clamp."""
     x, y = DIST
     o = np.array([x, y, 0.0])
     d.revolve("distributor_body", o, (0, 0, 1), (1, 0, 0),
-              [(8.6, 0.0), (8.6, 0.72), (11.2, 0.72), (11.2, 1.25), (11.7, 1.6), (12.9, 1.6),
-               (12.9, 0.0)])
-    # Vacuum advance off the housing's side, toward the front on the right.
-    arm = unit([-0.55, 0.84, 0.0])
-    d.cylinder("distributor_vacuum_arm", o + np.array([0, 0, 12.25]) + 1.3 * arm, arm, 0.75, 1.2)
-    d.cylinder("distributor_vacuum", o + np.array([0, 0, 12.25]) + 2.5 * arm, arm, 2.1, 1.0)
+              [(10.4, 0.0), (10.4, 0.64), (11.0, 0.64), (11.0, 0.9), (11.25, 0.9), (11.25, 0.64),
+               (12.6, 0.64), (12.7, 1.86), (13.05, 1.86), (13.05, 0.0)])
     d.revolve("distributor_cap", o, (0, 0, 1), (1, 0, 0),
-              [(12.9, 0.0), (12.9, 2.15), (13.9, 2.15), (14.3, 1.95), (14.95, 1.2), (14.95, 0.0)])
-    # Eight towers on the shoulder, leaning out, and the coil tower in the middle.
+              [(13.0, 0.0), (13.0, 2.05), (13.3, 2.13), (13.5, 2.05), (14.95, 2.05), (15.2, 1.68),
+               (16.35, 1.72), (16.6, 1.58), (16.72, 1.3), (16.72, 0.0)])
+    # Eight towers standing up round the top, and the coil tower in the middle.
     for k in range(8):
         t = 2 * math.pi * (k + 0.5) / 8
-        radial = np.array([math.cos(t), math.sin(t), 0.0])
-        lean = unit(np.array([0, 0, 1.0]) + 0.45 * radial)
-        base = o + np.array([0, 0, 14.35]) + 1.55 * radial
-        d.cylinder(f"distributor_cap_tower_{k}", base, lean, 0.62, 0.85)
-    d.cylinder("distributor_cap_coil_tower", o + np.array([0, 0, 14.9]), (0, 0, 1), 0.72, 0.85)
-    # Hold-down clamp at the base.
-    d.box("distributor_clamp", (x - 2.2, -0.35, 11.2), (x - 0.6, 0.35, 11.45))
+        base = o + np.array([1.2 * math.cos(t), 1.2 * math.sin(t), 16.4])
+        d.cylinder(f"distributor_cap_tower_{k}", base, (0, 0, 1), 0.64, 0.9)
+    d.cylinder("distributor_cap_coil_tower", o + np.array([0, 0, 16.5]), (0, 0, 1), 0.74, 1.1)
+    # The vacuum advance off the housing toward the front on the right, by the cap.
+    arm = unit([-0.72, 0.68, 0.0])
+    z = 13.5
+    d.cylinder("distributor_vacuum_arm", o + np.array([0, 0, z]) + 1.7 * arm, arm, 0.6, 0.7)
+    d.cylinder("distributor_vacuum", o + np.array([0, 0, z]) + 2.25 * arm, arm, 2.2, 1.2)
+    d.cone("distributor_vacuum_end", o + np.array([0, 0, z]) + 3.45 * arm, arm, 1.1, 0.6, 0.35)
+    d.cylinder("distributor_vacuum_nipple", o + np.array([0, 0, z]) + 3.8 * arm, arm, 0.25, 0.45)
+    # The hold-down clamp over the collar, its bolt in front.
+    d.box("distributor_clamp", (x - 2.0, y - 0.35, 11.25), (x - 0.55, y + 0.35, 11.45))
+    d.cylinder("distributor_clamp_bolt", (x - 1.55, y, 11.45), (0, 0, 1), 0.55, 0.3)
 
 
 # The headers.
@@ -622,9 +685,8 @@ def headers(d, style):
     (cx, cy, cz), axis = COLLECTOR[style]
     axis = unit(axis)
     for s in (1, -1):
-        _, _, inn = bank(s)
-        n = v3(-inn)                       # out of the exhaust face
-        port_yz = on_head(s, HEAD_DECK[0], PORT_H)
+        n = v3(exhaust_face(s)[2])         # out of the exhaust face
+        port_yz = port_center(s)
         # The flange over all four ports.
         sk, to2d = d.plane(p3(0.0, port_yz), (1, 0, 0), n, f"Header flange {s}")
         x0, x1 = bank_x(s, EXHAUST_PORT_X[0] - 1.05), bank_x(s, EXHAUST_PORT_X[-1] + 1.05)
@@ -644,16 +706,29 @@ def headers(d, style):
         mouth_order = sorted(range(4), key=lambda k: (mouths[k] @ np.array([1.0, 0, 0]),
                                                       -s * mouths[k][1]))
         for k_port, k_mouth in zip(order, mouth_order):
+            # Out of the port and down outside the plugs to below them, the end tubes
+            # leaning away from their plugs; then one bend back into the collector.
             p0, target = ports[k_port] - 0.375 * n, mouths[k_mouth]
-            e1, e2, (a0, a1, c, q, t) = tube_path(p0, n, target)
+            lean = PRIMARY_LEAN[order.index(k_port)]
+            drop = unit([lean, 0.0, -1.0])
+            corner = p0 + (PRIMARY_OUT[0] + PRIMARY_OUT[1]) * n
+            mid = corner + (corner[2] - PRIMARY_MID_Z) * drop / -drop[2]
             name = f"exhaust_runner_{s}_{k_port}"
-            sk, _ = d.plane(p0, e1, np.cross(e1, e2), f"{name} path")
-            d.c.append(cmd("sketch.line", infer=False, points=[skp(*a0), skp(*a1)]))
-            d.c.append(cmd("sketch.arc.center_point", center=skp(*c), start="l1.end", end=skp(*q)))
-            d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*t)]))
-            d.finish()
-            d.body(name, "solid.pipe", path_sketch=sk, path=["l1", "a1", "l2"],
-                   diameter=inch(PRIMARY_D))
+            down = None
+            for part, (start, out_dir, end, lead, radius) in enumerate((
+                    (p0, n, mid, PRIMARY_OUT[0], PRIMARY_OUT[1]),
+                    (mid, None, target, 0.05, 3.0))):
+                if out_dir is None:
+                    out_dir = down
+                e1, e2, (a0, a1, c, q, t) = tube_path(start, out_dir, end, lead, radius)
+                down = unit(end - (start + q[0] * e1 + q[1] * e2))
+                sk, _ = d.plane(start, e1, np.cross(e1, e2), f"{name} path {part}")
+                d.c.append(cmd("sketch.line", infer=False, points=[skp(*a0), skp(*a1)]))
+                d.c.append(cmd("sketch.arc.center_point", center=skp(*c), start="l1.end", end=skp(*q)))
+                d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*t)]))
+                d.finish()
+                d.body(f"{name}_{part}", "solid.pipe", path_sketch=sk, path=["l1", "a1", "l2"],
+                       diameter=inch(PRIMARY_D))
         # The merge cone over the tubes' ends, the collector, its flange.
         d.cone(f"exhaust_collector_{s}", front - 0.4 * axis, axis, 2.05, 1.5, 3.4)
         d.cylinder(f"exhaust_collector_pipe_{s}", front + 3.0 * axis, axis, 3.0, 3.0)
@@ -821,20 +896,24 @@ def bottom(d):
     d.cylinder("flywheel", (fx, 0, 0), (1, 0, 0), 2 * fr, ft)
     d.cylinder("flywheel_hub", (fx + ft, 0, 0), (1, 0, 0), 3.2, 0.3)
 
+    # The starter: the motor, its end cap, the nose back to the flywheel bolted up to the
+    # block, the solenoid above the motor on the outside with its posts forward.
     sy, sz = STARTER
-    d.cylinder("starter", (2.6, sy, sz), (1, 0, 0), 4.4, 5.6)
-    d.cylinder("starter_end", (2.3, sy, sz), (1, 0, 0), 3.4, 0.3)
-    d.cone("starter_nose", (8.2, sy, sz), (1, 0, 0), 2.0, 1.55, 2.6)
-    d.box("starter_nose_mount", (8.4, sy - 1.3, sz + 1.2), (10.2, sy + 0.9, 0.0))
-    sol = (sy + 1.25, sz + 2.35)
-    d.cylinder("starter_solenoid", (3.3, sol[0], sol[1]), (1, 0, 0), 2.3, 4.5)
+    d.cylinder("starter", (1.9, sy, sz), (1, 0, 0), 4.0, 5.7)
+    d.cylinder("starter_end", (1.6, sy, sz), (1, 0, 0), 3.4, 0.3)
+    d.cone("starter_nose", (7.6, sy, sz), (1, 0, 0), 1.7, 1.3, 4.2)
+    d.box("starter_nose_mount", (9.2, sy - 1.6, sz + 0.9), (10.9, sy + 1.6, 0.0))
+    sol = (sy + 1.78, sz + 2.86)
+    d.cylinder("starter_solenoid", (4.4, sol[0], sol[1]), (1, 0, 0), 2.3, 4.55)
     for k, dy in enumerate((-0.5, 0.5)):
-        d.cylinder(f"starter_solenoid_post_{k}", (3.3, sol[0] + dy, sol[1]), (-1, 0, 0), 0.45, 0.55)
+        d.cylinder(f"starter_solenoid_post_{k}", (4.4, sol[0] + dy, sol[1]), (-1, 0, 0), 0.45, 0.55)
 
-    # Oil pan: the flange on the rail, the tray, the sump at the back with a notch for
-    # the starter, the drain plug.
+    # Oil pan: the flange on the rail, notched at the back on the left for the filter;
+    # the tray, the sump at the back, the drain plug.
+    fx0, fx1 = BLOCK_FRONT + 0.05, BLOCK_BACK - 0.05
     sk = d.sketch("XY", "Pan flange", offset=0.0)
-    d.rounded((BLOCK_FRONT + 0.05, -RAIL_Y), (BLOCK_BACK - 0.05, RAIL_Y), 0.8)
+    d.poly(ccw([(fx0, -RAIL_Y), (6.6, -RAIL_Y), (6.6, -4.5), (fx1, -4.5), (fx1, RAIL_Y),
+                (fx0, RAIL_Y)]))
     d.finish()
     d.extrude(sk, "oil_pan", 0.16, "negative")
     tx, ty, th = PAN_TRAY
@@ -850,17 +929,24 @@ def bottom(d):
     d.extrude(sk, "oil_pan_sump_detail", top - zb, "negative", taper="-3 deg")
     d.cylinder("oil_pan_drain", ((x0 + x1) / 2 + 2.0, (y0 + y1) / 2, zb), (0, 0, -1), 0.9, 0.3)
 
-    # Oil filter on its adapter at the back of the block on the left, pointing down and out.
-    base = np.array([7.6, -6.5, 0.9])
-    dirn = unit([0.0, -0.62, -0.78])
-    d.cylinder("oil_filter_adapter", base, dirn, 2.6, 0.6)
-    d.cylinder("oil_filter", base + 0.6 * dirn, dirn, 3.7, 4.9)
+    # The oil filter hanging straight down from its boss on the block, at the back on
+    # the left, beside the pan.
+    ox, oy = OIL_FILTER
+    sk = d.sketch("XY", "Filter boss", offset=0.85)
+    d.rounded((ox - 1.6, oy - 1.6), (ox + 1.6, -5.3), 0.6)
+    d.finish()
+    d.extrude(sk, "engine_block_filter_boss", 1.3)
+    d.cylinder("oil_filter_adapter", (ox, oy, 0.9), (0, 0, -1), 2.9, 0.45)
+    d.revolve("oil_filter", (ox, oy, 0.0), (0, 0, 1), (1, 0, 0),
+              [(0.45, 0.0), (0.45, 1.68), (0.3, 1.83), (-4.45, 1.83), (-4.68, 1.62),
+               (-4.75, 0.0)])
 
 
 # Run inside Blender: as make_flathead.py's, weld, dissolve the coplanar triangles and
-# collapse each body to a triangle budget by its size, but a body turned about its axis
-# (pulleys, the air cleaner's lid) keeps a budget per ring of its outline, so it stays
-# round, and the pleated element is left whole.
+# collapse each body to a triangle budget by its size. SolidCraft meshes a circle with
+# over a hundred segments; round bodies (a factor given as "r0.35") are thinned by that
+# ratio instead, which leaves forty-odd evenly round them, where a budget by size would
+# leave them jagged.
 BLENDER_REDUCE = r"""
 import bmesh, bpy, json, math, sys
 src, dst, factors = sys.argv[sys.argv.index("--") + 1:]
@@ -873,17 +959,22 @@ for ob in list(bpy.context.scene.objects):
         continue
     bm = bmesh.new()
     bm.from_mesh(ob.data)
-    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-4)
+    bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=2e-3)
     bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(0.5), verts=bm.verts, edges=bm.edges)
     bmesh.ops.triangulate(bm, faces=bm.faces)
     tris = len(bm.faces)
     bm.to_mesh(ob.data)
     bm.free()
     factor = next((f for p, f in factors if ob.name.startswith(p)), 1)
+    if isinstance(factor, str):
+        mod = ob.modifiers.new("reduce", "DECIMATE")
+        mod.decimate_type = "COLLAPSE"
+        mod.ratio = float(factor[1:])
+        continue
     if factor == 0:
         continue
     size = sorted(ob.dimensions)[1] / 25.4
-    budget = 4 * min(36, max(10, int(5 * size))) * factor
+    budget = 6 * min(96, max(16, int(8 * size))) * factor
     if tris > budget * 1.5:
         mod = ob.modifiers.new("reduce", "DECIMATE")
         mod.decimate_type = "COLLAPSE"
@@ -892,11 +983,19 @@ bpy.ops.wm.obj_export(filepath=dst, apply_modifiers=True, export_normals=False, 
                       export_materials=False, export_triangulated_mesh=True)
 """
 # Budget multipliers by body name prefix, first match wins; 0 leaves the body whole.
+ROUND = "r0.35"
 REDUCE_FACTORS = [
-    ("air_cleaner_element", 0), ("air_cleaner_lid", 5), ("air_cleaner_base", 3),
-    ("crank_pulley", 5), ("upper_pulley", 5), ("alternator_pulley", 4), ("harmonic_balancer", 2),
-    ("alternator_fan_vanes", 0), ("alternator", 2), ("distributor_cap", 3), ("distributor_body", 3),
-    ("fan_blades", 3), ("exhaust_runner", 2), ("carburetor_ring", 2),
+    ("air_cleaner_element", 0), ("alternator_fan_vanes", 0),
+    ("air_cleaner", ROUND), ("crank_pulley", ROUND), ("upper_pulley", ROUND),
+    ("alternator", ROUND), ("harmonic_balancer", ROUND), ("crank_bolt", ROUND),
+    ("distributor_clamp", 1), ("distributor", ROUND), ("spark_plug", ROUND),
+    ("ignition_coil", ROUND), ("oil_filler", ROUND), ("oil_filter", ROUND), ("thermostat", ROUND),
+    ("starter_nose_mount", 1), ("starter", ROUND), ("flywheel", ROUND), ("fan_spacer", ROUND),
+    ("fan_hub", ROUND), ("water_pump_snout", ROUND), ("water_pump_hub", ROUND),
+    ("water_pump_inlet", ROUND), ("water_pump_heater", ROUND), ("carburetor_ring", ROUND),
+    ("carb_throat", ROUND), ("carburetor_bowl_screw", ROUND), ("exhaust_collector", ROUND),
+    ("exhaust_runner", "r0.2"), ("intake_manifold_pad_bosses", ROUND),
+    ("intake_manifold_distributor", ROUND), ("fan_blades", 2), ("belt", 3),
 ]
 
 
@@ -941,6 +1040,8 @@ def main():
     intake(d)
     air_cleaner(d, carburetor(d))
     distributor(d)
+    coil(d)
+    oil_filler(d)
     headers(d, args.headers)
     front(d)
     bottom(d)
