@@ -8,6 +8,7 @@ extends Node3D
 ## The springs and shocks are at all four corners, and they swap as a set.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _EngineAssembly := preload("res://scripts/engine_assembly.gd")
 
 ## Engine models are built about four and a half times real size.
 const ENGINE_SCALE := 0.22
@@ -24,6 +25,14 @@ const WHEEL_R := 0.34
 const TRACK_HALF := 0.74
 const FRAME_HALF := 0.48
 const BODY_HALF := 0.86
+## The Ford flathead's exhaust, from tools/make_flathead.py in inches on the right bank:
+## where each cast log's outlet flange takes the head pipe, below its front end, the
+## log's ends and height, and the back of the bell housing cast on the block, which is
+## where the transmission starts. Its logs are its model's own `exhaust_*` nodes.
+const _FH_OUTLET := Vector3(-8.375, 9.042, 0.45)
+const _FH_LOG_X := Vector2(-9.375, 9.8)
+const _FH_LOG_Z := 3.951
+const _FH_BELL_BACK := 15.3
 ## Exhaust ports along each head, and how far out from the crank line the heads are.
 const PORT_COUNT := 4
 const PORT_STEP := 0.13
@@ -737,10 +746,35 @@ func _build_engine() -> void:
 	var engine := packed.instantiate() as Node3D
 	if engine == null:
 		return
+	# A flathead's exhaust logs are the manifold slot's, drawn with it.
+	if _is_flathead():
+		for node in engine.find_children("exhaust*", "MeshInstance3D", true, false):
+			node.get_parent().remove_child(node)
+			node.free()
 	add_child(engine)
-	engine.scale = Vector3.ONE * ENGINE_SCALE
-	engine.rotation.x = -PI * 0.5
-	engine.position = Vector3(_engine_rear - ENGINE_REAR_X * ENGINE_SCALE, CRANK_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0)
+	engine.transform = _engine_xform()
+
+
+## Whether `engine` (the fitted one when empty) is a Ford flathead.
+func _is_flathead(engine: Dictionary = {}) -> bool:
+	if engine.is_empty():
+		if not GameState.has_engine():
+			return false
+		engine = GameState.get_equipped_engine()
+	return GameState.engine_family(engine) == _EngineAssembly.FH_FAMILY
+
+
+## Engine model units to this scene, as the engine is placed: stood up, its block's back
+## face (a flathead's bell housing) at `_engine_rear`.
+func _engine_xform(flathead: bool = _is_flathead()) -> Transform3D:
+	var rear_x := _EngineAssembly.fh(Vector3(_FH_BELL_BACK, 0.0, 0.0)).x if flathead else ENGINE_REAR_X
+	var basis := Basis(Vector3.RIGHT, -PI * 0.5).scaled(Vector3.ONE * ENGINE_SCALE)
+	return Transform3D(basis, Vector3(_engine_rear - rear_x * ENGINE_SCALE, CRANK_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0))
+
+
+## A point of the flathead in inches on the scene's `side` (its right is -Z), placed.
+func _fh_point(p: Vector3, side: float) -> Vector3:
+	return _engine_xform(true) * _EngineAssembly.fh(Vector3(p.x, -side * p.y, p.z))
 
 
 ## Gearbox (seen from below, it is changed on the lift), driveshaft, and axle housing.
@@ -811,10 +845,25 @@ func _build_exhaust(rig: Node3D, dual: bool) -> void:
 	var ends: Array[float] = [RIGHT]
 	if dual:
 		ends.append(-RIGHT)
+	var flathead := _is_flathead()
 	for side in ends:
-		_tube(rig, _pipe_start(side), Vector3(end_x, PIPE_Y, MUFFLER_Z * side), 0.028, pipe)
+		var start := _pipe_start(side)
+		var end := Vector3(end_x, PIPE_Y, MUFFLER_Z * side)
+		if flathead:
+			# Down from the outlet under the front of the log, then back beside the pan.
+			_pipe(rig, [start, Vector3(start.x + 0.08, PIPE_Y, start.z), end], 0.028, pipe)
+		else:
+			_tube(rig, start, end, 0.028, pipe)
 		_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * side, 16)
 	if dual:
+		return
+	if flathead:
+		# The left pipe drops and crosses under the front of the pan, ahead of the sump,
+		# into the right one.
+		var from := _pipe_start(-RIGHT)
+		var into := _pipe_start(RIGHT)
+		var low := PIPE_Y - 0.035
+		_pipe(rig, [from, Vector3(from.x + 0.06, low, from.z), Vector3(from.x + 0.1, low, into.z * 0.6), Vector3(into.x + 0.2, PIPE_Y, into.z + (MUFFLER_Z * RIGHT - into.z) * 0.1)], 0.026, pipe)
 		return
 	# Every run heads back from the flanges, never forward: the left pipe steps back,
 	# then crosses under the driveshaft and joins the right one ahead of the muffler.
@@ -843,15 +892,23 @@ func _build_tailpipe(rig: Node3D, side: float) -> void:
 	_pipe(rig, tail, 0.027, _exhaust_pipe_mat())
 
 
-## Where a head pipe leaves the manifold on `side`, behind the bellhousing.
+## Where a head pipe leaves the manifold on `side`: behind the bellhousing, or on a
+## flathead under the front of its log.
 func _pipe_start(side: float) -> Vector3:
+	if _is_flathead():
+		return _fh_point(_FH_OUTLET, side)
 	return Vector3(_engine_rear + 0.28, PIPE_Y, PIPE_Z * side)
 
 
 ## Static hot spots for each slot, so an empty one can still be clicked.
 func _build_zones() -> void:
 	for side: float in [-1.0, 1.0]:
-		_zone(GameState.SLOT_MANIFOLD, Vector3(0.82, 0.3, 0.16), Vector3(_engine_rear - 0.18, CRANK_Y - 0.05, 0.3 * side))
+		if _is_flathead():
+			var front := _fh_point(Vector3(_FH_LOG_X.x, _FH_OUTLET.y, _FH_LOG_Z), side)
+			var back := _fh_point(Vector3(_FH_LOG_X.y, _FH_OUTLET.y, _FH_LOG_Z), side)
+			_zone(GameState.SLOT_MANIFOLD, Vector3(back.x - front.x + 0.06, 0.2, 0.14), (front + back) * 0.5 + Vector3(0.0, -0.03, 0.0))
+		else:
+			_zone(GameState.SLOT_MANIFOLD, Vector3(0.82, 0.3, 0.16), Vector3(_engine_rear - 0.18, CRANK_Y - 0.05, 0.3 * side))
 	_zone(GameState.SLOT_MUFFLER, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, MUFFLER_Z * RIGHT))
 	_zone(GameState.SLOT_MUFFLER_LEFT, Vector3(MUFFLER_LEN + 0.16, 0.24, 0.32), Vector3(_muffler_x, PIPE_Y, -MUFFLER_Z * RIGHT))
 	# The head pipes, between the manifold flanges and the mufflers.
@@ -890,8 +947,9 @@ func build_preview(part: Dictionary) -> Node3D:
 	var slot := str(part.get("slot", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
+			var model := _family_model(part)
 			for side: float in [-1.0, 1.0]:
-				_build_manifold(rig, style, side)
+				_build_manifold(rig, style, side, model)
 		GameState.SLOT_EXHAUST:
 			_build_exhaust(rig, bool(part.get("dual", false)))
 		GameState.SLOT_MUFFLER:
@@ -940,8 +998,9 @@ func _rebuild_rig(slot: String) -> Node3D:
 	var style := str(part.get("style", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
+			var model := _family_model(part)
 			for side: float in [-1.0, 1.0]:
-				_build_manifold(rig, style, side)
+				_build_manifold(rig, style, side, model)
 		GameState.SLOT_EXHAUST:
 			_build_exhaust(rig, bool(part.get("dual", false)))
 		GameState.SLOT_MUFFLER, GameState.SLOT_MUFFLER_LEFT:
@@ -962,9 +1021,26 @@ func _port(i: int, side: float) -> Vector3:
 	return Vector3(_engine_rear - 0.12 - PORT_STEP * float(i), CRANK_Y + 0.08, HEAD_Z * side)
 
 
+## The model a flathead manifold part is drawn from: the model of an engine of its
+## family, or "" for the small-block's manifolds, which are drawn here.
+func _family_model(part: Dictionary) -> String:
+	if GameState.engine_family(part) != _EngineAssembly.FH_FAMILY:
+		return ""
+	if _is_flathead():
+		return str(GameState.get_equipped_engine().get("model", ""))
+	for engine: Dictionary in GameState.ENGINES:
+		if _is_flathead(engine):
+			return str(engine.get("model", ""))
+	return ""
+
+
 ## Log manifolds are rusty iron with the outlet at the back; shorty headers are chrome
-## tubes into a collector by the bellhousing; long tubes run ceramic-gray clear back.
-func _build_manifold(rig: Node3D, style: String, side: float) -> void:
+## tubes into a collector by the bellhousing; long tubes run ceramic-gray clear back. A
+## flathead's are its model's cast logs on that side (`flathead_model`).
+func _build_manifold(rig: Node3D, style: String, side: float, flathead_model: String = "") -> void:
+	if not flathead_model.is_empty():
+		_build_flathead_manifold(rig, side, flathead_model)
+		return
 	var start := _pipe_start(side)
 	var flange := _mat(_STEEL.darkened(0.2), 0.7, 0.4)
 	_cylinder_x(rig, 0.04, 0.04, 0.012, start.x - 0.012, flange, start.y, start.z, 16)
@@ -995,6 +1071,23 @@ func _build_manifold(rig: Node3D, style: String, side: float) -> void:
 				_box(rig, Vector3(0.06, 0.055, 0.07), Vector3(port.x, port.y - 0.01, (HEAD_Z + 0.025) * side), iron)
 			var elbow := Vector3(last - 0.01, y - 0.02, log_z)
 			_pipe(rig, [elbow, Vector3(last + 0.04, PIPE_Y + 0.06, (PIPE_Z + 0.02) * side), start], 0.03, iron)
+
+
+## The flathead model's exhaust log on the scene's `side`, placed as the engine is.
+func _build_flathead_manifold(rig: Node3D, side: float, path: String) -> void:
+	var packed := load(path) as PackedScene
+	if packed == null:
+		push_warning("Engine model missing: %s" % path)
+		return
+	var model := packed.instantiate() as Node3D
+	var bank := "%d" % int(-side)
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var bits := str(node.name).split("_")
+		if bits.size() < 3 or bits[0] != "exhaust" or bits[2] != bank:
+			node.get_parent().remove_child(node)
+			node.free()
+	model.transform = _engine_xform(true)
+	rig.add_child(model)
 
 
 ## One muffler between the head pipe and the tailpipe, hung at `z` across the car.
