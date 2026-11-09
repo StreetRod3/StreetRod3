@@ -21,9 +21,9 @@ internals, and nothing under the intake. It has:
   valve covers  the 327's: a flange round the rail with four bolts on spreader bars, a
                 plain body with a rounded top
   intake        the L79's dual plane: the flange and valley floor traced from above;
-                square runners with rounded corners rising out of the ports, the upper
-                ones across the front and the back and into the plenum, the lower ones
-                into its sides; the plenum under a square-flange pad with ears for its
+                square runners with rounded corners rising out of the ports, across,
+                and turning into the plenum's front and back, the upper plane's
+                higher than the lower's; the plenum under a square-flange pad with ears for its
                 studs; the bolts on bosses along each side; the water crossover tube
                 and thermostat housing at the front, the heat crossover, choke well and
                 distributor boss
@@ -140,23 +140,20 @@ INTAKE_FLANGE = [
     (-9.85, -3.17), (-9.91, -2.95), (-10.77, -2.63), (-11.22, -2.63), (-11.45, -2.43),
     (-11.44, -2.13), (-11.07, -1.86), (-10.98, -1.62), (-10.98, -0.84), (-11.25, -0.47),
 ]
-# The runners, square tubes with rounded corners rising out of the ports and across:
-# (x, the bank they leave, the y they end at, the height of their top, across, deep). The
-# upper plane's reach the middle and join the plenum through the branches, which cover
-# their ends; the lower plane's run into the plenum's sides.
+# The runners, square tubes with rounded corners, each one piece: up out of its port, a
+# bend over level, across toward the middle, then a turn into the plenum's front or back:
+# (x, the bank they leave, the height of their top, across, deep, the y they run into
+# the plenum along (None: straight on into its side), the x they end at inside it).
 INTAKE_RUNNERS = [
-    (-5.85, -1, 0.3, 13.1, 1.5, 1.5), (-4.6, -1, 0.2, 12.45, 1.4, 1.4),
-    (-5.1, 1, 0.3, 12.6, 1.4, 1.4), (-3.75, 1, 2.3, 12.15, 1.3, 1.35),
-    (4.2, -1, -0.3, 13.1, 1.5, 1.5), (2.8, -1, -2.3, 12.4, 1.35, 1.4),
-    (5.0, 1, -0.3, 12.7, 1.4, 1.4), (3.65, 1, 2.3, 12.45, 1.35, 1.4),
-    (-1.25, -1, -2.4, 11.7, 1.15, 1.15),          # the exhaust heat passage
+    (-5.85, -1, 13.1, 1.5, 1.5, -0.85, -2.3), (-4.6, -1, 12.2, 1.4, 1.4, -1.7, -2.3),
+    (-5.1, 1, 12.6, 1.4, 1.4, 0.85, -2.3), (-3.75, 1, 12.0, 1.3, 1.35, 1.7, -2.3),
+    (4.2, -1, 13.1, 1.5, 1.5, -0.85, 1.4), (2.8, -1, 12.2, 1.35, 1.4, -1.7, 1.4),
+    (5.0, 1, 12.7, 1.4, 1.4, 0.85, 1.4), (3.65, 1, 12.2, 1.35, 1.4, 1.7, 1.4),
+    (-1.25, -1, 11.7, 1.15, 1.15, None, -2.4),     # the exhaust heat passage
 ]
 RUNNER_CORNER = 0.38
-# The branches over the upper runners' ends into the plenum: (x0, x1, y, top, across, deep).
-# The lower runners turn into the plenum's front and back the same way.
-INTAKE_BRANCHES = [(-6.65, -2.6, 0.1, 12.75, 1.6, 1.5), (5.8, 1.9, -0.1, 12.75, 1.6, 1.5),
-                   (-4.45, -2.9, 2.3, 12.15, 1.4, 1.35), (3.5, 2.0, -2.3, 12.4, 1.45, 1.4),
-                   (4.35, 2.0, 2.3, 12.45, 1.45, 1.4)]
+RUNNER_PORT = (4.15, 10.5, 53.0)   # where each leaves its port: |y|, z, its climb (degrees)
+RUNNER_BENDS = (1.0, 1.0)          # radius over level, radius of the turn into the plenum
 WATER_CROSSOVER = (-8.95, 11.25, 1.7)          # x, z of its axis, diameter
 HEAT_CROSSOVER = ((7.6, -4.6), (8.35, 2.4), 10.85, 1.2)  # ends (x, y), z, diameter
 CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
@@ -505,23 +502,64 @@ def valve_covers(d):
 
 # The intake.
 
-def runner(d, name, p0, out, target, lead, radius, size, corner):
-    """A square tube with rounded corners from p0: straight along out for lead, one
-    bend of radius, then straight to target; size (across, deep), its across kept
-    along X."""
-    e1, e2, (a0, a1, c, q, t) = tube_path(p0, out, target, lead, radius)
-    sk, _ = d.plane(p0, e1, np.cross(e1, e2), f"{name} path")
-    d.c.append(cmd("sketch.line", infer=False, points=[skp(*a0), skp(*a1)]))
-    d.c.append(cmd("sketch.arc.center_point", center=skp(*c), start="l1.end", end=skp(*q)))
-    d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*t)]))
+def runner(d, name, x, s, top, w, h, entry_y, to_x):
+    """A square runner with rounded corners from bank s's port at x: straight up and in
+    out of the port, a bend over level, across, then (entry_y given) a turn along X into
+    the plenum at entry_y, ending at to_x; else straight on to y = to_x."""
+    y0, z0, climb = RUNNER_PORT
+    th = math.radians(climb)
+    zc = top - h / 2
+    rise = zc - z0
+    r1 = min(RUNNER_BENDS[0], 0.9 * rise / (1 - math.cos(th)))
+    lead = max((rise - r1 * (1 - math.cos(th))) / math.sin(th), 0.05)
+    r2 = RUNNER_BENDS[1]
+    inward = np.array([0.0, -s, 0.0])
+    p0 = np.array([x, s * y0, z0])
+    y_turn = entry_y + s * r2 if entry_y is not None else to_x
+    # Out of the port, in the plane across the engine at x: drawn with the sketch's y
+    # down, so the bend over level turns counterclockwise as the sketch's arcs do.
+    sk, to2d = d.plane(p0, inward, (s, 0, 0), f"{name} path")
+    u1 = lead * np.array([math.cos(th), math.sin(th)])
+    c = u1 + r1 * np.array([math.sin(th), -math.cos(th)])
+    u2 = c + np.array([0.0, r1])
+    u3 = np.array([abs(y_turn - s * y0), u2[1]])
+    flip = np.array([1.0, -1.0])
+    d.c.append(cmd("sketch.line", infer=False, points=[skp(0.0, 0.0), skp(*(u1 * flip))]))
+    d.c.append(cmd("sketch.arc.center_point", center=skp(*(c * flip)), start="l1.end",
+                   end=skp(*(u2 * flip))))
+    path = ["l1", "a1"]
+    if u3[0] - u2[0] > 0.02:
+        d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*(u3 * flip))]))
+        path.append("l2")
     d.finish()
+    out = np.array([0.0, -s * math.cos(th), math.sin(th)])
     prof, to2d = d.plane(p0, (1, 0, 0), out, f"{name} section")
     cx, cy = to2d(p0)
-    w, h = size
-    d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), corner)
+    d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
     d.finish()
-    d.body(name, "solid.sweep", sketch=prof, path_sketch=sk, path=["l1", "a1", "l2"],
-           orientation=[1.0, 0.0, 0.0])
+    d.body(name, "solid.sweep", sketch=prof, path_sketch=sk, path=path, orientation=[1.0, 0.0, 0.0])
+    if entry_y is None:
+        return
+
+    # The turn into the plenum, level: from going along Y round to going along X, drawn
+    # on whichever face of the level plane makes it counterclockwise.
+    pt = np.array([x, y_turn, zc])
+    along = -s                                  # travel along Y
+    dx = 1.0 if to_x > x else -1.0
+    ysign = -dx * along
+    sk, to2d = d.plane(pt, (1, 0, 0), (0, 0, ysign), f"{name} turn")
+    centre = pt + np.array([dx * r2, 0.0, 0.0])
+    arc_end = pt + np.array([dx * r2, along * r2, 0.0])
+    end = np.array([to_x, arc_end[1], zc])
+    d.c.append(cmd("sketch.arc.center_point", center=skp(*to2d(centre)), start=skp(*to2d(pt)),
+                   end=skp(*to2d(arc_end))))
+    d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*to2d(end))]))
+    d.finish()
+    prof, to2d = d.plane(pt, (1, 0, 0), (0, along, 0), f"{name} turn section")
+    cx, cy = to2d(pt)
+    d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
+    d.finish()
+    d.body(f"{name}_turn", "solid.sweep", sketch=prof, path_sketch=sk, path=["a1", "l1"])
 
 
 def intake(d):
@@ -532,21 +570,9 @@ def intake(d):
     d.finish()
     d.extrude(sk, "intake_manifold", z1 - z0)
 
-    # The runners: out of each port, square to the face, then bending across; square
-    # in section with rounded corners, as cast.
-    for k, (x, s, y_end, top, w, h) in enumerate(INTAKE_RUNNERS):
-        p0 = np.array([x, s * 4.15, 10.5])
-        out = unit([0.0, -s * 0.6, 0.8])
-        end = np.array([x, y_end, top - h / 2])
-        runner(d, f"intake_manifold_runner_{k}", p0, out, end, 0.2, 1.6, (w, h), RUNNER_CORNER)
-    # The branches, across the upper runners' ends and into the plenum.
-    for k, (x0, x1, y, top, w, h) in enumerate(INTAKE_BRANCHES):
-        origin = np.array([x0, y, top - h / 2])
-        sk, to2d = d.plane(origin, (0, 1, 0), (np.sign(x1 - x0), 0, 0), f"Intake branch {k}")
-        cx, cy = to2d(origin)
-        d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
-        d.finish()
-        d.extrude(sk, f"intake_manifold_branch_{k}", abs(x1 - x0))
+    # The runners, out of each port and round into the plenum.
+    for k, (x, s, top, w, h, entry_y, to_x) in enumerate(INTAKE_RUNNERS):
+        runner(d, f"intake_manifold_runner_{k}", x, s, top, w, h, entry_y, to_x)
     # The water crossover across the front, between the heads' front water ports.
     x, z, dia = WATER_CROSSOVER
     d.cylinder("intake_manifold_crossover", (x, -4.7, z), (0, 1, 0), dia, 9.4)
@@ -1118,8 +1144,8 @@ REDUCE_FACTORS = [
     ("fan_hub", ROUND), ("water_pump_snout", ROUND), ("water_pump_hub", ROUND),
     ("water_pump_inlet", ROUND), ("water_pump_heater", ROUND), ("carburetor_ring", ROUND),
     ("carb_throat", ROUND), ("carburetor_bowl_screw", ROUND), ("exhaust_collector", ROUND),
-    ("exhaust_runner", "r0.08"), ("intake_manifold_runner", "r0.3"),
-    ("intake_manifold_branch", 0), ("intake_manifold_crossover", ROUND),
+    ("exhaust_runner", "r0.08"), ("intake_manifold_runner", "r0.12"),
+    ("intake_manifold_crossover", ROUND),
     ("intake_manifold_heat", ROUND), ("intake_manifold_bolt_bosses", ROUND),
     ("intake_manifold_pad_bosses", ROUND), ("intake_manifold_pad", 0), ("intake_manifold_choke", 0),
     ("intake_manifold_plenum", 0), ("intake_manifold_thermostat_seat", 0),
