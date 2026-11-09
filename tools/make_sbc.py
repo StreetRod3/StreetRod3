@@ -153,7 +153,7 @@ PAD_Z = 13.15           # the carb pad's underside
 PAD = (2.65, 2.6, 0.4)  # half length, half width, thickness
 PAD_BOSSES = [(2.3, 2.58), (2.3, -2.58), (-3.3, 2.58), (-3.3, -2.58)]
 INTAKE_BOLT_X = [-9.42, -7.1, -0.8, 1.52, 7.1, 9.42]   # the right bank's; the left's mirrored
-INTAKE_BOLT = (8.45, 1.39)  # (a, h) of the bolt heads on each head's intake face
+INTAKE_BOLT_Y = 4.07    # the bolts' line along each side of the flange
 DIST = (8.87, 1.55)     # distributor's axis (x, y)
 THERMOSTAT = (-8.9, 0.06)
 COIL = (6.7, -1.9)
@@ -514,32 +514,32 @@ def intake(d):
     d.rounded((PAD_X - px, -py), (PAD_X + px, py), 0.45)
     d.finish()
     d.extrude(sk, "intake_manifold_pad", pt)
-    sk = d.sketch("XY", "Pad bosses", offset=PAD_Z)
+    # The pad's bolt bosses stand at the plenum's corners, cast up from the flange
+    # and the runners.
+    sk = d.sketch("XY", "Pad bosses", offset=z1 - 0.1)
     for x, y in PAD_BOSSES:
-        d.circle((x, y), 0.36)
+        d.circle((x, y), 0.45)
     d.finish()
-    d.extrude(sk, "intake_manifold_pad_bosses", pt + 0.12)
+    d.extrude(sk, "intake_manifold_pad_bosses", PAD_Z + pt + 0.12 - (z1 - 0.1))
 
-    # Bolts along each head's intake face, their heads toward the valley.
+    # Bolts down through the flange along each side.
+    sk = d.sketch("XY", "Intake bolts", offset=z1)
     for s in (1, -1):
-        _, _, inn = bank(s)
-        for k, x in enumerate(INTAKE_BOLT_X):
-            c = p3(bank_x(s, s * x), on_head(s, *INTAKE_BOLT))
-            sk, to2d = d.plane(c, (1, 0, 0), v3(inn), f"Intake bolt {s} {k}")
-            d.hexagon(to2d(c), 0.5)
-            d.finish()
-            d.extrude(sk, f"intake_manifold_bolts_{s}_{k}", 0.3)
+        for x in INTAKE_BOLT_X:
+            d.hexagon((bank_x(s, s * x), s * INTAKE_BOLT_Y), 0.5)
+    d.finish()
+    d.extrude(sk, "intake_manifold_bolts", 0.3)
 
-    # The distributor's boss at the back.
-    d.cylinder("intake_manifold_distributor_boss", (DIST[0], DIST[1], 10.2), (0, 0, 1), 2.1, 1.25)
+    # The distributor's boss at the back, the housing's collar sitting on it.
+    d.cylinder("intake_manifold_distributor_boss", (DIST[0], DIST[1], 10.2), (0, 0, 1), 2.1, 0.8)
 
     # The thermostat housing on the front crossover, its outlet neck forward and up.
     tx, ty = THERMOSTAT
     d.cylinder("thermostat_housing", (tx, ty - 0.35, 11.6), (0, 0, 1), 2.6, 1.7)
-    sk = d.sketch("XY", "Thermostat ears", offset=12.3)
+    sk = d.sketch("XY", "Thermostat ears", offset=11.7)
     d.c += outline_commands(*hull_outline([((tx, ty - 1.9), 0.45), ((tx, ty + 1.2), 0.45)]))
     d.finish()
-    d.extrude(sk, "thermostat_ears", 0.45)
+    d.extrude(sk, "thermostat_ears", 0.65)
     neck = np.array([tx, ty, 12.9])
     dirn = unit([-0.6, 0.0, 0.8])
     hose_neck(d, "thermostat_neck", neck, dirn, 0.775, 0.6, 2.25, 1.4)
@@ -559,7 +559,7 @@ def hose_neck(d, name, base, dirn, r, bore, length, depth):
 def coil(d):
     """The ignition coil on its bracket on the intake, behind the carburetor on the left."""
     x, y = COIL
-    d.cylinder("ignition_coil_foot", (x, y, 11.0), (0, 0, 1), 1.4, 0.55)
+    d.cylinder("ignition_coil_foot", (x, y, INTAKE_BASE[1] - 0.05), (0, 0, 1), 1.4, 0.65)
     d.revolve("ignition_coil", (x, y, 0.0), (0, 0, 1), (1, 0, 0),
               [(11.5, 0.0), (11.5, 1.05), (16.4, 1.05), (16.6, 1.15), (16.95, 1.15),
                (17.05, 0.95), (17.05, 0.0)])
@@ -907,6 +907,8 @@ def alternator(d):
 def bottom(d):
     fx, ft, fr = FLYWHEEL
     d.cylinder("flywheel", (fx, 0, 0), (1, 0, 0), 2 * fr, ft)
+    # The crank's flange out of the block's back, the flywheel bolted to it.
+    d.cylinder("flywheel_crank_flange", (BLOCK_BACK, 0, 0), (1, 0, 0), 3.6, fx - BLOCK_BACK)
     d.cylinder("flywheel_hub", (fx + ft, 0, 0), (1, 0, 0), 3.2, 0.3)
 
     # The starter: the motor, its end cap, the nose back to the flywheel bolted up to the
@@ -916,7 +918,7 @@ def bottom(d):
     d.cylinder("starter_end", (1.6, sy, sz), (1, 0, 0), 3.4, 0.3)
     d.cone("starter_nose", (7.6, sy, sz), (1, 0, 0), 1.7, 1.3, 4.2)
     d.box("starter_nose_mount", (9.2, sy - 1.6, sz + 0.9), (10.9, sy + 1.6, 0.0))
-    sol = (sy + 1.78, sz + 2.86)
+    sol = (sy + 1.64, sz + 2.64)
     d.cylinder("starter_solenoid", (4.4, sol[0], sol[1]), (1, 0, 0), 2.3, 4.55)
     for k, dy in enumerate((-0.5, 0.5)):
         d.cylinder(f"starter_solenoid_post_{k}", (4.4, sol[0] + dy, sol[1]), (-1, 0, 0), 0.45, 0.55)
