@@ -127,7 +127,7 @@ RULES = [
     (r"l79 oem intake manifold", "intake_manifold"),
     (r"intake bolts", "intake_manifold_bolts"),
     (r"holley 4160", "carburetor"),
-    (r"air cleaner", "air_cleaner"),
+    (r"air cleaner", None),                  # the game fits its own air cleaners
     (r"distributor.*vacuum advance can", "distributor_vacuum"),
     (r"distributor.*distributor cap", "distributor_cap"),
     (r"distributor.*(distributor body|distributor hold down)", "distributor_body"),
@@ -154,7 +154,7 @@ RULES = [
     (r"65 nova ss pan", "oil_pan"),
     (r"oil filter", "oil_filter"),
     (r"road draft", "road_draft_tube"),
-    (r"dipstick|dip stick", "dipstick"),
+    (r"dipstick|dip stick", None),           # stick and both tubes: too fine to see
     (r"oil fill tube", "oil_filler"),
     (r"/ pcv|pvc bolt", "pcv_valve"),
     (r"motor mount", "engine_mount_{s}"),
@@ -171,14 +171,14 @@ RULES = [
 BUDGETS = [
     ("engine_block", 12000), ("cylinder_head", 4000), ("valve_cover", 1300), ("valve_bolt", 300),
     ("intake_manifold_bolts", 400), ("intake_manifold", 5000), ("thermostat_housing", 300),
-    ("carburetor", 4000), ("air_cleaner", 4000), ("distributor_body", 700),
+    ("carburetor", 4000), ("distributor_body", 700),
     ("distributor_cap", 1000), ("distributor_vacuum", 300), ("ignition_coil", 500),
     ("plug_wire_shield", 900), ("generator", 2200), ("accessory_bracket", 200),
     ("upper_pulley", 700), ("crank_pulley", 700), ("harmonic_balancer", 900),
     ("fan_blades", 900), ("fan_hub", 200), ("belt", 400), ("water_hose", 150),
     ("water_pump_housing", 1500), ("exhaust_manifold", 2500), ("starter_solenoid", 500),
     ("starter", 1500), ("timing_cover", 800), ("oil_pan", 2500), ("oil_filter", 500),
-    ("road_draft_tube", 300), ("dipstick", 300), ("oil_filler", 300), ("pcv_valve", 150),
+    ("road_draft_tube", 300), ("oil_filler", 300), ("pcv_valve", 150),
     ("engine_mount", 300), ("fuel_pump", 900), ("fuel_filter", 200), ("fuel_line", 400),
     ("flywheel", 900), ("spark_plug", 600),
 ]
@@ -188,14 +188,14 @@ MIN_SIZE = 6.0
 CHROME = {"name": "chrome", "pbrMetallicRoughness": {
     "baseColorFactor": [0.9, 0.9, 0.92, 1], "metallicFactor": 1.0, "roughnessFactor": 0.12}}
 FINISHES = [
-    ("valve_cover", CHROME), ("air_cleaner", CHROME), ("valve_bolt", STEEL),
+    ("valve_cover", CHROME), ("valve_bolt", STEEL),
     ("intake_manifold_bolts", STEEL), ("carburetor", ZINC), ("distributor_cap", BLACK),
     ("distributor", STEEL), ("ignition_coil", BLACK), ("plug_wire_shield", STEEL),
     ("spark_plug", PORCELAIN), ("exhaust_manifold", CAST_IRON), ("generator", BLACK),
     ("accessory_bracket", BLACK), ("upper_pulley", BLACK), ("crank_pulley", BLACK),
     ("harmonic_balancer", STEEL), ("fan", BLACK), ("belt", RUBBER), ("water_hose", RUBBER),
     ("starter_solenoid", ZINC), ("starter", BLACK), ("oil_filter", PAINT),
-    ("road_draft_tube", BLACK), ("dipstick", STEEL), ("oil_filler", CHROME),
+    ("road_draft_tube", BLACK), ("oil_filler", CHROME),
     ("pcv_valve", BLACK), ("engine_mount", BLACK), ("fuel_line", STEEL), ("fuel_filter", ZINC),
     ("flywheel", STEEL),
 ]
