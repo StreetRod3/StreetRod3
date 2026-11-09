@@ -153,15 +153,24 @@ INTAKE_RUNNERS = [
 ]
 RUNNER_CORNER = 0.38
 # The branches over the upper runners' ends into the plenum: (x0, x1, y, top, across, deep).
-INTAKE_BRANCHES = [(-6.65, -2.6, 0.1, 12.75, 1.6, 1.5), (5.8, 1.9, -0.1, 12.75, 1.6, 1.5)]
+# The lower runners turn into the plenum's front and back the same way.
+INTAKE_BRANCHES = [(-6.65, -2.6, 0.1, 12.75, 1.6, 1.5), (5.8, 1.9, -0.1, 12.75, 1.6, 1.5),
+                   (-4.45, -2.9, 2.3, 12.15, 1.4, 1.35), (3.5, 2.0, -2.3, 12.4, 1.45, 1.4),
+                   (4.35, 2.0, 2.3, 12.45, 1.45, 1.4)]
 WATER_CROSSOVER = (-8.95, 11.25, 1.7)          # x, z of its axis, diameter
 HEAT_CROSSOVER = ((7.6, -4.6), (8.35, 2.4), 10.85, 1.2)  # ends (x, y), z, diameter
 CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
 INTAKE_BASE = (9.9, 10.65)   # the flange's underside (inside the heads) and top
-PAD_X = -0.3            # the carb pad's middle
+PAD_X = -0.45           # the carb pad's middle
 PAD_Z = 13.15           # the carb pad's underside
 PAD = (2.65, 2.6, 0.4)  # half length, half width, thickness
 PAD_BOSSES = [(2.3, 2.58), (2.3, -2.58), (-3.3, 2.58), (-3.3, -2.58)]
+# The pad's openings down into the plenum, as on the L79: the left plane's two barrels
+# round, the right plane's one long slot, a web between; (x, y) from the pad's middle.
+PAD_HOLES = [(-0.91, -0.95), (0.91, -0.95)]
+PAD_HOLE_R = 0.8
+PAD_SLOT = ((-0.99, 0.95), (0.99, 0.95), 0.82)
+PLENUM_FLOOR = 1.1      # how far down the openings the plenum's dark floor is
 INTAKE_BOLT_X = [-9.42, -7.1, -0.8, 1.52, 7.1, 9.42]   # the right bank's; the left's mirrored
 INTAKE_BOLT_Y = 4.07    # the bolts' line along each side of the flange
 DIST = (8.87, 1.55)     # distributor's axis (x, y)
@@ -211,7 +220,8 @@ FINISHES = [
     ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
     ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON),
-    ("thermostat_neck_bore", BLACK), ("water_pump_inlet_bore", BLACK),
+    ("thermostat_neck_bore", BLACK), ("intake_manifold_plenum_floor", BLACK),
+    ("thermostat_bolts", STEEL), ("water_pump_inlet_bore", BLACK),
     ("water_pump_heater_bore", BLACK), ("thermostat", CAST_IRON),
     ("ignition_coil_bracket", STEEL), ("ignition_coil_foot", STEEL), ("ignition_coil", BLACK),
     ("oil_filler", CHROME),
@@ -551,16 +561,42 @@ def intake(d):
     d.finish()
     d.extrude(sk, "intake_manifold_choke_well", ctop - z1 + 0.1, taper="-4 deg")
 
-    # The plenum under the pad.
+    # The plenum: solid up to its dark floor, then its walls round the pad's openings
+    # up to the pad, which has ears for the carb's studs.
     px, py, pt = PAD
+    floor = PAD_Z - PLENUM_FLOOR
     sk = d.sketch("XY", "Plenum", offset=z1 - 0.1)
     d.rounded((PAD_X - px - 0.1, -py - 0.1), (PAD_X + px + 0.1, py + 0.1), 0.8)
     d.finish()
-    d.extrude(sk, "intake_manifold_plenum", PAD_Z - z1 + 0.1, taper="-3 deg")
+    d.extrude(sk, "intake_manifold_plenum", floor - z1 + 0.1)
 
-    # The carb pad and its four bolt bosses.
+    def openings(first):
+        # The slot's lines and arcs are numbered on from the outline's, so it goes before
+        # the circles, which take arc numbers of their own.
+        (sx0, sy0), (sx1, sy1), sr = PAD_SLOT
+        d.c += outline_commands(*hull_outline([((PAD_X + sx0, sy0), sr), ((PAD_X + sx1, sy1), sr)]),
+                                first=first)
+        for x, y in PAD_HOLES:
+            d.circle((PAD_X + x, y), PAD_HOLE_R)
+
+    corners = [((PAD_X + sx * (px + 0.1 - 0.8), sy * (py + 0.1 - 0.8)), 0.8)
+               for sx, sy in ((1, -1), (1, 1), (-1, 1), (-1, -1))]
+    sk = d.sketch("XY", "Plenum walls", offset=floor)
+    d.c += outline_commands(*hull_outline(corners))
+    openings(5)
+    d.finish()
+    d.extrude(sk, "intake_manifold_plenum_walls", PAD_Z - floor)
+    sk = d.sketch("XY", "Plenum floor", offset=floor)
+    openings(1)
+    d.finish()
+    d.extrude(sk, "intake_manifold_plenum_floor", 0.02)
+
     sk = d.sketch("XY", "Carb pad", offset=PAD_Z)
-    d.c += outline_commands(*hull_outline([((x, y), 0.55) for x, y in PAD_BOSSES]))
+    # The outline round the studs' bosses, taken in turn round the pad.
+    mid = np.mean(PAD_BOSSES, axis=0)
+    bosses = sorted(PAD_BOSSES, key=lambda p: math.atan2(p[1] - mid[1], p[0] - mid[0]))
+    d.c += outline_commands(*hull_outline([((x, y), 0.55) for x, y in bosses]))
+    openings(5)
     d.finish()
     d.extrude(sk, "intake_manifold_pad", pt)
     # The pad's bolt bosses stand at the plenum's corners, cast up from the flange
@@ -588,14 +624,32 @@ def intake(d):
     # The distributor's boss at the back, the housing's collar sitting on it.
     d.cylinder("intake_manifold_distributor_boss", (DIST[0], DIST[1], 10.2), (0, 0, 1), 2.1, 0.8)
 
-    # The thermostat housing on the front crossover, its outlet neck forward and up.
+    # The thermostat's seat, cast up from the flange round the crossover tube to a flat
+    # top; the housing bolted down on it by its two ears, its outlet neck forward and up.
     tx, ty = THERMOSTAT
-    d.cylinder("thermostat_housing", (tx, ty - 0.35, 11.6), (0, 0, 1), 2.6, 1.7)
-    sk = d.sketch("XY", "Thermostat ears", offset=11.7)
-    d.c += outline_commands(*hull_outline([((tx, ty - 1.9), 0.45), ((tx, ty + 1.2), 0.45)]))
+    # Outlines round circles taken in turn counterclockwise: an ear, the right of the
+    # housing, the other ear, its left.
+    seat = [((tx, ty - 1.9), 0.55), ((tx + 0.3, ty - 0.35), 1.35), ((tx, ty + 1.2), 0.55),
+            ((tx - 0.4, ty - 0.35), 1.35)]
+    seat_top = WATER_CROSSOVER[1] + WATER_CROSSOVER[2] / 2 + 0.15
+    sk = d.sketch("XY", "Thermostat seat", offset=z1 - 0.05)
+    d.c += outline_commands(*hull_outline(seat))
     d.finish()
-    d.extrude(sk, "thermostat_ears", 0.65)
-    neck = np.array([tx, ty, 12.9])
+    d.extrude(sk, "intake_manifold_thermostat_seat", seat_top - z1 + 0.05)
+    sk = d.sketch("XY", "Thermostat ears", offset=seat_top)
+    d.c += outline_commands(*hull_outline([((tx, ty - 1.9), 0.45), ((tx + 0.05, ty - 0.35), 1.2),
+                                           ((tx, ty + 1.2), 0.45), ((tx - 0.05, ty - 0.35), 1.2)]))
+    d.finish()
+    d.extrude(sk, "thermostat_housing", 0.25)
+    d.revolve("thermostat_dome", (tx, ty - 0.35, 0.0), (0, 0, 1), (1, 0, 0),
+              [(seat_top + 0.2, 0.0), (seat_top + 0.2, 1.25), (seat_top + 0.75, 1.2),
+               (seat_top + 1.15, 0.95), (seat_top + 1.3, 0.0)])
+    sk = d.sketch("XY", "Thermostat bolts", offset=seat_top + 0.25)
+    for y in (ty - 1.9, ty + 1.2):
+        d.hexagon((tx, y), 0.5)
+    d.finish()
+    d.extrude(sk, "thermostat_bolts", 0.3)
+    neck = np.array([tx, ty, seat_top + 0.6])
     dirn = unit([-0.6, 0.0, 0.8])
     hose_neck(d, "thermostat_neck", neck, dirn, 0.775, 0.6, 2.25, 1.4)
     d.cylinder("thermostat_bead", neck + 1.75 * dirn, dirn, 1.72, 0.18)
@@ -663,8 +717,8 @@ def carburetor(d):
     d.circle((x, 0), 2.35)
     d.finish()
     d.extrude(sk, "carburetor_ring", 0.55)
-    for tx in (-0.85, 0.85):
-        for ty in (-0.85, 0.85):
+    for tx in (-0.91, 0.91):
+        for ty in (-0.95, 0.95):
             d.cylinder(f"carb_throat_{tx}_{ty}", (x + tx, ty, z), (0, 0, 1), 1.56 if tx < 0 else 1.69, 0.04)
     return z + 0.55
 
@@ -1068,6 +1122,7 @@ REDUCE_FACTORS = [
     ("intake_manifold_branch", 0), ("intake_manifold_crossover", ROUND),
     ("intake_manifold_heat", ROUND), ("intake_manifold_bolt_bosses", ROUND),
     ("intake_manifold_pad_bosses", ROUND), ("intake_manifold_pad", 0), ("intake_manifold_choke", 0),
+    ("intake_manifold_plenum", 0), ("intake_manifold_thermostat_seat", 0),
     ("intake_manifold_distributor", ROUND), ("fan_blades", 2), ("belt", 3),
 ]
 
