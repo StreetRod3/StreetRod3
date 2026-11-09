@@ -274,3 +274,7 @@ The same ~ prompt opens in the garage, where its command is `inherit`: an uncle 
 The garage prompt also takes `tiger`, which fills the gas tank of the car in the bay with premium gas for free. On a full tank it says the tank is already full, and with no car in the bay it says there is nothing to fill.
 
 The garage prompt also takes `showme`, which puts every part on the car in the bay (engine, gearbox, wheels, tires and everything in the slots) in 100% condition. Spare parts keep their wear.
+
+## 2026-11-08
+
+There is a model of a Ford flathead V8, the 1942-48 59A of 239 cubic inches, built in SolidCraft by tools/make_flathead.py and drawn from photos of a real one. It has the block with its bell housing cast on, the wide smooth heads with 24 stud nuts each, the plugs down their inner side, and the water outlet's three-bolt flange facing forward off the front end, the plug wires' conduit along each head, the single-carburetor intake in the valley with the generator on its stand at the front and the fan on the generator's pulley, a slim cast exhaust log under each head turning down at the front, the timing cover with the distributor lying forward off it, a water pump low on each side, one belt round crank, pumps and generator, and the oil pan with its sump at the back. The SolidCraft design is in resources/engines and the GLB in assets/parts, in the frame and units of the other engine models with node names to match where there is one. SolidCraft's mesh is thinned in Blender to about 11,000 triangles. The game does not use it yet.

@@ -24,3 +24,5 @@ resources/tires/tire-225-60r15.sc filter=lfs diff=lfs merge=lfs -text
 assets/parts/wheel-steel-15x7.glb filter=lfs diff=lfs merge=lfs -text
 resources/wheels/wheel-c1-15x7.sc filter=lfs diff=lfs merge=lfs -text
 resources/wheels/wheel-steel-15x7.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/engine-flathead-239.glb filter=lfs diff=lfs merge=lfs -text
+resources/engines/engine-flathead-239.sc filter=lfs diff=lfs merge=lfs -text
