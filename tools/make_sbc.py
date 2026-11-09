@@ -68,8 +68,9 @@ engine models (engine_assembly.gd): engine units of 0.22 m, the crank at Z -0.36
 names follow engine-v8-*.glb where there is a match (engine_block, cylinder_head_1,
 valve_cover_-1, valve_bolt_..., intake_manifold, carburetor, carb_throat_..., distributor_cap,
 crank_pulley, upper_pulley, alternator_pulley, water_pump_housing, accessory_bracket_right,
-exhaust_collector_1, oil_pan, timing_cover), +1 the right bank and -1 the left. The game
-does not use it yet.
+exhaust_collector_1, oil_pan, timing_cover), +1 the right bank and -1 the left. The hood
+screen draws the Chevy small-blocks from it (engine_assembly.gd's SB_ constants are
+this script's measurements), and the header parts from the headers' models.
 """
 import argparse
 import json
