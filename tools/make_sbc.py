@@ -129,10 +129,10 @@ COVER_BOLTS = [(-4.4, 0.26), (4.4, 0.26), (-4.4, 4.46), (4.4, 4.46)]  # (x, acro
 # the distributor's boss, its ends stepping in by each head (the banks are offset: the
 # right head starts behind the left and ends behind it too).
 INTAKE_FLOOR = [
-    (-10.70, -3.85), (-10.70, 2.22), (-10.67, 2.31), (-10.58, 2.38), (-10.11, 2.41),
-    (-10.00, 2.47), (-9.94, 2.57), (-9.90, 3.85), (9.74, 3.85), (9.75, 2.53), (10.04, 1.98),
-    (10.12, 1.55), (10.04, 1.12), (9.79, 0.70), (9.75, 0.56), (9.75, -2.22), (9.72, -2.31),
-    (9.63, -2.38), (9.13, -2.41), (9.03, -2.47), (8.96, -2.57), (8.92, -3.85),
+    (-10.70, -3.00), (-10.70, 2.22), (-10.67, 2.31), (-10.58, 2.38), (-10.12, 2.41),
+    (-10.00, 2.48), (-9.94, 2.59), (-9.93, 3.00), (9.75, 3.00), (9.75, 2.53), (10.04, 1.98),
+    (10.12, 1.55), (10.04, 1.12), (9.79, 0.70), (9.75, 0.55), (9.75, -2.22), (9.72, -2.31),
+    (9.63, -2.38), (9.15, -2.41), (9.03, -2.47), (8.96, -2.59), (8.95, -3.00),
 ]
 # The runners, square tubes with rounded corners, each one piece: up out of its port, a
 # bend over level, across toward the middle, then a turn into the plenum's front or back:
@@ -151,8 +151,10 @@ RUNNER_BENDS = (1.0, 1.0)          # radius over level, radius of the turn into 
 WATER_CROSSOVER = (-8.35, 11.25, 1.7, 4.15)    # x, z of its axis, diameter, |y| of its ends
 HEAT_CROSSOVER = (7.75, 11.05, 1.0, 3.3)       # (the heat crossover's ends inside the bolts)
 CHOKE_WELL = ((-0.35, 3.0), (0.75, 4.2), 12.4)  # the stove well's corners and top
-INTAKE_BASE = (9.9, 10.65)   # the floor's underside (on the end walls) and top
-INTAKE_FLANGE = (0.15, 2.55, 0.45)   # up each head's intake face from the deck, thickness
+INTAKE_BASE = (9.81, 10.65)  # the floor's underside (on the end walls) and top
+# Each flange up its head's intake face from the deck, and its thickness, enough that its
+# inner face meets the floor's edge at the floor's top; the floor stops short of the faces.
+INTAKE_FLANGE = (0.1, 2.55, 0.64)
 PAD_X = -0.45           # the carb pad's middle
 PAD_Z = 13.15           # the carb pad's underside
 PAD = (2.65, 2.6, 0.4)  # half length, half width, thickness
