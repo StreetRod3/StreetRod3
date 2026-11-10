@@ -505,6 +505,7 @@ func _enter_roam_place(place_id: String) -> void:
 	_roam_done = true
 	set_process(false)
 	if _roam_car != null:
+		_roam_car.call(&"stop_mouse_driving")
 		_roam_car.set_physics_process(false)
 	GameState.set_music_dimmed(false)
 	GameState.roam_from_poi = ""
@@ -657,6 +658,7 @@ func _check_roam_wreck() -> bool:
 		return false
 	_wrecked = true
 	_roam_done = true
+	_roam_car.call(&"stop_mouse_driving")
 	_roam_car.set_physics_process(false)
 	var engine := _roam_car.get_node_or_null("EngineSound") as AudioStreamPlayer
 	if engine != null:

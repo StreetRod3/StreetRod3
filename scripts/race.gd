@@ -544,6 +544,7 @@ func _park_cars() -> void:
 
 
 func _end_race_ui() -> void:
+	_player.stop_mouse_driving()
 	_resume_race()
 	if _mobile != null:
 		_mobile.visible = false

@@ -276,6 +276,10 @@ var controller_bindings: Dictionary = {}
 ## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
 ## car's own lock, and a 900 degree wheel reaches full lock a third of the way round at 3.
 var steer_sensitivity: float = 3.0
+var mouse_steering_enabled: bool = false
+var mouse_pedals_enabled: bool = false
+var mouse_steering_sensitivity: float = 1.0
+var mouse_pedals_sensitivity: float = 1.0
 ## The driving controls as changed on the controls page, by action. One not here has its default.
 var control_keys: Dictionary = {}
 var control_pad: Dictionary = {}
@@ -3828,6 +3832,10 @@ func save_settings() -> void:
 	cfg.set_value("game", "imperial_units", imperial_units)
 	cfg.set_value("input", "controller", controller_bindings)
 	cfg.set_value("input", "steer_sensitivity", steer_sensitivity)
+	cfg.set_value("input", "mouse_steering_enabled", mouse_steering_enabled)
+	cfg.set_value("input", "mouse_pedals_enabled", mouse_pedals_enabled)
+	cfg.set_value("input", "mouse_steering_sensitivity", mouse_steering_sensitivity)
+	cfg.set_value("input", "mouse_pedals_sensitivity", mouse_pedals_sensitivity)
 	cfg.set_value("input", "rumble_strength", rumble_strength)
 	cfg.set_value("display", "hud_items", hud_items)
 	cfg.set_value("display", "hud_size", hud_size)
@@ -3856,6 +3864,10 @@ func load_settings() -> void:
 	if cfg.get_value("input", "controller", {}) is Dictionary:
 		controller_bindings = cfg.get_value("input", "controller", {})
 	steer_sensitivity = float(cfg.get_value("input", "steer_sensitivity", steer_sensitivity))
+	mouse_steering_enabled = bool(cfg.get_value("input", "mouse_steering_enabled", false))
+	mouse_pedals_enabled = bool(cfg.get_value("input", "mouse_pedals_enabled", false))
+	mouse_steering_sensitivity = clampf(float(cfg.get_value("input", "mouse_steering_sensitivity", 1.0)), 0.25, 3.0)
+	mouse_pedals_sensitivity = clampf(float(cfg.get_value("input", "mouse_pedals_sensitivity", 1.0)), 0.25, 3.0)
 	if cfg.get_value("input", "keys", {}) is Dictionary:
 		control_keys = cfg.get_value("input", "keys", {})
 	if cfg.get_value("input", "pad", {}) is Dictionary:
