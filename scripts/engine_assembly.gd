@@ -807,7 +807,7 @@ func _build_sbc_exhaust(head: Node3D, side: float) -> void:
 	var style := str(manifold.get("style", "log"))
 	var path := str(SB_HEADERS.get(style, ""))
 	if path.is_empty() or not ResourceLoader.exists(path):
-		_add_model_filtered(head, _model_path(), func(n: String) -> bool: return n.begins_with("exhaust_manifold_" + bank))
+		_add_model_filtered(head, _model_path(), func(n: String) -> bool: return n.begins_with("exhaust_manifold") and first_number(n) == bank)
 		return
 	# A header node's bank is the first number in its name.
 	_add_model_filtered(head, path, func(n: String) -> bool: return first_number(n) == bank)

@@ -38,10 +38,11 @@ internals, and nothing under the intake. It has:
                 coil tower, the hold-down clamp
   coil          standing on the intake behind the carburetor, on the left
   oil filler    the tube out of the intake's front, forward and up, with its breather cap
-  manifolds     the L79's right-hand center-dump ram's horn on both banks: flanges on the
-                end ports and across the middle pair, a square arm up and out of each end
-                port and in along the head into the center log, which drops below the
-                head to the outlet flange
+  manifolds     the L79's right-hand center-dump ram's horn (resources/engines/right
+                exhaust manifold.step) on both banks, solid: flanges with bolt ears on
+                the end ports and across the middle pair, a rounded square arm from each
+                end port arching up and over, leaning out, into the center tube, which
+                flares down into the outlet flange
   headers       (built alone) long tubes or shorties: a flange on each head, four 1 5/8
                 primaries out of the ports, one bend each, into a merge cone and a 3 inch
                 collector
@@ -218,24 +219,37 @@ OIL_FILTER = (8.88, -6.4)
 
 # Headers: the collectors' front ends (x along the bank, |y|, z) and their axis.
 # Cast-iron exhaust manifolds, the stock exhaust: the L79's right-hand center-dump ram's
-# horn, on both banks. In each exhaust face's own frame: x along the engine, v up the face
-# from the ports' middles, out off it. A flange on each end port and one across the middle
-# pair; an arm out of each end port, rising out and up (ARM_RISE, out and up off the port)
-# then turning to run in along the engine into the center log, which drops below the head
-# to the outlet flange.
-MANIFOLD_FLANGE = (0.95, 0.875, 0.45, 0.35)   # half wide, half tall, thick, corner radius
-MANIFOLD_ARM = (1.7, 1.7, 0.5)                # wide, tall, corner radius
-ARM_RISE = (2.22, 1.86)
-ARM_BEND = 1.2
-ARM_START = 1.3            # the arm's path starts this far back of the port, in the head
-ARM_END_X = 1.6            # and ends inside the center log, this far out of the middle
-# The center log's side outline in the face (x, v): round corners top and bottom, out to
-# this deep; then the outlet flange under it, (half along the engine, how far either side
-# of the log across, thick).
-MANIFOLD_LOG = [((1.85, 1.95), 0.6), ((-1.85, 1.95), 0.6), ((-0.95, -3.6), 0.45),
-                ((0.95, -3.6), 0.45)]
-MANIFOLD_LOG_OUT = 2.8
-MANIFOLD_OUTLET = (1.6, 0.3, 0.4)
+# horn (resources/engines/right exhaust manifold.step), on both banks, solid and without
+# its casting numbers. In each exhaust face's frame (x along the engine from the bank's
+# middle, v up the face from the ports' middles): a flange with two bolt ears on each end
+# port and one across the middle pair, outlines round circles (x, v, r).
+MANIFOLD_END_FLANGE = [(-1.15, -0.45, 0.3), (-0.6, -0.73, 0.3), (0.6, -0.73, 0.3), (1.15, -0.45, 0.3),
+                       (0.6, 0.57, 0.3), (-0.6, 0.57, 0.3)]
+MANIFOLD_MID_FLANGE = [(-2.0, -0.45, 0.3), (-1.4, -0.73, 0.3), (1.4, -0.73, 0.3), (2.0, -0.45, 0.3),
+                       (1.4, 0.57, 0.3), (-1.4, 0.57, 0.3)]
+MANIFOLD_FLANGE_T = 0.5
+# The arms: a rounded square (side, corner radius). Each lies in a plane along the engine,
+# leaning out at the top (MANIFOLD_ARM_PLANE: out from the crank line at the ports'
+# height, lean from upright), as the reference's do: from the bottom of its end port's
+# flange, where the flange sits on its inner side, straight up, over and down into the
+# center tube along a spline through the reference's centerline (out along the engine
+# from the bank's middle, height); the other arm is its mirror.
+MANIFOLD_ARM = (1.96, 0.7)
+MANIFOLD_ARM_PLANE = (10.37, 12.6)
+MANIFOLD_ARM_PATH = [(7.45, 6.6), (7.45, 7.3), (7.46, 8.0), (7.36, 8.62), (6.87, 9.06), (6.3, 9.33),
+                     (5.29, 9.63), (4.0, 9.72), (2.77, 9.53), (1.86, 9.19), (1.25, 8.95), (0.85, 8.5),
+                     (0.75, 8.0)]
+# The center tube, lofted through upright ellipses (height, half along the engine, half
+# across, middle out from the crank line) from its foot flaring into the outlet flange,
+# narrowing and leaning in as it rises, to its neck widening into the arms' undersides.
+MANIFOLD_TUBE = [(3.75, 1.9, 1.78, 10.55), (4.05, 1.6, 1.5, 10.55), (4.4, 1.5, 1.43, 10.55),
+                 (5.5, 1.5, 1.37, 10.49), (6.5, 1.58, 1.31, 10.43), (7.7, 1.9, 1.18, 10.45),
+                 (8.5, 2.25, 0.95, 10.6)]
+# The outlet flange under the foot: its outline round circles (along from the bank's
+# middle, out from the crank line, radius), and how thick.
+MANIFOLD_OUTLET = [(-1.6, 8.95, 0.55), (1.6, 8.95, 0.55), (1.95, 10.45, 0.25), (1.6, 11.95, 0.55),
+                   (-1.6, 11.95, 0.55), (-1.95, 10.45, 0.25)]
+MANIFOLD_OUTLET_T = 0.45
 
 COLLECTOR = {"long": ((9.0, 10.4, -6.8), (0.72, 0.0, -0.69)),
              "shorty": ((1.5, 11.4, -2.6), (0.8, 0.0, -0.6))}
@@ -1075,80 +1089,76 @@ def headers(d, style):
 
 
 def iron_manifolds(d):
-    fw, fh_, ft, fr = MANIFOLD_FLANGE
-    aw, ah, ar = MANIFOLD_ARM
     for s in (1, -1):
-        f0, up, n = exhaust_face(s)
-        port = port_center(s)
+        _, up, n = exhaust_face(s)
         mid = bank_x(s, 0.0)
-        # The face's own frame at the ports' middle: x along the engine, v up the face.
-        origin = p3(mid, port)
-        sk, to2d = d.plane(origin, (1, 0, 0), v3(n), f"Manifold flanges {s}")
+        origin = p3(mid, port_center(s))
 
-        def at(x, v):
-            return to2d(origin + np.array([x, 0, 0]) + v * v3(up))
+        def face_plane(name, out=0.0):
+            o = origin + out * v3(n)
+            sk, to2d = d.plane(o, (1, 0, 0), v3(n), name)
+            return sk, lambda x, v: np.array(to2d(o + np.array([x, 0, 0]) + v * v3(up)))
 
+        def hull(at, circles, dx=0.0):
+            pts = [(at(dx + x, v), r) for x, v, r in circles]
+            c = sum(p for p, _ in pts) / len(pts)
+            pts.sort(key=lambda pr: math.atan2(*(pr[0] - c)[::-1]))    # counterclockwise
+            return outline_commands(*hull_outline(pts))
+
+        # The flanges, each a sketch of its own (an outline's ids start over in each).
         ends = [bank_x(s, EXHAUST_PORT_X[0]) - mid, bank_x(s, EXHAUST_PORT_X[-1]) - mid]
-        middle = [bank_x(s, x) - mid for x in EXHAUST_PORT_X[1:3]]
-        for x in ends:
-            d.rounded(at(x - fw, -fh_), at(x + fw, fh_), fr)
-        d.rounded(at(min(middle) - fw, -fh_), at(max(middle) + fw, fh_), fr)
-        d.finish()
-        d.extrude(sk, f"exhaust_manifold_{s}", ft)
+        middle = sum(bank_x(s, x) - mid for x in EXHAUST_PORT_X[1:3]) / 2
+        for k, (dx, circles) in enumerate(((ends[0], MANIFOLD_END_FLANGE), (middle, MANIFOLD_MID_FLANGE),
+                                           (ends[1], MANIFOLD_END_FLANGE))):
+            sk, at = face_plane(f"Manifold flange {s} {k}")
+            d.c += hull(at, circles, dx)
+            d.finish()
+            d.extrude(sk, f"exhaust_manifold_{s} ({10 + 10 * k})", MANIFOLD_FLANGE_T)
 
-        # The center log, out from the face, and the outlet flange under it.
-        sk, to2d = d.plane(origin, (1, 0, 0), v3(n), f"Manifold log {s}")
-        log = [(np.array(at(*c)), r) for c, r in MANIFOLD_LOG]
-        mid2 = sum(c for c, _ in log) / len(log)
-        log.sort(key=lambda cr: math.atan2(*(cr[0] - mid2)[::-1]))   # counterclockwise
-        d.c += outline_commands(*hull_outline(log))
-        d.finish()
-        d.extrude(sk, f"exhaust_manifold_{s} (10)", MANIFOLD_LOG_OUT - 0.5)
-        # Its outer face rounded over: lofted from the outline out to one drawn in by the
-        # same corners' radii less 0.35 (the planes are only moved out along the normal, so
-        # the outlines' sketch coordinates carry over).
-        caps = []
-        for out, shrink in ((MANIFOLD_LOG_OUT - 0.5, 0.0), (MANIFOLD_LOG_OUT, 0.35)):
-            sk, _ = d.plane(origin + out * v3(n), (1, 0, 0), v3(n), f"Manifold log face {s} {out}")
-            d.c += outline_commands(*hull_outline([(c, r - shrink) for c, r in log]))
-            d.finish()
-            caps.append(sk)
-        d.loft(f"exhaust_manifold_{s} (20)", caps)
-        (_, vb), rb = MANIFOLD_LOG[2]
-        bottom = origin + (vb - rb) * v3(up)
-        hx, past, t = MANIFOLD_OUTLET
-        y0 = bottom[1] - s * past
-        y1 = bottom[1] + s * (MANIFOLD_LOG_OUT + past)
-        sk = d.sketch("XY", f"Manifold outlet {s}", offset=bottom[2] - t)
-        d.rounded((mid - hx, min(y0, y1)), (mid + hx, max(y0, y1)), 0.4)
-        d.finish()
-        d.extrude(sk, f"exhaust_manifold_{s} (30)", t + 0.3)
+        # The arms, each along its spline in its leaning plane.
+        side, corner = MANIFOLD_ARM
+        y_port, lean = MANIFOLD_ARM_PLANE
+        lean = math.radians(lean)
+        zp = port_center(s)[1]
 
-        # The arms: up and out of each end port, round, and in along the engine.
-        rise = unit([s * ARM_RISE[0], ARM_RISE[1]])
-        run = float(np.linalg.norm(ARM_RISE))
-        d1 = v3(rise)
-        for k, x in enumerate(ends):
-            inward = np.array([-math.copysign(1.0, x), 0.0, 0.0])
-            start = origin + np.array([x, 0, 0]) - ARM_START * d1
-            lead = ARM_START + run - ARM_BEND
-            length = abs(x) - ARM_BEND - ARM_END_X
-            name = f"exhaust_manifold_{s}_arm_{k}"
-            # Its path in the plane of the rise and the engine's length, drawn so the bend
-            # turns counterclockwise.
-            sk, _ = d.plane(start, d1, np.cross(d1, inward), f"{name} path")
-            d.c.append(cmd("sketch.line", infer=False, points=[skp(0.0, 0.0), skp(lead, 0.0)]))
-            d.c.append(cmd("sketch.arc.center_point", center=skp(lead, ARM_BEND), start="l1.end",
-                           end=skp(lead + ARM_BEND, ARM_BEND)))
-            d.c.append(cmd("sketch.line", infer=False,
-                           points=["a1.end", skp(lead + ARM_BEND, ARM_BEND + length)]))
+        def on_arm(x, z):
+            return np.array([mid + x, s * (y_port + (z - zp) * math.tan(lean)), z])
+
+        for k, sign in enumerate((-1.0, 1.0)):
+            name = f"Manifold arm {s} {k}"
+            # Along its spline in the leaning plane.
+            up = np.array([0.0, s * math.sin(lean), math.cos(lean)])
+            sk, to2d = d.plane(on_arm(0.0, zp), (1, 0, 0), np.cross([1.0, 0, 0], up), f"{name} path")
+            pts = [(sign * x, z) for x, z in MANIFOLD_ARM_PATH]
+            d.c.append(cmd("sketch.spline.fit_point", points=[skp(*to2d(on_arm(*p))) for p in pts]))
             d.finish()
-            prof, to2d = d.plane(start, (1, 0, 0), d1, f"{name} section")
-            cx, cy = to2d(start)
-            d.rounded((cx - aw / 2, cy - ah / 2), (cx + aw / 2, cy + ah / 2), ar)
+            first = on_arm(*pts[0])
+            prof, to2d = d.plane(first, (1, 0, 0), unit(on_arm(*pts[1]) - first), f"{name} section")
+            cx, cy = to2d(first)
+            d.rounded((cx - side / 2, cy - side / 2), (cx + side / 2, cy + side / 2), corner)
             d.finish()
-            d.body(f"exhaust_manifold_{s} ({40 + 10 * k})", "solid.sweep", sketch=prof,
-                   path_sketch=sk, path=["l1", "a1", "l2"])
+            d.body(f"exhaust_manifold_arm_{s}_{k}", "solid.sweep", sketch=prof,
+                   path_sketch=sk, path=["s1"])
+
+        # The center tube, lofted from the outlet flange up into the arms: a body of its
+        # own, so it is not thinned flat.
+        def ellipse(z, ax, ay, yc, name):
+            sk = d.sketch("XY", name, offset=z)
+            d.c.append(cmd("sketch.ellipse", center=skp(mid, s * yc), major=skp(mid + ax, s * yc),
+                           minor_radius=round(ay * MM, 4)))
+            d.finish()
+            return sk
+
+        d.loft(f"exhaust_manifold_tube_{s}",
+               [ellipse(*sec, f"Manifold tube {s} {k}") for k, sec in enumerate(MANIFOLD_TUBE)])
+        zf = MANIFOLD_TUBE[0][0]
+        sk = d.sketch("XY", f"Manifold outlet {s}", offset=zf - MANIFOLD_OUTLET_T)
+        circles = [((mid + x, s * yy), r) for x, yy, r in MANIFOLD_OUTLET]
+        c = sum(np.array(p) for p, _ in circles) / len(circles)
+        circles.sort(key=lambda pr: math.atan2(*(np.array(pr[0]) - c)[::-1]))
+        d.c += outline_commands(*hull_outline(circles))
+        d.finish()
+        d.extrude(sk, f"exhaust_manifold_{s} (100)", MANIFOLD_OUTLET_T + 0.05)
 
 
 # The front of the engine.
@@ -1406,7 +1416,7 @@ bpy.ops.wm.obj_export(filepath=dst, apply_modifiers=True, export_normals=False, 
 ROUND = "r0.35"
 REDUCE_FACTORS = [
     ("air_cleaner_element", 0), ("alternator_fan_vanes", 0),
-    ("cylinder_head", 0),
+    ("cylinder_head", 0), ("exhaust_manifold_tube", "r0.5"), ("exhaust_manifold", "r0.1"),
     ("air_cleaner", ROUND), ("crank_pulley", ROUND), ("upper_pulley", ROUND),
     ("alternator", ROUND), ("harmonic_balancer", ROUND), ("crank_bolt", ROUND),
     ("distributor_clamp", 1), ("distributor", ROUND), ("spark_plug", ROUND),
