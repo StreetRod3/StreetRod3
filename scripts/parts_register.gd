@@ -14,11 +14,21 @@ extends RefCounted
 ## id, so saves that name it still find it; the others are "<id>-<family>", or
 ## "<id>-<make in lower case>", with the same everything else. Each copy keeps the
 ## entry's id as `base`.
+##
+## Bolt-on parts sit in the register under groups (`PART_GROUPS`) so the file reads by
+## kind; the groups are only for the file. Loaded, they are one list, `parts`, and each
+## entry's `slot` says what it bolts to (the `fuel` group has carburetors and air
+## cleaners, `exhaust` has exhausts and mufflers, `suspension` springs and shocks). An id
+## must be unique across all the groups.
 
 const ENGINES := "engines"
 const TRANSMISSIONS := "transmissions"
 const WHEELS := "wheels"
 const PARTS := "parts"
+const PART_GROUPS: Array[String] = [
+	"heads", "intake", "fuel", "ignition", "cam", "tires", "headers", "exhaust",
+	"differential", "suspension", "mounts",
+]
 const FAMILIES := "families"
 
 static var _cache: Dictionary = {}
@@ -79,16 +89,20 @@ static func _read(path: String) -> Dictionary:
 	result.engines = _rows(root.get(ENGINES, []), ENGINES, result)
 	result.transmissions = _rows(root.get(TRANSMISSIONS, []), TRANSMISSIONS, result)
 	result.wheels = _rows(root.get(WHEELS, []), WHEELS, result)
-	result.parts = _rows(root.get(PARTS, []), PARTS, result)
+	var parts: Array[Dictionary] = []
+	var seen_parts: Dictionary = {}
+	for group: String in PART_GROUPS:
+		parts.append_array(_rows(root.get(group, []), group, result, seen_parts))
+	result.parts = parts
 	return result
 
 
-static func _rows(value: Variant, category: String, result: Dictionary) -> Array[Dictionary]:
+## `seen` holds the ids already taken; groups that load into one list share it.
+static func _rows(value: Variant, category: String, result: Dictionary, seen: Dictionary = {}) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	if typeof(value) != TYPE_ARRAY:
 		result.errors.append("Parts register '%s' must be a list." % category)
 		return rows
-	var seen: Dictionary = {}
 	for item: Variant in value:
 		if typeof(item) != TYPE_DICTIONARY:
 			result.errors.append("A %s entry must be an object." % category)
