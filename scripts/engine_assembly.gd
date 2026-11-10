@@ -145,12 +145,12 @@ const SB_PLUG_EXIT := Vector2(9.061, 5.541)
 const SB_PLUG_DIR := Vector3(0.231, 0.963, -0.14)
 const SB_PLUG_BOOT := 0.9
 ## Plug wires leave the cap out sideways behind the air cleaner (`SB_WIRE_BACK`: along,
-## out from the middle, height), run forward over the valve cover, out past the exhaust
-## and down to the plugs, as (out from the middle, height).
+## out from the middle, height), run forward over the valve cover (`SB_WIRE_OVER`), out
+## over the exhaust (`SB_WIRE_BEND`) and hang down to the plugs, as (out from the middle,
+## height); see `_sb_wire_stops()`.
 const SB_WIRE_BACK := Vector3(7.6, 5.5, 15.6)
 const SB_WIRE_OVER := Vector2(7.5, 14.4)
 const SB_WIRE_BEND := Vector2(13.0, 11.8)
-const SB_WIRE_DOWN := Vector2(13.3, 8.2)
 ## Intake bolts: the right flange's front one and the left's back one, on the flange's
 ## face (y, z) and square to it.
 const SB_INTAKE_BOLT_X := 9.42
@@ -1131,9 +1131,6 @@ func _build_wires(rig: Node3D) -> void:
 	var plugs := plug_spots()
 	var free := plugs.duplicate()
 	var base := distributor_base()
-	var over_at := SB_WIRE_OVER * FH_IN + Vector2(0.0, CRANK_Z) if is_sbc() else WIRE_OVER
-	var bend_at := SB_WIRE_BEND * FH_IN + Vector2(0.0, CRANK_Z) if is_sbc() else WIRE_BEND
-	var down_at := SB_WIRE_DOWN * FH_IN + Vector2(0.0, CRANK_Z) if is_sbc() else WIRE_DOWN
 	var towers: Array[Vector3] = []
 	for t in cap_towers():
 		towers.append(base + t)
@@ -1146,18 +1143,17 @@ func _build_wires(rig: Node3D) -> void:
 				best = i
 		var plug: Transform3D = free[best]
 		free.remove_at(best)
-		var side := signf(plug.origin.y)
-		var out := plug.origin + plug.basis.z * 0.25
-		var over := Vector3(plug.origin.x * 0.85 + tower.x * 0.15, side * over_at.x, over_at.y)
-		var down := Vector3(plug.origin.x, side * down_at.x, down_at.y)
-		var points := _bezier(tower, tower + Vector3(0.0, 0.0, 0.2), over, 8)
+		var points: PackedVector3Array
 		if is_sbc():
-			# Out sideways first, clear of the carburetors and air cleaners over the front.
-			var back := fh(Vector3(SB_WIRE_BACK.x, SB_WIRE_BACK.y * side, SB_WIRE_BACK.z))
-			points = _bezier(tower, tower + Vector3(0.0, 0.0, 0.08), back, 8)
-			points.append_array(_bezier(back, Vector3(back.x, over.y, over.z + 0.04), over, 8).slice(1))
-		points.append_array(_bezier(over, Vector3(plug.origin.x, side * bend_at.x, bend_at.y), down, 8).slice(1))
-		points.append_array(_bezier(down, out + plug.basis.z * 0.25, out, 6).slice(1))
+			points = _smooth_path(_sb_wire_stops(tower, plug, plugs), 8)
+		else:
+			var side := signf(plug.origin.y)
+			var out := plug.origin + plug.basis.z * 0.25
+			var over := Vector3(plug.origin.x * 0.85 + tower.x * 0.15, side * WIRE_OVER.x, WIRE_OVER.y)
+			var down := Vector3(plug.origin.x, side * WIRE_DOWN.x, WIRE_DOWN.y)
+			points = _bezier(tower, tower + Vector3(0.0, 0.0, 0.2), over, 8)
+			points.append_array(_bezier(over, Vector3(plug.origin.x, side * WIRE_BEND.x, WIRE_BEND.y), down, 8).slice(1))
+			points.append_array(_bezier(down, out + plug.basis.z * 0.25, out, 6).slice(1))
 		var wire := MeshInstance3D.new()
 		wire.mesh = sweep_mesh(points, 0.025, 8, false)
 		wire.material_override = rubber
@@ -1171,6 +1167,59 @@ func _build_wires(rig: Node3D) -> void:
 		b.material_override = boot
 		b.transform = Transform3D(plug.basis * Basis(Vector3.RIGHT, PI * 0.5), plug.origin + plug.basis.z * 0.125)
 		rig.add_child(b)
+
+
+## Where a small-block's wire passes, from its tower to its plug's boot: up out of the
+## tower, out sideways behind the air cleaner, forward along the valve cover sagging a
+## little between, over the exhaust and hanging down to come into the boot along the plug.
+## Each bank's wires lie side by side: the back plug's outermost, so none cross as they
+## leave the run.
+func _sb_wire_stops(tower: Vector3, plug: Transform3D, plugs: Array[Transform3D]) -> PackedVector3Array:
+	var side := signf(plug.origin.y)
+	var lane := 0.0
+	for other in plugs:
+		if signf(other.origin.y) == side and other.origin.x < plug.origin.x:
+			lane += 1.0
+	var x := plug.origin.x / FH_IN
+	var out := plug.origin + plug.basis.z * 0.25
+	var stops := PackedVector3Array([tower, tower + Vector3(0.0, 0.0, 0.5 * FH_IN)])
+	var back := fh(Vector3(SB_WIRE_BACK.x, side * (SB_WIRE_BACK.y + 0.3 * lane), SB_WIRE_BACK.z - 0.15 * lane))
+	var over := fh(Vector3(x + 0.6, side * (SB_WIRE_OVER.x + 0.3 * lane), SB_WIRE_OVER.y - 0.1 * lane))
+	stops.append(back)
+	if back.x - over.x > 4.0 * FH_IN:
+		stops.append((back + over) * 0.5 - Vector3(0.0, 0.0, 0.35 * FH_IN))
+	stops.append(over)
+	stops.append(fh(Vector3(x + 0.3, side * (SB_WIRE_BEND.x + 0.15 * lane), SB_WIRE_BEND.y)))
+	# Hanging straight down outside the exhaust, curving in to meet the boot a little above
+	# its line, so it never dips below the boot and hooks back up.
+	stops.append(out + plug.basis.z * 0.9 * FH_IN + Vector3(0.0, 0.0, 0.5 * FH_IN))
+	stops.append(out)
+	return stops
+
+
+## A smooth curve through `stops` (centripetal Catmull-Rom), `steps` points a span, so a
+## wire bends gently through each place it passes instead of kinking there.
+static func _smooth_path(stops: PackedVector3Array, steps: int) -> PackedVector3Array:
+	var n := stops.size()
+	var out := PackedVector3Array()
+	for i in n - 1:
+		var p0 := stops[i - 1] if i > 0 else stops[0] * 2.0 - stops[1]
+		var p1 := stops[i]
+		var p2 := stops[i + 1]
+		var p3 := stops[i + 2] if i + 2 < n else stops[n - 1] * 2.0 - stops[n - 2]
+		var t1 := sqrt(maxf(p0.distance_to(p1), 1e-4))
+		var t2 := t1 + sqrt(maxf(p1.distance_to(p2), 1e-4))
+		var t3 := t2 + sqrt(maxf(p2.distance_to(p3), 1e-4))
+		for k in steps:
+			var t := lerpf(t1, t2, float(k) / float(steps))
+			var a1 := p0 * ((t1 - t) / t1) + p1 * (t / t1)
+			var a2 := p1 * ((t2 - t) / (t2 - t1)) + p2 * ((t - t1) / (t2 - t1))
+			var a3 := p2 * ((t3 - t) / (t3 - t2)) + p3 * ((t - t2) / (t3 - t2))
+			var b1 := a1 * ((t2 - t) / t2) + a2 * (t / t2)
+			var b2 := a2 * ((t3 - t) / (t3 - t1)) + a3 * ((t - t1) / (t3 - t1))
+			out.append(b1 * ((t2 - t) / (t2 - t1)) + b2 * ((t - t1) / (t2 - t1)))
+	out.append(stops[n - 1])
+	return out
 
 
 ## The flathead's wires: forward out of the cap's face, up over the front of each head,
