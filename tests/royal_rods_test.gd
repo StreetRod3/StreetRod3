@@ -180,12 +180,53 @@ func _run() -> void:
 		"transmission": state.GEARBOXES,
 		"wheels": state.WHEELS,
 	}
+	var register_file := FileAccess.open(state.PARTS_REGISTER, FileAccess.READ)
+	assert(register_file != null)
+	var register: Variant = JSON.parse_string(register_file.get_as_text())
+	assert(register is Dictionary)
+	var group_filters := {
+		"heads": ["heads"], "intake": ["intake"], "fuel": ["carb", "air_cleaner"],
+		"ignition": ["distributor"], "cam": ["cam"], "tires": ["tires"],
+		"headers": ["manifold"], "exhaust": ["exhaust", "muffler"],
+		"differential": ["differential"], "suspension": ["springs", "shocks"],
+		"mounts": [],
+	}
+	var expected_parts: Dictionary = {}
+	for group: String in PartsRegister.PART_GROUPS:
+		assert(group_filters.has(group))
+		assert(register.has(group) and register[group] is Array and not register[group].is_empty())
+		for filter: String in group_filters[group]:
+			assert(not displayed.has(filter))
+			displayed[filter] = []
+		for source: Dictionary in register[group]:
+			var base := str(source["id"])
+			var filters: Array = group_filters[group]
+			var filter := ""
+			if filters.size() == 1:
+				filter = filters[0]
+			elif filters.size() > 1:
+				filter = str(source.get("slot", ""))
+				assert(filters.has(filter))
+			else:
+				assert(group == "mounts" and source.get("mounts", false))
+			var variants: Array = source.get("families", source.get("makes", []))
+			var variant_count := maxi(variants.size(), 1)
+			for i in variant_count:
+				var id := base if i == 0 else "%s-%s" % [base, str(variants[i]).to_lower()]
+				assert(not expected_parts.has(id))
+				expected_parts[id] = {"base": base, "filter": filter}
+	assert(expected_parts.size() == state.PARTS.size())
 	for part: Dictionary in state.PARTS:
-		var slot := str(part.get("slot", ""))
-		assert(not slot.is_empty())
-		if not displayed.has(slot):
-			displayed[slot] = []
-		displayed[slot].append(part)
+		var id := str(part["id"])
+		assert(expected_parts.has(id))
+		var expected: Dictionary = expected_parts[id]
+		assert(str(part.get("base", "")) == expected["base"])
+		var filter := str(expected["filter"])
+		assert(str(part.get("slot", "")) == filter)
+		if not filter.is_empty():
+			displayed[filter].append(part)
+		expected_parts.erase(id)
+	assert(expected_parts.is_empty())
 	for kind: String in displayed:
 		if kind == "wheels" or kind == "tires":
 			continue
@@ -245,8 +286,21 @@ func _run() -> void:
 			assert((store.get("_status") as Label).text.contains("Bought"))
 		store.call("_close_catalog")
 	store.call("_open_catalog")
+	var full_catalog_ids: Dictionary = {}
 	for row: Node in store.get("_catalog_list").get_children():
 		assert((row as Control).visible)
+		if row is Button:
+			var id := str(row.get_meta("part_id"))
+			full_catalog_ids[id] = int(full_catalog_ids.get(id, 0)) + 1
+	for items: Array in [state.ENGINES, state.GEARBOXES, state.WHEELS, state.PARTS]:
+		for item: Dictionary in items:
+			var id := str(item["id"])
+			assert(int(full_catalog_ids.get(id, 0)) > 0)
+			full_catalog_ids[id] -= 1
+			if full_catalog_ids[id] == 0:
+				full_catalog_ids.erase(id)
+	assert(full_catalog_ids.is_empty())
+	assert(not store.has_node("Shelf_mounts"))
 	store.call("_close_catalog")
 
 	state.roll_newspaper_wear()
