@@ -159,10 +159,10 @@ const SB_INTAKE_NORMAL := Vector2(-0.615, 0.788)
 ## Head bolts, front and back on the intake face above the intake's flange.
 const SB_HEAD_BOLT_X := 8.8
 const SB_HEAD_BOLT := Vector2(5.289, 11.627)
-## The mount pads' bolt bosses on the block's sides, and their way out.
-const SB_MOUNT_X := -6.2
-const SB_MOUNT := Vector2(6.037, 1.054)
-const SB_MOUNT_NORMAL := Vector2(0.636, -0.772)
+## The engine's mount bolts, in the block's front face either side of the timing cover,
+## as the '55-57 front mounts were (the side pads are out of sight from above): front
+## face, out from the middle, height.
+const SB_MOUNT := Vector3(-10.6, 6.8, 3.2)
 ## The camshaft lies in the valley once the intake is off: front, back, height.
 const SB_CAM := Vector3(-9.3, 8.3, 9.45)
 const SB_COVER_X := -11.4
@@ -477,8 +477,7 @@ func _sb_bolt_spots(key: String) -> Array[Transform3D]:
 	match key:
 		GameState.HOOD_ENGINE:
 			for side: float in [1.0, -1.0]:
-				var normal := Vector3(0.0, SB_MOUNT_NORMAL.x * side, SB_MOUNT_NORMAL.y)
-				out.append(Transform3D(_axis_basis(normal), fh(Vector3(SB_MOUNT_X, SB_MOUNT.x * side, SB_MOUNT.y))))
+				out.append(Transform3D(_axis_basis(Vector3(-1.0, 0.0, 0.0)), fh(Vector3(SB_MOUNT.x, SB_MOUNT.y * side, SB_MOUNT.z))))
 		GameState.SLOT_CAM:
 			for y: float in [-1.0, 1.0]:
 				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(SB_CAM.x + 0.8, y, SB_CAM.z + 0.4))))

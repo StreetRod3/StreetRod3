@@ -22,11 +22,13 @@ const BOLT_PITCH := 0.06
 const BOLT_SPIN := TAU * 0.6
 ## Hole hot spots, in meters.
 const SPOT_RADIUS := 0.035
-## A bolt under the pointer takes the click over its part's box this far behind the box's
-## face, in meters, since the box takes in the bolt's own hole.
-const BOLT_PICK_DEPTH := 0.1
+## A bolt under the pointer takes the click unless a part's own surface is this far in
+## front of it, in meters: a bolt that can be seen can be clicked, whatever part's box it
+## sits in.
+const BOLT_PICK_DEPTH := 0.03
 const _LAYER_PARTS := 1
 const _LAYER_BOLTS := 2
+const _LAYER_SOLID := 4
 ## A part lifts this far off, in engine units, before it is put on the shelf.
 const LIFT_PART := 4.0
 const LIFT_ENGINE := 10.0
@@ -93,6 +95,8 @@ var _loosening: Dictionary = {}
 ## Click targets: the holes, and each part's bounds (a list of boxes per part).
 var _hole_bodies: Dictionary = {}
 var _part_bodies: Dictionary = {}
+## The parts' own surfaces, for what hides a bolt from the camera.
+var _solid_bodies: Array[Node3D] = []
 ## What the mouse is over: [key, bolt index], [key, -1] for a part, or [].
 var _hover: Array = []
 var _busy: bool = false
@@ -563,7 +567,8 @@ func _target_at(screen_pos: Vector2) -> Array:
 	var part_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, _LAYER_PARTS))
 	if not bolt_hit.is_empty():
 		var bolt_near := from.distance_to(bolt_hit["position"])
-		if part_hit.is_empty() or bolt_near <= from.distance_to(part_hit["position"]) + BOLT_PICK_DEPTH:
+		var solid_hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(from, to, _LAYER_SOLID))
+		if solid_hit.is_empty() or bolt_near <= from.distance_to(solid_hit["position"]) + BOLT_PICK_DEPTH:
 			var bolt := bolt_hit.get("collider") as Node
 			if bolt != null and bolt.has_meta(&"hood_bolt"):
 				return bolt.get_meta(&"hood_bolt")
@@ -662,10 +667,14 @@ func _refresh_part_bodies() -> void:
 		for body: Node3D in bodies:
 			(body as Node3D).queue_free()
 	_part_bodies.clear()
+	for body in _solid_bodies:
+		body.queue_free()
+	_solid_bodies.clear()
 	for key: String in _engine.rigs.keys():
 		var rig: Node3D = _engine.rigs[key]
 		if not is_instance_valid(rig):
 			continue
+		_solid_bodies.append(_solid_body(rig))
 		# The heads are one part but a box each, so the one box does not take in the
 		# whole top of the engine between them; the front drive a box for each piece
 		# (belt, fan, generator, pulleys), so it does not cover the front of the engine.
@@ -696,6 +705,28 @@ func _refresh_part_bodies() -> void:
 		var shape := (body.get_child(0) as CollisionShape3D).shape as BoxShape3D
 		shape.size.y *= 0.5
 		body.global_position.y -= shape.size.y * 0.5
+
+
+## Every mesh under `node` as one collision surface in world space, on the layer only the
+## bolts' line of sight looks at.
+func _solid_body(node: Node) -> StaticBody3D:
+	var faces := PackedVector3Array()
+	for mi in node.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh != null and m.is_visible_in_tree():
+			faces.append_array(m.global_transform * m.mesh.get_faces())
+	var body := StaticBody3D.new()
+	body.collision_layer = _LAYER_SOLID
+	body.collision_mask = 0
+	if not faces.is_empty():
+		var shape := CollisionShape3D.new()
+		var surface := ConcavePolygonShape3D.new()
+		surface.set_faces(faces)
+		surface.backface_collision = true
+		shape.shape = surface
+		body.add_child(shape)
+	add_child(body)
+	return body
 
 
 func _world_bounds(node: Node) -> AABB:
