@@ -38,7 +38,7 @@ const _FH_BELL_BACK := 15.3
 ## manifold's center or at the end of a header's collector. Its exhaust is the manifold
 ## slot's, from its model or the headers' own.
 const _SB_OUTLETS := {
-	"log": Vector3(0.0, 10.38, 3.08),
+	"log": Vector3(0.0, 10.55, 3.3),
 	"shorty": Vector3(6.6, 11.4, -6.43),
 	"long-tube": Vector3(13.6, 10.4, -11.21),
 }

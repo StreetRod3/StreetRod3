@@ -41,8 +41,9 @@ internals, and nothing under the intake. It has:
   manifolds     the L79's right-hand center-dump ram's horn (resources/engines/right
                 exhaust manifold.step) on both banks, solid: flanges with bolt ears on
                 the end ports and across the middle pair, a rounded square arm from each
-                end port arching up and over, leaning out, into the center tube, which
-                flares down into the outlet flange
+                end port, its foot rounding into the flange, arching up and over, leaning
+                out, into the center tube, which flares down into the three-bolt
+                triangular outlet flange, open up through it to a dark bore
   headers       (built alone) long tubes or shorties: a flange on each head, four 1 5/8
                 primaries out of the ports, one bend each, into a merge cone and a 3 inch
                 collector
@@ -236,7 +237,10 @@ MANIFOLD_FLANGE_T = 0.5
 # from the bank's middle, height); the other arm is its mirror.
 MANIFOLD_ARM = (1.96, 0.7)
 MANIFOLD_ARM_PLANE = (10.37, 12.6)
-MANIFOLD_ARM_PATH = [(7.45, 6.6), (7.45, 7.3), (7.46, 8.0), (7.36, 8.62), (6.87, 9.06), (6.3, 9.33),
+# Each arm's foot is rounded over down to the flange's bottom edge: lofted through
+# sections (how far below the arm's start, how much smaller all round).
+MANIFOLD_ARM_FOOT = [(0.0, 0.0), (0.22, 0.06), (0.4, 0.2), (0.5, 0.45)]
+MANIFOLD_ARM_PATH = [(7.45, 7.05), (7.46, 8.0), (7.36, 8.62), (6.87, 9.06), (6.3, 9.33),
                      (5.29, 9.63), (4.0, 9.72), (2.77, 9.53), (1.86, 9.19), (1.25, 8.95), (0.85, 8.5),
                      (0.75, 8.0)]
 # The center tube, lofted through upright ellipses (height, half along the engine, half
@@ -245,10 +249,18 @@ MANIFOLD_ARM_PATH = [(7.45, 6.6), (7.45, 7.3), (7.46, 8.0), (7.36, 8.62), (6.87,
 MANIFOLD_TUBE = [(3.75, 1.9, 1.78, 10.55), (4.05, 1.6, 1.5, 10.55), (4.4, 1.5, 1.43, 10.55),
                  (5.5, 1.5, 1.37, 10.49), (6.5, 1.58, 1.31, 10.43), (7.7, 1.9, 1.18, 10.45),
                  (8.5, 2.25, 0.95, 10.6)]
-# The outlet flange under the foot: its outline round circles (along from the bank's
-# middle, out from the crank line, radius), and how thick.
-MANIFOLD_OUTLET = [(-1.6, 8.95, 0.55), (1.6, 8.95, 0.55), (1.95, 10.45, 0.25), (1.6, 11.95, 0.55),
-                   (-1.6, 11.95, 0.55), (-1.95, 10.45, 0.25)]
+# The outlet is open: a bore (half along, half across) up through the flange and the tube's
+# flared foot, to the dark end of it at the top of the flare (the third section), as the
+# hose necks' are.
+MANIFOLD_BORE = (1.15, 1.05)
+MANIFOLD_BORE_TOP = 2
+# The outlet flange under the foot, the reference's rounded triangle: one point in toward
+# the head and two corners outside, the outer edge bowed, its outline round circles (along
+# from the bank's middle, out from the crank line, radius); a bolt hole in each point
+# (along, out); how thick.
+MANIFOLD_OUTLET = [(0.0, 8.75, 0.38), (1.64, 11.57, 0.48), (0.0, 11.0, 1.5), (-1.64, 11.57, 0.48)]
+MANIFOLD_OUTLET_HOLES = [(0.0, 8.75), (1.64, 11.57), (-1.64, 11.57)]
+MANIFOLD_OUTLET_HOLE_R = 0.17
 MANIFOLD_OUTLET_T = 0.45
 
 COLLECTOR = {"long": ((9.0, 10.4, -6.8), (0.72, 0.0, -0.69)),
@@ -271,7 +283,7 @@ FINISHES = [
     ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
     ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON),
-    ("exhaust_manifold", CAST_IRON),
+    ("exhaust_manifold_tube_bore", BLACK), ("exhaust_manifold", CAST_IRON),
     ("cylinder_head_holes", BLACK),
     ("thermostat_neck_bore", BLACK), ("intake_manifold_plenum_floor", BLACK),
     ("thermostat_bolts", STEEL), ("water_pump_inlet_bore", BLACK),
@@ -1139,26 +1151,57 @@ def iron_manifolds(d):
             d.finish()
             d.body(f"exhaust_manifold_arm_{s}_{k}", "solid.sweep", sketch=prof,
                    path_sketch=sk, path=["s1"])
+            # Its foot, rounded over.
+            down = -unit(on_arm(*pts[1]) - first)
+            feet = []
+            for j, (drop, shrink) in enumerate(MANIFOLD_ARM_FOOT):
+                at = first + drop * down
+                foot, to2d = d.plane(at, (1, 0, 0), -down, f"{name} foot {j}")
+                cx, cy = to2d(at)
+                h = side / 2 - shrink
+                d.rounded((cx - h, cy - h), (cx + h, cy + h), corner - shrink)
+                d.finish()
+                feet.append(foot)
+            d.loft(f"exhaust_manifold_arm_{s}_{k} (10)", feet)
 
         # The center tube, lofted from the outlet flange up into the arms: a body of its
         # own, so it is not thinned flat.
-        def ellipse(z, ax, ay, yc, name):
-            sk = d.sketch("XY", name, offset=z)
+        bx, by = MANIFOLD_BORE
+
+        def draw_ellipse(ax, ay, yc):
             d.c.append(cmd("sketch.ellipse", center=skp(mid, s * yc), major=skp(mid + ax, s * yc),
                            minor_radius=round(ay * MM, 4)))
+
+        def ellipse(z, ax, ay, yc, name, bore=False):
+            sk = d.sketch("XY", name, offset=z)
+            draw_ellipse(ax, ay, yc)
+            if bore:
+                draw_ellipse(bx, by, yc)
             d.finish()
             return sk
 
+        # The flared foot a ring round the bore, the rest solid from the flare's top up.
+        top = MANIFOLD_BORE_TOP
         d.loft(f"exhaust_manifold_tube_{s}",
-               [ellipse(*sec, f"Manifold tube {s} {k}") for k, sec in enumerate(MANIFOLD_TUBE)])
+               [ellipse(*sec, f"Manifold tube {s} {k}", bore=True)
+                for k, sec in enumerate(MANIFOLD_TUBE[:top + 1])])
+        d.loft(f"exhaust_manifold_tube_{s} (10)",
+               [ellipse(*sec, f"Manifold tube {s} {k + top}")
+                for k, sec in enumerate(MANIFOLD_TUBE[top:])])
+        zt, _, _, yt = MANIFOLD_TUBE[top]
+        sk = ellipse(zt - 0.04, bx + 0.02, by + 0.02, yt, f"Manifold bore end {s}")
+        d.extrude(sk, f"exhaust_manifold_tube_bore_{s}", 0.04)
         zf = MANIFOLD_TUBE[0][0]
         sk = d.sketch("XY", f"Manifold outlet {s}", offset=zf - MANIFOLD_OUTLET_T)
         circles = [((mid + x, s * yy), r) for x, yy, r in MANIFOLD_OUTLET]
         c = sum(np.array(p) for p, _ in circles) / len(circles)
         circles.sort(key=lambda pr: math.atan2(*(np.array(pr[0]) - c)[::-1]))
         d.c += outline_commands(*hull_outline(circles))
+        draw_ellipse(bx, by, MANIFOLD_TUBE[0][3])
+        for x, yy in MANIFOLD_OUTLET_HOLES:
+            d.circle((mid + x, s * yy), MANIFOLD_OUTLET_HOLE_R)
         d.finish()
-        d.extrude(sk, f"exhaust_manifold_{s} (100)", MANIFOLD_OUTLET_T + 0.05)
+        d.extrude(sk, f"exhaust_manifold_tube_{s} (20)", MANIFOLD_OUTLET_T + 0.05)
 
 
 # The front of the engine.
@@ -1416,7 +1459,7 @@ bpy.ops.wm.obj_export(filepath=dst, apply_modifiers=True, export_normals=False, 
 ROUND = "r0.35"
 REDUCE_FACTORS = [
     ("air_cleaner_element", 0), ("alternator_fan_vanes", 0),
-    ("cylinder_head", 0), ("exhaust_manifold_tube", "r0.5"), ("exhaust_manifold", "r0.1"),
+    ("cylinder_head", 0), ("exhaust_manifold_tube", "r0.3"), ("exhaust_manifold", "r0.1"),
     ("air_cleaner", ROUND), ("crank_pulley", ROUND), ("upper_pulley", ROUND),
     ("alternator", ROUND), ("harmonic_balancer", ROUND), ("crank_bolt", ROUND),
     ("distributor_clamp", 1), ("distributor", ROUND), ("spark_plug", ROUND),
