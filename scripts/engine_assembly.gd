@@ -144,6 +144,10 @@ const SB_CLAMP_BOLT := Vector3(7.32, 1.55, 11.75)
 const SB_PLUG_EXIT := Vector2(9.061, 5.541)
 const SB_PLUG_DIR := Vector3(0.231, 0.963, -0.14)
 const SB_PLUG_BOOT := 0.9
+## The coil lead, from the top of the coil's tower (on the stock intake) to the top of the
+## cap's middle tower: up and back off the coil, clear of the air cleaner's rim, and over the
+## plug wires leaving the cap.
+const SB_COIL_LEAD: Array[Vector3] = [Vector3(6.7, -1.9, 17.65), Vector3(6.95, -1.75, 18.15), Vector3(7.9, -0.2, 18.6), Vector3(8.87, 1.55, 18.3), Vector3(8.87, 1.55, 17.6)]
 ## Plug wires leave the cap out sideways behind the air cleaner (`SB_WIRE_BACK`: along,
 ## out from the middle, height), run forward over the valve cover (`SB_WIRE_OVER`), out
 ## over the exhaust (`SB_WIRE_BEND`) and hang down to the plugs, as (out from the middle,
@@ -180,7 +184,9 @@ const SB_HEADERS := {
 	"long-tube": "res://assets/parts/sbc-headers-long.glb",
 }
 const _SB_NODES_HEADS: Array[String] = ["cylinder_head", "valve_cover", "valve_bolt", "spark_plug"]
-const _SB_NODES_INTAKE: Array[String] = ["intake_manifold", "thermostat", "ignition_coil", "oil_filler"]
+const _SB_NODES_INTAKE: Array[String] = ["intake_manifold", "thermostat", "oil_filler"]
+## The coil stands on the stock intake but comes off with the wires.
+const _SB_NODES_COIL: Array[String] = ["ignition_coil"]
 const _SB_NODES_CARB: Array[String] = ["carburetor", "carb_throat"]
 const _SB_NODES_DISTRIBUTOR: Array[String] = ["distributor"]
 const _SB_NODES_CLEANER: Array[String] = ["air_cleaner"]
@@ -646,7 +652,7 @@ func _build_flathead_block(rig: Node3D) -> void:
 ## cast on the block's sides.
 func _build_sbc_block(rig: Node3D) -> void:
 	var leave: Array[String] = []
-	for nodes: Array[String] in [_SB_NODES_HEADS, _SB_NODES_INTAKE, _SB_NODES_CARB, _SB_NODES_DISTRIBUTOR, _SB_NODES_CLEANER, _SB_NODES_FRONT, _SB_NODES_BALANCER, _SB_NODES_EXHAUST]:
+	for nodes: Array[String] in [_SB_NODES_HEADS, _SB_NODES_INTAKE, _SB_NODES_COIL, _SB_NODES_CARB, _SB_NODES_DISTRIBUTOR, _SB_NODES_CLEANER, _SB_NODES_FRONT, _SB_NODES_BALANCER, _SB_NODES_EXHAUST]:
 		leave.append_array(nodes)
 	_add_model_nodes(rig, leave, false)
 	_build_balancer(rig, SB_PULLEY_R * FH_IN)
@@ -1127,6 +1133,16 @@ func _build_wires(rig: Node3D) -> void:
 	if is_flathead():
 		_build_flathead_wires(rig, rubber, boot)
 		return
+	if is_sbc() and str(_view_part(GameState.SLOT_INTAKE).get("style", "iron4")) == "iron4":
+		# The coil and its lead to the cap come off with the wires.
+		_add_model_nodes(rig, _SB_NODES_COIL, true)
+		var lead := PackedVector3Array()
+		for p in SB_COIL_LEAD:
+			lead.append(fh(p))
+		var coil_wire := MeshInstance3D.new()
+		coil_wire.mesh = sweep_mesh(_smooth_path(lead, 8), 0.025, 8, false)
+		coil_wire.material_override = rubber
+		rig.add_child(coil_wire)
 	var plugs := plug_spots()
 	var free := plugs.duplicate()
 	var base := distributor_base()
