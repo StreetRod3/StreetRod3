@@ -5,8 +5,9 @@ extends RefCounted
 
 const KEYS_AND_PAD := 0
 const WHEEL := 1
-const _PAGES: Array[String] = ["res://scripts/controls_setup.gd", "res://scripts/controller_setup.gd"]
-const _NAMES: Array[String] = ["Keyboard and gamepad", "Wheel and shifter"]
+const MOUSE := 2
+const _PAGES: Array[String] = ["res://scripts/controls_setup.gd", "res://scripts/controller_setup.gd", "res://scripts/mouse_setup.gd"]
+const _NAMES: Array[String] = ["Keyboard and gamepad", "Wheel and shifter", "Mouse"]
 
 
 static func build(current: int, from: CanvasLayer) -> TabBar:

@@ -16,6 +16,7 @@ const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 const _AirTime := preload("res://scripts/air_time.gd")
+const _MouseDrive := preload("res://scripts/mouse_drive.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -127,6 +128,9 @@ var _park_slot := 0.0
 var _road_base_y: float = 0.0
 const _ROAD_PITCH_SPAN := 8.0
 var _air: _AirTime = _AirTime.new()
+var _mouse_drive := _MouseDrive.new()
+var _mouse_driving := true
+var _mouse_captured := false
 
 func _ready() -> void:
 	_road_base_y = global_position.y
@@ -156,6 +160,46 @@ func _ready() -> void:
 	var race := get_parent()
 	if race != null:
 		_touch = race.get_node_or_null("RaceUI/MobileControls")
+	_resume_mouse_drive()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PAUSED or what == NOTIFICATION_APPLICATION_FOCUS_OUT:
+		_release_mouse_drive()
+	elif what == NOTIFICATION_UNPAUSED or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		if is_inside_tree() and can_process():
+			_resume_mouse_drive()
+
+
+func _resume_mouse_drive() -> void:
+	_mouse_drive.reset()
+	if _mouse_driving and (GameState.mouse_steering_enabled or GameState.mouse_pedals_enabled):
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		_mouse_captured = true
+
+
+func _release_mouse_drive() -> void:
+	_mouse_drive.reset()
+	if _mouse_captured:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		_mouse_captured = false
+
+
+func stop_mouse_driving() -> void:
+	_mouse_driving = false
+	_release_mouse_drive()
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion and _mouse_captured:
+		_mouse_drive.move(event.screen_relative, GameState.mouse_steering_enabled, GameState.mouse_pedals_enabled, GameState.mouse_steering_sensitivity, GameState.mouse_pedals_sensitivity)
+	elif event is InputEventMouseButton and event.pressed and _mouse_captured:
+		if event.button_index == MOUSE_BUTTON_LEFT and GameState.mouse_steering_enabled:
+			_mouse_drive.steering = 0.0
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_RIGHT and GameState.mouse_pedals_enabled:
+			_mouse_drive.pedals = 0.0
+			get_viewport().set_input_as_handled()
 
 
 ## The car reads held controls each step, and a quick tap on a slow machine can come and go
@@ -373,7 +417,7 @@ func _steer_input() -> float:
 			s = touch_steer
 	if is_zero_approx(s):
 		s = _Controller.steer()
-	return clampf(s, -1.0, 1.0)
+	return clampf(s + _mouse_drive.steering, -1.0, 1.0)
 
 
 func _throttle_down() -> bool:
@@ -388,13 +432,13 @@ func _brake_down() -> bool:
 func _throttle_amount() -> float:
 	if _touch != null and _touch.has_method(&"is_throttle_down") and _touch.is_throttle_down():
 		return 1.0
-	return maxf(_Controller.amount(_Controller.THROTTLE), _Controller.pedal(_Controller.THROTTLE))
+	return maxf(maxf(_Controller.amount(_Controller.THROTTLE), _Controller.pedal(_Controller.THROTTLE)), maxf(_mouse_drive.pedals, 0.0))
 
 
 func _brake_amount() -> float:
 	if _touch != null and _touch.has_method(&"is_brake_down") and _touch.is_brake_down():
 		return 1.0
-	return maxf(_Controller.amount(_Controller.BRAKE), _Controller.pedal(_Controller.BRAKE))
+	return maxf(maxf(_Controller.amount(_Controller.BRAKE), _Controller.pedal(_Controller.BRAKE)), maxf(-_mouse_drive.pedals, 0.0))
 
 
 ## Gas and brake together with the car all but stopped, which is how a burnout starts.
@@ -515,6 +559,7 @@ func _handbrake_down() -> bool:
 func begin_park(slot: float) -> void:
 	if _parking:
 		return
+	stop_mouse_driving()
 	_parking = true
 	_park_slot = slot
 	_burnout = 0.0
@@ -871,6 +916,7 @@ func _update_rumble(delta: float) -> void:
 
 
 func _exit_tree() -> void:
+	_release_mouse_drive()
 	_rumble.stop()
 
 

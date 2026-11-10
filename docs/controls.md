@@ -1,6 +1,6 @@
 # Controls
 
-Every control in the game: keyboard, gamepad, and steering wheel. They all work at the same time, so a gamepad or wheel can be used alongside the keyboard.
+Every control in the game: keyboard, mouse, gamepad, and steering wheel. They can be used alongside one another.
 
 ## Keyboard
 
@@ -19,6 +19,10 @@ Every control in the game: keyboard, gamepad, and steering wheel. They all work 
 | Burnout | W and S with the car stopped, steering to swing the back round |
 
 These can be changed under Controls in the settings. Esc always pauses, whatever else is set.
+
+### Mouse driving
+
+The Mouse tab under Controls enables steering and acceleration/braking independently, with a sensitivity slider for each. Both are off by default. While driving, move the mouse left or right to steer, up to accelerate, and down to brake; move it back to return to neutral. Left-click resets steering, and right-click resets acceleration/braking. The mouse is captured during driving and released for menus. Both axes reset to neutral when driving resumes or the window loses focus. Keyboard, gamepad, and pedals remain available.
 
 ### Menus
 

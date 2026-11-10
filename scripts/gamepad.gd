@@ -184,7 +184,8 @@ func _stop_pointing() -> void:
 		return
 	_pointing = false
 	_ring.visible = false
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	if Input.mouse_mode == Input.MOUSE_MODE_HIDDEN:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
 func _draw_ring() -> void:
