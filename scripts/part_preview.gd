@@ -7,7 +7,7 @@ const _UnderCar := preload("res://scripts/under_car.gd")
 const _Transmission := preload("res://scripts/transmission.gd")
 const _WheelMesh := preload("res://scripts/stl_mesh_instance.gd")
 
-const _ENGINE_MODEL := "res://assets/parts/engine-v8-283.glb"
+const _ENGINE_MODEL := "res://assets/parts/engine-sbc-350.glb"
 const _WEAR_SHADER := preload("res://shaders/part_wear.gdshader")
 
 static var _white_tex: Texture2D
@@ -36,8 +36,11 @@ static func _engine(part: Dictionary) -> Node3D:
 ## parts are drawn from the flathead's layout.
 static func _hood(part: Dictionary) -> Node3D:
 	var slot := str(part.get("slot", ""))
-	var engine := {"model": _ENGINE_MODEL, "heads": 2}
+	var engine := {"model": _ENGINE_MODEL, "heads": 2, "family": _EngineAssembly.SB_FAMILY}
+	# Parts for several families, and the ones for any engine, are shown on the small-block.
 	var family := GameState.engine_family(part)
+	if family.is_empty():
+		family = _EngineAssembly.SB_FAMILY
 	for listed: Dictionary in GameState.ENGINES:
 		if not family.is_empty() and GameState.engine_family(listed) == family:
 			engine = listed

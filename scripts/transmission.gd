@@ -6,6 +6,7 @@ extends Node3D
 ## parts. Select raises a spare gearbox into an empty bellhousing, its bolts in but loose.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
+const _EngineAssembly := preload("res://scripts/engine_assembly.gd")
 
 ## Engine models are built about four and a half times real size.
 const ENGINE_SCALE := 0.22
@@ -753,7 +754,11 @@ func _build_engine() -> void:
 	add_child(engine)
 	engine.scale = Vector3.ONE * ENGINE_SCALE
 	engine.rotation.x = -PI * 0.5
-	engine.position = Vector3(-ENGINE_REAR_X * ENGINE_SCALE, DRIVELINE_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0)
+	# The small-block's model is drawn to size from its block's back face.
+	var rear_x := ENGINE_REAR_X
+	if GameState.engine_family(GameState.get_equipped_engine()) == _EngineAssembly.SB_FAMILY:
+		rear_x = _EngineAssembly.fh(Vector3(_EngineAssembly.SB_BLOCK_BACK, 0.0, 0.0)).x
+	engine.position = Vector3(-rear_x * ENGINE_SCALE, DRIVELINE_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0)
 
 
 func _build_jack() -> void:

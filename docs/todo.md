@@ -39,5 +39,6 @@ Engines come in families now (`families` in `parts.register`), and only the Ford
 
 - **Period Chevys** to match the flathead, each a family with its own stock heads, intake, camshaft, distributor and manifolds, and speed parts like the flathead's finned heads and three two-barrel intake.
 - **Real Ford Y-block and small-block.** The 292 and the 302 are stand-ins drawn with the Chevy models, and their speed parts are Ford copies of the Chevy ones with the same stats and looks.
+- **Small-block speed parts as models.** The Chevys are drawn from `tools/make_sbc.py`'s model now, with its cast-iron manifolds and headers, but the high-rise, tri-power and dual-quad intakes, the two-barrel carburetor and the chrome air cleaner are still built from primitives in `engine_assembly.gd`. The Ford stand-ins still use the old `engine-v8-*.glb`.
 - **Chrysler.** The issue names it as a third make (issue #8); there are no Chrysler cars or engines yet.
 - **The speed shop**, the only place to buy engine mounts for a swap across makes (`mounts` parts, `"shop": "speed"`).

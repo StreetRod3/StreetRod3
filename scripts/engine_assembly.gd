@@ -116,6 +116,86 @@ const _FH_NODES_OFF_BLOCK: Array[String] = ["cylinder_head", "spark_plug", "wate
 const _FH_NODES_FRONT: Array[String] = ["belt", "generator", "pulley_generator", "pulley_pump", "fan_"]
 const _FH_NODES_HEADS: Array[String] = ["cylinder_head", "spark_plug", "water_outlet", "plug_conduit"]
 
+## The Chevy small-block, laid out as tools/make_sbc.py builds its model (in inches from
+## the crank as the flathead's are, `fh()` turning them into engine units). Its model
+## carries the stock parts: the iron intake with its thermostat housing, coil and oil
+## filler, the four-barrel, the 14 inch air cleaner, the distributor, the plugs and the
+## cast-iron exhaust manifolds; headers are models of their own. The balancer and the
+## timing tab are built here on its crank.
+const SB_FAMILY := "chevy-sbc"
+const SB_BORE_MID := -0.49
+const SB_BANK_SHIFT := 0.425
+const SB_BORES_X: Array[float] = [-6.6, -2.2, 2.2, 6.6]
+## The block's back face, where the transmission's bell housing bolts on.
+const SB_BLOCK_BACK := 10.6
+## The carb pad's top, the carburetor's top where the air cleaner sits, and the stock
+## cleaner's wing nut top and radius.
+const SB_PAD := Vector3(-0.45, 0.0, 13.55)
+const SB_CARB_TOP := 16.7
+const SB_WINGNUT_TOP := 21.1
+const SB_CLEANER_R := 7.3
+## The distributor's axis at the cap's foot, its towers' ring and tops, and the clamp bolt.
+const SB_DIST := Vector3(8.87, 1.55, 13.0)
+const SB_TOWER_R := 1.2
+const SB_TOWER_TOP := 17.3
+const SB_CLAMP_BOLT := Vector3(7.32, 1.55, 11.75)
+## Where the plugs leave the right head's exhaust face (y, z), their way out on the right
+## (mirrored on the left), and how far out along it the boots start.
+const SB_PLUG_EXIT := Vector2(9.061, 5.541)
+const SB_PLUG_DIR := Vector3(0.231, 0.963, -0.14)
+const SB_PLUG_BOOT := 0.9
+## The coil lead, from the top of the coil's tower (on the stock intake) to the top of the
+## cap's middle tower: up and back off the coil, clear of the air cleaner's rim, and over the
+## plug wires leaving the cap.
+const SB_COIL_LEAD: Array[Vector3] = [Vector3(6.7, -1.9, 17.65), Vector3(6.95, -1.75, 18.15), Vector3(7.9, -0.2, 18.6), Vector3(8.87, 1.55, 18.3), Vector3(8.87, 1.55, 17.6)]
+## Plug wires leave the cap out sideways behind the air cleaner (`SB_WIRE_BACK`: along,
+## out from the middle, height), run forward over the valve cover (`SB_WIRE_OVER`), out
+## over the exhaust (`SB_WIRE_BEND`) and hang down to the plugs, as (out from the middle,
+## height); see `_sb_wire_stops()`.
+const SB_WIRE_BACK := Vector3(7.6, 5.5, 15.6)
+const SB_WIRE_OVER := Vector2(7.5, 14.4)
+const SB_WIRE_BEND := Vector2(13.0, 11.8)
+## Intake bolts: the right flange's front one and the left's back one, on the flange's
+## face (y, z) and square to it.
+const SB_INTAKE_BOLT_X := 9.42
+const SB_INTAKE_BOLT := Vector2(3.674, 11.178)
+const SB_INTAKE_NORMAL := Vector2(-0.615, 0.788)
+## Head bolts, front and back on the intake face above the intake's flange.
+const SB_HEAD_BOLT_X := 8.8
+const SB_HEAD_BOLT := Vector2(5.289, 11.627)
+## The engine's mount bolts, in the block's front face either side of the timing cover,
+## as the '55-57 front mounts were (the side pads are out of sight from above): front
+## face, out from the middle, height.
+const SB_MOUNT := Vector3(-10.6, 6.8, 3.2)
+## The camshaft lies in the valley once the intake is off: front, back, height.
+const SB_CAM := Vector3(-9.3, 8.3, 9.45)
+const SB_COVER_X := -11.4
+const SB_BELT_X := -13.35
+const SB_PULLEY_R := 3.2
+## For the aftermarket intakes: where a runner meets its port on each head (out from the
+## middle, height, and how steeply it climbs out of it), the floor over the valley
+## (bottom, top, half wide), the thermostat housing's place, and the distributor's boss.
+const SB_PORT := Vector3(4.15, 10.5, 53.0)
+const SB_FLOOR := Vector3(9.81, 10.65, 3.0)
+const SB_THERMOSTAT := Vector2(-8.9, 0.06)
+const SB_DIST_BOSS_TOP := 10.95
+const SB_HEADERS := {
+	"shorty": "res://assets/parts/sbc-headers-shorty.glb",
+	"long-tube": "res://assets/parts/sbc-headers-long.glb",
+}
+const _SB_NODES_HEADS: Array[String] = ["cylinder_head", "valve_cover", "valve_bolt", "spark_plug"]
+const _SB_NODES_INTAKE: Array[String] = ["intake_manifold", "thermostat", "oil_filler"]
+## The coil stands on the stock intake but comes off with the wires.
+const _SB_NODES_COIL: Array[String] = ["ignition_coil"]
+const _SB_NODES_CARB: Array[String] = ["carburetor", "carb_throat"]
+const _SB_NODES_DISTRIBUTOR: Array[String] = ["distributor"]
+const _SB_NODES_CLEANER: Array[String] = ["air_cleaner"]
+const _SB_NODES_FRONT: Array[String] = ["belt", "alternator", "upper_pulley", "fan_", "accessory_bracket"]
+## The crank's own balancer and pulley, which the built balancer stands in for, and the
+## exhaust, which goes on with the heads.
+const _SB_NODES_BALANCER: Array[String] = ["harmonic_balancer", "crank_pulley", "crank_bolt"]
+const _SB_NODES_EXHAUST: Array[String] = ["exhaust"]
+
 const _MODEL_DEFAULT := "res://assets/parts/engine-v8-283.glb"
 ## Nodes of an engine model by part. The long block is everything else, less the front
 ## drive the assembly builds itself.
@@ -195,13 +275,28 @@ func is_flathead() -> bool:
 	return GameState.engine_family(_view_engine()) == FH_FAMILY
 
 
+## Whether the engine on view is the Chevy small-block, drawn from its own model.
+func is_sbc() -> bool:
+	return GameState.engine_family(_view_engine()) == SB_FAMILY
+
+
+## A small-block point on bank `side` (+1 right): `x` along the engine as the bores are
+## numbered, moved to that bank's bores, in inches.
+static func sb_bank_x(side: float, x: float) -> float:
+	return x + SB_BORE_MID + side * SB_BANK_SHIFT
+
+
 ## Where the balancer's back face is along the crank, and the crank pulley's belt line.
 func balancer_x() -> float:
-	return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x - 0.05 if is_flathead() else COVER_X
+	if is_flathead():
+		return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x - 0.05
+	return fh(Vector3(SB_COVER_X, 0.0, 0.0)).x if is_sbc() else COVER_X
 
 
 func belt_x() -> float:
-	return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x if is_flathead() else BELT_X
+	if is_flathead():
+		return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x
+	return fh(Vector3(SB_BELT_X, 0.0, 0.0)).x if is_sbc() else BELT_X
 
 
 func _view_engine() -> Dictionary:
@@ -317,6 +412,8 @@ func _present(key: String) -> bool:
 func bolt_spots(key: String) -> Array[Transform3D]:
 	if is_flathead():
 		return _fh_bolt_spots(key)
+	if is_sbc():
+		return _sb_bolt_spots(key)
 	var out: Array[Transform3D] = []
 	match key:
 		GameState.HOOD_ENGINE:
@@ -381,8 +478,50 @@ func _fh_bolt_spots(key: String) -> Array[Transform3D]:
 	return out
 
 
-## The carburetor pads of an intake style, front to back.
-static func pads_for(style: String) -> Array[Vector3]:
+func _sb_bolt_spots(key: String) -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	match key:
+		GameState.HOOD_ENGINE:
+			for side: float in [1.0, -1.0]:
+				out.append(Transform3D(_axis_basis(Vector3(-1.0, 0.0, 0.0)), fh(Vector3(SB_MOUNT.x, SB_MOUNT.y * side, SB_MOUNT.z))))
+		GameState.SLOT_CAM:
+			for y: float in [-1.0, 1.0]:
+				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(SB_CAM.x + 0.8, y, SB_CAM.z + 0.4))))
+		GameState.SLOT_HEADS:
+			for side in head_sides():
+				var normal := Vector3(0.0, SB_INTAKE_NORMAL.x * side, SB_INTAKE_NORMAL.y)
+				for x: float in [-SB_HEAD_BOLT_X, SB_HEAD_BOLT_X]:
+					out.append(Transform3D(_axis_basis(normal), fh(Vector3(sb_bank_x(side, x), SB_HEAD_BOLT.x * side, SB_HEAD_BOLT.y))))
+		GameState.SLOT_INTAKE:
+			for side: float in [1.0, -1.0]:
+				var normal := Vector3(0.0, SB_INTAKE_NORMAL.x * side, SB_INTAKE_NORMAL.y)
+				var at := Vector3(sb_bank_x(side, -SB_INTAKE_BOLT_X * side), SB_INTAKE_BOLT.x * side, SB_INTAKE_BOLT.y)
+				out.append(Transform3D(_axis_basis(normal), fh(at)))
+		GameState.SLOT_DISTRIBUTOR:
+			out.append(Transform3D(Basis.IDENTITY, fh(SB_CLAMP_BOLT)))
+		GameState.SLOT_AIR_CLEANER:
+			for slot in _view_carb_slots():
+				out.append(Transform3D(Basis.IDENTITY, carb_pad(slot) + Vector3(0.0, 0.0, _cleaner_top())))
+		_:
+			if GameState.CARB_SLOTS.has(key):
+				var four := int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
+				var nut := Vector3(2.58, 2.58, 0.75) * FH_IN if four else Vector3(0.15, 0.21, 0.09)
+				for corner: Vector3 in [Vector3(-nut.x, -nut.y, nut.z), nut]:
+					out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + corner))
+	return out
+
+
+## The carburetor pads of an intake style on the engine on view, front to back.
+func pads_for(style: String) -> Array[Vector3]:
+	if is_sbc():
+		match style:
+			"highrise":
+				return [fh(SB_PAD + Vector3(0.0, 0.0, 1.0))]
+			"tripower":
+				return [fh(Vector3(-5.6, 0.0, SB_PAD.z + 0.6)), fh(Vector3(SB_PAD.x, 0.0, SB_PAD.z + 0.6)), fh(Vector3(4.7, 0.0, SB_PAD.z + 0.6))]
+			"dualquad":
+				return [fh(Vector3(-5.6, 0.0, SB_PAD.z + 1.0)), fh(Vector3(2.6, 0.0, SB_PAD.z + 1.0))]
+		return [fh(SB_PAD)]
 	match style:
 		"flathead":
 			return [fh(Vector3(0.0, 0.0, FH_INTAKE_TOP + 1.8))]
@@ -405,11 +544,23 @@ func carb_pad(slot: String) -> Vector3:
 
 ## Height of a carburetor's air horn above its pad.
 func _carb_height() -> float:
-	return 0.48 if int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4 else 0.36
+	var four := int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
+	if four and is_sbc():
+		return (SB_CARB_TOP - SB_PAD.z) * FH_IN
+	return 0.48 if four else 0.36
 
 
+## Height of an air cleaner's top above the pad: the stock small-block cleaner's wing nut.
 func _cleaner_top() -> float:
+	if is_sbc() and _sb_stock_cleaner():
+		return (SB_WINGNUT_TOP - SB_PAD.z) * FH_IN
 	return _carb_height() + 0.32
+
+
+## Whether the small-block's own air cleaner is the one on: the stock cleaner on its one
+## four-barrel.
+func _sb_stock_cleaner() -> bool:
+	return str(_view_part(GameState.SLOT_AIR_CLEANER).get("style", "stock")) == "stock" and _view_carb_slots().size() <= 1 and int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
 
 
 ## The balancer's turn that puts its mark at `degrees` of timing on the tab.
@@ -423,6 +574,9 @@ static func mark_angle(degrees: float) -> float:
 func _build_engine(rig: Node3D) -> void:
 	if is_flathead():
 		_build_flathead_block(rig)
+		return
+	if is_sbc():
+		_build_sbc_block(rig)
 		return
 	var leave: Array[String] = []
 	for nodes: Array[String] in [_NODES_HEADS, _NODES_INTAKE, _NODES_CARB, _NODES_DISTRIBUTOR, _NODES_FRONT_DRIVE]:
@@ -448,6 +602,9 @@ func _build_engine(rig: Node3D) -> void:
 func _build_front(rig: Node3D) -> void:
 	if is_flathead():
 		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _FH_NODES_FRONT))
+		return
+	if is_sbc():
+		_add_model_nodes(rig, _SB_NODES_FRONT, true)
 		return
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
 	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
@@ -488,6 +645,17 @@ func _build_flathead_block(rig: Node3D) -> void:
 	var cover := fh(Vector3(FH_COVER_X, 0.0, 0.0)).x
 	_cyl_x(rig, 0.1, cover - balancer_x(), cover, steel, 16, 0.0, CRANK_Z)
 	_build_balancer(rig, FH_PULLEY_R * FH_IN)
+
+
+## The small-block's long block from its model, less the other parts' nodes and its own
+## balancer and crank pulley, with the balancer built on the crank. Its mount pads are
+## cast on the block's sides.
+func _build_sbc_block(rig: Node3D) -> void:
+	var leave: Array[String] = []
+	for nodes: Array[String] in [_SB_NODES_HEADS, _SB_NODES_INTAKE, _SB_NODES_COIL, _SB_NODES_CARB, _SB_NODES_DISTRIBUTOR, _SB_NODES_CLEANER, _SB_NODES_FRONT, _SB_NODES_BALANCER, _SB_NODES_EXHAUST]:
+		leave.append_array(nodes)
+	_add_model_nodes(rig, leave, false)
+	_build_balancer(rig, SB_PULLEY_R * FH_IN)
 
 
 ## Balancer: steel hub, rubber ring, steel rim with the mark across its face, its back at
@@ -565,13 +733,18 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 	var metal := _mat("cam_racing", _CHROME, 0.9, 0.2) if racing else _mat("steel", _STEEL, 0.6, 0.35)
 	var lobe_r := 0.09 if racing else 0.075
 	var flathead := is_flathead()
+	var sbc := is_sbc()
 	var cam_z := fh(FH_CAM).z if flathead else CAM_Z
 	var front := fh(FH_CAM).x if flathead else CAM_FRONT_X
 	var back := fh(Vector3(FH_CAM.y, 0.0, 0.0)).x if flathead else CAM_BACK_X
+	if sbc:
+		cam_z = fh(SB_CAM).z
+		front = fh(SB_CAM).x
+		back = SB_CAM.y * FH_IN
 	_cyl_x(rig, 0.045, back - front, back, metal, 12, 0.0, cam_z)
 	var bores: Array[float] = []
-	for b in (FH_BORES_X if flathead else BORES_X):
-		bores.append(b * FH_IN if flathead else b)
+	for b in (FH_BORES_X if flathead else SB_BORES_X if sbc else BORES_X):
+		bores.append(b * FH_IN if flathead or sbc else b)
 	var phase := 0.0
 	for bore in bores:
 		for offset: float in [-0.21, -0.07, 0.07, 0.21]:
@@ -582,7 +755,7 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
 			lobe.scale.x = 0.62
 			phase += 2.4
-	var plate := bolt_spots(GameState.SLOT_CAM)[0].origin if flathead else CAM_BOLTS[0]
+	var plate := bolt_spots(GameState.SLOT_CAM)[0].origin if flathead or sbc else CAM_BOLTS[0]
 	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(plate.x, 0.0, plate.z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 
 
@@ -605,18 +778,52 @@ func _build_heads(rig: Node3D, part: Dictionary) -> void:
 		_build_flathead_heads(rig, part)
 		return
 	var aluminum := str(part.get("finish", "")) == "aluminum"
+	var sbc := is_sbc()
 	for side in head_sides():
 		var bank := "%d" % int(side)
 		var head := Node3D.new()
 		head.name = "Head_%s" % bank
 		rig.add_child(head)
 		var nodes: Array[String] = ["cylinder_head_" + bank, "valve_cover_" + bank, "valve_bolt_%s_" % bank]
+		if sbc:
+			# The small-block's covers, bolts and plugs are in pieces named by bank, and
+			# the exhaust bolts to the head.
+			nodes = []
+			for prefix in _SB_NODES_HEADS:
+				nodes.append("%s_%s" % [prefix, bank])
+			for prefix: String in ["cylinder_head_holes", "valve_cover_body", "valve_cover_top", "valve_bolt_bar", "spark_plug_base", "spark_plug_tip"]:
+				nodes.append("%s_%s" % [prefix, bank])
+			_build_sbc_exhaust(head, side)
 		var model := _add_model_nodes(head, nodes, true)
 		if model == null or not aluminum:
 			continue
 		var casting := model.find_child("cylinder_head_" + bank, true, false) as MeshInstance3D
 		if casting != null:
 			casting.material_override = _mat("aluminum", _ALUMINUM, 0.75, 0.35)
+
+
+## The small-block's exhaust on bank `side` as the car's manifold part has it: the cast-iron
+## manifold from the engine's model, or the headers' own model; none with no part on.
+func _build_sbc_exhaust(head: Node3D, side: float) -> void:
+	var manifold := _view_part(GameState.SLOT_MANIFOLD)
+	if manifold.is_empty():
+		return
+	var bank := "%d" % int(side)
+	var style := str(manifold.get("style", "log"))
+	var path := str(SB_HEADERS.get(style, ""))
+	if path.is_empty() or not ResourceLoader.exists(path):
+		_add_model_filtered(head, _model_path(), func(n: String) -> bool: return n.begins_with("exhaust_manifold") and first_number(n) == bank)
+		return
+	# A header node's bank is the first number in its name.
+	_add_model_filtered(head, path, func(n: String) -> bool: return first_number(n) == bank)
+
+
+## The first part of `node_name` between underscores that is a number, or "".
+static func first_number(node_name: String) -> String:
+	for bit in node_name.split("_"):
+		if bit.is_valid_int():
+			return bit
+	return ""
 
 
 ## A flathead's heads from the part's own model, or the engine's for the stock ones: each
@@ -636,6 +843,12 @@ func _build_flathead_heads(rig: Node3D, part: Dictionary) -> void:
 
 func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	var style := str(part.get("style", "iron4"))
+	if is_sbc():
+		if style == "iron4":
+			_add_model_nodes(rig, _SB_NODES_INTAKE, true)
+		else:
+			_build_sbc_intake(rig, style)
+		return
 	if style == "iron4":
 		_add_model_nodes(rig, _NODES_INTAKE, true)
 		return
@@ -675,12 +888,66 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	_cyl_z(rig, 0.11, 0.09, 0.14, Vector3(front - 0.2, 0.0, top - 0.02), _mat("steel", _STEEL, 0.6, 0.35), 16)
 
 
+## An aftermarket intake on the small-block: the floor over the valley on the block's end
+## walls, a runner out of each port on the heads' intake faces up into the plenum, the
+## plenum and its pads, the distributor's boss behind, and the thermostat housing in front.
+func _build_sbc_intake(rig: Node3D, style: String) -> void:
+	var metal := _paint() if style == "tripower" else _mat("aluminum", _ALUMINUM, 0.75, 0.35)
+	var pads := pads_for(style)
+	var top := pads[0].z
+	var half_y := SB_FLOOR.z * FH_IN
+	var floor_top := fh(Vector3(0.0, 0.0, SB_FLOOR.y)).z
+	var floor_bottom := fh(Vector3(0.0, 0.0, SB_FLOOR.x)).z
+	var ends := Vector2(fh(Vector3(-10.5, 0.0, 0.0)).x, fh(Vector3(10.5, 0.0, 0.0)).x)
+	_box(rig, Vector3(ends.y - ends.x, half_y * 2.0, floor_top - floor_bottom), Vector3((ends.x + ends.y) * 0.5, 0.0, (floor_top + floor_bottom) * 0.5), metal)
+	var front := pads[0].x - 0.3
+	var back := pads[pads.size() - 1].x + 0.3
+	var width := half_y * 1.4
+	var climb := deg_to_rad(SB_PORT.z)
+	for side: float in [-1.0, 1.0]:
+		for bx in SB_BORES_X:
+			var port := fh(Vector3(sb_bank_x(side, bx), SB_PORT.x * side, SB_PORT.y))
+			var out := Vector3(0.0, -side * cos(climb), sin(climb))
+			var rise := port + out * 0.12
+			var root := Vector3(clampf(port.x * 0.6, front + 0.1, back - 0.1), width * 0.35 * side, top - 0.12)
+			var runner := MeshInstance3D.new()
+			runner.mesh = sweep_mesh(_bezier(port, rise + Vector3(0.0, 0.0, 0.12), root, 10), 0.085, 12, false)
+			runner.material_override = metal
+			rig.add_child(runner)
+			# The runner's flange square to it on the head's face.
+			var flange := _box(rig, Vector3(0.22, 0.24, 0.04), port, metal)
+			flange.basis = _axis_basis(out)
+	# Plenum and the pads on top.
+	_box(rig, Vector3(back - front, width, top - floor_top), Vector3((front + back) * 0.5, 0.0, (top + floor_top) * 0.5 - 0.02), metal)
+	for pad in pads:
+		var size := Vector3(0.62, 0.62, 0.04) if style != "tripower" else Vector3(0.46, 0.5, 0.04)
+		_box(rig, size, pad - Vector3(0.0, 0.0, 0.02), metal)
+	if style == "dualquad":
+		# Cast fins across the plenum between the carburetors.
+		var mid := (pads[0].x + pads[1].x) * 0.5
+		for i in 5:
+			_box(rig, Vector3(0.025, width + 0.04, 0.06), Vector3(mid + lerpf(-0.16, 0.16, float(i) / 4.0), 0.0, top - 0.1), metal)
+	# The distributor's boss, the bolts' bosses, and the thermostat housing with its neck.
+	var boss := fh(Vector3(SB_DIST.x, SB_DIST.y, 0.0))
+	_cyl_z(rig, 0.15, 0.13, fh(Vector3(0.0, 0.0, SB_DIST_BOSS_TOP)).z - floor_top + 0.01, Vector3(boss.x, boss.y, floor_top - 0.01), metal, 24)
+	for spot in _sb_bolt_spots(GameState.SLOT_INTAKE):
+		var b := _box(rig, Vector3(0.12, 0.12, 0.04), spot.origin - spot.basis.z * 0.02, metal)
+		b.basis = spot.basis
+	var stat := fh(Vector3(SB_THERMOSTAT.x, SB_THERMOSTAT.y, 0.0))
+	var stat_top := fh(Vector3(0.0, 0.0, SB_FLOOR.y + 1.6)).z
+	_box(rig, Vector3(0.3, 0.32, stat_top - floor_top), Vector3(stat.x, stat.y, (stat_top + floor_top) * 0.5), metal)
+	_cyl_z(rig, 0.1, 0.085, 0.16, Vector3(stat.x - 0.04, stat.y, stat_top), _mat("steel", _STEEL, 0.6, 0.35), 20)
+
+
 # --- Carburetors ---------------------------------------------------------------------
 
 
 func _build_carb(rig: Node3D, part: Dictionary, pad: Vector3) -> void:
 	if int(part.get("barrels", 4)) == 2:
 		_build_two_barrel(rig, pad)
+		return
+	if is_sbc():
+		_build_sbc_carb(rig, part, pad)
 		return
 	var model := _add_model_nodes(rig, _NODES_CARB, true)
 	if model == null:
@@ -690,6 +957,22 @@ func _build_carb(rig: Node3D, part: Dictionary, pad: Vector3) -> void:
 	var body := model.find_child("carburetor", true, false) as MeshInstance3D
 	if finish is Color and body != null:
 		body.material_override = _mat("carb_" + str(part.get("finish", "")), finish, 0.85, 0.3)
+
+
+## The small-block's four-barrel from its model, moved onto `pad`; a finish colors its
+## body, bowls and air horn.
+func _build_sbc_carb(rig: Node3D, part: Dictionary, pad: Vector3) -> void:
+	var model := _add_model_nodes(rig, _SB_NODES_CARB, true)
+	if model == null:
+		return
+	model.position = pad - fh(SB_PAD)
+	var finish: Variant = _CARB_FINISHES.get(str(part.get("finish", "")), null)
+	if not finish is Color:
+		return
+	var mat := _mat("carb_" + str(part.get("finish", "")), finish, 0.85, 0.3)
+	for node in model.find_children("carburetor*", "MeshInstance3D", true, false):
+		if not str(node.name).begins_with("carburetor_bowl_screw"):
+			(node as MeshInstance3D).material_override = mat
 
 
 func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
@@ -720,6 +1003,11 @@ func _build_distributor(rig: Node3D, part: Dictionary) -> void:
 	var cap := model.find_child("distributor_cap", true, false) as MeshInstance3D
 	if cap != null:
 		cap.material_override = cap_mat
+	if is_sbc():
+		# The small-block's cap has its towers in its model.
+		for node in model.find_children("distributor_cap_*", "MeshInstance3D", true, false):
+			(node as MeshInstance3D).material_override = cap_mat
+		return
 	if is_flathead():
 		# The flathead's lies forward with its towers round the cap's face.
 		for tower in cap_towers():
@@ -752,6 +1040,9 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		pads.append(carb_pad(slot))
 	if pads.is_empty():
 		pads.append(carb_pad(GameState.SLOT_CARB))
+	if is_sbc() and _sb_stock_cleaner():
+		_build_sbc_cleaner(rig, pads[0])
+		return
 	var r := 0.72
 	if pads.size() == 2:
 		r = 0.45
@@ -759,6 +1050,9 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		r = 0.3
 	if is_flathead():
 		r = 0.5 if pads.size() == 1 else 0.26
+	if is_sbc():
+		var radii: Array[float] = [SB_CLEANER_R, 4.0, 2.5]
+		r = radii[clampi(pads.size() - 1, 0, 2)] * FH_IN
 	var base := _carb_height()
 	var h := _cleaner_top() - base
 	for pad in pads:
@@ -783,6 +1077,27 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		rig.add_child(label)
 
 
+## The small-block's stock 14 inch cleaner from its model, moved onto `pad`, with the
+## engine's badge on the lid in front of the wing nut.
+func _build_sbc_cleaner(rig: Node3D, pad: Vector3) -> void:
+	var model := _add_model_nodes(rig, _SB_NODES_CLEANER, true)
+	if model == null:
+		return
+	model.position = pad - fh(SB_PAD)
+	var label := Label3D.new()
+	var engine := _view_engine()
+	label.text = str(engine.get("badge", "%d V8" % GameState.cid_of(engine)))
+	label.font_size = 64
+	label.pixel_size = 0.004
+	label.modulate = Color(0.85, 0.12, 0.08)
+	label.outline_size = 0
+	# Lying on the lid, read from the front of the car: the lid is about 3.7 in over the
+	# cleaner's base this far out.
+	var at := pad + Vector3(-3.6, 0.0, SB_CARB_TOP - SB_PAD.z + 3.74) * FH_IN
+	label.transform = Transform3D(Basis(Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1)), at)
+	rig.add_child(label)
+
+
 # --- Plug wires ----------------------------------------------------------------------
 
 
@@ -795,6 +1110,13 @@ func plug_spots() -> Array[Transform3D]:
 			for x in FH_PLUG_X:
 				var at := fh_head(side, x, FH_HEAD_INNER - FH_PLUG_IN, seat + 0.35)
 				out.append(Transform3D(_axis_basis(fh_head_up(side)), at))
+		return out
+	if is_sbc():
+		for side: float in [1.0, -1.0]:
+			var dir := Vector3(SB_PLUG_DIR.x, SB_PLUG_DIR.y * side, SB_PLUG_DIR.z)
+			for bx in SB_BORES_X:
+				var exit := Vector3(sb_bank_x(side, bx), SB_PLUG_EXIT.x * side, SB_PLUG_EXIT.y)
+				out.append(Transform3D(_axis_basis(dir), fh(exit + dir * SB_PLUG_BOOT)))
 		return out
 	for side: float in [1.0, -1.0]:
 		for i in BORES_X.size():
@@ -811,27 +1133,42 @@ func _build_wires(rig: Node3D) -> void:
 	if is_flathead():
 		_build_flathead_wires(rig, rubber, boot)
 		return
+	if is_sbc() and str(_view_part(GameState.SLOT_INTAKE).get("style", "iron4")) == "iron4":
+		# The coil and its lead to the cap come off with the wires.
+		_add_model_nodes(rig, _SB_NODES_COIL, true)
+		var lead := PackedVector3Array()
+		for p in SB_COIL_LEAD:
+			lead.append(fh(p))
+		var coil_wire := MeshInstance3D.new()
+		coil_wire.mesh = sweep_mesh(_smooth_path(lead, 8), 0.025, 8, false)
+		coil_wire.material_override = rubber
+		rig.add_child(coil_wire)
 	var plugs := plug_spots()
 	var free := plugs.duplicate()
+	var base := distributor_base()
 	var towers: Array[Vector3] = []
 	for t in cap_towers():
-		towers.append(DISTRIBUTOR_BASE + t)
+		towers.append(base + t)
 	# Towers on the right go to the right bank, front ones to the front cylinders.
 	towers.sort_custom(func(a: Vector3, b: Vector3) -> bool: return a.y > b.y if signf(a.y) != signf(b.y) else a.x < b.x)
 	for tower in towers:
 		var best := 0
 		for i in free.size():
-			if _wire_cost(tower, free[i].origin) < _wire_cost(tower, free[best].origin):
+			if _wire_cost(tower, free[i].origin, base) < _wire_cost(tower, free[best].origin, base):
 				best = i
 		var plug: Transform3D = free[best]
 		free.remove_at(best)
-		var side := signf(plug.origin.y)
-		var out := plug.origin + plug.basis.z * 0.25
-		var over := Vector3(plug.origin.x * 0.85 + tower.x * 0.15, side * WIRE_OVER.x, WIRE_OVER.y)
-		var down := Vector3(plug.origin.x, side * WIRE_DOWN.x, WIRE_DOWN.y)
-		var points := _bezier(tower, tower + Vector3(0.0, 0.0, 0.2), over, 8)
-		points.append_array(_bezier(over, Vector3(plug.origin.x, side * WIRE_BEND.x, WIRE_BEND.y), down, 8).slice(1))
-		points.append_array(_bezier(down, out + plug.basis.z * 0.25, out, 6).slice(1))
+		var points: PackedVector3Array
+		if is_sbc():
+			points = _smooth_path(_sb_wire_stops(tower, plug, plugs), 8)
+		else:
+			var side := signf(plug.origin.y)
+			var out := plug.origin + plug.basis.z * 0.25
+			var over := Vector3(plug.origin.x * 0.85 + tower.x * 0.15, side * WIRE_OVER.x, WIRE_OVER.y)
+			var down := Vector3(plug.origin.x, side * WIRE_DOWN.x, WIRE_DOWN.y)
+			points = _bezier(tower, tower + Vector3(0.0, 0.0, 0.2), over, 8)
+			points.append_array(_bezier(over, Vector3(plug.origin.x, side * WIRE_BEND.x, WIRE_BEND.y), down, 8).slice(1))
+			points.append_array(_bezier(down, out + plug.basis.z * 0.25, out, 6).slice(1))
 		var wire := MeshInstance3D.new()
 		wire.mesh = sweep_mesh(points, 0.025, 8, false)
 		wire.material_override = rubber
@@ -845,6 +1182,59 @@ func _build_wires(rig: Node3D) -> void:
 		b.material_override = boot
 		b.transform = Transform3D(plug.basis * Basis(Vector3.RIGHT, PI * 0.5), plug.origin + plug.basis.z * 0.125)
 		rig.add_child(b)
+
+
+## Where a small-block's wire passes, from its tower to its plug's boot: up out of the
+## tower, out sideways behind the air cleaner, forward along the valve cover sagging a
+## little between, over the exhaust and hanging down to come into the boot along the plug.
+## Each bank's wires lie side by side: the back plug's outermost, so none cross as they
+## leave the run.
+func _sb_wire_stops(tower: Vector3, plug: Transform3D, plugs: Array[Transform3D]) -> PackedVector3Array:
+	var side := signf(plug.origin.y)
+	var lane := 0.0
+	for other in plugs:
+		if signf(other.origin.y) == side and other.origin.x < plug.origin.x:
+			lane += 1.0
+	var x := plug.origin.x / FH_IN
+	var out := plug.origin + plug.basis.z * 0.25
+	var stops := PackedVector3Array([tower, tower + Vector3(0.0, 0.0, 0.5 * FH_IN)])
+	var back := fh(Vector3(SB_WIRE_BACK.x, side * (SB_WIRE_BACK.y + 0.3 * lane), SB_WIRE_BACK.z - 0.15 * lane))
+	var over := fh(Vector3(x + 0.6, side * (SB_WIRE_OVER.x + 0.3 * lane), SB_WIRE_OVER.y - 0.1 * lane))
+	stops.append(back)
+	if back.x - over.x > 4.0 * FH_IN:
+		stops.append((back + over) * 0.5 - Vector3(0.0, 0.0, 0.35 * FH_IN))
+	stops.append(over)
+	stops.append(fh(Vector3(x + 0.3, side * (SB_WIRE_BEND.x + 0.15 * lane), SB_WIRE_BEND.y)))
+	# Hanging straight down outside the exhaust, curving in to meet the boot a little above
+	# its line, so it never dips below the boot and hooks back up.
+	stops.append(out + plug.basis.z * 0.9 * FH_IN + Vector3(0.0, 0.0, 0.5 * FH_IN))
+	stops.append(out)
+	return stops
+
+
+## A smooth curve through `stops` (centripetal Catmull-Rom), `steps` points a span, so a
+## wire bends gently through each place it passes instead of kinking there.
+static func _smooth_path(stops: PackedVector3Array, steps: int) -> PackedVector3Array:
+	var n := stops.size()
+	var out := PackedVector3Array()
+	for i in n - 1:
+		var p0 := stops[i - 1] if i > 0 else stops[0] * 2.0 - stops[1]
+		var p1 := stops[i]
+		var p2 := stops[i + 1]
+		var p3 := stops[i + 2] if i + 2 < n else stops[n - 1] * 2.0 - stops[n - 2]
+		var t1 := sqrt(maxf(p0.distance_to(p1), 1e-4))
+		var t2 := t1 + sqrt(maxf(p1.distance_to(p2), 1e-4))
+		var t3 := t2 + sqrt(maxf(p2.distance_to(p3), 1e-4))
+		for k in steps:
+			var t := lerpf(t1, t2, float(k) / float(steps))
+			var a1 := p0 * ((t1 - t) / t1) + p1 * (t / t1)
+			var a2 := p1 * ((t2 - t) / (t2 - t1)) + p2 * ((t - t1) / (t2 - t1))
+			var a3 := p2 * ((t3 - t) / (t3 - t2)) + p3 * ((t - t2) / (t3 - t2))
+			var b1 := a1 * ((t2 - t) / t2) + a2 * (t / t2)
+			var b2 := a2 * ((t3 - t) / (t3 - t1)) + a3 * ((t - t1) / (t3 - t1))
+			out.append(b1 * ((t2 - t) / (t2 - t1)) + b2 * ((t - t1) / (t2 - t1)))
+	out.append(stops[n - 1])
+	return out
 
 
 ## The flathead's wires: forward out of the cap's face, up over the front of each head,
@@ -890,12 +1280,17 @@ func _build_flathead_wires(rig: Node3D, rubber: Material, boot: Material) -> voi
 			rig.add_child(b)
 
 
-static func _wire_cost(tower: Vector3, plug: Vector3) -> float:
-	var side_miss := 0.0 if signf(tower.y - DISTRIBUTOR_BASE.y) == signf(plug.y) else 2.0
-	return absf(plug.x - (tower.x - DISTRIBUTOR_BASE.x) * 9.0) + side_miss
+static func _wire_cost(tower: Vector3, plug: Vector3, base: Vector3) -> float:
+	var side_miss := 0.0 if signf(tower.y - base.y) == signf(plug.y) else 2.0
+	return absf(plug.x - (tower.x - base.x) * 9.0) + side_miss
 
 
-## Tops of the distributor cap's plug towers, from its base; on a flathead, where they
+## The distributor's base the cap's towers stand on, in engine units.
+func distributor_base() -> Vector3:
+	return fh(SB_DIST) if is_sbc() else DISTRIBUTOR_BASE
+
+
+## Tops of the distributor cap's plug towers, from `distributor_base()`; on a flathead, where they
 ## stand out of the cap's face, in engine units.
 func cap_towers() -> Array[Vector3]:
 	var out: Array[Vector3] = []
@@ -906,9 +1301,11 @@ func cap_towers() -> Array[Vector3]:
 			var r := FH_CAP_R * 0.65 * FH_IN
 			out.append(face + Vector3(-0.08, r * cos(a), r * sin(a)))
 		return out
+	var ring := SB_TOWER_R * FH_IN if is_sbc() else CAP_TOWER_R
+	var top := (SB_TOWER_TOP - SB_DIST.z) * FH_IN if is_sbc() else CAP_TOWER_TOP
 	for k in 8:
 		var a := TAU * (float(k) + 0.5) / 8.0
-		out.append(Vector3(CAP_TOWER_R * cos(a), CAP_TOWER_R * sin(a), CAP_TOWER_TOP))
+		out.append(Vector3(ring * cos(a), ring * sin(a), top))
 	return out
 
 
