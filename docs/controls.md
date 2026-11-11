@@ -12,11 +12,12 @@ Every control in the game: keyboard, mouse, gamepad, and steering wheel. They ca
 | Brake | S or Down |
 | Steer | A / D or Left / Right |
 | Shift up / down | E / Q |
-| Reverse | Q from first gear (or drive) with the car stopped |
+| Neutral | Q from first gear (or drive); the engine revs free on the gas |
+| Reverse | Q from neutral with the car stopped |
 | Hand brake | Space |
 | Camera | C |
 | Pause | Esc |
-| Burnout | W and S with the car stopped, steering to swing the back round |
+| Burnout | W and S with the car stopped in gear, steering to swing the back round |
 
 These can be changed under Controls in the settings. Esc always pauses, whatever else is set.
 
@@ -103,11 +104,12 @@ Xbox, PlayStation, Nintendo, and most other common gamepads work with no setup. 
 | Gas | RT or right stick up | R2 or right stick up | ZR or right stick up |
 | Brake | LT or right stick down | L2 or right stick down | ZL or right stick down |
 | Shift up / down | RB / LB | R1 / L1 | R / L |
-| Reverse | LB from first gear (or drive) with the car stopped | L1, the same way | L, the same way |
+| Neutral | LB from first gear (or drive) | L1, the same way | L, the same way |
+| Reverse | LB from neutral with the car stopped | L1, the same way | L, the same way |
 | Hand brake | X | Square | Y |
 | Camera | Y | Triangle | X |
 | Pause | Start | Options | Plus |
-| Burnout | Gas and brake with the car stopped | The same | The same |
+| Burnout | Gas and brake with the car stopped in gear | The same | The same |
 
 The triggers and sticks are gradual. On a Nintendo pad ZL and ZR are only on or off, so use the right stick to ease onto the gas. A burnout works with a trigger on one pedal and the stick on the other, such as ZL held and the right stick pushed up.
 
@@ -175,4 +177,4 @@ Graphics in the settings sets what the driving HUD shows and how big it is, with
 
 ## Reverse
 
-One shift down from first, or from drive on an automatic, is reverse once the car has stopped. While it is still rolling forward, that shift is neutral, and another once it has slowed is reverse. One shift up from reverse is first.
+Shifts step through reverse, neutral, and first (or drive on an automatic). One shift down from first or drive is neutral, and another is reverse once the car has stopped; while it still rolls forward it stays in neutral. Going into neutral takes no shift time, so a quick double tap goes from first to reverse, or back up. In neutral the gas revs the engine without moving the car, on the start line too, and gas and brake together do not start a burnout.
