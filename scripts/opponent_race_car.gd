@@ -46,10 +46,10 @@ const LANE_EDGE_MARGIN_M := 1.8
 ## How a rival moves around something on the road: how early it looks, and how fast it goes across.
 const DODGE_LOOK_S := 2.2
 const DODGE_LOOK_M := 25.0
-const DODGE_MPS := 7.0
+const DODGE_MPS := 8.5
 ## On a tight road: what share of the gap to its lane it closes in a second, and how fast at most.
 const TIGHT_CLOSE_RATE := 4.0
-const TIGHT_MAX_MPS := 4.5
+const TIGHT_MAX_MPS := 5.0
 const TIGHT_EDGE_MARGIN_M := 1.0
 ## Turn rate on the arcade rails that shows as a full steering input, in rad/s.
 const _RAIL_FULL_YAW_RATE := 0.5
@@ -83,6 +83,8 @@ var _lane_x: float = 0.0
 ## The lane being held, which eases around what is on the road.
 var _dodge_lane: float = 0.0
 var _dodge_ready: bool = false
+var _traffic_brake: bool = false
+var _traffic_speed_cap: float = INF
 var _lane_ready: bool = false
 ## While turning round after a spin: which way, 1 or -1. 0 when not turning round.
 var _turn_round: float = 0.0
@@ -326,7 +328,7 @@ func _physics_simulation(delta: float) -> void:
 	var throttle := 1.0
 	var brake := false
 	if track != null:
-		var command := _drive_command(track)
+		var command := _drive_command(track, delta)
 		steer = command.x
 		throttle = command.y
 		brake = command.z > 0.5
@@ -372,6 +374,10 @@ func _physics_arcade(delta: float) -> void:
 	var corner := _max_mps
 	if track != null and track.has_method(&"sample_at"):
 		corner = _corner_speed(track, forward_speed, _ArcadeDrive.dry_grip_accel(_arcade_grip, _dynamics.ride_grip()) * ARCADE_CORNER_GRIP_USE)
+	if not is_inf(_traffic_speed_cap):
+		corner = minf(corner, _traffic_speed_cap)
+	if _traffic_brake:
+		corner = minf(corner, 6.0)
 	var braking := forward_speed > corner
 	var pull := 0.0
 	if braking:
@@ -588,12 +594,15 @@ func _project_progress(track: Node) -> void:
 ## x is steering input, y is throttle (0 to 1), z is brake (0 or 1). The steering sets the wheel
 ## for how the road bends ahead, so the car turns in with it rather than falling behind and
 ## catching up, and corrects from there for heading, lane, and turning too fast or too slow.
-func _drive_command(track: Node) -> Vector3:
+func _drive_command(track: Node, delta: float = 0.016) -> Vector3:
 	var planar := Vector2(_dynamics.cg_velocity.x, _dynamics.cg_velocity.z).length()
 	var here: Dictionary = track.sample_at(_path_s)
 	var left_ext := float(here.get("left_ext", 8.0))
 	var right_ext := float(here.get("right_ext", 8.0))
-	var lane := clampf(_lane_x, -(left_ext - LANE_EDGE_MARGIN_M), right_ext - LANE_EDGE_MARGIN_M)
+	var left_room := maxf(left_ext - LANE_EDGE_MARGIN_M, 0.0)
+	var right_room := maxf(right_ext - LANE_EDGE_MARGIN_M, 0.0)
+	var target_lane := _dodging_lane(track, clampf(_lane_x, -left_room, right_room), delta)
+	var lane := clampf(target_lane, -left_room, right_room)
 	var ahead_yaw := float(track.sample_at(_path_s + planar * STEER_LOOKAHEAD_S).get("yaw", _path_yaw))
 	var err := wrapf(ahead_yaw - _dynamics.yaw, -PI, PI)
 	var lat_err := _lateral - lane
@@ -614,10 +623,13 @@ func _drive_command(track: Node) -> Vector3:
 	if absf(err) < TURN_ROUND_ERROR_RAD:
 		_turn_round = 0.0
 	steer = clampf(steer, -1.0, 1.0)
-	var too_fast := planar - _corner_speed(track, planar, _dynamics.grip_accel() * CORNER_GRIP_USE)
-	var braking := (too_fast > 1.8 and absf(steer) < 0.3) or too_fast > 8.0
+	var corner_lim := _corner_speed(track, planar, _dynamics.grip_accel() * CORNER_GRIP_USE)
+	if not is_inf(_traffic_speed_cap):
+		corner_lim = minf(corner_lim, _traffic_speed_cap)
+	var too_fast := planar - corner_lim
+	var braking := (too_fast > 1.8 and absf(steer) < 0.3) or too_fast > 8.0 or _traffic_brake
 	var throttle := not braking and too_fast < 0.6 and absf(err) < 0.7 and not sliding
-	if planar < 4.0 and absf(err) < 1.2:
+	if planar < 4.0 and absf(err) < 1.2 and not _traffic_brake:
 		throttle = true
 		braking = false
 	return Vector3(steer, 1.0 if throttle else 0.0, 1.0 if braking else 0.0)
@@ -633,7 +645,8 @@ func _hold_tight_lane(track: Node, delta: float) -> void:
 	var right_ext := float(here.get("right_ext", 8.0))
 	var left_room := maxf(left_ext - TIGHT_EDGE_MARGIN_M, 0.0)
 	var right_room := maxf(right_ext - TIGHT_EDGE_MARGIN_M, 0.0)
-	var lane := clampf(_dodging_lane(track, clampf(_lane_x, -left_room, right_room), delta), -left_room, right_room)
+	var target_lane := _dodge_lane if _dodge_ready else _dodging_lane(track, clampf(_lane_x, -left_room, right_room), delta)
+	var lane := clampf(target_lane, -left_room, right_room)
 	var speed := maxf(_dynamics.longitudinal_speed(), 0.0)
 	var yaw := float(here.get("yaw", _dynamics.yaw))
 	var across := clampf((lane - _lateral) * TIGHT_CLOSE_RATE, -TIGHT_MAX_MPS, TIGHT_MAX_MPS)
@@ -643,12 +656,132 @@ func _hold_tight_lane(track: Node, delta: float) -> void:
 
 ## The lane to hold this step: the wanted one, eased around whatever is on the road ahead.
 func _dodging_lane(track: Node, wanted: float, delta: float) -> float:
-	var target: float = track.lane_around(_path_s, wanted, maxf(forward_speed, 0.0) * DODGE_LOOK_S + DODGE_LOOK_M)
+	var traffic_wanted := _scan_traffic(track, wanted)
+	var target: float = track.lane_around(_path_s, traffic_wanted, maxf(forward_speed, 0.0) * DODGE_LOOK_S + DODGE_LOOK_M)
 	if not _dodge_ready:
-		_dodge_lane = wanted
+		_dodge_lane = target
 		_dodge_ready = true
 	_dodge_lane = move_toward(_dodge_lane, target, DODGE_MPS * delta)
 	return _dodge_lane
+
+
+## Scans ahead for active traffic cars and selects the safest lane, setting speed caps and braking when blocked.
+func _scan_traffic(track: Node, wanted_lane: float) -> float:
+	_traffic_brake = false
+	_traffic_speed_cap = INF
+
+	if not is_inside_tree() or track == null:
+		return wanted_lane
+
+	var traffic_cars := get_tree().get_nodes_in_group(&"traffic_cars")
+	if traffic_cars.is_empty():
+		return wanted_lane
+
+	var speed := maxf(forward_speed, 10.0)
+	var lookahead := maxf(speed * 3.2 + 35.0, 120.0)
+
+	var relevant_cars: Array[Dictionary] = []
+	for node: Node in traffic_cars:
+		if node == null or not is_instance_valid(node):
+			continue
+		var car_s: float = float(node.get("s"))
+		var gap := car_s - _path_s
+		if gap > -3.0 and gap < lookahead:
+			relevant_cars.append({
+				"gap": gap,
+				"lat": float(node.get("lateral")),
+				"oncoming": bool(node.get("is_oncoming")),
+				"speed": float(node.get("speed_mps")),
+			})
+
+	if relevant_cars.is_empty():
+		return wanted_lane
+
+	relevant_cars.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["gap"]) < float(b["gap"]))
+
+	# Check player position to avoid running into player while dodging
+	var player_s := -INF
+	var player_lat := 0.0
+	var race := get_parent()
+	if race != null:
+		var p_car := race.get_node_or_null("PlayerCar") as Node3D
+		if p_car != null and track.has_method(&"closest_sample"):
+			var p_samp: Dictionary = track.closest_sample(p_car.global_position)
+			player_s = float(p_samp.get("s", -INF))
+			player_lat = float(p_samp.get("lateral", 0.0))
+
+	# Candidate lanes: on 8m road, -2.0 is right lane, +2.0 is left/oncoming lane, 0.0 is center
+	var candidates: Array[float] = [-2.0, 2.0, 0.0]
+	if not candidates.has(wanted_lane):
+		candidates.append(wanted_lane)
+
+	var best_lane := wanted_lane
+	var lowest_penalty := INF
+
+	for c: float in candidates:
+		var penalty := 0.0
+		# Baseline preference: prefer right lane (-2.0), as oncoming traffic travels on +2.0
+		if absf(c - (-2.0)) < 0.5:
+			penalty += 0.0
+		elif absf(c - 2.0) < 0.5:
+			penalty += 20.0
+		else:
+			penalty += 45.0
+
+		# Check static obstacles (boulders / walls / narrow bridges)
+		if track.has_method(&"lane_around"):
+			var static_clear: float = track.lane_around(_path_s, c, 35.0)
+			if absf(static_clear - c) > 0.8:
+				penalty += 4000.0
+
+		# Check player car
+		if absf(player_s - _path_s) < 12.0 and absf(c - player_lat) < 2.3:
+			penalty += 1500.0
+
+		# Check traffic cars
+		for tcar: Dictionary in relevant_cars:
+			var t_gap := float(tcar["gap"])
+			var t_lat := float(tcar["lat"])
+			var t_oncoming := bool(tcar["oncoming"])
+			var lat_dist := absf(c - t_lat)
+			if lat_dist < 2.4:
+				if t_oncoming:
+					penalty += 5000.0 / maxf(t_gap * 0.04, 0.4)
+				else:
+					penalty += 800.0 / maxf(t_gap * 0.08, 0.8)
+
+		if penalty < lowest_penalty:
+			lowest_penalty = penalty
+			best_lane = c
+
+	# Speed and braking evaluation
+	for tcar: Dictionary in relevant_cars:
+		var t_gap := float(tcar["gap"])
+		var t_lat := float(tcar["lat"])
+		var t_oncoming := bool(tcar["oncoming"])
+		var t_speed := float(tcar["speed"])
+
+		var our_lat := _lateral
+		var lat_overlap := absf(our_lat - t_lat) < 2.2
+		var target_overlap := absf(best_lane - t_lat) < 2.2
+
+		if t_oncoming:
+			if (lat_overlap or target_overlap) and t_gap < 75.0:
+				var lat_dist := absf(our_lat - t_lat)
+				if lat_dist < 2.1:
+					_traffic_brake = true
+					_traffic_speed_cap = minf(_traffic_speed_cap, maxf(t_gap * 0.6, 5.0))
+		else:
+			# Same direction car ahead
+			if best_lane == t_lat or (lat_overlap and t_gap < 40.0):
+				_traffic_speed_cap = minf(_traffic_speed_cap, t_speed)
+				if forward_speed > t_speed:
+					_traffic_brake = true
+				if t_gap < 16.0:
+					_traffic_brake = true
+					_traffic_speed_cap = minf(_traffic_speed_cap, maxf(t_speed - 3.0, 3.0))
+
+	return best_lane
 
 
 ## Fastest speed the tightest bend in the braking horizon allows.

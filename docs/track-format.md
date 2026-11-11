@@ -222,7 +222,7 @@ A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. 
 
 The bake takes a boulder off the road only where it and fallen rocks would leave less than 2.6 m, and records it in the track's `left_out` list. None comes to that, so all of Street Rod 2's boulders are on the road. Sawhorses don't count, since a car can go through them.
 
-Oncoming traffic is not built.
+Oncoming and same-direction civilian traffic is spawned dynamically ahead of the racers, managed by `mulholland_traffic.gd` with 3D spline alignment, obstacle dodging, and two-way car bump resolution with both player and opponent.
 
 ## Aqueduct race
 

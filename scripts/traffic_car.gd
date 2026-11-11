@@ -29,7 +29,12 @@ var _visual: Node3D
 var _roll: float = 0.0
 
 
+func _ready() -> void:
+	add_to_group(&"traffic_cars")
+
+
 func setup(car_file: String, paint: Color, edge: int, distance: float, pace: float, bias: float) -> void:
+	add_to_group(&"traffic_cars")
 	edge_i = edge
 	along = distance
 	cruise_mps = pace

@@ -109,6 +109,7 @@ var _far_ys: PackedFloat32Array = PackedFloat32Array()
 var _node_s: PackedFloat32Array = PackedFloat32Array()
 ## What a rival steers around, from the start: {s, to, low, high}, sorted by s.
 var _blocks: Array[Dictionary] = []
+var _dynamic_blocks: Array[Dictionary] = []
 var _road_rocks: Array[Vector3] = []
 ## Squared distance from the last grass point to the road's middle, set by `_grass_height`.
 var _grass_dist_sq: float = 0.0
@@ -233,6 +234,14 @@ func over_the_edge(world: Vector3) -> bool:
 	return absf(lateral) > _half_ws[i] + _TrackSides.MOUNTAIN_VERGE + _TrackSides.OVER_EDGE_PAST_VERGE
 
 
+func set_dynamic_blocks(blocks: Array[Dictionary]) -> void:
+	_dynamic_blocks = blocks
+
+
+func clear_dynamic_blocks() -> void:
+	_dynamic_blocks.clear()
+
+
 ## The lane a rival should hold at `s`, looking `look` meters ahead, given the one it wants: of the
 ## gaps left by the next group of things on the road, the spot nearest that lane.
 func lane_around(s: float, lane: float, look: float) -> float:
@@ -242,17 +251,25 @@ func lane_around(s: float, lane: float, look: float) -> float:
 	var soft_highs := PackedFloat32Array()
 	var group_end := INF
 	var bridge: Dictionary = {}
+	var min_s := s - 2.0 if look >= 0.0 else s + look
+	var max_s := s + look if look >= 0.0 else s + 2.0
 	for block: Dictionary in _blocks:
 		var from_s := float(block["s"])
-		if from_s > s + look or from_s > group_end:
-			break
-		if float(block["to"]) < s - 2.0:
-			continue
+		if look >= 0.0:
+			if from_s > max_s or from_s > group_end:
+				break
+			if float(block["to"]) < min_s:
+				continue
+		else:
+			if from_s > max_s:
+				break
+			if float(block["to"]) < min_s:
+				continue
 		# Lining up for a bridge comes after whatever is in the way before it.
 		if block.has("bridge"):
 			bridge = block
 			continue
-		if is_inf(group_end):
+		if is_inf(group_end) and look >= 0.0:
 			group_end = float(block["to"]) + _BLOCK_GROUP_M
 		var low := float(block["low"]) - _RIVAL_CLEARANCE_M
 		var high := float(block["high"]) + _RIVAL_CLEARANCE_M
@@ -262,10 +279,23 @@ func lane_around(s: float, lane: float, look: float) -> float:
 		else:
 			lows.append(low)
 			highs.append(high)
+	for block: Dictionary in _dynamic_blocks:
+		if float(block.get("to", 0.0)) < min_s or float(block.get("s", 0.0)) > max_s:
+			continue
+		var low := float(block.get("low", 0.0)) - _RIVAL_CLEARANCE_M
+		var high := float(block.get("high", 0.0)) + _RIVAL_CLEARANCE_M
+		if block.has("soft"):
+			soft_lows.append(low)
+			soft_highs.append(high)
+		else:
+			lows.append(low)
+			highs.append(high)
 	var room := INF
 	var no_more := lows.is_empty() and soft_lows.is_empty()
-	if not bridge.is_empty() and (no_more or s >= float(bridge["s"])):
-		room = maxf(float(bridge["bridge"]) - _RIVAL_BRIDGE_ROOM_M, 0.0)
+	if not bridge.is_empty():
+		var bridge_active := (s >= float(bridge["s"])) if look >= 0.0 else (s <= float(bridge.get("to", bridge["s"])))
+		if no_more or bridge_active:
+			room = maxf(float(bridge["bridge"]) - _RIVAL_BRIDGE_ROOM_M, 0.0)
 	if no_more:
 		return clampf(lane, -room, room)
 	return clampf(_lane_through(lane, lows, highs, soft_lows, soft_highs), -room, room)
