@@ -1,7 +1,7 @@
-# Bakes the drive-in's challenger from MakeHuman's base mesh and system assets: a light-skinned man in a
+# Bakes the drive-in's race organizer from MakeHuman's base mesh and system assets: a light-skinned man in a
 # plain white T-shirt tucked into jeans, boots, dark hair, leaning back against a wall with his legs crossed.
 # One static GLB, textures inside, feet on the ground at the origin.
-# blender -b --python make_drive_in_man.py -- ASSETS OUT_GLB
+# blender -b --python make_drive_in_organizer.py -- ASSETS OUT_GLB
 import sys, os, math, bpy, bmesh, numpy as np
 from mathutils import Matrix, Vector
 from mathutils.kdtree import KDTree
