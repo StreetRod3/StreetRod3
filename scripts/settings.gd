@@ -12,6 +12,7 @@ func _ready() -> void:
 	%MusicCheck.set_pressed_no_signal(GameState.music_enabled)
 	%ArcadeCheck.set_pressed_no_signal(GameState.arcade_drive)
 	%ImperialCheck.set_pressed_no_signal(GameState.imperial_units)
+	%SkipCruiseCheck.set_pressed_no_signal(GameState.skip_cruise)
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_nav.setup([
@@ -20,6 +21,7 @@ func _ready() -> void:
 		%MusicCheck,
 		%ArcadeCheck,
 		%ImperialCheck,
+		%SkipCruiseCheck,
 		%ControlsBtn,
 		$Margin/VBox/BackButton,
 	])
@@ -53,6 +55,10 @@ func _on_arcade_toggled(pressed: bool) -> void:
 
 func _on_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
+
+
+func _on_skip_cruise_toggled(pressed: bool) -> void:
+	GameState.set_skip_cruise(pressed)
 
 
 func _on_controls_pressed() -> void:

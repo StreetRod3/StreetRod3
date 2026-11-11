@@ -60,6 +60,7 @@ var _race_started: bool = false
 @onready var _pause_music: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _pause_arcade: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck
 @onready var _pause_imperial: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck
+@onready var _pause_skip_cruise: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
 
 var _race_over: bool = false
 var _result_shown_ms: int = 0
@@ -652,6 +653,7 @@ func _sync_pause_nav() -> void:
 			_pause_music,
 			_pause_arcade,
 			_pause_imperial,
+			_pause_skip_cruise,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ControlsBtn,
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
@@ -693,6 +695,7 @@ func _refresh_pause_settings() -> void:
 	_pause_music.set_pressed_no_signal(GameState.music_enabled)
 	_pause_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_pause_imperial.set_pressed_no_signal(GameState.imperial_units)
+	_pause_skip_cruise.set_pressed_no_signal(GameState.skip_cruise)
 
 
 func _on_pause_graphics_pressed() -> void:
@@ -721,6 +724,10 @@ func _on_pause_arcade_toggled(pressed: bool) -> void:
 func _on_pause_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
 	_show_speed_and_distance()
+
+
+func _on_pause_skip_cruise_toggled(pressed: bool) -> void:
+	GameState.set_skip_cruise(pressed)
 
 
 ## Also called when the controls page closes.
