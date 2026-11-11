@@ -56,6 +56,7 @@ func _ready() -> void:
 	_engine.name = "Engine"
 	_engine.position = Vector3(0.0, CRANK_Y - _EngineAssembly.CRANK_Z * _EngineAssembly.ENGINE_SCALE, 0.0)
 	add_child(_engine)
+	_engine.timing_marks = true
 	_engine.build()
 	_place_camera()
 	_build_pointer()
