@@ -548,11 +548,11 @@ func _build_ui() -> void:
 		_catalog_list.add_child(heading)
 		for part: Dictionary in group[2]:
 			var button := Button.new()
-			button.text = "%s  —  $%d" % [str(part.get("name", part["id"])), int(part.get("price", 0))]
+			button.text = "%s  —  $%d" % [_item_label(part), int(part.get("price", 0))]
 			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			button.set_meta(&"catalog_filter", str(part.get("slot", "")) if group[1] == "part" else str(group[1]))
 			button.set_meta(&"part_id", str(part["id"]))
-			button.set_meta(&"status_hint", "Buy %s" % str(part.get("name", part["id"])))
+			button.set_meta(&"status_hint", "Buy %s" % _item_label(part))
 			button.pressed.connect(_buy.bind(str(group[1]), str(part["id"])))
 			_catalog_list.add_child(button)
 	_catalog.visible = false
@@ -693,7 +693,7 @@ func _close_catalog() -> void:
 func _buy(kind: String, id: String) -> void:
 	var error := GameState.buy_new_part(kind, id)
 	if error.is_empty():
-		_status.text = "Bought %s. It's in your spare parts." % str(GameState.listing_for(kind, id).get("name", id))
+		_status.text = "Bought %s. It's in your spare parts." % _item_label(GameState.listing_for(kind, id))
 		_refresh_cash()
 	else:
 		_status.text = error
@@ -701,3 +701,10 @@ func _buy(kind: String, id: String) -> void:
 
 func _refresh_cash() -> void:
 	_cash.text = "Bankroll: $%d" % GameState.money
+
+
+## A catalog item's name with whom it fits, so the GM and Ford copies of a part tell apart.
+func _item_label(part: Dictionary) -> String:
+	var name := str(part.get("name", part.get("id", "")))
+	var fits := GameState.fits_text(part)
+	return name if fits.is_empty() else "%s (%s)" % [name, fits]
