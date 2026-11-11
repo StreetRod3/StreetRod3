@@ -2081,11 +2081,13 @@ func _parts_row(item: Dictionary, kind: String, equipped_id: String) -> HBoxCont
 
 func _parts_row_text(item: Dictionary, kind: String) -> String:
 	var name := str(item.get("name", "Part"))
+	var fits := GameState.fits_text(item)
 	if kind == "engine":
-		return "%s  %.0f hp" % [name, float(item.get("hp", 0.0))]
+		var hp_text := "%s  %.0f hp" % [name, float(item.get("hp", 0.0))]
+		return hp_text if fits.is_empty() else "%s   %s" % [hp_text, fits]
 	if kind == "transmission":
 		var kind_name := "auto" if bool(item.get("automatic", false)) else "manual"
-		return "%s  %s" % [name, kind_name]
+		return "%s  %s" % [name, kind_name] if fits.is_empty() else "%s  %s   for %s" % [name, kind_name, fits]
 	if kind == "part" and item.has("slot"):
 		return "%s  %s" % [name, GameState.part_detail(item)]
 	if kind == "part":
