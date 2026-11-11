@@ -228,8 +228,9 @@ var frame: Node3D
 var rigs: Dictionary = {}
 ## Turns about the crank: the mark is on top at 0, clockwise from the front.
 var balancer: Node3D
-## Number the timing tab's marks. Only the tune-up reads them; set before `build()`.
-var timing_numbers: bool = false
+## Draw the timing tab's marks and their numbers. Only the tune-up reads them, so other
+## views show the bare plate; set before `build()`.
+var timing_marks: bool = false
 var _mats: Dictionary = {}
 ## A rival's engine, shown instead of the car in the garage. Empty slots mean the garage car.
 var _spec_on: bool = false
@@ -689,29 +690,30 @@ func _build_balancer(rig: Node3D, pulley_r: float) -> void:
 	_build_timing_tab(rig)
 
 
-## Plate over the balancer's rim with a mark each two degrees, 0 to 20 before top dead
-## center and a few after, numbered every ten when `timing_numbers` is set.
+## Plate over the balancer's rim. When `timing_marks` is set it carries a mark each two
+## degrees, 0 to 20 before top dead center and a few after, numbered every ten.
 func _build_timing_tab(rig: Node3D) -> void:
 	var steel := _mat("tab", Color(0.3, 0.3, 0.3), 0.7, 0.4)
 	var white := _mat("mark", Color(0.95, 0.95, 0.9), 0.0, 0.5)
 	var x := balancer_x() - 0.2
-	for deg in range(-TAB_ATDC_MAX, TAB_BTDC_MAX + 1, 2):
-		var a := mark_angle(float(deg))
-		var long := deg % 10 == 0
-		var span := 0.1 if long else 0.06
-		var r := BALANCER_R + 0.02 + span * 0.5
-		var tick := _box(rig, Vector3(0.01, 0.014, span), Vector3(x - 0.005, -r * sin(a), CRANK_Z + r * cos(a)), white)
-		tick.rotation.x = a
-		if long and timing_numbers:
-			var label := Label3D.new()
-			label.text = str(deg)
-			label.font_size = 32
-			label.pixel_size = 0.0035
-			label.outline_size = 0
-			label.modulate = Color(0.95, 0.95, 0.9)
-			var lr := BALANCER_R + 0.17
-			label.transform = Transform3D(Basis(Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)), Vector3(x - 0.01, -lr * sin(a), CRANK_Z + lr * cos(a)))
-			rig.add_child(label)
+	if timing_marks:
+		for deg in range(-TAB_ATDC_MAX, TAB_BTDC_MAX + 1, 2):
+			var a := mark_angle(float(deg))
+			var long := deg % 10 == 0
+			var span := 0.1 if long else 0.06
+			var r := BALANCER_R + 0.02 + span * 0.5
+			var tick := _box(rig, Vector3(0.01, 0.014, span), Vector3(x - 0.005, -r * sin(a), CRANK_Z + r * cos(a)), white)
+			tick.rotation.x = a
+			if long:
+				var label := Label3D.new()
+				label.text = str(deg)
+				label.font_size = 32
+				label.pixel_size = 0.0035
+				label.outline_size = 0
+				label.modulate = Color(0.95, 0.95, 0.9)
+				var lr := BALANCER_R + 0.17
+				label.transform = Transform3D(Basis(Vector3(0, -1, 0), Vector3(0, 0, 1), Vector3(-1, 0, 0)), Vector3(x - 0.01, -lr * sin(a), CRANK_Z + lr * cos(a)))
+				rig.add_child(label)
 	# The plate itself, a strip of arc behind the marks, on a foot to the cover.
 	var steps := 10
 	var a0 := mark_angle(float(TAB_BTDC_MAX + 1))
