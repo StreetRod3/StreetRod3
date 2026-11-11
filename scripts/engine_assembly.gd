@@ -228,8 +228,9 @@ var frame: Node3D
 var rigs: Dictionary = {}
 ## Turns about the crank: the mark is on top at 0, clockwise from the front.
 var balancer: Node3D
-## Draw the timing tab's marks and their numbers. Only the tune-up reads them, so other
-## views show the bare plate; set before `build()`.
+## Draw the timing marks: the line on the balancer, and the tab's notches and their
+## numbers. Only the tune-up reads them, so other views show the bare balancer and plate;
+## set before `build()`.
 var timing_marks: bool = false
 var _mats: Dictionary = {}
 ## A rival's engine, shown instead of the car in the garage. Empty slots mean the garage car.
@@ -677,11 +678,13 @@ func _build_balancer(rig: Node3D, pulley_r: float) -> void:
 	_cyl_x(balancer, BALANCER_R - 0.06, 0.012, bx - 0.17, rubber, 40)
 	_cyl_x(balancer, BALANCER_R - 0.08, 0.02, bx - 0.18, steel, 40)
 	_cyl_x(balancer, 0.12, 0.14, bx - 0.17, dark, 20)
-	# The mark: a white line on the face out to the rim, and on across the rim.
-	var mark_face := _box(balancer, Vector3(0.016, 0.045, 0.12), Vector3(bx - 0.19, 0.0, BALANCER_R - 0.055), white)
-	mark_face.name = "MarkFace"
-	var mark_rim := _box(balancer, Vector3(0.16, 0.045, 0.012), Vector3(bx - 0.09, 0.0, BALANCER_R + 0.003), white)
-	mark_rim.name = "MarkRim"
+	# The mark: a white line on the face out to the rim, and on across the rim. Like the
+	# tab's marks, only the tune-up shows it.
+	if timing_marks:
+		var mark_face := _box(balancer, Vector3(0.016, 0.045, 0.12), Vector3(bx - 0.19, 0.0, BALANCER_R - 0.055), white)
+		mark_face.name = "MarkFace"
+		var mark_rim := _box(balancer, Vector3(0.16, 0.045, 0.012), Vector3(bx - 0.09, 0.0, BALANCER_R + 0.003), white)
+		mark_rim.name = "MarkRim"
 	# Crank pulley on the hub, in line with the belt.
 	var belt := belt_x()
 	_cyl_x(balancer, pulley_r, 0.035, belt + 0.04, steel, 36)
