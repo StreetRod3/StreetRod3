@@ -16,9 +16,12 @@ const _WALL_H := 3.62
 const _WALL_T := 0.3
 const _WALL := Color(0.84, 0.78, 0.68)
 const _RED := Color(0.62, 0.08, 0.09)
-const _SKIN := Color(0.76, 0.58, 0.44)
-const _HAIR := Color(0.1, 0.07, 0.06)
-const _SHOE := Color(0.14, 0.11, 0.09)
+## MakeHuman figure baked by tools/make_drive_in_man.py: feet at the origin, facing +Z, leaning back.
+const _CHALLENGER := preload("res://assets/locations/drive-in/challenger.glb")
+## MakeHuman crowd baked by tools/make_drive_in_people.py: Diner00 onward, Cook and Waitress, each facing +Z.
+const _PEOPLE := preload("res://assets/locations/drive-in/people.glb")
+## Middle of the pier between the last dining window and the order window.
+const _MAN_X := 5.375
 const _NO_ROOM_LINES: Array[String] = [
 	"You've got no room for all these cars!",
 	"Sell some cars first!",
@@ -490,16 +493,14 @@ func _build_sign(parent: Node3D) -> void:
 	_bulbs(parent, Vector3(-7.35, 3.42, 0.5), Vector3(7.35, 3.42, 0.5), 0.46)
 
 
+## A different crowd from the pool of diners each visit; the cook and the waitress always work the order window.
 func _build_interior_people(parent: Node3D) -> void:
-	var shirts: Array[Color] = [
-		Color(0.7, 0.12, 0.12),
-		Color(0.82, 0.62, 0.18),
-		Color(0.12, 0.45, 0.48),
-		Color(0.55, 0.18, 0.38),
-		Color(0.2, 0.38, 0.18),
-		Color(0.45, 0.28, 0.16),
-		Color(0.15, 0.2, 0.48),
-	]
+	var crowd := _PEOPLE.instantiate()
+	var diners: Array[Node3D] = []
+	for child in crowd.get_children():
+		if str(child.name).begins_with("Diner"):
+			diners.append(child as Node3D)
+	diners.shuffle()
 	var n := 0
 	for span in _WINDOWS:
 		if str(span["kind"]) == "order":
@@ -507,16 +508,26 @@ func _build_interior_people(parent: Node3D) -> void:
 		var x0: float = span["x0"]
 		var x1: float = span["x1"]
 		var mid_x := (x0 + x1) * 0.5
-		_add_person(parent, Vector3(mid_x - 0.38, -0.15, -0.7), 0.15, shirts[n % shirts.size()], Color(0.18, 0.16, 0.2))
+		_place_figure(parent, diners[n % diners.size()], Vector3(mid_x - 0.38, -0.15, -0.7), 0.15)
 		n += 1
 		if x1 - x0 > 2.4:
-			_add_person(parent, Vector3(mid_x + 0.48, -0.15, -0.78), -0.2, shirts[n % shirts.size()], Color(0.28, 0.22, 0.16))
+			_place_figure(parent, diners[n % diners.size()], Vector3(mid_x + 0.48, -0.15, -0.78), -0.2)
 			n += 1
-	_add_person(parent, Vector3(6.35, 0.0, -0.72), 0.1, Color(0.92, 0.92, 0.9), Color(0.1, 0.1, 0.12))
-	_add_box(parent, Vector3(0.2, 0.05, 0.2), Vector3(6.35, 1.86, -0.72), Color(0.95, 0.95, 0.95))
-	_add_person(parent, Vector3(8.05, 0.0, -0.68), -0.35, Color(0.9, 0.9, 0.88), Color(0.12, 0.1, 0.1))
-	_add_box(parent, Vector3(0.22, 0.32, 0.04), Vector3(8.05, 1.18, -0.5), _RED, 0.5, 0.0, Color.BLACK, 0.0, Vector3.ZERO, false)
+	_place_figure(parent, crowd.get_node("Cook") as Node3D, Vector3(6.35, 0.0, -0.72), 0.1)
+	_place_figure(parent, crowd.get_node("Waitress") as Node3D, Vector3(8.05, 0.0, -0.68), -0.35)
 	_add_box(parent, Vector3(0.32, 0.05, 0.22), Vector3(7.15, 1.32, -0.4), Color(0.42, 0.24, 0.12))
+	crowd.free()
+
+
+func _place_figure(parent: Node3D, figure: Node3D, pos: Vector3, yaw: float) -> void:
+	figure.get_parent().remove_child(figure)
+	# The figure leaves the imported scene, which owns it and its meshes.
+	figure.owner = null
+	for child in figure.find_children("*", "", true, false):
+		child.owner = null
+	figure.position = pos
+	figure.rotation.y = yaw
+	parent.add_child(figure)
 
 
 func _build_cars(parent: Node3D) -> void:
@@ -538,41 +549,27 @@ func _build_cars(parent: Node3D) -> void:
 		_plant_wheels(car)
 
 
+## He leans back on the pier between the last dining window and the order window, his back on the wall.
 func _build_man(parent: Node3D) -> void:
 	var man := StaticBody3D.new()
 	man.name = "Challenger"
-	man.position = Vector3(-0.05, 0.0, 9.45)
-	man.rotation.y = -0.25
+	man.position = Vector3(_MAN_X, 0.0, 0.0)
 	man.collision_mask = 0
 	man.input_ray_pickable = true
 	parent.add_child(man)
+	man.add_child(_CHALLENGER.instantiate())
+	var bounds := _node_aabb(man)
+	var wall_face := parent.to_global(Vector3(0.0, 0.0, _WALL_T * 0.5)).z
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(0.85, 1.95, 0.6)
+	box.size = bounds.size
 	shape.shape = box
-	shape.position = Vector3(0.0, 0.98, 0.0)
+	shape.position = bounds.get_center() - man.global_position
 	man.add_child(shape)
-	_add_person(man, Vector3.ZERO, 0.0, Color(0.96, 0.96, 0.98), Color(0.58, 0.76, 0.9), 0.45)
+	man.position.z += wall_face + 0.01 - bounds.position.z
 	man.input_event.connect(_on_man_input)
 	man.mouse_entered.connect(_on_man_hover.bind(true))
 	man.mouse_exited.connect(_on_man_hover.bind(false))
-
-
-func _add_person(parent: Node3D, pos: Vector3, yaw: float, shirt: Color, pants: Color, shirt_glow: float = 0.0) -> void:
-	var body := Node3D.new()
-	body.position = pos
-	body.rotation.y = yaw
-	parent.add_child(body)
-	_add_box(body, Vector3(0.16, 0.78, 0.2), Vector3(-0.11, 0.43, 0.0), pants)
-	_add_box(body, Vector3(0.16, 0.78, 0.2), Vector3(0.11, 0.43, 0.0), pants)
-	_add_box(body, Vector3(0.14, 0.08, 0.26), Vector3(-0.11, 0.04, 0.04), _SHOE)
-	_add_box(body, Vector3(0.14, 0.08, 0.26), Vector3(0.11, 0.04, 0.04), _SHOE)
-	_add_box(body, Vector3(0.48, 0.5, 0.24), Vector3(0.0, 1.22, 0.0), shirt, 0.55, 0.0, shirt, shirt_glow)
-	_add_box(body, Vector3(0.1, 0.46, 0.1), Vector3(-0.3, 1.16, 0.0), _SKIN)
-	_add_box(body, Vector3(0.1, 0.46, 0.1), Vector3(0.3, 1.16, 0.0), _SKIN)
-	_add_sphere(body, 0.125, Vector3(0.0, 1.64, 0.0), _SKIN)
-	_add_sphere(body, 0.11, Vector3(0.0, 1.73, -0.02), _HAIR, 0.8)
-	_add_sphere(body, 0.028, Vector3(0.0, 1.62, 0.11), _SKIN)
 
 
 func _bulbs(parent: Node3D, from: Vector3, to: Vector3, spacing: float) -> void:
