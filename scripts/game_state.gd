@@ -492,16 +492,12 @@ func gearbox_fit_trouble(box: Dictionary) -> String:
 	var box_make := str(box.get("make", ""))
 	if box_make.is_empty():
 		return ""
-	var make := car_make(current_car_id)
 	if has_engine():
-		var engine := get_equipped_engine()
-		var engine_mk := engine_make(engine)
-		if engine_mk.is_empty() or engine_mk == box_make:
-			return ""
-		# A swapped-in engine sets the transmission, whatever the car's own make is.
-		if not make.is_empty() and make != engine_mk:
-			return "This %s car has a %s swapped in, so it takes a %s transmission." % [make, family_name(engine_family(engine)), engine_mk]
-		return "A %s transmission won't bolt to the %s engine in the car." % [box_make, engine_mk]
+		var engine_mk := engine_make(get_equipped_engine())
+		if not engine_mk.is_empty() and engine_mk != box_make:
+			return "You need a %s transmission for that %s engine." % [engine_mk, engine_mk]
+		return ""
+	var make := car_make(current_car_id)
 	if make.is_empty() or make == box_make:
 		return ""
 	for family in mounted_families(equipped_part_ids):
