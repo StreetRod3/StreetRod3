@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://dd2dkbth11237"
-path="res://.godot/imported/challenger.glb-1588a801f53a3c8ceb25d3ad42da5e77.scn"
+path="res://.godot/imported/organizer.glb-c1de800f9fcc69452bbe1076743c18c5.scn"
 
 [deps]
 
-source_file="res://assets/locations/drive-in/challenger.glb"
-dest_files=["res://.godot/imported/challenger.glb-1588a801f53a3c8ceb25d3ad42da5e77.scn"]
+source_file="res://assets/locations/drive-in/organizer.glb"
+dest_files=["res://.godot/imported/organizer.glb-c1de800f9fcc69452bbe1076743c18c5.scn"]
 
 [params]
 

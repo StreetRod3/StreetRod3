@@ -16,8 +16,9 @@ const _WALL_H := 3.62
 const _WALL_T := 0.3
 const _WALL := Color(0.84, 0.78, 0.68)
 const _RED := Color(0.62, 0.08, 0.09)
-## MakeHuman figure baked by tools/make_drive_in_man.py: feet at the origin, facing +Z, leaning back.
-const _CHALLENGER := preload("res://assets/locations/drive-in/challenger.glb")
+## The race organizer, a MakeHuman figure baked by tools/make_drive_in_organizer.py: feet at the origin,
+## facing +Z, leaning back.
+const _ORGANIZER := preload("res://assets/locations/drive-in/organizer.glb")
 ## MakeHuman crowd baked by tools/make_drive_in_people.py: Diner00 onward, Cook and Waitress, each facing +Z.
 const _PEOPLE := preload("res://assets/locations/drive-in/people.glb")
 ## Middle of the pier between the last dining window and the order window.
@@ -549,15 +550,15 @@ func _build_cars(parent: Node3D) -> void:
 		_plant_wheels(car)
 
 
-## He leans back on the pier between the last dining window and the order window, his back on the wall.
+## The race organizer leans back on the pier between the last dining window and the order window, his back on the wall.
 func _build_man(parent: Node3D) -> void:
 	var man := StaticBody3D.new()
-	man.name = "Challenger"
+	man.name = "Organizer"
 	man.position = Vector3(_MAN_X, 0.0, 0.0)
 	man.collision_mask = 0
 	man.input_ray_pickable = true
 	parent.add_child(man)
-	man.add_child(_CHALLENGER.instantiate())
+	man.add_child(_ORGANIZER.instantiate())
 	var bounds := _node_aabb(man)
 	var wall_face := parent.to_global(Vector3(0.0, 0.0, _WALL_T * 0.5)).z
 	var shape := CollisionShape3D.new()
