@@ -8,6 +8,7 @@ const _GraphicsSetup := preload("res://scripts/graphics_setup.gd")
 const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
+const _MulhollandTraffic := preload("res://scripts/mulholland_traffic.gd")
 
 const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
@@ -78,6 +79,7 @@ var _nav := _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
 var _result_scene: String = ""
+var _traffic_mgr: Node3D = null
 
 ## Dim “off” lamp colors (same hue, low value).
 const _DIM_RED := Color(0.12, 0.05, 0.05, 1)
@@ -163,6 +165,20 @@ func _setup_race_layout() -> void:
 		var box := BoxShape3D.new()
 		box.size = Vector3(42, 8, 5)
 		col.shape = box
+	if GameState.selected_race_type == GameState.RACE_MULHOLLAND:
+		var files: Array[String] = []
+		for car: Dictionary in GameState.USED_CARS:
+			var path := str(car.get("car_file", ""))
+			if not path.is_empty():
+				files.append(path)
+		if files.is_empty():
+			files.append("res://assets/cars/chevy-styleline-1950.car")
+		var traf := _MulhollandTraffic.new()
+		traf.name = "MulhollandTraffic"
+		add_child(traf)
+		var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
+		traf.setup(_track, _player, _opponent, floor_mi, files)
+		_traffic_mgr = traf
 
 
 ## Street Rod 2 runs its cruise races under a black sky, with everything on the ground bright and flat.
@@ -250,7 +266,7 @@ func _debug_mesh_instances_recursive(node: Node, label: String) -> void:
 		_debug_mesh_instances_recursive(child, label)
 
 
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if get_tree().paused or _race_over or not _race_started:
 		return
 	var hit := _car_bump.resolve(_player, _opponent)
@@ -258,6 +274,8 @@ func _physics_process(_delta: float) -> void:
 	var hurt_rival: bool = _opponent.take_hit(hit.y)
 	if hurt_player or hurt_rival:
 		_play_crunch(maxf(hit.x, hit.y))
+	if _traffic_mgr != null and _traffic_mgr.has_method(&"tick"):
+		_traffic_mgr.tick(delta)
 	_check_wrecks()
 
 
