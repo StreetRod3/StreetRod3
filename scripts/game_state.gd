@@ -271,6 +271,8 @@ var drive_in_hood_seen: bool = false
 var arcade_drive: bool = true
 ## Show speeds, fuel, weights, and distances in US units. They are always kept in metric.
 var imperial_units: bool = false
+## Go straight to the place picked instead of watching the car drive there through town.
+var skip_cruise: bool = false
 ## What each control on a wheel or shifter is bound to, by action in controller.gd. Persisted in settings.
 var controller_bindings: Dictionary = {}
 ## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
@@ -3791,13 +3793,21 @@ func _string_array(value: Variant) -> Array[String]:
 
 
 ## Play the short city drive from one place to another, then open `destination_scene`.
+## With skip_cruise set it opens `destination_scene` at once, as Space does during the drive.
 func begin_cruise(from_poi: String, to_poi: String, destination_scene: String) -> void:
 	roam_from_poi = ""
+	current_scene_path = destination_scene
+	var tree := get_tree()
+	if skip_cruise:
+		cruise_from_poi = ""
+		cruise_to_poi = ""
+		cruise_scene = ""
+		if tree != null:
+			tree.change_scene_to_file(destination_scene)
+		return
 	cruise_from_poi = from_poi
 	cruise_to_poi = to_poi
 	cruise_scene = destination_scene
-	current_scene_path = destination_scene
-	var tree := get_tree()
 	if tree != null:
 		tree.change_scene_to_file(SCENE_CRUISE)
 
@@ -3830,6 +3840,7 @@ func save_settings() -> void:
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("game", "arcade_drive", arcade_drive)
 	cfg.set_value("game", "imperial_units", imperial_units)
+	cfg.set_value("game", "skip_cruise", skip_cruise)
 	cfg.set_value("input", "controller", controller_bindings)
 	cfg.set_value("input", "steer_sensitivity", steer_sensitivity)
 	cfg.set_value("input", "mouse_steering_enabled", mouse_steering_enabled)
@@ -3861,6 +3872,7 @@ func load_settings() -> void:
 		arcade_drive = bool(cfg.get_value("game", "arcade_drive"))
 	if cfg.has_section_key("game", "imperial_units"):
 		imperial_units = bool(cfg.get_value("game", "imperial_units"))
+	skip_cruise = bool(cfg.get_value("game", "skip_cruise", false))
 	if cfg.get_value("input", "controller", {}) is Dictionary:
 		controller_bindings = cfg.get_value("input", "controller", {})
 	steer_sensitivity = float(cfg.get_value("input", "steer_sensitivity", steer_sensitivity))
@@ -3904,6 +3916,11 @@ func set_arcade_drive(enabled: bool) -> void:
 
 func set_imperial_units(enabled: bool) -> void:
 	imperial_units = enabled
+	save_settings()
+
+
+func set_skip_cruise(enabled: bool) -> void:
+	skip_cruise = enabled
 	save_settings()
 
 

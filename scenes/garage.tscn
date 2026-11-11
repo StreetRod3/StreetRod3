@@ -1065,6 +1065,10 @@ text = "Arcade driving"
 layout_mode = 2
 text = "Imperial units (mph, gallons, pounds)"
 
+[node name="SkipCruiseCheck" type="CheckBox" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070031]
+layout_mode = 2
+text = "Skip the drive between places"
+
 [node name="ControlsBtn" type="Button" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070032]
 layout_mode = 2
 text = "Controls"
@@ -1294,6 +1298,7 @@ script = ExtResource("5")
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_clock_music_toggled"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck" to="." method="_on_clock_arcade_toggled"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck" to="." method="_on_clock_imperial_toggled"]
+[connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck" to="." method="_on_clock_skip_cruise_toggled"]
 [connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControlsBtn" to="." method="_on_clock_controls_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn" to="." method="_on_clock_settings_back_pressed"]
 [connection signal="pressed" from="GarageUI/StatsPanel/Panel/Margin/VBox/StatsClose" to="." method="_on_stats_close_pressed"]

@@ -26,6 +26,7 @@ var _view_port: SubViewport
 @onready var _clock_music: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _clock_arcade: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck
 @onready var _clock_imperial: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck
+@onready var _clock_skip_cruise: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
 @onready var _stats_panel: Control = $GarageUI/StatsPanel
 @onready var _spray_menu: Control = $GarageUI/ColorPickerMenu
 @onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/VBox/ColorPicker
@@ -1030,6 +1031,7 @@ func _sync_menu_nav() -> void:
 			_clock_music,
 			_clock_arcade,
 			_clock_imperial,
+			_clock_skip_cruise,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ControlsBtn,
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/BackBtn,
 		])
@@ -3039,6 +3041,7 @@ func _refresh_clock_settings() -> void:
 	_clock_music.set_pressed_no_signal(GameState.music_enabled)
 	_clock_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_clock_imperial.set_pressed_no_signal(GameState.imperial_units)
+	_clock_skip_cruise.set_pressed_no_signal(GameState.skip_cruise)
 
 
 func _on_clock_graphics_pressed() -> void:
@@ -3059,6 +3062,10 @@ func _on_clock_arcade_toggled(pressed: bool) -> void:
 
 func _on_clock_imperial_toggled(pressed: bool) -> void:
 	GameState.set_imperial_units(pressed)
+
+
+func _on_clock_skip_cruise_toggled(pressed: bool) -> void:
+	GameState.set_skip_cruise(pressed)
 
 
 func _start_wheel_change(wheel_id: String) -> void:
