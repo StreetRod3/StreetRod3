@@ -370,8 +370,18 @@ func _distance_to_finish() -> float:
 	return maxf(0.0, QUARTER_MILE_M - _player.global_position.z)
 
 
+## Ends the race on distance covered, so a car past the line finishes even where it missed the
+## finish area, as a car backing up and wandering wide can. Either way across the line counts.
 func _maybe_finish_by_progress() -> void:
-	if not _is_road or _race_over or _track == null:
+	if _race_over:
+		return
+	if not _is_road:
+		if _opponent.global_position.z >= QUARTER_MILE_M:
+			_opponent_finished = true
+		if _player.global_position.z >= QUARTER_MILE_M:
+			_finish_player()
+		return
+	if _track == null:
 		return
 	var p_rem: float = _track.remaining_distance(_player.global_position)
 	var o_rem := INF
