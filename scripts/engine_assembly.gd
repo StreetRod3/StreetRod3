@@ -228,6 +228,8 @@ var frame: Node3D
 var rigs: Dictionary = {}
 ## Turns about the crank: the mark is on top at 0, clockwise from the front.
 var balancer: Node3D
+## Number the timing tab's marks. Only the tune-up reads them; set before `build()`.
+var timing_numbers: bool = false
 var _mats: Dictionary = {}
 ## A rival's engine, shown instead of the car in the garage. Empty slots mean the garage car.
 var _spec_on: bool = false
@@ -688,7 +690,7 @@ func _build_balancer(rig: Node3D, pulley_r: float) -> void:
 
 
 ## Plate over the balancer's rim with a mark each two degrees, 0 to 20 before top dead
-## center and a few after, numbered every ten.
+## center and a few after, numbered every ten when `timing_numbers` is set.
 func _build_timing_tab(rig: Node3D) -> void:
 	var steel := _mat("tab", Color(0.3, 0.3, 0.3), 0.7, 0.4)
 	var white := _mat("mark", Color(0.95, 0.95, 0.9), 0.0, 0.5)
@@ -700,7 +702,7 @@ func _build_timing_tab(rig: Node3D) -> void:
 		var r := BALANCER_R + 0.02 + span * 0.5
 		var tick := _box(rig, Vector3(0.01, 0.014, span), Vector3(x - 0.005, -r * sin(a), CRANK_Z + r * cos(a)), white)
 		tick.rotation.x = a
-		if long:
+		if long and timing_numbers:
 			var label := Label3D.new()
 			label.text = str(deg)
 			label.font_size = 32
