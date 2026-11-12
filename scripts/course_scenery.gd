@@ -67,7 +67,10 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 		var lateral := float(here["lateral"])
 		var turn := Basis(Vector3.UP, yaw)
 		var along := Vector3(sin(yaw), 0.0, cos(yaw))
-		var s := float(here["s"])
+		# Measured from the nearest point, so a thing in the run-in sits before the start line.
+		# The nearest point alone puts it on the line, where a rival steers round it from the off.
+		var off: Vector3 = at - (here["position"] as Vector3)
+		var s := float(here["s"]) + Vector2(off.x, off.z).dot(Vector2(along.x, along.z))
 		var ground: Vector3 = _StreetScenery._ground(track, at.x, at.z)
 		match kind:
 			"shrub", "bush":
