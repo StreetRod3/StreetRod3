@@ -88,9 +88,10 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from make_flathead import (  # noqa: E402
-    BLACK, CAST_ALUMINUM, CAST_IRON, MM, PAINT, PORCELAIN, RUBBER, S45, SATIN_ALUMINUM, STEEL, ZINC,
+    BLACK, CAST_ALUMINUM, CAST_IRON, MACHINED, MM, PAINT, PORCELAIN, RUBBER, S45, SATIN_ALUMINUM, STEEL, ZINC,
     Design, crease_normals, hull_outline, inch, outline_commands, pt3, read_tris, skp)
 from make_wheels import SolidCraft, cmd, write_glb  # noqa: E402
+import engine_meshes as em  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STEM = "engine-sbc-350"
@@ -119,6 +120,22 @@ BORE_X = [-6.6, -2.2, 2.2, 6.6]
 EXHAUST_PORT_X = [-7.6, -0.86, 0.86, 7.6]
 FREEZE_PLUG_X = [-2.2, 2.2, 6.6]   # under the bores, between the head bolts' bosses
 FREEZE_PLUG_T = 0.5     # how far down the outer wall from the deck's edge
+
+# What shows with the intake and the heads off: on each deck the bores and the pistons
+# down them, the head bolts' holes in two rows and the water holes; in the valley the
+# lifters, and the pushrods from them up into the heads; on each head's intake face its
+# ports, the water passage's and the intake bolts' holes; the distributor's hole.
+BORE = 4.0
+STROKE = 3.48
+ROD = 5.7
+THROWS = [0, 90, 270, 180]      # the cross-plane crank's throws front to back, from upright
+DECK_PLATE = 0.012      # the machined deck, standing just proud of the block
+DECK_BOLTS = (0.75, 5.65, 0.25)     # the bolt rows, in from the deck's outer edge; radius
+DECK_WATER = (0.85, 5.95, 0.17)     # the water holes beside each bore, likewise
+LIFTER = (2.4, 0.42, 0.55)  # out from the middle on the valley floor, radius, standing up
+LIFTER_X = 0.9          # each lifter's offset along the bank from its bore
+PUSHROD_R = 0.16
+PORT = (0.55, 0.95, 0.3)    # the intake ports on the heads: half long, half high, corner
 
 # The heads, in each deck's own frame: a in from the deck's outer edge, h up off it.
 HEAD_HALF = 9.83
@@ -280,6 +297,10 @@ FILTER_CAN = {"name": "oil filter", "pbrMetallicRoughness": {
     "baseColorFactor": [0.75, 0.75, 0.73, 1], "metallicFactor": 0.1, "roughnessFactor": 0.4}}
 # Body name prefixes to finishes, first match wins; anything else is the block's paint.
 FINISHES = [
+    ("engine_block_deck_holes", BLACK), ("engine_block_deck", MACHINED), ("cylinder_bores", MACHINED),
+    ("piston", CAST_ALUMINUM), ("engine_block_lifters", STEEL), ("intake_manifold_distributor_hole", BLACK),
+    ("cylinder_head_1_pushrods", STEEL), ("cylinder_head_-1_pushrods", STEEL),
+    ("cylinder_head_1_ports", BLACK), ("cylinder_head_-1_ports", BLACK),
     ("valve_bolt", STEEL), ("valve_cover", CHROME),
     ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL), ("spark_plug", PORCELAIN),
     ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_IRON),
@@ -517,6 +538,112 @@ def block(d):
             d.circle(to2d(p3(-6.2 + dx, c)), 0.38)
         d.finish()
         d.extrude(sk, f"engine_block_mount_bosses_{s}", 0.4)
+
+
+# The insides.
+
+def throw_angle(s, i):
+    """Cylinder i of bank s's crank angle from its own top dead center."""
+    return THROWS[i] - s * 45
+
+
+def bore_cut():
+    return max(em.piston_depth(throw_angle(s, i), STROKE, ROD) for s in (1, -1) for i in range(4)) + 1.0
+
+
+def deck_holes():
+    """The deck's small holes (x along the bank, a in from the outer edge, radius)."""
+    ob, ib, br = DECK_BOLTS
+    ow, iw, wr = DECK_WATER
+    return ([(x, a, br) for x in HEAD_BOLT_X for a in (ob, ib)] +
+            [(x, a, wr) for x in BORE_X for a in (ow, iw)])
+
+
+def deck(d):
+    """The bores cut down each bank, and the machined deck plate round them with its holes."""
+    for s in (1, -1):
+        u = bank(s)[0]
+        sk, to2d = d.plane(p3(0.0, deck_edge(s)), (1, 0, 0), v3(u), f"Bores {s}")
+        for x in BORE_X:
+            c = to2d(p3(bank_x(s, x), on_head(s, DECK_OUT, 0.0)))
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(*c), radius=round(BORE / 2 * MM, 4), sides=36))
+        d.finish()
+        d.c.append(cmd("solid.extrude", sketch=sk, distance=inch(bore_cut()), direction="negative",
+                       operation="cut", targets=["engine_block"], name=f"Bores cut {s}"))
+        sk, to2d = d.plane(p3(0.0, deck_edge(s)), (1, 0, 0), v3(u), f"Deck {s}")
+        c0 = to2d(p3(BLOCK_FRONT, on_head(s, 0.0, 0.0)))
+        c1 = to2d(p3(BLOCK_BACK, on_head(s, DECK_OUT + DECK_IN, 0.0)))
+        d.c.append(cmd("sketch.rectangle.two_point", p0=skp(min(c0[0], c1[0]), min(c0[1], c1[1])),
+                       p1=skp(max(c0[0], c1[0]), max(c0[1], c1[1]))))
+        for x in BORE_X:
+            c = to2d(p3(bank_x(s, x), on_head(s, DECK_OUT, 0.0)))
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(*c), radius=round(BORE / 2 * MM, 4), sides=36))
+        for x, a, r in deck_holes():
+            c = to2d(p3(bank_x(s, x), on_head(s, a, 0.0)))
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(*c), radius=round(r * MM, 4), sides=10))
+        d.finish()
+        d.extrude(sk, f"engine_block_deck_{s}", DECK_PLATE)
+
+
+def on_intake_face(s, z):
+    """The point on bank s's head's intake face at height z, and the face's normal, (y, z)."""
+    f0, up, n = intake_face(s)
+    return f0 + up * (z - f0[1]) / up[1], n
+
+
+def internals_meshes():
+    """{name: mesh} in inches for what shows with the intake and heads off."""
+    out, walls, floors, lifters = {}, [], [], []
+    cut = bore_cut()
+    for s in (1, -1):
+        u = v3(bank(s)[0])
+        for i, x in enumerate(BORE_X):
+            depth = em.piston_depth(throw_angle(s, i), STROKE, ROD)
+            wall, piston = em.bore_and_piston(p3(bank_x(s, x), on_head(s, DECK_OUT, 0.0)), u, BORE, depth, cut)
+            walls.append(wall)
+            out[f"piston_{s}_{i + 1}"] = piston
+        for x, a, r in deck_holes():
+            floors.append(em.disc(p3(bank_x(s, x), on_head(s, a, 0.004)), u, r * 0.95, 10))
+
+        # Lifters standing out of the valley floor along the bank's axis, a pushrod from
+        # each up into the head over it.
+        ly, lr, lh = LIFTER
+        rods = []
+        for x in BORE_X:
+            for k in (-1, 1):
+                base = np.array([bank_x(s, x + k * LIFTER_X), s * ly, VALLEY_Z]) - u * 0.2
+                lifters.append(em.cylinder(base, u, lr, lh + 0.2, 12))
+                top = base + u * (lh + 0.2)
+                h = (top[1:] - deck_edge(s)) @ bank(s)[0]
+                rods.append(em.cylinder(top, u, PUSHROD_R, 0.6 - h, 6))
+        out[f"cylinder_head_{s}_pushrods"] = em.merge(rods)
+
+        # The head's intake face: a port where each runner meets it, the water passage's
+        # hole at the front, the intake bolts' holes along it.
+        ports = []
+        pz = RUNNER_PORT[1]
+        c, n = on_intake_face(s, pz)
+        nn = v3(n)
+        for x, bank_of, *_ in INTAKE_RUNNERS:
+            if bank_of != s:
+                continue
+            small = x == -1.25
+            ports.append(em.rounded_rect(p3(x, c + n * 0.004), nn, (1, 0, 0), PORT[0] * (0.7 if small else 1),
+                                         PORT[1] * (0.6 if small else 1), PORT[2]))
+        f0, up, _ = intake_face(s)
+        water = f0 + up * 2.0 + n * 0.004
+        ports.append(em.disc(p3(WATER_CROSSOVER[0], water), nn, 0.45, 12))
+        bolt = f0 + up * INTAKE_BOLT_T + n * 0.004
+        for x in INTAKE_BOLT_X:
+            x = x if s == 1 else -x
+            if any(abs(x - rx) < PORT[0] + 0.25 for rx, b, *_ in INTAKE_RUNNERS if b == s):
+                continue
+            ports.append(em.disc(p3(x, bolt), nn, 0.2, 8))
+        out[f"cylinder_head_{s}_ports"] = em.merge(ports)
+    out.update({"cylinder_bores": em.merge(walls), "engine_block_deck_holes": em.merge(floors),
+                "engine_block_lifters": em.merge(lifters),
+                "intake_manifold_distributor_hole": em.disc((DIST[0], DIST[1], 11.004), (0, 0, 1), 0.6, 16)})
+    return out
 
 
 # The heads.
@@ -1458,6 +1585,7 @@ bpy.ops.wm.obj_export(filepath=dst, apply_modifiers=True, export_normals=False, 
 # Budget multipliers by body name prefix, first match wins; 0 leaves the body whole.
 ROUND = "r0.35"
 REDUCE_FACTORS = [
+    ("engine_block_deck", 0), ("engine_block_", 1), ("engine_block", 0),
     ("air_cleaner_element", 0), ("alternator_fan_vanes", 0),
     ("cylinder_head", 0), ("exhaust_manifold_tube", "r0.3"), ("exhaust_manifold", "r0.1"),
     ("air_cleaner", ROUND), ("crank_pulley", ROUND), ("upper_pulley", ROUND),
@@ -1520,6 +1648,7 @@ def main():
         headers(d, args.headers)
     else:
         block(d)
+        deck(d)
         heads(d)
         valve_covers(d)
         intake(d)
@@ -1558,6 +1687,8 @@ def main():
             merged[base] = (np.vstack([mp, p]), np.vstack([mn, nr]), np.concatenate([mi, i + len(mp)]))
         else:
             merged[base] = (p, nr, i)
+    if args.what == "engine":
+        merged.update(em.to_mm(internals_meshes()))
     parts = []
     for name, (p, nr, i) in merged.items():
         p = p * 0.001 / 0.22 + np.array([0.0, 0.0, -0.36])
