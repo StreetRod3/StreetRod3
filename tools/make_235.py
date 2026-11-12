@@ -123,9 +123,11 @@ PULLEYS = [("crank", (CRANK_Y, 0.0), 2.25), ("pump", PUMP, 1.2), ("generator", G
 # The right side.
 PLUG_Z = 11.4
 PLUG_TILT = 25.0        # up from level, leaning out
-DIST_BASE = (0.0, 3.7, 0.6)
-DIST_TILT = 15.0        # out from upright
-COIL = (3.85, 4.9, 9.7, 13.9, 1.75)     # x, y, bottom, top, diameter
+# The distributor leans 19 degrees out, upright seen from the side; DIST_CAP is the middle
+# of its cap, 8.2 up its axis from the shank's foot inside the crankcase.
+DIST_AXIS = (0.0, 0.326, 0.946)
+DIST_CAP = (0.0, 5.62, 8.33)
+COIL = (3.85, 4.1, 9.68, 13.68, 2.0)    # x, y, bottom, top, diameter
 FUEL_PUMP = (-8.9, 5.95)
 FILLER_TUBE = ((-5.0, 4.0, 1.5), 20.0, 7.8)   # base, lean out from upright, length
 DIPSTICK = (4.4, 4.3, 1.0, 9.0)
@@ -452,8 +454,8 @@ def plug_wires(d, a):
     """Towers round the distributor cap's top, a wire from each to a plug in the order the
     towers lie along the engine, and the coil's wire to the middle."""
     a = np.array(a, float)
-    top = np.array(DIST_BASE) + a * 9.0
-    e1 = np.array([1.0, 0.0, 0.0])
+    top = dist_base() + a * 9.0
+    e1 = unit(np.array([1.0, 0.0, 0.0]) - a[0] * a)
     e2 = np.cross(a, e1)
     towers = [top + 1.0 * (math.cos(t) * e1 + math.sin(t) * e2)
               for t in (math.radians(30 + 60 * k) for k in range(6))]
@@ -469,16 +471,21 @@ def plug_wires(d, a):
     wire(d, "plug_wire_coil", (x, y, z1 + 0.5), top + a * 0.5, 1.2)
 
 
+def dist_base():
+    """The foot of the distributor's shank."""
+    return np.array(DIST_CAP) - unit(DIST_AXIS) * 8.2
+
+
 def right_side(d):
     # Distributor leaning out of the block: shank, body, cap; the vacuum advance off it.
-    t = math.radians(DIST_TILT)
-    a = (0.0, math.sin(t), math.cos(t))
-    rod(d, "distributor_shank", DIST_BASE, a, 1.0, 0.0, 4.8)
-    rod(d, "distributor_body", DIST_BASE, a, 2.5, 4.8, 2.6)
-    rod(d, "distributor_cap", DIST_BASE, a, 2.9, 7.4, 1.6)
-    rod(d, "distributor_cap_top", DIST_BASE, a, 1.4, 9.0, 0.5)
+    a = unit(DIST_AXIS)
+    base = dist_base()
+    rod(d, "distributor_shank", base, a, 1.0, 0.0, 4.8)
+    rod(d, "distributor_body", base, a, 2.5, 4.8, 2.6)
+    rod(d, "distributor_cap", base, a, 2.9, 7.4, 1.6)
+    rod(d, "distributor_cap_top", base, a, 1.4, 9.0, 0.5)
     plug_wires(d, a)
-    side = np.array(DIST_BASE) + np.array(a) * 5.8
+    side = base + a * 5.8
     rod(d, "vacuum_advance", side, (-1, 0, 0), 1.3, 1.2, 0.7)
     rod(d, "vacuum_advance_arm", side, (-1, 0, 0), 0.4, 0.0, 1.3)
 
@@ -486,7 +493,8 @@ def right_side(d):
     x, y, z0, z1, dia = COIL
     d.cylinder("coil", (x, y, z0), (0, 0, 1), dia, z1 - z0)
     d.cylinder("coil_tower", (x, y, z1), (0, 0, 1), 0.6, 0.5)
-    d.box("coil_bracket", (x - 0.4, HEAD_Y - 0.05, 12.4), (x + 0.4, y - dia / 2 + 0.1, 13.0))
+    # Its bracket: a strap off the head's top edge, round the coil.
+    d.box("coil_bracket", (x - 0.5, HEAD_Y - 0.5, HEAD_TOP - 0.25), (x + 0.5, y + dia / 2 + 0.05, HEAD_TOP + 0.05))
 
     # Fuel pump at the front: the pad, the body and the glass bowl on top.
     fx, fy = FUEL_PUMP
