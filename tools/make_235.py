@@ -3,6 +3,8 @@
 
     python3 tools/make_235.py            # the engine, with the factory exhaust manifold
     python3 tools/make_235.py headers    # the split headers alone
+    python3 tools/make_235.py cover      # the finned aluminum valve cover alone
+    python3 tools/make_235.py intake     # the two-carburetor intake alone
 
 The engine is the 235 cubic inch "stovebolt" six of the fifties: bore 3 9/16, stroke
 3 15/16, the overhead-valve head under a tall ribbed valve cover. Its proportions and
@@ -39,6 +41,11 @@ plugs, distributor, coil, fuel pump, oil filler and starter on the right. It has
                 on the head, the fuel pump at the front, the oil filler tube leaning out,
                 the dipstick, and the starter at the back with its solenoid on top
   oil pan       shallow at the front, stepping down to the deep sump at the back
+  finned cover  (built alone: make_235.py cover) polished aluminum on the stock cover's
+                footprint: straight sides, eight fins along the top rolling over the ends,
+                broken round raised bosses for the acorn nuts and the filler cap
+  2x1 intake    (built alone: make_235.py intake) a cast aluminum log into the head's
+                three ports, two one-barrels on short risers, the heat pad underneath
 
 Every part is a body of its own, drawn from numbers in this script, so to change the
 engine change the numbers and run it again. The helpers are tools/make_flathead.py's.
@@ -193,7 +200,16 @@ FINISHES = [
 ]
 
 
-def finish_for(name):
+POLISHED = {"name": "polished aluminum", "pbrMetallicRoughness": {
+    "baseColorFactor": [0.86, 0.86, 0.85, 1], "metallicFactor": 0.9, "roughnessFactor": 0.18}}
+
+
+def finish_for(name, what="engine"):
+    if what == "cover" and name.startswith("valve_cover") and not name.startswith(
+            ("valve_cover_nut", "valve_cover_washer")):
+        return POLISHED
+    if what == "intake" and name.startswith("intake_manifold"):
+        return CAST_ALUMINUM
     for prefix, mat in FINISHES:
         if name.startswith(prefix):
             return mat
@@ -413,7 +429,7 @@ def openings():
     cleaner, and the distributor's hole in its boss."""
     left = (0.0, -1.0, 0.0)
     face = -HEAD_Y - 0.004
-    ports = [disc_facing((k * INTAKE_PORT_X, face, INTAKE_Z), left, 0.6, 12) for k in (-1, 1)]
+    ports = [disc_facing((k * INTAKE_PORT_X, face, INTAKE_Z), left, 0.6, 12) for k in (-1, 0, 1)]
     exhaust = [disc_facing((k * END_PORT[0], face, END_PORT[1]), left, 0.6, 12) for k in (-1, 1)]
     exhaust += [disc_facing((k * INNER_PORT[0], face, INNER_PORT[1]), left, 0.6, 12) for k in (-1, 1)]
     a = unit(DIST_AXIS)
@@ -511,7 +527,15 @@ def valve_cover(d):
     d.extrude(sk, "valve_cover_lip", COVER_BASE - HEAD_TOP)
 
     # Acorn nuts on washers, sitting on the outer bands' pairs of beads.
-    seat = COVER_TOP + BEAD_R
+    acorn_nuts(d, COVER_TOP + BEAD_R)
+
+    # The filler cap at the front: a neck, a hollow ring with its floor down inside, and
+    # two little ears to turn it by.
+    filler_cap(d)
+
+
+def acorn_nuts(d, seat):
+    """Acorn nuts on washers on the cover's two studs, seated at z."""
     for i, x in enumerate((STRAP_X[0], STRAP_X[-1])):
         d.cylinder(f"valve_cover_washer_{i}", (x, COVER_Y, seat), (0, 0, 1), 0.6, 0.04)
         sk = d.sketch("XY", f"Cover nut {i}", offset=seat + 0.04)
@@ -520,9 +544,10 @@ def valve_cover(d):
         d.extrude(sk, f"valve_cover_nut_{i}", 0.25)
         sphere(d, f"valve_cover_nut_dome_{i}", (x, COVER_Y, seat + 0.29), 0.42)
 
-    # The filler cap at the front: a neck, a hollow ring with its floor down inside, and
-    # two little ears to turn it by.
-    fx, z = FILLER_X, COVER_TOP - 0.06
+
+def filler_cap(d, z=COVER_TOP - 0.06):
+    """The twist-on filler cap's neck, floor and ears, its neck's foot at z."""
+    fx = FILLER_X
     d.cylinder("valve_cover_filler", (fx, COVER_Y, z), (0, 0, 1), 1.5, 0.25)
     d.cylinder("valve_cover_filler_cap_floor", (fx, COVER_Y, z + 0.25), (0, 0, 1), 1.5, 0.13)
     for k in (-1, 1):
@@ -587,12 +612,13 @@ def tube(path, normal, radius, sides=8):
     return orient(np.array(p), np.array(nrm), tris)
 
 
-def cover_shell(seg=8):
-    """The stamped shell: a box with every top edge and corner rounded to COVER's radius,
-    the corners up its sides too, its walls down to the lip. Columns run round the plan, a
+def cover_shell(seg=8, size=None, top=None):
+    """The cover's shell: a box with every top edge and corner rounded to its radius, the
+    corners up its sides too, its walls down to the lip. Columns run round the plan, a
     quarter turn to each corner; rows from the foot up to the top."""
-    hl, hw, r = COVER
-    cx, cy, cz = hl - r, hw - r, COVER_TOP - r
+    hl, hw, r = size or COVER
+    top = COVER_TOP if top is None else top
+    cx, cy, cz = hl - r, hw - r, top - r
     cols = []
     for q, (sx, sy) in enumerate(((1, 1), (-1, 1), (-1, -1), (1, -1))):
         for k in range(seg + 1):
@@ -663,6 +689,140 @@ def water_outlet_meshes():
     }
 
 
+# The finned aluminum cover: the same footprint, straight polished sides, a flat top with
+# fins along it that roll over the ends, round bosses for the studs and the filler.
+FIN_COVER_R = 0.35      # the shell's edge radius
+FIN_TOP = COVER_TOP - 0.15      # the shell's top, under the fins
+FINS = 8
+FIN_R = 0.13
+STUD_BOSS_R = 0.55
+FILLER_BOSS_R = 0.95
+BOSS_TOP = FIN_TOP + 0.3
+
+
+def finned_cover(d):
+    """The finned cover's lip, its acorn nuts on the stud bosses and the filler cap on its
+    boss; the shell, fins and bosses are exact meshes (finned_cover_meshes)."""
+    hl, hw, r = COVER
+    sk = d.sketch("XY", "Valve cover lip", offset=HEAD_TOP)
+    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(-hl - LIP, COVER_Y - hw - LIP),
+                   p1=skp(hl + LIP, COVER_Y + hw + LIP), radius=inch(FIN_COVER_R + LIP)))
+    d.finish()
+    d.extrude(sk, "valve_cover_lip", COVER_BASE - HEAD_TOP)
+    acorn_nuts(d, BOSS_TOP)
+    filler_cap(d, BOSS_TOP - 0.06)
+
+
+def finned_cover_meshes():
+    hl, hw, _ = COVER
+    r = FIN_COVER_R
+    bosses = [(x, STUD_BOSS_R) for x in (STRAP_X[0], STRAP_X[-1])] + [(FILLER_X, FILLER_BOSS_R)]
+    fins = []
+    pitch = (2 * hw - 0.9) / (FINS - 1)
+    for k in range(FINS):
+        y = COVER_Y - hw + 0.45 + k * pitch
+        dy = y - COVER_Y
+        # The fin's run along the top, broken round each boss it meets.
+        cuts = sorted((bx - math.sqrt((br + 0.12) ** 2 - dy * dy), bx + math.sqrt((br + 0.12) ** 2 - dy * dy))
+                      for bx, br in bosses if abs(dy) < br + 0.12)
+        x0, x1 = -hl + r, hl - r
+        spans, start = [], x0
+        for a, b in cuts:
+            spans.append((start, a))
+            start = b
+        spans.append((start, x1))
+        for i, (a, b) in enumerate(spans):
+            path = [(x, y, FIN_TOP) for x in (a, b)]
+            # The end spans roll over the end's rounded edge and down the end face.
+            if i == 0:
+                path = [(x, y, z) for x, z in reversed(arc_points((-hl + r, FIN_TOP - r), r, 90, 180, 6))][:-1] \
+                    + path
+                path = [(-hl, y, COVER_BASE + 0.5)] + path
+            if i == len(spans) - 1:
+                path = path + [(x, y, z) for x, z in arc_points((hl - r, FIN_TOP - r), r, 90, 0, 6)][1:]
+                path = path + [(hl, y, COVER_BASE + 0.5)]
+            caps = []
+            if i > 0:
+                caps.append(disc_facing(path[0], (-1, 0, 0), FIN_R, 12))
+            if i < len(spans) - 1:
+                caps.append(disc_facing(path[-1], (1, 0, 0), FIN_R, 12))
+            fins.append(merge([tube3(path, FIN_R, 12)] + caps))
+    boss_meshes = [cylinder_mesh((bx, COVER_Y, FIN_TOP - 0.1), (0, 0, 1), br, BOSS_TOP - FIN_TOP + 0.1, 32)
+                   for bx, br in bosses]
+    return {
+        "valve_cover": cover_shell(size=(hl, hw, r), top=FIN_TOP),
+        "valve_cover_fins": merge(fins),
+        "valve_cover_bosses": merge(boss_meshes),
+        "valve_cover_filler_cap": filler_ring(BOSS_TOP - 0.06),
+    }
+
+
+# The two-carburetor intake, after the aftermarket ones for the 235: a log with a runner
+# into each of the head's three ports, two one-barrels on short risers between them, the
+# heat pad underneath at the middle, and port flanges on the head.
+TWO_CARB_X = (-4.2, 4.2)
+TWO_CARB_PAD = INTAKE_Z + 1.6
+
+
+def two_carb_intake(d):
+    sk = d.sketch("XZ", "Intake port flanges", offset=-HEAD_Y - 0.3)
+    for x in (-INTAKE_PORT_X, 0.0, INTAKE_PORT_X):
+        d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x - 0.8, -(INTAKE_Z + 0.75)),
+                       p1=skp(x + 0.8, -(INTAKE_Z - 0.75)), radius=inch(0.35)))
+    d.finish()
+    d.extrude(sk, "intake_manifold_port_flanges", 0.3)
+    # The heat pad under the middle, down to the exhaust manifold's heat box.
+    d.box("intake_manifold_heat_pad", (CARB_X - 1.5, INTAKE_Y - 0.75, 9.6), (CARB_X + 1.5, INTAKE_Y + 0.75, INTAKE_Z))
+    for i, x in enumerate(TWO_CARB_X):
+        # Carburetor pad: a round boss with an ear either side across the engine.
+        circles = [((x, INTAKE_Y + 1.15), 0.32), ((x + 0.001, INTAKE_Y), 0.95), ((x, INTAKE_Y - 1.15), 0.32),
+                   ((x - 0.001, INTAKE_Y), 0.95)]
+        sk = d.sketch("XY", f"Carb pad {i}", offset=TWO_CARB_PAD - 0.3)
+        d.c += outline_commands(*hull_outline(circles))
+        for k in (-1, 1):
+            d.c.append(cmd("sketch.circle.center", center=skp(x, INTAKE_Y + k * 1.15), radius=inch(0.13)))
+        d.finish()
+        d.extrude(sk, f"intake_manifold_pad_{i}", 0.3)
+        one_barrel(d, x, TWO_CARB_PAD, f"_{i}")
+
+
+def one_barrel(d, x, z, suffix):
+    """A one-barrel carburetor without an air cleaner: base, body, bowl on the outboard side,
+    and the air horn."""
+    y = INTAKE_Y
+    d.box(f"carburetor_base{suffix}", (x - 0.9, y - 1.4, z), (x + 0.9, y + 1.4, z + 0.25))
+    sk = d.sketch("XY", f"Carburetor {suffix}", offset=z + 0.25)
+    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x - 1.0, y - 1.0), p1=skp(x + 1.0, y + 1.0), radius=inch(0.4)))
+    d.finish()
+    d.extrude(sk, f"carburetor{suffix}", 1.8)
+    d.cylinder(f"carburetor_bowl{suffix}", (x, y - 1.15, z + 0.6), (0, 0, 1), 1.3, 1.3)
+    d.cylinder(f"carburetor_horn{suffix}", (x, y, z + 2.05), (0, 0, 1), 1.9, 0.6)
+
+
+def two_carb_meshes():
+    """The two-carb intake's log, hooked into the end ports, the middle runner, the risers up
+    to the pads, and the carburetors' throats."""
+    head = -HEAD_Y - 0.25
+    p = INTAKE_PORT_X
+    log = fillet_path([(-p, head, INTAKE_Z), (-p, INTAKE_Y, INTAKE_Z), (p, INTAKE_Y, INTAKE_Z), (p, head, INTAKE_Z)],
+                      1.3)
+    middle = [(0.0, head, INTAKE_Z), (0.0, INTAKE_Y + 0.4, INTAKE_Z)]
+    risers = [cylinder_mesh((x, INTAKE_Y, INTAKE_Z), (0, 0, 1), 0.8, TWO_CARB_PAD - 0.3 - INTAKE_Z, 24)
+              for x in TWO_CARB_X]
+    throats = [disc_facing((x, INTAKE_Y, TWO_CARB_PAD + 2.654), (0, 0, 1), 0.62, 16) for x in TWO_CARB_X]
+    return {
+        "intake_manifold": merge([tube3(log, 0.95), tube3(middle, 0.8)] + risers),
+        "carb_throat": merge(throats),
+    }
+
+
+def filler_ring(z):
+    """The filler cap's hollow ring, for a cap whose neck's foot is at z."""
+    fx, z = FILLER_X, z + 0.25
+    return merge([wall(fx, COVER_Y, z, z + 0.38, 0.94, 32, False), wall(fx, COVER_Y, z, z + 0.38, 0.75, 32, True),
+                  annulus(fx, COVER_Y, z + 0.38, 0.75, 0.94, 32)])
+
+
 def cover_meshes():
     """{name: mesh} in inches: the cover's shell and its stamped beads, as on the
     reference: two along the top either side of the middle, over the end shoulders and down
@@ -670,11 +830,8 @@ def cover_meshes():
     over the top and down both sides."""
     across = [[(x, y, z) for y, z in cover_section()] for x in BAND_BEADS_X]
     along = [[(x, COVER_Y + s * SPINE_HALF, z) for x, z in cover_length_section()] for s in (-1, 1)]
-    fx, z = FILLER_X, COVER_TOP + 0.19
-    cap = [wall(fx, COVER_Y, z, z + 0.38, 0.94, 32, False), wall(fx, COVER_Y, z, z + 0.38, 0.75, 32, True),
-           annulus(fx, COVER_Y, z + 0.38, 0.75, 0.94, 32)]
     return {
-        "valve_cover_filler_cap": merge(cap),
+        "valve_cover_filler_cap": filler_ring(COVER_TOP - 0.06),
         "valve_cover": cover_shell(),
         "valve_cover_beads": merge([tube(pth, (1, 0, 0), BEAD_R) for pth in across]
                                    + [tube(pth, (0, 1, 0), BEAD_R) for pth in along]),
@@ -686,8 +843,10 @@ def intake(d):
     p = INTAKE_PORT_X
     pipe(d, "intake_manifold", "XY", INTAKE_Z,
          [(-p, -HEAD_Y + 0.3), (-p, INTAKE_Y), (p, INTAKE_Y), (p, -HEAD_Y + 0.3)], 1.6, INTAKE_D)
+    # The middle runner, into the head's middle port.
+    d.cylinder("intake_manifold_middle", (0.0, INTAKE_Y, INTAKE_Z), (0, 1, 0), 1.5, INTAKE_Y * -1 - HEAD_Y - 0.3)
     # Port flanges on the head.
-    for i, x in enumerate((-p, p)):
+    for i, x in enumerate((-p, 0.0, p)):
         d.cylinder(f"intake_manifold_flange_{i}", (x, -HEAD_Y, INTAKE_Z), (0, -1, 0), 2.2, 0.3)
     # Heat riser box under the carburetor, against the log.
     d.box("intake_manifold_riser", (CARB_X - 1.9, INTAKE_Y - 1.05, 9.6),
@@ -1024,16 +1183,17 @@ def oil_pan(d):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "headers"),
-                    help="the engine (default), with the factory exhaust manifold, or the split "
-                         "headers alone")
+    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "headers", "cover", "intake"),
+                    help="the engine (default), with the factory exhaust manifold; or alone: the "
+                         "split headers, the finned valve cover, or the two-carburetor intake")
     ap.add_argument("--sc", help="design file (default resources/engines/STEM.sc)")
     ap.add_argument("--glb", help="mesh (default assets/parts/STEM.glb)")
     ap.add_argument("--solidcraft", default="solidcraft-cli",
                     help="solidcraft-cli, or the SolidCraft AppImage")
     ap.add_argument("--blender", default="blender", help="Blender, which thins the mesh")
     args = ap.parse_args()
-    stem = STEM if args.what == "engine" else "chevy-235-headers-split"
+    stem = {"engine": STEM, "headers": "chevy-235-headers-split", "cover": "chevy-235-valve-cover-finned",
+            "intake": "chevy-235-intake-2x1"}[args.what]
     sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", stem + ".sc"))
     glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", stem + ".glb"))
     tool = shutil.which(args.solidcraft) or args.solidcraft
@@ -1047,6 +1207,12 @@ def main():
     if args.what == "headers":
         headers(d)
         meshes = header_meshes()
+    elif args.what == "cover":
+        finned_cover(d)
+        meshes = finned_cover_meshes()
+    elif args.what == "intake":
+        two_carb_intake(d)
+        meshes = two_carb_meshes()
     else:
         block(d)
         deck(d)
@@ -1091,7 +1257,7 @@ def main():
     parts = []
     for name, (p, nr, i) in merged.items():
         p = (p * 0.001 - np.array([0.0, CRANK_Y * 0.0254, 0.0])) / 0.22 + np.array([0.0, 0.0, -0.36])
-        parts.append((name, p, nr, i, finish_for(name)))
+        parts.append((name, p, nr, i, finish_for(name, args.what)))
     write_glb(glb, parts)
     allp = np.concatenate([p for _, p, *_ in parts])
     print(f"{os.path.relpath(sc, ROOT)}\n{os.path.relpath(glb, ROOT)}: {len(parts)} bodies, "

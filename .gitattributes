@@ -43,3 +43,7 @@ assets/parts/engine-chevy-235.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/engine-chevy-235.sc filter=lfs diff=lfs merge=lfs -text
 assets/parts/chevy-235-headers-split.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/chevy-235-headers-split.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/chevy-235-valve-cover-finned.glb filter=lfs diff=lfs merge=lfs -text
+resources/engines/chevy-235-valve-cover-finned.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/chevy-235-intake-2x1.glb filter=lfs diff=lfs merge=lfs -text
+resources/engines/chevy-235-intake-2x1.sc filter=lfs diff=lfs merge=lfs -text
