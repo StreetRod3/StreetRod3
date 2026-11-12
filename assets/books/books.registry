@@ -1,0 +1,49 @@
+{
+  "books": [
+    {
+      "id": "hellmark-flathead",
+      "title": "Hellmark's guide to Ford's Flathead",
+      "description": "Classic hop-up manual covering finned heads, multi-carb linkages, and cooling tips for Ford's 239 flathead V8.",
+      "content": "Ford's 239 flathead V8 rewards patient hands and clean block passages. Scrub the water jackets thoroughly so both dual water pumps move coolant evenly, torque finned aluminum heads from the center studs outward, and re-torque them after the first heat cycle.\n\nSync progressive three-two-barrel carburetors so the center two-barrel carries crisp street response while the end carbs open together at full throttle, and set the front-mount distributor right on the timing mark.",
+      "family": "ford-flathead",
+      "parameter-name": "hp",
+      "value": "3"
+    },
+    {
+      "id": "hellmark-sbc",
+      "title": "Hellmark's guide to Chevy's Small-Block",
+      "description": "Shop manual covering valve lash, intake matching, and spark curves for GM's 265, 283, 327, and 350 small-block V8s.",
+      "content": "GM's compact small-block V8 responds to careful assembly even before heavy machine work. Set rocker stud lash evenly across both banks with the engine warm so every valve opens to full cam lift without floating at the top of the quarter mile.\n\nMatch the intake manifold runners cleanly to the cylinder head ports, keep carburetor airflow close to 1.5 CFM per cubic inch across 265 through 350 cubic inches, and dial in spark advance with a timing light right on the balancer's sweet spot.",
+      "family": "chevy-sbc",
+      "parameter-name": "hp",
+      "value": "5"
+    },
+    {
+      "id": "hellmark-yblock",
+      "title": "Hellmark's guide to Ford's Y-Block",
+      "description": "Practical speed manual for oiling, rocker geometry, and tuning Ford's deep-skirt 292 Y-block V8.",
+      "content": "Ford's 292 Y-block carries a rigid deep-skirt crankcase that handles hard launches when the top end is set up right. Flush the rocker-shaft oil passages thoroughly, set mechanical lash cold and re-check hot, and seal the valley cover snugly before bolting down the intake.\n\nBecause the Y-block's stacked intake ports turn sharply into the heads, careful gasket alignment and balanced carburetor linkage free up crisp midrange pull and steady top-end power.",
+      "family": "ford-yblock",
+      "parameter-name": "hp",
+      "value": "4"
+    },
+    {
+      "id": "hellmark-windsor",
+      "title": "Hellmark's guide to Ford's Windsor Small-Block",
+      "description": "Street-and-strip tuning handbook for breathing, cam timing, and ignition setup on Ford's thin-wall 302 small-block V8.",
+      "content": "Light, stiff, and eager to rev, the 302 Windsor thrives on clean airflow into and out of the heads. Torque the intake bolts in sequence from the center outward so the end seals stay oil-tight, and unshroud the air cleaner to feed a crisp four-barrel or multi-carb setup.\n\nWith the distributor mounted up front for easy reach, lock down the clamp only after checking full advance under the timing light and pair free-flowing headers with low-restriction mufflers to let the exhaust scavenge cleanly.",
+      "family": "ford-windsor",
+      "parameter-name": "hp",
+      "value": "5"
+    },
+    {
+      "id": "hellmark-racing-slicks",
+      "title": "Hellmark's guide to racing slicks",
+      "description": "Trackside handbook on tire pressures, burnout heat cycles, and compound care for maximum racing-slick traction.",
+      "content": "Soft-compound racing slicks make their bite through heat and a flat contact patch. Drop cold tire pressures until chalk across the tread wears evenly from shoulder to shoulder, and bring the rubber up to temperature with a clean, straight burnout before staging.\n\nBrush grit and rubber marbles off the tread between runs, store spare wheels out of direct sun so the sidewall stays supple, and inspect wear closely so a thin carcass never lets go at top speed.",
+      "product": "tires",
+      "parameter-name": "grip",
+      "value": "1"
+    }
+  ]
+}

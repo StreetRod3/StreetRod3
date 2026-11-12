@@ -91,7 +91,7 @@ godot --headless --export-release "Web" build/web/index.html
 
 A successful export writes `build/web/index.html`, `index.wasm`, and `index.pck`. Serve that directory with any static host. Godot’s Web export needs the [cross-origin isolation headers](https://docs.godotengine.org/en/stable/tutorials/export/exporting_for_web.html) (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`) if you enable thread support later. The current preset has `variant/thread_support=false`.
 
-`.trk`, `.obj`, `.car`, `.register`, and `.json` files are included via `include_filter` in `export_presets.cfg`. If you add another non-imported extension, add it to the `include_filter` of every preset or the exported builds will not see the file.
+`.trk`, `.obj`, `.car`, `.register`, `.registry`, and `.json` files are included via `include_filter` in `export_presets.cfg`. If you add another non-imported extension, add it to the `include_filter` of every preset or the exported builds will not see the file.
 
 ## Desktop export
 

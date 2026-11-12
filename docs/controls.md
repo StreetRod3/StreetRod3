@@ -45,6 +45,7 @@ The Mouse tab under Controls enables steering and acceleration/braking independe
 | T | Tire machine |
 | W | Wheels |
 | L | Spare parts |
+| B | Bookshelf |
 | C | Your cars |
 | P | Paint job |
 | I | Car stats |

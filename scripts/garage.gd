@@ -73,6 +73,14 @@ var _parts_title: Label
 var _parts_list: VBoxContainer
 var _parts_status: Label
 var _parts_close: Button
+var _books_board: Control
+var _books_title: Label
+var _books_status: Label
+var _books_scroll: ScrollContainer
+var _books_list: VBoxContainer
+var _books_back: Button
+var _books_close: Button
+var _open_book_id: String = ""
 var _parts_show_spares: bool = false
 var _parts_show_wheels: bool = false
 var _parts_show_tires: bool = false
@@ -172,6 +180,7 @@ const _TOOLTIPS := {
 	&"clock": "Menu (Q)",
 	&"chart": "Parts list",
 	&"spares": "Spare parts (L)",
+	&"bookshelf": "Bookshelf (B)",
 	&"newspaper": "Newspaper (N)",
 	&"radio": "Radio (R)",
 	&"doors": "Free roam (D)",
@@ -296,9 +305,12 @@ func _ready() -> void:
 	_stats_panel.visible = false
 	_spray_menu.visible = false
 	_build_parts_board()
+	_build_books_board()
 	$InteractClock.set_meta(&"garage_interact", &"clock")
 	$InteractDesk/InteractChart.set_meta(&"garage_interact", &"chart")
 	$InteractDesk/ShelfOther/InteractFolder.set_meta(&"garage_interact", &"spares")
+	$InteractBookshelf.set_meta(&"garage_interact", &"bookshelf")
+	_refresh_bookshelf_meshes()
 	$InteractDesk/InteractNewspaper.set_meta(&"garage_interact", &"newspaper")
 	$InteractDesk/Shelf/Radio.set_meta(&"garage_interact", &"radio")
 	$InteractDoors.set_meta(&"garage_interact", &"doors")
@@ -718,6 +730,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hide_parts_board()
 		get_viewport().set_input_as_handled()
 		return
+	if _books_board != null and _books_board.visible and event.is_action_pressed(&"ui_cancel"):
+		if not _open_book_id.is_empty():
+			_show_books_list()
+		else:
+			_hide_books_board()
+		get_viewport().set_input_as_handled()
+		return
 	if _car_list != null and _car_list.visible and event.is_action_pressed(&"ui_cancel"):
 		_on_car_list_forget()
 		get_viewport().set_input_as_handled()
@@ -734,6 +753,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if _spares_list_open() and _try_spares_shortcut(event):
+		var viewport := get_viewport()
+		if viewport != null:
+			viewport.set_input_as_handled()
+		return
+
+	if _books_list_open() and _try_books_shortcut(event):
 		var viewport := get_viewport()
 		if viewport != null:
 			viewport.set_input_as_handled()
@@ -758,7 +783,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Pinch gesture zoom (touch / trackpad).
 	if event is InputEventMagnifyGesture:
-		if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible:
+		if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or (_books_board != null and _books_board.visible):
 			return
 		var mg := event as InputEventMagnifyGesture
 		# `factor` grows when fingers spread (zoom in).
@@ -932,6 +957,11 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 				_hide_parts_board()
 			else:
 				_show_spares_board()
+		KEY_B:
+			if _books_board != null and _books_board.visible:
+				_hide_books_board()
+			else:
+				_show_books_board()
 		KEY_H:
 			_handle_interact(&"hood")
 		KEY_A:
@@ -954,6 +984,8 @@ func _car_management_available() -> bool:
 		return false
 	if _parts_board != null and _parts_board.visible:
 		return false
+	if _books_board != null and _books_board.visible:
+		return false
 	if _offer_panel != null and _offer_panel.visible:
 		return false
 	return true
@@ -963,6 +995,7 @@ func _open_console() -> void:
 	_nav.clear()
 	var console: Control = _Console.new()
 	# Above the bottom bar, so the bankroll stays in view.
+	console.call("add_command", "givebook", "put a book on the bookshelf: givebook <id>", _on_givebook)
 	console.call("add_command", "showme", "put every part on the car in the bay in 100% condition", _on_showme)
 	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
 	console.set("bottom_margin", _hud_bottom.size.y if _hud_bottom.visible else 0.0)
@@ -977,6 +1010,20 @@ func _on_console_closed() -> void:
 		_console.queue_free()
 		_console = null
 	_sync_menu_nav()
+
+
+## The console's `givebook <ID>`. Puts the book on the shelf and refreshes open views.
+func _on_givebook(arg: String) -> String:
+	var line := GameState.give_book(arg)
+	_refresh_bookshelf_meshes()
+	if _books_board != null and _books_board.visible:
+		_rebuild_books_board()
+	if _parts_board != null and _parts_board.visible:
+		_rebuild_parts_board()
+	if _stats_panel != null and _stats_panel.visible:
+		_show_stats()
+	_refresh_hud()
+	return line
 
 
 ## The console's `inherit`. The news stays on the prompt.
@@ -1012,6 +1059,8 @@ func _hide_garage_overlays() -> void:
 	_spray_menu.visible = false
 	if _parts_board != null:
 		_parts_board.visible = false
+	if _books_board != null:
+		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
 	_dismiss_here_bubble()
@@ -1058,6 +1107,8 @@ func _sync_menu_nav() -> void:
 		_nav.setup(_nav.collect_buttons(_sale_panel))
 	elif _parts_board != null and _parts_board.visible:
 		_nav.setup(_nav.collect_buttons(_parts_board))
+	elif _books_board != null and _books_board.visible:
+		_nav.setup(_nav.collect_buttons(_books_board))
 	elif _car_list != null and _car_list.visible:
 		_nav.setup(_nav.collect_buttons(_car_list))
 	else:
@@ -1190,6 +1241,8 @@ func _handle_interact(kind: Variant) -> void:
 			_show_parts_board()
 		&"spares":
 			_show_spares_board()
+		&"bookshelf":
+			_show_books_board()
 		&"newspaper":
 			get_tree().change_scene_to_file(GameState.SCENE_NEWSPAPER)
 		&"radio":
@@ -1503,6 +1556,10 @@ func _show_spray_picker() -> void:
 	# Hide other garage overlays so clicks go to the picker.
 	_clock_menu.visible = false
 	_stats_panel.visible = false
+	if _parts_board != null:
+		_parts_board.visible = false
+	if _books_board != null:
+		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
 	_spray_color_picker.color = GameState.car_color
@@ -1677,6 +1734,8 @@ func _show_parts_board() -> void:
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
+	if _books_board != null:
+		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
 	_rebuild_parts_board()
@@ -1691,6 +1750,8 @@ func _show_spares_board() -> void:
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
+	if _books_board != null:
+		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
 	_rebuild_parts_board()
@@ -1720,6 +1781,8 @@ func _show_wheel_board() -> void:
 	_clock_menu.visible = false
 	_spray_menu.visible = false
 	_stats_panel.visible = false
+	if _books_board != null:
+		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
 	_rebuild_parts_board()
@@ -1731,6 +1794,186 @@ func _hide_parts_board() -> void:
 	_offer_panel.visible = false
 	_parts_board.visible = false
 	_sync_menu_nav()
+
+
+func _build_books_board() -> void:
+	var root := Control.new()
+	root.name = "BooksBoard"
+	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.visible = false
+	root.mouse_filter = Control.MOUSE_FILTER_STOP
+	var dim := ColorRect.new()
+	dim.color = Color(0.05, 0.05, 0.06, 0.55)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.add_child(dim)
+	var panel := PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(580, 520)
+	panel.offset_left = -290
+	panel.offset_top = -260
+	panel.offset_right = 290
+	panel.offset_bottom = 260
+	root.add_child(panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 16)
+	margin.add_theme_constant_override("margin_right", 16)
+	margin.add_theme_constant_override("margin_top", 12)
+	margin.add_theme_constant_override("margin_bottom", 12)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 8)
+	margin.add_child(box)
+	_books_title = Label.new()
+	_books_title.text = "Bookshelf"
+	box.add_child(_books_title)
+	_books_status = Label.new()
+	_books_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_books_status)
+	_books_scroll = ScrollContainer.new()
+	_books_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_books_scroll.custom_minimum_size = Vector2(0, 380)
+	box.add_child(_books_scroll)
+	_books_list = VBoxContainer.new()
+	_books_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_books_list.add_theme_constant_override("separation", 10)
+	_books_scroll.add_child(_books_list)
+	var actions := HBoxContainer.new()
+	actions.add_theme_constant_override(&"separation", 8)
+	_books_back = Button.new()
+	_books_back.text = "Back"
+	_books_back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_books_back.visible = false
+	_books_back.pressed.connect(_show_books_list)
+	actions.add_child(_books_back)
+	_books_close = Button.new()
+	_books_close.text = "Close"
+	_books_close.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_books_close.pressed.connect(_hide_books_board)
+	actions.add_child(_books_close)
+	box.add_child(actions)
+	$GarageUI.add_child(root)
+	_books_board = root
+
+
+func _show_books_board() -> void:
+	_hang_calendar()
+	_hang_map()
+	_hide_garage_overlays()
+	_open_book_id = ""
+	_rebuild_books_board()
+	_books_board.visible = true
+	_sync_menu_nav()
+
+
+func _show_books_list() -> void:
+	_open_book_id = ""
+	_rebuild_books_board()
+	_sync_menu_nav()
+
+
+func _hide_books_board() -> void:
+	_open_book_id = ""
+	_books_board.visible = false
+	_sync_menu_nav()
+
+
+func _on_book_read(book_id: String) -> void:
+	_open_book_id = book_id
+	_rebuild_books_board()
+	_sync_menu_nav()
+
+
+func _refresh_bookshelf_meshes() -> void:
+	var shelf := get_node_or_null("InteractBookshelf") as Node3D
+	if shelf == null:
+		return
+	var owned_count := GameState.owned_book_ids.size()
+	var index := 0
+	for child: Node in shelf.get_children():
+		if child is MeshInstance3D and child.name.begins_with("Book"):
+			(child as MeshInstance3D).visible = index < owned_count
+			index += 1
+
+
+func _rebuild_books_board() -> void:
+	for child: Node in _books_list.get_children():
+		_books_list.remove_child(child)
+		child.queue_free()
+	if not _open_book_id.is_empty():
+		var book := GameState.book_by_id(_open_book_id)
+		if not book.is_empty():
+			_rebuild_book_pages(book)
+			_books_back.visible = true
+			_books_scroll.scroll_vertical = 0
+			return
+		_open_book_id = ""
+	_books_title.text = "Bookshelf"
+	var books := GameState.owned_books()
+	if books.is_empty():
+		_books_status.text = "The shelf is empty."
+	else:
+		_books_status.text = "Books on the shelf improve every car you own."
+		for i: int in books.size():
+			var item: Dictionary = books[i]
+			var book_id := str(item.get("id", ""))
+			var title := str(item.get("title", "Book"))
+			var copies := GameState.book_count(book_id)
+			var heading := "%d.  %s" % [i + 1, title]
+			if copies > 1:
+				heading += "  ×%d" % copies
+			var effect := GameState.book_effect_text(item)
+			var description := str(item.get("description", ""))
+			var details: Array[String] = [heading]
+			if not effect.is_empty():
+				details.append(effect)
+			if not description.is_empty():
+				details.append(description)
+			_books_list.add_child(_action_row("\n".join(details), "Read", _on_book_read.bind(book_id)))
+	_books_back.visible = false
+	_books_scroll.scroll_vertical = 0
+
+
+func _rebuild_book_pages(book: Dictionary) -> void:
+	_books_title.text = str(book.get("title", "Book"))
+	var effect := GameState.book_effect_text(book)
+	var description := str(book.get("description", ""))
+	if not effect.is_empty() and not description.is_empty():
+		_books_status.text = "%s\n%s" % [effect, description]
+	elif not effect.is_empty():
+		_books_status.text = effect
+	else:
+		_books_status.text = description
+	var content := str(book.get("content", ""))
+	if not content.is_empty():
+		var body_label := Label.new()
+		body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body_label.text = content
+		_books_list.add_child(body_label)
+
+
+func _books_list_open() -> bool:
+	return _books_board != null and _books_board.visible and _open_book_id.is_empty()
+
+
+func _try_books_shortcut(event: InputEvent) -> bool:
+	if not event is InputEventKey:
+		return false
+	var key := event as InputEventKey
+	if not key.pressed or key.echo:
+		return false
+	if key.ctrl_pressed or key.meta_pressed or key.alt_pressed or key.shift_pressed:
+		return false
+	if _gui_has_text_focus():
+		return false
+	var index := _car_list_number_index(key.keycode)
+	if index < 0:
+		return false
+	var books := GameState.owned_books()
+	if index >= books.size():
+		return false
+	_on_book_read(str(books[index].get("id", "")))
+	return true
 
 
 func _rebuild_parts_board() -> void:
@@ -2930,10 +3173,12 @@ func _show_stats() -> void:
 	if box.is_empty():
 		kind = "not fitted"
 	var rear_end := GameState.slot_part(GameState.SLOT_DIFFERENTIAL)
-	var t := "Car: %s\n\nTop speed: %s\nEngine power: %.0f hp\nGearbox: %s\n%s, %d gears\nRear end: %s\nFuel: %s" % [
+	var grip_text := "%.0f" % GameState.tire_grip() if GameState.has_tires() else "—"
+	var t := "Car: %s\n\nTop speed: %s\nEngine power: %.0f hp\nTire grip: %s\nGearbox: %s\n%s, %d gears\nRear end: %s\nFuel: %s" % [
 		GameState.car_name,
 		GameState.speed_text(GameState.get_effective_vmax_kmh()),
 		GameState.engine_power_hp,
+		grip_text,
 		str(box.get("name", "—")),
 		kind,
 		gear_count,
@@ -3506,9 +3751,7 @@ func _bring_calendar_forward() -> void:
 	if _calendar_inspecting:
 		return
 	_hang_map()
-	_clock_menu.visible = false
-	_stats_panel.visible = false
-	_spray_menu.visible = false
+	_hide_garage_overlays()
 	_calendar_home = _calendar.global_transform
 	_calendar_inspecting = true
 	_calendar_hint.visible = true
@@ -3839,9 +4082,7 @@ func _bring_map_forward() -> void:
 	if _map == null or _map_inspecting:
 		return
 	_hang_calendar()
-	_clock_menu.visible = false
-	_stats_panel.visible = false
-	_spray_menu.visible = false
+	_hide_garage_overlays()
 	_map_inspecting = true
 	_set_map_hint_visible(true)
 	if _map_tween != null:

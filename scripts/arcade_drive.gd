@@ -117,7 +117,7 @@ func apply_spec(chassis: Dictionary, grip_rating: float) -> void:
 		_cg_height = float(chassis.get("cg_height", _cg_height))
 		_front_axle_fraction = float(chassis.get("front_axle_fraction", _front_axle_fraction))
 		_max_steer_rad = deg_to_rad(float(chassis.get("max_steer_deg", rad_to_deg(_max_steer_rad))))
-	_wheel_grip = clampf(grip_rating, 1.0, 5.0)
+	_wheel_grip = maxf(grip_rating, 1.0)
 
 
 func reset() -> void:

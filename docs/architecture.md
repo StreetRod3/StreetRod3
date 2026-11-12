@@ -123,6 +123,7 @@ A register entry with `families` or `makes` as a list stands for one copy per fa
 | --- | --- |
 | `clock` | Save or load through the save slot list (`save_slots.gd`), or return to the main menu |
 | `chart` | Stats overlay |
+| `bookshelf` | Bookshelf overlay (`books_register.gd`, `assets/books/books.registry`), listing owned mechanics books that boost owned cars' parameters |
 | `newspaper` | Open the classifieds |
 | `radio` | Toggle music |
 | `doors` | Open the drive-in |
@@ -199,7 +200,7 @@ Five layouts share `scenes/race.tscn`:
 
 Street Rod 2's three races run at night, set by `_set_night()` in `race.gd`. The quarter mile and the road course run by day.
 
-A win is crossing the finish before the opponent. Holding a manual gearbox past critical RPM for 0.55 s blows the engine and ends the race.
+A win is crossing the finish before the opponent. Holding a manual gearbox past critical RPM for 0.55 s blows the engine and ends the race. After winning a money bet on Road Race (`RACE_ROAD`), Aqueduct (`RACE_AQUEDUCT`), or Mulholland Drive (`RACE_MULHOLLAND`), the rival may propose giving a randomly chosen book from `BOOKS` instead of paying the stake (`book_offer_chance()`: `10% * bet_amount / 100`); duplicate copies on the bookshelf do not multiply stat bonuses (`owned_books()`).
 
 ### Cars
 
