@@ -40,9 +40,11 @@ Writes resources/engines/engine-chevy-235.sc, the SolidCraft design, and
 assets/parts/engine-chevy-235.glb. Both are LFS files (.gitattributes). Needs
 SolidCraft's command line and Blender, as tools/make_flathead.py does.
 
-The design is in inches with the crank on the X axis: +X toward the back of the car, +Y
-to its right, +Z up, the block's middle on X = 0. The GLB is in the frame of the other
-engine models (engine_assembly.gd): engine units of 0.22 m, the crank at Z -0.36. The
+The design is in inches across the block's middle: +X toward the back of the car, +Y to
+its right, +Z up, the block's middle on X = 0 and Y = 0, the crank at Z = 0. The crank and
+the bores sit CRANK_Y toward the manifolds, as on the real engine, whose cam and pushrod
+side is the wider. The GLB is in the frame of the other engine models
+(engine_assembly.gd): engine units of 0.22 m, the crank on its X axis at Z -0.36. The
 game does not use it yet.
 """
 import argparse
@@ -68,6 +70,8 @@ STEM = "engine-chevy-235"
 BORE = 3.5625
 STROKE = 3.9375
 BORE_X = [-9.6, -5.76, -1.92, 1.92, 5.76, 9.6]   # 3.84 apart, as the reference's plugs
+
+CRANK_Y = -1.3          # crank and bores, out from the block's middle toward the manifolds
 
 # The block, across (y, z) from the crank: the pan rail at the crank's height, the
 # crankcase flaring in to the upper block, and the head on the deck.
@@ -114,7 +118,7 @@ PUMP = (0.0, 8.5)
 GENERATOR = (-6.8, 2.7)
 GENERATOR_R = 2.5
 GENERATOR_BACK = -4.9
-PULLEYS = [("crank", (0.0, 0.0), 2.25), ("pump", PUMP, 1.2), ("generator", GENERATOR, 1.0)]
+PULLEYS = [("crank", (CRANK_Y, 0.0), 2.25), ("pump", PUMP, 1.2), ("generator", GENERATOR, 1.0)]
 
 # The right side.
 PLUG_Z = 11.4
@@ -236,8 +240,9 @@ def block(d):
 
     # Flywheel housing behind, with the starter's boss.
     dia, cz, depth = FLYWHEEL
-    d.cylinder("engine_block_flywheel_housing", (BLOCK_HALF, 0, cz), (1, 0, 0), dia, depth)
-    d.cylinder("engine_block_flywheel_flange", (BLOCK_HALF + depth, 0, cz), (1, 0, 0), dia + 0.8, 0.3)
+    d.cylinder("engine_block_flywheel_housing", (BLOCK_HALF, CRANK_Y, cz), (1, 0, 0), dia, depth)
+    d.cylinder("engine_block_flywheel_flange", (BLOCK_HALF + depth, CRANK_Y, cz), (1, 0, 0),
+               dia + 0.8, 0.3)
     sy, sz, sd, _, _ = STARTER
     d.cylinder("engine_block_starter_boss", (BLOCK_HALF, sy, sz), (1, 0, 0), sd * 0.75, depth)
 
@@ -373,7 +378,7 @@ def exhaust(d):
 def front(d):
     # Timing cover round the crank and up round the cam gear on the right.
     sk = d.sketch("YZ", "Timing cover", offset=FRONT)
-    d.c += outline_commands(*hull_outline([((0.0, 0.6), 2.0), ((2.6, 2.6), 2.6)]))
+    d.c += outline_commands(*hull_outline([((CRANK_Y + 0.7, 0.5), 2.0), ((2.6, 2.6), 2.6)]))
     d.finish()
     d.extrude(sk, "timing_cover", FRONT - COVER_FACE, "negative")
 
@@ -400,7 +405,7 @@ def front(d):
     d.box("generator_bracket", (-9.0, -CASE_Y - 0.4, 2.2), (-8.2, -CASE_Y + 0.05, 3.2))
 
     # Crank snout through the cover, the pulleys in the belt's plane and the belt round them.
-    d.cylinder("crank_snout", (COVER_FACE, 0, 0), (-1, 0, 0), 2.2, COVER_FACE - BELT_X)
+    d.cylinder("crank_snout", (COVER_FACE, CRANK_Y, 0), (-1, 0, 0), 2.2, COVER_FACE - BELT_X)
     for name, (y, z), r in PULLEYS:
         d.cylinder(f"pulley_{name}", (BELT_X + 0.45, y, z), (-1, 0, 0), r * 2, 0.9)
     sk = d.sketch("YZ", "Belt", offset=BELT_X)
@@ -561,7 +566,7 @@ def main():
         reduce_obj(obj, thin, blender)
         bodies = read_tris(thin)
 
-    # Design mm -> engine units (0.22 m), crank down to the models' Z. A sketch of several
+    # Design mm -> engine units (0.22 m), the crank onto the models' axis. A sketch of several
     # separate shapes extrudes into a body each, "name (2)" and on: one mesh again.
     merged = {}
     for name, (p, t) in bodies.items():
@@ -574,7 +579,7 @@ def main():
             merged[base] = (p, nr, i)
     parts = []
     for name, (p, nr, i) in merged.items():
-        p = p * 0.001 / 0.22 + np.array([0.0, 0.0, -0.36])
+        p = (p * 0.001 - np.array([0.0, CRANK_Y * 0.0254, 0.0])) / 0.22 + np.array([0.0, 0.0, -0.36])
         parts.append((name, p, nr, i, finish_for(name)))
     write_glb(glb, parts)
     allp = np.concatenate([p for _, p, *_ in parts])
