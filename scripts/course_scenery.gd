@@ -67,7 +67,10 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 		var lateral := float(here["lateral"])
 		var turn := Basis(Vector3.UP, yaw)
 		var along := Vector3(sin(yaw), 0.0, cos(yaw))
-		var s := float(here["s"])
+		# Measured from the nearest point, so a thing in the run-in sits before the start line.
+		# The nearest point alone puts it on the line, where a rival steers round it from the off.
+		var off: Vector3 = at - (here["position"] as Vector3)
+		var s := float(here["s"]) + Vector2(off.x, off.z).dot(Vector2(along.x, along.z))
 		var ground: Vector3 = _StreetScenery._ground(track, at.x, at.z)
 		match kind:
 			"shrub", "bush":
@@ -107,7 +110,10 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 			"slab":
 				var center := ground + along * (_LINE_M * 0.5) + Vector3.UP * (_SLAB_H * 0.5)
 				_box_into(boxes, _OBSTACLE, Transform3D(turn.scaled(Vector3(_SLAB_HALF * 2.0, _SLAB_H, _LINE_M)), center))
-				_add_hit_box(body, Vector3(_SLAB_HALF * 2.0, _OBSTACLE_HIT_H, _LINE_M), Transform3D(turn, ground + along * (_LINE_M * 0.5) + Vector3.UP * (_OBSTACLE_HIT_H * 0.5)))
+				# As high as it is drawn. A car's box starts just above the road, so this still
+				# stops one on the floor, but a car going round on the bank leans its roof over the
+				# slab, and a taller box hit it there with nothing to see.
+				_add_hit_box(body, Vector3(_SLAB_HALF * 2.0, _SLAB_H, _LINE_M), Transform3D(turn, center))
 				blocks.append({"s": s, "to": s + _LINE_M, "low": -_SLAB_HALF, "high": _SLAB_HALF})
 			"fin":
 				var fin_center := ground + along * (_LINE_M * 0.5) + Vector3.UP * (_FIN_H * 0.5)

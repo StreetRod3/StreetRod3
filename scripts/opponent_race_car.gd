@@ -50,6 +50,9 @@ const DODGE_MPS := 8.5
 ## On a tight road: what share of the gap to its lane it closes in a second, and how fast at most.
 const TIGHT_CLOSE_RATE := 4.0
 const TIGHT_MAX_MPS := 5.0
+## How fast it goes across for each m/s it goes up the road, so a car that is barely moving
+## cannot slide sideways into its lane.
+const TIGHT_MAX_SLOPE := 0.35
 const TIGHT_EDGE_MARGIN_M := 1.0
 ## Turn rate on the arcade rails that shows as a full steering input, in rad/s.
 const _RAIL_FULL_YAW_RATE := 0.5
@@ -647,9 +650,12 @@ func _hold_tight_lane(track: Node, delta: float) -> void:
 	var right_room := maxf(right_ext - TIGHT_EDGE_MARGIN_M, 0.0)
 	var target_lane := _dodge_lane if _dodge_ready else _dodging_lane(track, clampf(_lane_x, -left_room, right_room), delta)
 	var lane := clampf(target_lane, -left_room, right_room)
-	var speed := maxf(_dynamics.longitudinal_speed(), 0.0)
 	var yaw := float(here.get("yaw", _dynamics.yaw))
-	var across := clampf((lane - _lateral) * TIGHT_CLOSE_RATE, -TIGHT_MAX_MPS, TIGHT_MAX_MPS)
+	# Speed up the road, not along the car. The car is turned toward its lane, so along the car
+	# the step across counts as speed too, and read back each step it built on itself.
+	var speed := maxf(_dynamics.cg_velocity.dot(Vector3(sin(yaw), 0.0, cos(yaw))), 0.0)
+	var most := minf(TIGHT_MAX_MPS, speed * TIGHT_MAX_SLOPE)
+	var across := clampf((lane - _lateral) * TIGHT_CLOSE_RATE, -most, most)
 	_dynamics.yaw = yaw + atan2(across, maxf(speed, 3.0))
 	_dynamics.cg_velocity = Vector3(sin(yaw), 0.0, cos(yaw)) * speed + Vector3(cos(yaw), 0.0, -sin(yaw)) * across
 
