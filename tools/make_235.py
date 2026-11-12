@@ -130,6 +130,8 @@ EXH_FLANGE_Z = 7.2
 CARB_X = -1.0
 CLEANER = (7.3, 18.9, 23.9)  # diameter, bottom, top
 
+WATER_OUTLET = (-12.5, 12.0)    # the gooseneck's x, the housing's middle z
+
 # The front, from the block's face back: the timing cover, the belt's plane, the fan.
 FRONT = -BLOCK_HALF
 COVER_FACE = -12.8
@@ -173,7 +175,7 @@ MACHINED = {"name": "machined iron", "pbrMetallicRoughness": {
     "baseColorFactor": [0.46, 0.46, 0.47, 1], "metallicFactor": 0.7, "roughnessFactor": 0.4}}
 FINISHES = [
     ("engine_block_deck_holes", BLACK), ("intake_manifold_carb_bore", BLACK),
-    ("carb_throat", BLACK), ("engine_block_distributor_hole", BLACK), ("cylinder_head_port", BLACK),
+    ("carb_throat", BLACK), ("water_outlet_bore", BLACK), ("engine_block_distributor_hole", BLACK), ("cylinder_head_port", BLACK),
     ("flywheel_holes", BLACK), ("flywheel", STEEL), ("engine_block_deck", MACHINED), ("cylinder_bore", MACHINED),
     ("piston", CAST_ALUMINUM),
     ("exhaust", CAST_IRON), ("carburetor_neck", STEEL), ("carburetor", CAST_ALUMINUM),
@@ -415,6 +417,8 @@ def openings():
     return {
         "cylinder_head_ports": merge(ports + exhaust),
         "intake_manifold_carb_bore": disc_facing((CARB_X, INTAKE_Y, INTAKE_Z + 0.904), (0, 0, 1), 0.65, 16),
+        "water_outlet_bore": disc_facing((WATER_OUTLET[0] - 1.404, 0.0, WATER_OUTLET[1] + 0.9), (-1, 0, 0),
+                                         0.5, 12),
         "carb_throat": disc_facing((CARB_X, INTAKE_Y, CLEANER[1] + 0.004), (0, 0, 1), 0.85, 16),
         "engine_block_distributor_hole": disc_facing(dist_base() + a * (DIST_BOSS[1] + 0.004), a, 0.55, 12),
         # The clutch's bolt holes round the flywheel's face.
@@ -443,6 +447,7 @@ def deck_meshes():
     out["engine_block_deck_holes"] = merge(floors)
     out.update(openings())
     out.update(cover_meshes())
+    out.update(water_outlet_meshes())
     return out
 
 
@@ -486,9 +491,9 @@ def head(d):
         rod(d, f"spark_plug_{i}", base, a, 0.55, 0.35, 1.2)
         rod(d, f"spark_plug_tip_{i}", base, a, 0.25, 1.55, 0.35)
 
-    # Water outlet on the front end, its neck forward and up to the hose.
-    d.box("water_outlet", (-HEAD_HALF - 0.7, -0.9, 11.2), (-HEAD_HALF + 0.05, 0.9, 12.8))
-    rod(d, "water_outlet_neck", (-HEAD_HALF - 0.4, 0.0, 12.3), (-0.5, 0.0, 0.866), 1.4, 0.0, 1.8)
+    # Thermostat housing on the front end: round, on the head's face, with a gooseneck
+    # rising out of it and turning forward to the hose (an XZ path: (x, -z)).
+    # Drawn as exact meshes: water_outlet_meshes.
 
 
 def valve_cover(d):
@@ -621,6 +626,37 @@ def orient(p, nrm, tris):
             continue
         out.append(t if fn @ (nrm[t[0]] + nrm[t[1]] + nrm[t[2]]) >= 0 else [t[0], t[2], t[1]])
     return p, nrm, np.array(out, dtype=np.uint32).ravel()
+
+
+def cylinder_mesh(base, axis, r, length, n=24):
+    """A round bar from base along axis, its far end capped."""
+    a = unit(axis)
+    e1 = unit(np.cross(a, [0.0, 0.0, 1.0]) if abs(a[2]) < 0.9 else np.cross(a, [1.0, 0.0, 0.0]))
+    e2 = np.cross(a, e1)
+    base = np.array(base, float)
+    p, nrm, tris = [], [], []
+    for j in range(n):
+        t = 2 * math.pi * j / n
+        d = math.cos(t) * e1 + math.sin(t) * e2
+        p += [base + r * d, base + a * length + r * d]
+        nrm += [d, d]
+    for j in range(n):
+        k, k2 = 2 * j, 2 * ((j + 1) % n)
+        tris += [[k, k2, k2 + 1], [k, k2 + 1, k + 1]]
+    side = orient(np.array(p), np.array(nrm), tris)
+    return merge([side, disc_facing(base + a * length, a, r, n)])
+
+
+def water_outlet_meshes():
+    """The thermostat housing, round on the head's front, and its gooseneck rising out of
+    it and turning forward to the hose."""
+    hx, hz = WATER_OUTLET
+    path = ([(hx, 0.0, hz - 0.4)] + [(hx - 0.6 + 0.6 * math.cos(t), 0.0, hz + 0.3 + 0.6 * math.sin(t))
+                                      for t in np.linspace(0, math.pi / 2, 9)] + [(hx - 1.4, 0.0, hz + 0.9)])
+    return {
+        "water_outlet": cylinder_mesh((-HEAD_HALF + 0.05, 0.0, hz), (-1, 0, 0), 0.95, 0.75),
+        "water_outlet_neck": tube(path, (0, 1, 0), 0.65, 16),
+    }
 
 
 def cover_meshes():
