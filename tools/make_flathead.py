@@ -60,6 +60,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from make_wheels import SolidCraft, cmd, write_glb  # noqa: E402
+import engine_meshes as em  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STEM = "engine-flathead-239"
@@ -77,6 +78,21 @@ RAIL_Y = 6.9            # pan rail lip
 RAIL_Z = -3.5           # pan rail, bottom of the block
 BANK_SHIFT = 0.5        # the right bank sits this far forward of the middle, the left back
 BORE_X = [-6.375, -2.125, 2.125, 6.375]  # cylinders along each bank, before the shift
+
+# What shows on the decks and in the valley with the heads and the intake off: the bores
+# and the pistons down them, the valves in the deck beside each bore on the valley side,
+# the head studs standing in the block, the intake ports in the valley's walls, and the
+# valve chamber along each side of the valley floor with the springs' retainers in it.
+BORE = 3.1875           # the 59A's 3 3/16
+STROKE = 3.75
+ROD = 7.0
+THROWS = [0, 90, 270, 180]      # the cross-plane crank's throws front to back, from upright
+VALVE_A = 5.5           # the valves' middles, in from the deck's outer edge
+VALVE_X = 0.85          # each valve's offset along the bank from its bore
+VALVE_R = 0.75
+STUD_UP = 1.75          # the studs up from the deck: under the heads' tops
+DECK_PLATE = 0.012      # the machined deck, standing just proud of the block
+CHAMBER = (1.35, 0.45, 8.6)     # the valve chamber: out from the middle, half wide, half long
 
 # The heads, in each deck's own frame: a from the outer edge in, h up off the deck, x
 # along the head from its middle.
@@ -116,6 +132,7 @@ COVER_FACE = -12.5
 BELT_X = -13.6
 CAM = (0.0, 5.2)
 DISTRIBUTOR = (1.8, 5.2)
+DIST_BOSS = 0.3         # its boss on the timing cover, out from the face
 PUMP = (5.6, 2.4)
 GENERATOR = (0.0, 16.0)
 GENERATOR_R = 2.4
@@ -140,6 +157,8 @@ ZINC = {"name": "zinc", "pbrMetallicRoughness": {
     "baseColorFactor": [0.66, 0.55, 0.26, 1], "metallicFactor": 0.6, "roughnessFactor": 0.35}}
 PORCELAIN = {"name": "porcelain", "pbrMetallicRoughness": {
     "baseColorFactor": [0.85, 0.85, 0.82, 1], "metallicFactor": 0.0, "roughnessFactor": 0.25}}
+MACHINED = {"name": "machined iron", "pbrMetallicRoughness": {
+    "baseColorFactor": [0.46, 0.46, 0.47, 1], "metallicFactor": 0.7, "roughnessFactor": 0.4}}
 CAST_ALUMINUM = {"name": "cast aluminum", "pbrMetallicRoughness": {
     "baseColorFactor": [0.58, 0.58, 0.56, 1], "metallicFactor": 0.6, "roughnessFactor": 0.6}}
 SATIN_ALUMINUM = {"name": "satin aluminum", "pbrMetallicRoughness": {
@@ -148,6 +167,10 @@ RUBBER = {"name": "rubber", "pbrMetallicRoughness": {
     "baseColorFactor": [0.05, 0.05, 0.05, 1], "metallicFactor": 0.0, "roughnessFactor": 0.9}}
 # Body name prefixes to finishes, first match wins; anything else is the block's paint.
 FINISHES = [
+    ("engine_block_valve_seats", BLACK), ("engine_block_ports", BLACK), ("engine_block_valve_chamber", BLACK),
+    ("engine_block_valves", STEEL), ("engine_block_studs", STEEL), ("engine_block_retainers", STEEL),
+    ("engine_block_deck", MACHINED), ("cylinder_bores", MACHINED), ("piston", CAST_ALUMINUM),
+    ("timing_cover_distributor_hole", BLACK),
     ("cylinder_head_nuts", STEEL), ("cylinder_head_studs", STEEL), ("cylinder_head", CAST_ALUMINUM),
     ("water_outlet_port", BLACK), ("water_outlet", CAST_ALUMINUM), ("plug_conduit", STEEL), ("spark_plug_base", STEEL), ("spark_plug_tip", STEEL),
     ("spark_plug", PORCELAIN), ("exhaust", CAST_IRON), ("carb_throat", BLACK),
@@ -299,6 +322,102 @@ def block(d):
     d.poly(right + left)
     d.finish()
     d.extrude(sk, "engine_block", BLOCK_LEN, "symmetric")
+
+
+def valve_xs():
+    return [x + k * VALVE_X for x in BORE_X for k in (-1, 1)]
+
+
+def throw_angle(s, i):
+    """Cylinder i of bank s's crank angle from its own top dead center."""
+    return THROWS[i] - s * 45
+
+
+def bore_cut():
+    return max(em.piston_depth(throw_angle(s, i), STROKE, ROD) for s in (1, -1) for i in range(4)) + 1.0
+
+
+def block_studs():
+    """The head studs that stand in the block: the heads' pattern, less any that would
+    stand in a bore or a valve (the heads' pattern follows Offenhauser's castings)."""
+    out = []
+    for dd, xs in STUD_ROWS:
+        a = HEAD_A[1] - dd
+        for x in xs:
+            if any(math.hypot(x - bx, a - DECK_OUT) < BORE / 2 + 0.3 for bx in BORE_X):
+                continue
+            if any(math.hypot(x - vx, a - VALVE_A) < VALVE_R + 0.35 for vx in valve_xs()):
+                continue
+            out.append((x, a))
+    return out
+
+
+def deck(d):
+    """The bores cut down each bank, and the machined deck plate round them."""
+    half = BLOCK_LEN / 2
+    for s in (1, -1):
+        sk = d.head_plane(s, 0.0, f"Bores {s}")
+        for x in BORE_X:
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(-s * x, DECK_OUT),
+                           radius=round(BORE / 2 * MM, 4), sides=36))
+        d.finish()
+        d.c.append(cmd("solid.extrude", sketch=sk, distance=inch(bore_cut()), direction="negative",
+                       operation="cut", targets=["engine_block"], name=f"Bores cut {s}"))
+        sk = d.head_plane(s, 0.0, f"Deck {s}")
+        d.c.append(cmd("sketch.rectangle.two_point", p0=skp(-half - BANK_SHIFT, 0.0),
+                       p1=skp(half - BANK_SHIFT, DECK_OUT + DECK_IN)))
+        for x in BORE_X:
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(-s * x, DECK_OUT),
+                           radius=round(BORE / 2 * MM, 4), sides=36))
+        for x in valve_xs():
+            d.c.append(cmd("sketch.polygon.inscribed", center=skp(-s * x, VALVE_A),
+                           radius=round((VALVE_R + 0.1) * MM, 4), sides=12))
+        d.finish()
+        d.extrude(sk, f"engine_block_deck_{s}", DECK_PLATE)
+
+
+def internals_meshes():
+    """{name: mesh} in inches: the bores' walls, the pistons, the valves and their seats,
+    the studs, and in the valley the ports, the valve chamber and the retainers."""
+    out, walls, valves, seats, studs = {}, [], [], [], []
+    cut = bore_cut()
+    for s in (1, -1):
+        u = np.array(u3(s))
+        for i, x in enumerate(BORE_X):
+            depth = em.piston_depth(throw_angle(s, i), STROKE, ROD)
+            wall, piston = em.bore_and_piston(head_point(s, x, DECK_OUT, 0.0), u, BORE, depth, cut)
+            walls.append(wall)
+            out[f"piston_{s}_{i + 1}"] = piston
+        for x in valve_xs():
+            valves.append(em.disc(head_point(s, x, VALVE_A, 0.004), u, VALVE_R - 0.02, 12))
+            seats.append(em.annulus(head_point(s, x, VALVE_A, 0.002), u, VALVE_R - 0.04, VALVE_R + 0.1, 12))
+        for x, a in block_studs():
+            studs.append(em.cylinder(head_point(s, x, a, -0.1), u, 0.2, STUD_UP + 0.1, 8))
+    out.update({"cylinder_bores": em.merge(walls), "engine_block_valves": em.merge(valves),
+                "engine_block_valve_seats": em.merge(seats), "engine_block_studs": em.merge(studs)})
+
+    # The valley: an intake port in each bank's inner wall by each bore, the valve chamber
+    # along each side of the floor, the springs' retainers in it under each valve.
+    _, in_r = deck_edges(1)
+    vy = valley_y()
+    ports, chambers, retainers = [], [], []
+    for s in (1, -1):
+        mid = np.array([s * (vy + in_r[0]) / 2, (VALLEY_Z + in_r[1]) / 2])
+        n = em.unit([0.0, -s, 1.0])
+        for x in BORE_X:
+            c = np.array([x - s * BANK_SHIFT, mid[0], mid[1]]) + n * 0.004
+            ports.append(em.rounded_rect(c, n, (1, 0, 0), 0.6, 0.38, 0.3))
+        cy, half_w, half_l = CHAMBER
+        chambers.append(em.rounded_rect((-s * BANK_SHIFT, s * cy, VALLEY_Z + 0.003), (0, 0, 1), (1, 0, 0),
+                                        half_l, half_w, 0.4))
+        for x in valve_xs():
+            retainers.append(em.cylinder((x - s * BANK_SHIFT, s * cy, VALLEY_Z - 0.3), (0, 0, 1), 0.34, 0.31, 8))
+    out.update({"engine_block_ports": em.merge(ports), "engine_block_valve_chamber": em.merge(chambers),
+                "engine_block_retainers": em.merge(retainers)})
+    # The distributor's hole in its boss on the timing cover.
+    dx, dz = DISTRIBUTOR
+    out["timing_cover_distributor_hole"] = em.disc((COVER_FACE - DIST_BOSS - 0.004, dx, dz), (-1, 0, 0), 0.55, 16)
+    return out
 
 
 def heads(d, style="stock"):
@@ -705,8 +824,9 @@ def front(d):
     d.finish()
     d.extrude(sk, "timing_cover", COVER_BACK - COVER_FACE, "negative")
 
-    # Distributor lying forward off the cam's nose, cap to the front.
+    # Distributor lying forward off the cam's nose, cap to the front, out of its boss.
     dx, dz = DISTRIBUTOR
+    d.cylinder("timing_cover_distributor_boss", (COVER_FACE, dx, dz), (-1, 0, 0), 3.0, DIST_BOSS)
     d.cylinder("distributor_body", (COVER_FACE, dx, dz), (-1, 0, 0), 2.6, 1.0)
     d.cylinder("distributor_cap", (COVER_FACE - 1.0, dx, dz), (-1, 0, 0), 3.6, 1.1)
 
@@ -751,7 +871,8 @@ def front(d):
 # a triangle budget by its size, and write the result as an OBJ.
 BLENDER_REDUCE = r"""
 import bmesh, bpy, math, sys
-src, dst = sys.argv[sys.argv.index("--") + 1:]
+args = sys.argv[sys.argv.index("--") + 1:]
+src, dst, keep = args[0], args[1], set(args[2:])
 for ob in list(bpy.data.objects):
     bpy.data.objects.remove(ob)
 bpy.ops.wm.obj_import(filepath=src)
@@ -766,6 +887,8 @@ for ob in list(bpy.context.scene.objects):
     tris = len(bm.faces)
     bm.to_mesh(ob.data)
     bm.free()
+    if ob.name.split(" (")[0].split("_(")[0] in keep:
+        continue
     # Budget: about four triangles per facet round a cylinder, the facets by the body's
     # middle extent (millimeters) from 10 up to 36.
     size = sorted(ob.dimensions)[1] / 25.4
@@ -779,9 +902,13 @@ bpy.ops.wm.obj_export(filepath=dst, apply_modifiers=True, export_normals=False, 
 """
 
 
-def reduce_obj(src, dst, blender):
+# Bodies left as SolidCraft makes them: flat-faced, with round holes that must stay round.
+KEEP_EXACT = ("engine_block", "engine_block_deck_1", "engine_block_deck_-1")
+
+
+def reduce_obj(src, dst, blender, keep=()):
     r = subprocess.run([blender, "-b", "--factory-startup", "--python-expr", BLENDER_REDUCE,
-                        "--", src, dst], capture_output=True, text=True)
+                        "--", src, dst, *keep], capture_output=True, text=True)
     if r.returncode != 0 or not os.path.exists(dst):
         sys.exit(f"blender: {r.stderr.strip() or r.stdout.strip()}")
 
@@ -885,6 +1012,7 @@ def main():
         intake(d, args.intake)
     else:
         block(d)
+        deck(d)
         heads(d, args.heads)
         intake(d, args.intake)
         exhaust(d)
@@ -903,7 +1031,7 @@ def main():
         SolidCraft(tool).run(script, "--save", sc)
         print("thinning the mesh")
         thin = os.path.join(tmp, "thin.obj")
-        reduce_obj(obj, thin, blender)
+        reduce_obj(obj, thin, blender, KEEP_EXACT if args.what == "engine" else ())
         bodies = read_tris(thin)
 
     # Design mm -> engine units (ENGINE_SCALE m), crank down to the models' Z.
@@ -918,6 +1046,8 @@ def main():
             merged[base] = (np.vstack([mp, p]), np.vstack([mn, nr]), np.concatenate([mi, i + len(mp)]))
         else:
             merged[base] = (p, nr, i)
+    if args.what == "engine":
+        merged.update(em.to_mm(internals_meshes()))
     parts = []
     for name, (p, nr, i) in merged.items():
         p = p * 0.001 / 0.22 + np.array([0.0, 0.0, -0.36])
