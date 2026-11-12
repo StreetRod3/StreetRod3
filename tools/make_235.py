@@ -138,6 +138,8 @@ EXH_OUT_X = 1.75
 EXH_FLANGE_Z = 7.2
 CARB_X = -1.0
 CLEANER = (7.3, 18.9, 23.9)  # diameter, bottom, top
+CARB_PAD = INTAKE_Z + 0.9       # the stock carburetor's pad on the intake
+CARB_TOP = CARB_PAD + 3.05      # its air horn's top
 
 WATER_OUTLET = (-12.5, 12.0)    # the gooseneck's x, the housing's middle z
 
@@ -188,7 +190,7 @@ FINISHES = [
     ("exhaust_header_bore", BLACK), ("engine_block_distributor_hole", BLACK), ("cylinder_head_port", BLACK),
     ("flywheel_holes", BLACK), ("flywheel", STEEL), ("engine_block_deck", MACHINED), ("cylinder_bore", MACHINED),
     ("piston", CAST_ALUMINUM),
-    ("exhaust", CAST_IRON), ("carburetor_neck", STEEL), ("carburetor", CAST_ALUMINUM),
+    ("exhaust", CAST_IRON), ("air_cleaner_neck", STEEL), ("carburetor", CAST_ALUMINUM),
     ("air_cleaner_screen", SCREEN), ("air_cleaner", BLACK), ("plug_wire", WIRE),
     ("distributor_body", STEEL), ("distributor_shank", STEEL), ("distributor_cap", BLACK),
     ("vacuum_advance", STEEL), ("coil", BLACK), ("fuel_pump_bowl", GLASS),
@@ -438,7 +440,7 @@ def openings():
         "intake_manifold_carb_bore": disc_facing((CARB_X, INTAKE_Y, INTAKE_Z + 0.904), (0, 0, 1), 0.65, 16),
         "water_outlet_bore": disc_facing((WATER_OUTLET[0] - 1.404, 0.0, WATER_OUTLET[1] + 0.9), (-1, 0, 0),
                                          0.5, 12),
-        "carb_throat": disc_facing((CARB_X, INTAKE_Y, CLEANER[1] + 0.004), (0, 0, 1), 0.85, 16),
+        "carb_throat": disc_facing((CARB_X, INTAKE_Y, CARB_TOP + 0.004), (0, 0, 1), 0.75, 16),
         "engine_block_distributor_hole": disc_facing(dist_base() + a * (DIST_BOSS[1] + 0.004), a, 0.55, 12),
         # The clutch's bolt holes round the flywheel's face.
         "flywheel_holes": merge([disc_facing((BLOCK_HALF + 1.254, CRANK_Y + 5.0 * math.cos(t), 5.0 * math.sin(t)),
@@ -861,13 +863,15 @@ def carburetor(d):
                    p1=skp(CARB_X + 1.4, INTAKE_Y + 1.5), radius=inch(0.5)))
     d.finish()
     d.extrude(sk, "carburetor", 2.5)
-    top = z + 2.8
-    d.cylinder("carburetor_neck", (CARB_X, INTAKE_Y, top), (0, 0, 1), 2.4, CLEANER[1] - top)
+    # The air horn on top; the oil-bath cleaner's neck stands on it (air_cleaner).
+    d.cylinder("carburetor_horn", (CARB_X, INTAKE_Y, z + 2.8), (0, 0, 1), 2.0, 0.25)
 
 
 def air_cleaner(d):
     dia, z0, z1 = CLEANER
     c = (CARB_X, INTAKE_Y)
+    top = CARB_TOP - 0.05
+    d.cylinder("air_cleaner_neck", (*c, top), (0, 0, 1), 2.4, z0 - top)
     d.cylinder("air_cleaner_pan", (*c, z0), (0, 0, 1), dia - 0.8, 0.5)
     d.cylinder("air_cleaner", (*c, z0 + 0.5), (0, 0, 1), dia, 2.4)
     d.cylinder("air_cleaner_screen", (*c, z0 + 2.9), (0, 0, 1), dia - 0.3, 0.8)

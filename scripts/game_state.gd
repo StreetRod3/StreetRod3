@@ -2615,7 +2615,7 @@ func _part_stats_text(part: Dictionary) -> String:
 		bits.append("%d cfm" % int(part.get("cfm", 0)))
 	var carbs := int(part.get("carbs", 0))
 	if carbs > 1:
-		bits.append("%d %s" % [carbs, "four-barrels" if int(part.get("barrels", 4)) == 4 else "two-barrels"])
+		bits.append("%d %s" % [carbs, {4: "four-barrels", 2: "two-barrels", 1: "one-barrels"}.get(int(part.get("barrels", 4)), "carburetors")])
 	if float(part.get("drift", 1.0)) < 1.0:
 		bits.append("holds its timing")
 	var loud := float(part.get("loud_db", 0.0))

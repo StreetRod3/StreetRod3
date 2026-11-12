@@ -196,6 +196,47 @@ const _SB_NODES_FRONT: Array[String] = ["belt", "alternator", "upper_pulley", "f
 const _SB_NODES_BALANCER: Array[String] = ["harmonic_balancer", "crank_pulley", "crank_bolt"]
 const _SB_NODES_EXHAUST: Array[String] = ["exhaust"]
 
+## The Chevy six (216 and 235), laid out as tools/make_235.py builds its model: inches
+## from the block's middle, +X back, +Y right, +Z up from the crank's height; the crank
+## sits `SIX_CRANK_Y` toward the manifold side, and `six()` turns a point into engine
+## units with the crank on the axis. The model carries the stock parts: the head with its
+## stamped cover, plugs and thermostat housing, the intake, the one-barrel, the oil-bath
+## cleaner, the distributor, the coil and wires, and the exhaust manifold; the headers,
+## the finned cover and the two-carb intake are models of their own.
+const SIX_FAMILY := "chevy-six"
+const SIX_CRANK_Y := -0.5
+const SIX_BORES_X: Array[float] = [-9.6, -5.76, -1.92, 1.92, 5.76, 9.6]
+const SIX_DECK := 9.9
+const SIX_HEAD := Vector2(3.25, 13.0)
+## The stock carburetor's pad (x, y, z) and its air horn's top; the two-carb intake's pads.
+const SIX_PAD := Vector3(-1.0, -6.85, 12.4)
+const SIX_CARB_TOP := 15.45
+const SIX_TWIN_PADS: Array[Vector3] = [Vector3(-4.2, -6.85, 13.1), Vector3(4.2, -6.85, 13.1)]
+const SIX_CLEANER_TOP := 23.9
+const SIX_COVER_X := -12.8
+const SIX_BELT_X := -14.15
+const SIX_PULLEY_R := 2.25
+## The camshaft lies on the deck over the pushrod holes once the head is off.
+const SIX_CAM := Vector3(-11.2, 2.0, 10.65)
+## The distributor's axis and the middle of its cap; its hold-down bolt by the boss.
+const SIX_DIST_AXIS := Vector3(0.0, 0.326, 0.946)
+const SIX_DIST_CAP := Vector3(0.0, 5.62, 8.33)
+const SIX_DIST_BOLT := Vector3(-1.0, 4.92, 6.3)
+const SIX_HEAD_BOLTS: Array[Vector3] = [Vector3(-11.2, 3.45, 12.9), Vector3(11.2, 3.45, 12.9)]
+const SIX_INTAKE_BOLTS: Array[Vector3] = [Vector3(-7.0, -6.65, 12.4), Vector3(7.0, -6.65, 12.4)]
+const SIX_MOUNTS: Array[Vector3] = [Vector3(-11.4, 4.9, 0.6), Vector3(-11.4, -4.9, 0.6)]
+const _SIX_NODES_HEADS: Array[String] = ["cylinder_head", "valve_cover", "spark_plug", "water_outlet"]
+const _SIX_NODES_INTAKE: Array[String] = ["intake_manifold"]
+const _SIX_NODES_CARB: Array[String] = ["carburetor", "carb_throat"]
+const _SIX_NODES_CLEANER: Array[String] = ["air_cleaner"]
+const _SIX_NODES_DISTRIBUTOR: Array[String] = ["distributor", "vacuum_advance"]
+const _SIX_NODES_WIRES: Array[String] = ["plug_wire", "coil"]
+const _SIX_NODES_FRONT: Array[String] = ["belt", "generator", "pulley_generator", "pulley_pump", "fan_"]
+## The crank's own pulley and snout, which the built balancer stands in for, and the exhaust,
+## which goes on with the head.
+const _SIX_NODES_BALANCER: Array[String] = ["pulley_crank", "crank_snout"]
+const _SIX_NODES_EXHAUST: Array[String] = ["exhaust"]
+
 const _MODEL_DEFAULT := "res://assets/parts/engine-v8-283.glb"
 ## Nodes of an engine model by part. The long block is everything else, less the front
 ## drive the assembly builds itself.
@@ -279,6 +320,16 @@ func is_flathead() -> bool:
 	return GameState.engine_family(_view_engine()) == FH_FAMILY
 
 
+## A point of the six in inches from its block's middle as engine units.
+static func six(p: Vector3) -> Vector3:
+	return fh(Vector3(p.x, p.y - SIX_CRANK_Y, p.z))
+
+
+## Whether the engine on view is the Chevy six.
+func is_six() -> bool:
+	return GameState.engine_family(_view_engine()) == SIX_FAMILY
+
+
 ## Whether the engine on view is the Chevy small-block, drawn from its own model.
 func is_sbc() -> bool:
 	return GameState.engine_family(_view_engine()) == SB_FAMILY
@@ -292,12 +343,16 @@ static func sb_bank_x(side: float, x: float) -> float:
 
 ## Where the balancer's back face is along the crank, and the crank pulley's belt line.
 func balancer_x() -> float:
+	if is_six():
+		return fh(Vector3(SIX_BELT_X, 0.0, 0.0)).x - 0.05
 	if is_flathead():
 		return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x - 0.05
 	return fh(Vector3(SB_COVER_X, 0.0, 0.0)).x if is_sbc() else COVER_X
 
 
 func belt_x() -> float:
+	if is_six():
+		return fh(Vector3(SIX_BELT_X, 0.0, 0.0)).x
 	if is_flathead():
 		return fh(Vector3(FH_BELT_X, 0.0, 0.0)).x
 	return fh(Vector3(SB_BELT_X, 0.0, 0.0)).x if is_sbc() else BELT_X
@@ -414,6 +469,8 @@ func _present(key: String) -> bool:
 
 ## Where each bolt of a part goes, in engine units: origin at the hole, +Z out of it.
 func bolt_spots(key: String) -> Array[Transform3D]:
+	if is_six():
+		return _six_bolt_spots(key)
 	if is_flathead():
 		return _fh_bolt_spots(key)
 	if is_sbc():
@@ -482,6 +539,34 @@ func _fh_bolt_spots(key: String) -> Array[Transform3D]:
 	return out
 
 
+func _six_bolt_spots(key: String) -> Array[Transform3D]:
+	var out: Array[Transform3D] = []
+	match key:
+		GameState.HOOD_ENGINE:
+			for p in SIX_MOUNTS:
+				out.append(Transform3D(Basis.IDENTITY, six(p)))
+		GameState.SLOT_CAM:
+			for y: float in [-0.9, 0.9]:
+				out.append(Transform3D(Basis.IDENTITY, six(Vector3(SIX_CAM.x + 0.6, SIX_CAM.y + y, SIX_CAM.z + 0.1))))
+		GameState.SLOT_HEADS:
+			for p in SIX_HEAD_BOLTS:
+				out.append(Transform3D(Basis.IDENTITY, six(p)))
+		GameState.SLOT_INTAKE:
+			var lift := 0.1 if str(_view_part(GameState.SLOT_INTAKE).get("style", "")) == "six-2x1" else 0.0
+			for p in SIX_INTAKE_BOLTS:
+				out.append(Transform3D(Basis.IDENTITY, six(p + Vector3(0.0, 0.0, lift))))
+		GameState.SLOT_DISTRIBUTOR:
+			out.append(Transform3D(_axis_basis(SIX_DIST_AXIS), six(SIX_DIST_BOLT)))
+		GameState.SLOT_AIR_CLEANER:
+			for slot in _view_carb_slots():
+				out.append(Transform3D(Basis.IDENTITY, carb_pad(slot) + Vector3(0.0, 0.0, _cleaner_top())))
+		_:
+			if GameState.CARB_SLOTS.has(key):
+				for corner: Vector3 in [Vector3(-1.3, -1.25, 0.3), Vector3(1.3, 1.25, 0.3)]:
+					out.append(Transform3D(Basis.IDENTITY, carb_pad(key) + corner * FH_IN))
+	return out
+
+
 func _sb_bolt_spots(key: String) -> Array[Transform3D]:
 	var out: Array[Transform3D] = []
 	match key:
@@ -517,6 +602,13 @@ func _sb_bolt_spots(key: String) -> Array[Transform3D]:
 
 ## The carburetor pads of an intake style on the engine on view, front to back.
 func pads_for(style: String) -> Array[Vector3]:
+	if is_six():
+		if style == "six-2x1":
+			var twins: Array[Vector3] = []
+			for p in SIX_TWIN_PADS:
+				twins.append(six(p))
+			return twins
+		return [six(SIX_PAD)]
 	if is_sbc():
 		match style:
 			"highrise":
@@ -548,6 +640,8 @@ func carb_pad(slot: String) -> Vector3:
 
 ## Height of a carburetor's air horn above its pad.
 func _carb_height() -> float:
+	if is_six():
+		return (SIX_CARB_TOP - SIX_PAD.z) * FH_IN
 	var four := int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
 	if four and is_sbc():
 		return (SB_CARB_TOP - SB_PAD.z) * FH_IN
@@ -556,6 +650,8 @@ func _carb_height() -> float:
 
 ## Height of an air cleaner's top above the pad: the stock small-block cleaner's wing nut.
 func _cleaner_top() -> float:
+	if is_six() and _six_stock_cleaner():
+		return (SIX_CLEANER_TOP - SIX_PAD.z) * FH_IN
 	if is_sbc() and _sb_stock_cleaner():
 		return (SB_WINGNUT_TOP - SB_PAD.z) * FH_IN
 	return _carb_height() + 0.32
@@ -567,6 +663,11 @@ func _sb_stock_cleaner() -> bool:
 	return str(_view_part(GameState.SLOT_AIR_CLEANER).get("style", "stock")) == "stock" and _view_carb_slots().size() <= 1 and int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
 
 
+## Whether the six's own oil-bath cleaner is the one on: the stock cleaner on its one carburetor.
+func _six_stock_cleaner() -> bool:
+	return str(_view_part(GameState.SLOT_AIR_CLEANER).get("style", "stock")) == "stock" and _view_carb_slots().size() <= 1
+
+
 ## The balancer's turn that puts its mark at `degrees` of timing on the tab.
 static func mark_angle(degrees: float) -> float:
 	return deg_to_rad(TAB_ZERO_DEG - degrees * TAB_ARC_PER_DEG)
@@ -576,6 +677,9 @@ static func mark_angle(degrees: float) -> float:
 
 
 func _build_engine(rig: Node3D) -> void:
+	if is_six():
+		_build_six_block(rig)
+		return
 	if is_flathead():
 		_build_flathead_block(rig)
 		return
@@ -604,6 +708,9 @@ func _build_engine(rig: Node3D) -> void:
 ## The belt and what it drives: on a flathead its model's belt, generator, fan and
 ## pulleys; on the others the water pump pulley, the alternator on its bracket, and the belt.
 func _build_front(rig: Node3D) -> void:
+	if is_six():
+		_add_model_nodes(rig, _SIX_NODES_FRONT, true)
+		return
 	if is_flathead():
 		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _FH_NODES_FRONT))
 		return
@@ -649,6 +756,24 @@ func _build_flathead_block(rig: Node3D) -> void:
 	var cover := fh(Vector3(FH_COVER_X, 0.0, 0.0)).x
 	_cyl_x(rig, 0.1, cover - balancer_x(), cover, steel, 16, 0.0, CRANK_Z)
 	_build_balancer(rig, FH_PULLEY_R * FH_IN)
+
+
+## The six's long block from its model, less the other parts' nodes and its crank pulley,
+## with mount ears off the front corners and the balancer on the crank.
+func _build_six_block(rig: Node3D) -> void:
+	var leave: Array[String] = []
+	for nodes: Array[String] in [_SIX_NODES_HEADS, _SIX_NODES_INTAKE, _SIX_NODES_CARB, _SIX_NODES_CLEANER, _SIX_NODES_DISTRIBUTOR, _SIX_NODES_WIRES, _SIX_NODES_FRONT, _SIX_NODES_BALANCER, _SIX_NODES_EXHAUST]:
+		leave.append_array(nodes)
+	_add_model_nodes(rig, leave, false)
+	var steel := _mat("steel", _STEEL, 0.6, 0.35)
+	var rubber := _mat("rubber", _RUBBER, 0.0, 0.85)
+	for p in SIX_MOUNTS:
+		var at := six(p)
+		_box(rig, Vector3(0.18, 0.2, 0.06), at + Vector3(0.02, 0.0, -0.03), steel)
+		_box(rig, Vector3(0.14, 0.16, 0.12), at + Vector3(0.0, 0.0, -0.12), rubber)
+	var cover := fh(Vector3(SIX_COVER_X, 0.0, 0.0)).x
+	_cyl_x(rig, 0.1, cover - balancer_x(), cover, steel, 16, 0.0, CRANK_Z)
+	_build_balancer(rig, SIX_PULLEY_R * FH_IN)
 
 
 ## The small-block's long block from its model, less the other parts' nodes and its own
@@ -739,6 +864,9 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 	var racing := str(part.get("style", "stock")) == "racing"
 	var metal := _mat("cam_racing", _CHROME, 0.9, 0.2) if racing else _mat("steel", _STEEL, 0.6, 0.35)
 	var lobe_r := 0.09 if racing else 0.075
+	if is_six():
+		_build_six_cam(rig, metal, lobe_r)
+		return
 	var flathead := is_flathead()
 	var sbc := is_sbc()
 	var cam_z := fh(FH_CAM).z if flathead else CAM_Z
@@ -766,6 +894,26 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(plate.x, 0.0, plate.z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 
 
+## The six's cam lying on the deck over the pushrod holes, under where the head sits: a
+## lobe for each valve, and its retainer plate at the front with a bolt either side.
+func _build_six_cam(rig: Node3D, metal: Material, lobe_r: float) -> void:
+	var front := six(SIX_CAM)
+	var back := six(Vector3(-SIX_CAM.x, SIX_CAM.y, SIX_CAM.z))
+	_cyl_x(rig, 0.045, back.x - front.x, back.x, metal, 12, front.y, front.z)
+	var phase := 0.0
+	for bx in SIX_BORES_X:
+		for offset: float in [-0.6, 0.6]:
+			var turned := Node3D.new()
+			turned.position = six(Vector3(bx + offset, SIX_CAM.y, SIX_CAM.z))
+			turned.rotation.x = phase
+			rig.add_child(turned)
+			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
+			lobe.scale.x = 0.62
+			phase += 2.4
+	var plate := six(Vector3(SIX_CAM.x + 0.6, SIX_CAM.y, SIX_CAM.z + 0.1))
+	_box(rig, Vector3(0.14, 0.36, 0.03), plate - Vector3(0.0, 0.0, 0.015), _mat("steel", _STEEL, 0.6, 0.35))
+
+
 # --- Heads -------------------------------------------------------------------------
 
 
@@ -781,6 +929,9 @@ func head_sides() -> Array[float]:
 ## Each head with its valve cover, in a node of its own (`Head_1`, `Head_-1`) so the
 ## hood screen can tell them apart. Aluminum heads are left bare.
 func _build_heads(rig: Node3D, part: Dictionary) -> void:
+	if is_six():
+		_build_six_head(rig, part)
+		return
 	if is_flathead():
 		_build_flathead_heads(rig, part)
 		return
@@ -807,6 +958,28 @@ func _build_heads(rig: Node3D, part: Dictionary) -> void:
 		var casting := model.find_child("cylinder_head_" + bank, true, false) as MeshInstance3D
 		if casting != null:
 			casting.material_override = _mat("aluminum", _ALUMINUM, 0.75, 0.35)
+
+
+## The six's head from the engine's model, its valve cover from the part's own model when
+## it has one (the finned cover), and the exhaust bolted to it as the manifold part has it.
+func _build_six_head(rig: Node3D, part: Dictionary) -> void:
+	var head := Node3D.new()
+	head.name = "Head_1"
+	rig.add_child(head)
+	var cover := str(part.get("model", ""))
+	if cover.is_empty() or not ResourceLoader.exists(cover):
+		_add_model_nodes(head, _SIX_NODES_HEADS, true)
+	else:
+		_add_model_filtered(head, _model_path(), func(n: String) -> bool: return _begins_any(n, _SIX_NODES_HEADS) and not n.begins_with("valve_cover"))
+		_add_model_filtered(head, cover, func(n: String) -> bool: return n.begins_with("valve_cover"))
+	var manifold := _view_part(GameState.SLOT_MANIFOLD)
+	if manifold.is_empty():
+		return
+	var headers := str(manifold.get("model", ""))
+	if headers.is_empty() or not ResourceLoader.exists(headers):
+		_add_model_nodes(head, _SIX_NODES_EXHAUST, true)
+	else:
+		_add_model_filtered(head, headers, func(n: String) -> bool: return n.begins_with("exhaust"))
 
 
 ## The small-block's exhaust on bank `side` as the car's manifold part has it: the cast-iron
@@ -850,6 +1023,9 @@ func _build_flathead_heads(rig: Node3D, part: Dictionary) -> void:
 
 func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	var style := str(part.get("style", "iron4"))
+	if is_six():
+		_add_model_filtered(rig, _part_model(part), func(n: String) -> bool: return n.begins_with("intake_manifold"))
+		return
 	if is_sbc():
 		if style == "iron4":
 			_add_model_nodes(rig, _SB_NODES_INTAKE, true)
@@ -950,6 +1126,11 @@ func _build_sbc_intake(rig: Node3D, style: String) -> void:
 
 
 func _build_carb(rig: Node3D, part: Dictionary, pad: Vector3) -> void:
+	if is_six() and int(part.get("barrels", 4)) == 1:
+		var six_carb := _add_model_nodes(rig, _SIX_NODES_CARB, true)
+		if six_carb != null:
+			six_carb.position = pad - six(SIX_PAD)
+		return
 	if int(part.get("barrels", 4)) == 2:
 		_build_two_barrel(rig, pad)
 		return
@@ -1002,7 +1183,7 @@ func _build_two_barrel(rig: Node3D, pad: Vector3) -> void:
 
 
 func _build_distributor(rig: Node3D, part: Dictionary) -> void:
-	var model := _add_model_nodes(rig, _NODES_DISTRIBUTOR, true)
+	var model := _add_model_nodes(rig, _SIX_NODES_DISTRIBUTOR if is_six() else _NODES_DISTRIBUTOR, true)
 	if model == null:
 		return
 	var color: Variant = _CAP_COLORS.get(str(part.get("cap", "black")), _CAP_COLORS["black"])
@@ -1010,8 +1191,8 @@ func _build_distributor(rig: Node3D, part: Dictionary) -> void:
 	var cap := model.find_child("distributor_cap", true, false) as MeshInstance3D
 	if cap != null:
 		cap.material_override = cap_mat
-	if is_sbc():
-		# The small-block's cap has its towers in its model.
+	if is_sbc() or is_six():
+		# The small-block's and the six's caps have their towers in their models.
 		for node in model.find_children("distributor_cap_*", "MeshInstance3D", true, false):
 			(node as MeshInstance3D).material_override = cap_mat
 		return
@@ -1050,6 +1231,11 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 	if is_sbc() and _sb_stock_cleaner():
 		_build_sbc_cleaner(rig, pads[0])
 		return
+	if is_six() and _six_stock_cleaner():
+		var six_cleaner := _add_model_nodes(rig, _SIX_NODES_CLEANER, true)
+		if six_cleaner != null:
+			six_cleaner.position = pads[0] - six(SIX_PAD)
+		return
 	var r := 0.72
 	if pads.size() == 2:
 		r = 0.45
@@ -1057,6 +1243,8 @@ func _build_air_cleaner(rig: Node3D, part: Dictionary) -> void:
 		r = 0.3
 	if is_flathead():
 		r = 0.5 if pads.size() == 1 else 0.26
+	if is_six():
+		r = (3.0 if pads.size() == 1 else 1.8) * FH_IN
 	if is_sbc():
 		var radii: Array[float] = [SB_CLEANER_R, 4.0, 2.5]
 		r = radii[clampi(pads.size() - 1, 0, 2)] * FH_IN
@@ -1137,6 +1325,10 @@ func plug_spots() -> Array[Transform3D]:
 func _build_wires(rig: Node3D) -> void:
 	var rubber := _mat("wire", Color(0.08, 0.07, 0.07), 0.0, 0.6)
 	var boot := _mat("boot", Color(0.75, 0.3, 0.1), 0.0, 0.7)
+	if is_six():
+		# The six's wires and its coil, which hangs off the head, are in its model.
+		_add_model_nodes(rig, _SIX_NODES_WIRES, true)
+		return
 	if is_flathead():
 		_build_flathead_wires(rig, rubber, boot)
 		return

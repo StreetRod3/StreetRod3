@@ -42,6 +42,16 @@ const _SB_OUTLETS := {
 	"shorty": Vector3(6.6, 11.4, -6.43),
 	"long-tube": Vector3(13.6, 10.4, -11.21),
 }
+## The Chevy six, from tools/make_235.py in inches from its block's middle: where each
+## exhaust outlet's flange takes a head pipe (the stock manifold's one under the
+## carburetor, the split headers' two), the manifold's run along the head for its hot
+## spot, and the back of the flywheel housing. Its exhaust is all on its left.
+const _SIX_OUTLETS := {
+	"log": [Vector3(-1.0, -5.85, 6.6)],
+	"split": [Vector3(-1.75, -4.55, 7.2), Vector3(1.75, -4.55, 7.2)],
+}
+const _SIX_RUN := Vector3(10.5, -4.6, 9.4)
+const _SIX_BACK := 13.6
 ## Engine model nodes that come off with the belt (`GameState.front_drive`): the
 ## flathead's belt, generator, fan and pulleys, and the small-block's pulleys and bracket.
 const _FRONT_NODES: Array[String] = ["belt", "generator", "pulley_generator", "pulley_pump", "fan_", "upper_pulley", "alternator", "accessory_bracket"]
@@ -761,7 +771,7 @@ func _build_engine() -> void:
 	# A flathead's and a small-block's exhaust is the manifold slot's, drawn with it; and
 	# with the belt off, what it drives is off too.
 	var off: Array[String] = []
-	if _is_flathead() or _is_sbc():
+	if _is_flathead() or _is_sbc() or _is_six():
 		off.append("exhaust")
 	if not GameState.front_drive:
 		off.append_array(_FRONT_NODES)
@@ -784,6 +794,15 @@ func _is_flathead(engine: Dictionary = {}) -> bool:
 	return GameState.engine_family(engine) == _EngineAssembly.FH_FAMILY
 
 
+## Whether `engine` (the fitted one when empty) is the Chevy six.
+func _is_six(engine: Dictionary = {}) -> bool:
+	if engine.is_empty():
+		if not GameState.has_engine():
+			return false
+		engine = GameState.get_equipped_engine()
+	return GameState.engine_family(engine) == _EngineAssembly.SIX_FAMILY
+
+
 ## Whether `engine` (the fitted one when empty) is the Chevy small-block.
 func _is_sbc(engine: Dictionary = {}) -> bool:
 	if engine.is_empty():
@@ -795,12 +814,14 @@ func _is_sbc(engine: Dictionary = {}) -> bool:
 
 ## Engine model units to this scene, as the engine is placed: stood up, its block's back
 ## face (a flathead's bell housing) at `_engine_rear`.
-func _engine_xform(flathead: bool = _is_flathead(), sbc: bool = _is_sbc()) -> Transform3D:
+func _engine_xform(flathead: bool = _is_flathead(), sbc: bool = _is_sbc(), six: bool = _is_six()) -> Transform3D:
 	var rear_x := ENGINE_REAR_X
 	if flathead:
 		rear_x = _EngineAssembly.fh(Vector3(_FH_BELL_BACK, 0.0, 0.0)).x
 	elif sbc:
 		rear_x = _EngineAssembly.fh(Vector3(_EngineAssembly.SB_BLOCK_BACK, 0.0, 0.0)).x
+	elif six:
+		rear_x = _EngineAssembly.fh(Vector3(_SIX_BACK, 0.0, 0.0)).x
 	var basis := Basis(Vector3.RIGHT, -PI * 0.5).scaled(Vector3.ONE * ENGINE_SCALE)
 	return Transform3D(basis, Vector3(_engine_rear - rear_x * ENGINE_SCALE, CRANK_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0))
 
@@ -808,6 +829,20 @@ func _engine_xform(flathead: bool = _is_flathead(), sbc: bool = _is_sbc()) -> Tr
 ## A point of the flathead in inches on the scene's `side` (its right is -Z), placed.
 func _fh_point(p: Vector3, side: float) -> Vector3:
 	return _engine_xform(true) * _EngineAssembly.fh(Vector3(p.x, -side * p.y, p.z))
+
+
+## A point of the six in inches from its block's middle, placed.
+func _six_point(p: Vector3) -> Vector3:
+	return _engine_xform(false, false, true) * _EngineAssembly.six(p)
+
+
+## The six's exhaust outlets for its manifold part's style, front to back, placed.
+func _six_outlets() -> Array[Vector3]:
+	var style := str(GameState.slot_part(GameState.SLOT_MANIFOLD).get("style", "log"))
+	var out: Array[Vector3] = []
+	for p: Vector3 in _SIX_OUTLETS.get(style, _SIX_OUTLETS["log"]):
+		out.append(_six_point(p))
+	return out
 
 
 ## A point of the small-block in inches on the right bank, moved to the scene's `side`'s
@@ -886,16 +921,27 @@ func _build_exhaust(rig: Node3D, dual: bool) -> void:
 	if dual:
 		ends.append(-RIGHT)
 	var flathead := _is_flathead()
+	var six := _is_six()
 	for side in ends:
 		var start := _pipe_start(side)
 		var end := Vector3(end_x, PIPE_Y, MUFFLER_Z * side)
-		if flathead or _is_sbc():
+		if flathead or _is_sbc() or six:
 			# Down from the outlet, then back beside the pan.
 			_pipe(rig, [start, Vector3(start.x + 0.08, PIPE_Y, start.z), end], 0.028, pipe)
 		else:
 			_tube(rig, start, end, 0.028, pipe)
 		_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * side, 16)
 	if dual:
+		return
+	if six:
+		# The split headers' back outlet drops and joins the pipe from the front one.
+		var outlets := _six_outlets()
+		if outlets.size() > 1:
+			var from := _pipe_start(RIGHT)
+			var join := from.lerp(Vector3(end_x, PIPE_Y, MUFFLER_Z * RIGHT), 0.35)
+			join.y = PIPE_Y
+			var back := outlets[outlets.size() - 1]
+			_pipe(rig, [back, Vector3(back.x + 0.06, PIPE_Y, back.z), join], 0.026, pipe)
 		return
 	if flathead:
 		# The left pipe drops and crosses under the front of the pan, ahead of the sump,
@@ -935,6 +981,10 @@ func _build_tailpipe(rig: Node3D, side: float) -> void:
 ## Where a head pipe leaves the manifold on `side`: behind the bellhousing, or on a
 ## flathead under the front of its log.
 func _pipe_start(side: float) -> Vector3:
+	if _is_six():
+		# Both pipes start on the six's left: the front outlet feeds the right-hand run.
+		var outlets := _six_outlets()
+		return outlets[0] if side == RIGHT else outlets[outlets.size() - 1]
 	if _is_flathead():
 		return _fh_point(_FH_OUTLET, side)
 	if _is_sbc():
@@ -945,7 +995,13 @@ func _pipe_start(side: float) -> Vector3:
 
 ## Static hot spots for each slot, so an empty one can still be clicked.
 func _build_zones() -> void:
+	if _is_six():
+		var front := _six_point(Vector3(-_SIX_RUN.x, _SIX_RUN.y, _SIX_RUN.z))
+		var back := _six_point(_SIX_RUN)
+		_zone(GameState.SLOT_MANIFOLD, Vector3(back.x - front.x + 0.06, 0.24, 0.16), (front + back) * 0.5)
 	for side: float in [-1.0, 1.0]:
+		if _is_six():
+			break
 		if _is_flathead():
 			var front := _fh_point(Vector3(_FH_LOG_X.x, _FH_OUTLET.y, _FH_LOG_Z), side)
 			var back := _fh_point(Vector3(_FH_LOG_X.y, _FH_OUTLET.y, _FH_LOG_Z), side)
@@ -995,6 +1051,9 @@ func build_preview(part: Dictionary) -> Node3D:
 	var slot := str(part.get("slot", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
+			if GameState.engine_family(part) == _EngineAssembly.SIX_FAMILY:
+				_build_six_manifold(rig, part)
+				return rig
 			var model := _family_model(part)
 			for side: float in [-1.0, 1.0]:
 				_build_manifold(rig, style, side, model)
@@ -1046,6 +1105,9 @@ func _rebuild_rig(slot: String) -> Node3D:
 	var style := str(part.get("style", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
+			if GameState.engine_family(part) == _EngineAssembly.SIX_FAMILY:
+				_build_six_manifold(rig, part)
+				return rig
 			var model := _family_model(part)
 			for side: float in [-1.0, 1.0]:
 				_build_manifold(rig, style, side, model)
@@ -1128,6 +1190,33 @@ func _build_manifold(rig: Node3D, style: String, side: float, model: String = ""
 
 ## A model's exhaust on the scene's `side`, placed as the engine is: a flathead's log, or
 ## the small-block's manifold or headers. A node's bank is the first number in its name.
+## The six's manifold or headers from their model (the stock manifold is the engine's),
+## all of it on the engine's left.
+func _build_six_manifold(rig: Node3D, part: Dictionary) -> void:
+	var path := str(part.get("model", ""))
+	if path.is_empty():
+		if _is_six():
+			path = str(GameState.get_equipped_engine().get("model", ""))
+		else:
+			for engine: Dictionary in GameState.ENGINES:
+				if _is_six(engine):
+					path = str(engine.get("model", ""))
+					break
+	var packed: PackedScene = null
+	if not path.is_empty():
+		packed = load(path) as PackedScene
+	if packed == null:
+		push_warning("Engine model missing: %s" % path)
+		return
+	var model := packed.instantiate() as Node3D
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		if not str(node.name).begins_with("exhaust"):
+			node.get_parent().remove_child(node)
+			node.free()
+	model.transform = _engine_xform(false, false, true)
+	rig.add_child(model)
+
+
 func _build_model_manifold(rig: Node3D, side: float, path: String) -> void:
 	var packed := load(path) as PackedScene
 	if packed == null:
