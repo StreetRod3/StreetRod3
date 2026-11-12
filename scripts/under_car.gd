@@ -307,6 +307,12 @@ func _slot_at(screen_pos: Vector2) -> String:
 	if node == null or not node.has_meta(&"under_car_slot"):
 		return ""
 	var slot := str(node.get_meta(&"under_car_slot"))
+	if _is_six() and not GameState.has_dual_exhaust():
+		# A six's single muffler hangs on the left, where the dual's left one would.
+		if slot == GameState.SLOT_MUFFLER_LEFT:
+			slot = GameState.SLOT_MUFFLER
+		elif slot == GameState.SLOT_MUFFLER:
+			return ""
 	return slot if GameState.active_slots().has(slot) else ""
 
 
@@ -345,6 +351,14 @@ func _slot_hint(slot: String) -> String:
 	if part.is_empty():
 		return "%s — none, click to fit one" % _slot_name(slot)
 	return "%s — %s" % [_slot_name(slot), str(part.get("name", "Part"))]
+
+
+## Which side a muffler slot hangs on: a dual exhaust's two either side, and a single
+## exhaust's on the right, but on the six's left, under its manifold.
+func _muffler_side(slot: String) -> float:
+	if slot == GameState.SLOT_MUFFLER_LEFT:
+		return -RIGHT
+	return -RIGHT if _is_six() and not GameState.has_dual_exhaust() else RIGHT
 
 
 ## The muffler of a dual exhaust is the right-hand one.
@@ -953,11 +967,12 @@ func _build_exhaust(rig: Node3D, dual: bool) -> void:
 
 
 ## The six's pipes, all from its left: each drops from its outlet and runs straight back
-## beside the flywheel housing and the bellhousing, clear of them. The run to the right
-## muffler crosses under the gearbox's case behind the bellhousing, where it sits high
-## enough. On a dual exhaust (the split headers only) the front outlet's pipe keeps to the
-## outside on to the left muffler and the back one's runs inside it and crosses; on a single
-## the back outlet's pipe drops into the front one's run.
+## beside the flywheel housing and the bellhousing, clear of them. A single exhaust's
+## muffler is on the left too, so its pipe runs straight on to it, the split headers' back
+## outlet dropping into its run. On a dual exhaust (the split headers only) the front
+## outlet's pipe keeps to the outside on to the left muffler and the back one's runs inside
+## it and crosses to the right one under the gearbox's case behind the bellhousing, where
+## it sits high enough.
 func _build_six_exhaust(rig: Node3D, dual: bool, end_x: float, pipe: Material, soot: Material) -> void:
 	var left := -RIGHT
 	var outlets := _six_outlets()
@@ -971,15 +986,18 @@ func _build_six_exhaust(rig: Node3D, dual: bool, end_x: float, pipe: Material, s
 	var front := outlets[0]
 	var back := outlets[outlets.size() - 1]
 	var crossing := outlets.size() > 1 and dual
-	var from := back if crossing else front
-	var drop := Vector3(from.x + 0.06, PIPE_Y, inside)
-	_pipe(rig, [from, drop, Vector3(under, PIPE_Y, inside), Vector3(over, PIPE_Y, MUFFLER_Z * RIGHT), right_end], 0.028, pipe)
-	_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * RIGHT, 16)
-	if crossing:
-		_pipe(rig, [front, Vector3(front.x + 0.06, PIPE_Y, outside), Vector3(end_x, PIPE_Y, MUFFLER_Z * left)], 0.028, pipe)
+	if not crossing:
+		var run := Vector3(_engine_rear + 0.1, PIPE_Y, inside)
+		_pipe(rig, [front, Vector3(front.x + 0.06, PIPE_Y, inside), run, Vector3(end_x, PIPE_Y, MUFFLER_Z * left)], 0.028, pipe)
 		_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * left, 16)
-	elif outlets.size() > 1:
-		_pipe(rig, [back, Vector3(back.x + 0.05, PIPE_Y, inside)], 0.026, pipe)
+		if outlets.size() > 1:
+			_pipe(rig, [back, Vector3(back.x + 0.05, PIPE_Y, inside)], 0.026, pipe)
+		return
+	var drop := Vector3(back.x + 0.06, PIPE_Y, inside)
+	_pipe(rig, [back, drop, Vector3(under, PIPE_Y, inside), Vector3(over, PIPE_Y, MUFFLER_Z * RIGHT), right_end], 0.028, pipe)
+	_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * RIGHT, 16)
+	_pipe(rig, [front, Vector3(front.x + 0.06, PIPE_Y, outside), Vector3(end_x, PIPE_Y, MUFFLER_Z * left)], 0.028, pipe)
+	_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * left, 16)
 
 
 func _exhaust_pipe_mat() -> StandardMaterial3D:
@@ -1136,7 +1154,7 @@ func _rebuild_rig(slot: String) -> Node3D:
 		GameState.SLOT_EXHAUST:
 			_build_exhaust(rig, bool(part.get("dual", false)))
 		GameState.SLOT_MUFFLER, GameState.SLOT_MUFFLER_LEFT:
-			var side := -RIGHT if slot == GameState.SLOT_MUFFLER_LEFT else RIGHT
+			var side := _muffler_side(slot)
 			_build_muffler(rig, style, MUFFLER_Z * side)
 			_build_tailpipe(rig, side)
 		GameState.SLOT_DIFFERENTIAL:
