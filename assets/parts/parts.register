@@ -4,6 +4,10 @@
       "name": "Chevy small-block",
       "make": "GM"
     },
+    "chevy-six": {
+      "name": "Chevy six",
+      "make": "GM"
+    },
     "ford-flathead": {
       "name": "Ford flathead",
       "make": "Ford"
@@ -61,6 +65,40 @@
       "vmax": 262,
       "cid": 350,
       "model": "res://assets/parts/engine-sbc-350.glb"
+    },
+    {
+      "id": "chevy-216",
+      "make": "GM",
+      "family": "chevy-six",
+      "name": "216 six",
+      "price": 500,
+      "hp": 135,
+      "vmax": 160,
+      "cid": 216,
+      "heads": 1,
+      "badge": "216 Six",
+      "model": "res://assets/parts/engine-chevy-235.glb",
+      "charger": "generator",
+      "stock": {
+        "carb": "carb-1bbl"
+      }
+    },
+    {
+      "id": "chevy-235",
+      "make": "GM",
+      "family": "chevy-six",
+      "name": "235 six",
+      "price": 700,
+      "hp": 155,
+      "vmax": 175,
+      "cid": 235,
+      "heads": 1,
+      "badge": "235 Six",
+      "model": "res://assets/parts/engine-chevy-235.glb",
+      "charger": "generator",
+      "stock": {
+        "carb": "carb-1bbl"
+      }
     },
     {
       "id": "ford-239",
@@ -249,6 +287,27 @@
       "model": "res://assets/parts/flathead-heads-finned.glb",
       "hp": 16,
       "vmax": 2
+    },
+    {
+      "id": "heads-six-stock",
+      "slot": "heads",
+      "family": "chevy-six",
+      "name": "Six cylinder head",
+      "price": 160,
+      "stock": true,
+      "hp": 0,
+      "vmax": 0
+    },
+    {
+      "id": "heads-six-finned",
+      "slot": "heads",
+      "family": "chevy-six",
+      "name": "High-performance six head, finned cover",
+      "price": 380,
+      "finish": "finned",
+      "model": "res://assets/parts/chevy-235-valve-cover-finned.glb",
+      "hp": 16,
+      "vmax": 2
     }
   ],
   "intake": [
@@ -326,6 +385,32 @@
       "model": "res://assets/parts/flathead-intake-3x2.glb",
       "hp": 20,
       "vmax": 3
+    },
+    {
+      "id": "intake-six-stock",
+      "slot": "intake",
+      "family": "chevy-six",
+      "name": "Six intake",
+      "price": 80,
+      "stock": true,
+      "style": "six",
+      "carbs": 1,
+      "barrels": 1,
+      "hp": 0,
+      "vmax": 0
+    },
+    {
+      "id": "intake-six-2x1",
+      "slot": "intake",
+      "family": "chevy-six",
+      "name": "Six two-carburetor intake",
+      "price": 300,
+      "style": "six-2x1",
+      "carbs": 2,
+      "barrels": 1,
+      "model": "res://assets/parts/chevy-235-intake-2x1.glb",
+      "hp": 16,
+      "vmax": 2
     }
   ],
   "fuel": [
@@ -375,6 +460,17 @@
       "price": 90,
       "hp": 12,
       "vmax": 2
+    },
+    {
+      "id": "carb-1bbl",
+      "slot": "carb",
+      "style": "1bbl",
+      "barrels": 1,
+      "cfm": 180,
+      "name": "One-barrel carburetor",
+      "price": 60,
+      "hp": 0,
+      "vmax": 0
     },
     {
       "id": "air-cleaner-stock",
@@ -442,6 +538,18 @@
       "drift": 1.0,
       "hp": 0,
       "vmax": 0
+    },
+    {
+      "id": "dist-six",
+      "slot": "distributor",
+      "family": "chevy-six",
+      "name": "Six distributor",
+      "price": 60,
+      "stock": true,
+      "cap": "black",
+      "drift": 1.0,
+      "hp": 0,
+      "vmax": 0
     }
   ],
   "cam": [
@@ -471,6 +579,17 @@
       "slot": "cam",
       "family": "ford-flathead",
       "name": "Flathead camshaft",
+      "price": 90,
+      "stock": true,
+      "style": "stock",
+      "hp": 0,
+      "vmax": 0
+    },
+    {
+      "id": "cam-six-stock",
+      "slot": "cam",
+      "family": "chevy-six",
+      "name": "Six camshaft",
       "price": 90,
       "stock": true,
       "style": "stock",
@@ -555,6 +674,28 @@
       "style": "log",
       "hp": 0,
       "vmax": 0
+    },
+    {
+      "id": "manifold-six-iron",
+      "slot": "manifold",
+      "family": "chevy-six",
+      "name": "Six exhaust manifold",
+      "price": 80,
+      "stock": true,
+      "style": "log",
+      "hp": 0,
+      "vmax": 0
+    },
+    {
+      "id": "headers-six-split",
+      "slot": "manifold",
+      "family": "chevy-six",
+      "name": "Split cast-iron headers",
+      "price": 260,
+      "style": "split",
+      "model": "res://assets/parts/chevy-235-headers-split.glb",
+      "hp": 14,
+      "vmax": 2
     }
   ],
   "exhaust": [
@@ -722,7 +863,7 @@
   "mounts": [
     {
       "id": "mounts",
-      "families": ["chevy-sbc", "ford-flathead", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "chevy-six", "ford-flathead", "ford-yblock", "ford-windsor"],
       "name": "Engine mounts",
       "price": 150,
       "shop": "speed",
