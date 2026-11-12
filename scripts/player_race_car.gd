@@ -441,9 +441,10 @@ func _brake_amount() -> float:
 	return maxf(maxf(_Controller.amount(_Controller.BRAKE), _Controller.pedal(_Controller.BRAKE)), maxf(-_mouse_drive.pedals, 0.0))
 
 
-## Gas and brake together with the car all but stopped, which is how a burnout starts.
+## Gas and brake together with the car all but stopped, which is how a burnout starts. In neutral
+## nothing drives the wheels, so the gas only revs the engine.
 func _burnout_held() -> bool:
-	return _throttle_amount() >= BURNOUT_PEDAL and _brake_amount() >= BURNOUT_PEDAL and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED
+	return _throttle_amount() >= BURNOUT_PEDAL and _brake_amount() >= BURNOUT_PEDAL and not _engine_blown and absf(forward_speed) < BURNOUT_MAX_SPEED and _gear != GEAR_NEUTRAL
 
 
 ## The wheels spin, the engine revs, the tires smoke and mark the road, and the back of the car
@@ -521,8 +522,11 @@ func _front_axle() -> Vector3:
 ## if the car is moving, what they had over it gives a short kick of extra pull.
 func _update_clutch(delta: float) -> void:
 	var road := _road_rpm()
+	if _gear == GEAR_NEUTRAL and not _engine_blown:
+		_rev_in_neutral(delta)
+		return
 	var handbrake := _handbrake_down()
-	if handbrake and _throttle_down() and not _burnout_held() and not _engine_blown and _gear != GEAR_NEUTRAL:
+	if handbrake and _throttle_down() and not _burnout_held() and not _engine_blown:
 		var held := maxf(_clutch_rpm, road)
 		var free := lerpf(RPM_IDLE, CLUTCH_FREE_RPM, _throttle_amount())
 		_clutch_rpm = move_toward(held, maxf(held, free), CLUTCH_REV_RATE * delta)
@@ -534,6 +538,22 @@ func _update_clutch(delta: float) -> void:
 	if _clutch_rpm <= road:
 		_clutch_rpm = 0.0
 		_clutch_kicks = false
+
+
+## In neutral the engine turns free of the road: the revs follow the gas pedal, up to
+## CLUTCH_FREE_RPM with it all the way down, and fall back to idle when it comes up. Going into
+## gear, they come down to the road's as when the clutch comes out, with the same kick if moving.
+func _rev_in_neutral(delta: float) -> void:
+	var wanted := lerpf(RPM_IDLE, CLUTCH_FREE_RPM, _throttle_amount())
+	var revs := maxf(_clutch_rpm, RPM_IDLE)
+	var rate := CLUTCH_REV_RATE if wanted > revs else CLUTCH_CATCH_RATE
+	_clutch_rpm = move_toward(revs, wanted, rate * delta)
+	_clutch_kicks = forward_speed >= CLUTCH_KICK_SPEED
+
+
+## On the gas with the engine free of the road, in neutral or with the hand brake's clutch in.
+func _revving_free() -> bool:
+	return _throttle_down() and _clutch_rpm > 0.0 and not _engine_blown
 
 
 ## How much the clutch kick adds to the gear's pull, as a factor.
@@ -629,7 +649,7 @@ func _physics_simulation(delta: float) -> void:
 	if race and race.has_method(&"is_race_started") and not race.is_race_started():
 		_dynamics.reset_all_motion()
 		_hold_still()
-		_update_engine_sound(false)
+		_update_engine_sound(_revving_free())
 		_update_debug_draw()
 		return
 
@@ -687,7 +707,7 @@ func _physics_arcade(delta: float) -> void:
 		forward_speed = 0.0
 		heading_yaw = _arcade.heading_yaw
 		_skids.end_strips()
-		_update_engine_sound(false)
+		_update_engine_sound(_revving_free())
 		return
 
 	var throttle := _throttle_down() and not _burnout_held()
@@ -831,8 +851,9 @@ func _reverse_top() -> float:
 	return maxf(_gear_top_mps(0) * REVERSE_TOP_FRACTION, REVERSE_TOP_MIN)
 
 
-## The keys and gamepad buttons for shifting, the on-screen paddles, and a sequential shifter. A step down from first, or from
-## drive on an automatic, is reverse once the car has stopped, and neutral while it still rolls.
+## The keys and gamepad buttons for shifting, the on-screen paddles, and a sequential shifter.
+## The steps run reverse, neutral, first (or drive on an automatic), and up. Reverse only goes in
+## once the car has stopped; until then a step down from neutral stays in neutral.
 func _select_shift(direction: int) -> void:
 	if _engine_blown or _shift_timer > 0.0 or direction == 0:
 		return
@@ -842,10 +863,16 @@ func _select_shift(direction: int) -> void:
 func _gear_below() -> int:
 	if _gear > 0 and not _is_automatic():
 		return _gear - 1
-	return GEAR_REVERSE if _can_engage_reverse() else GEAR_NEUTRAL
+	if _gear >= 0:
+		return GEAR_NEUTRAL
+	if _gear == GEAR_NEUTRAL and _can_engage_reverse():
+		return GEAR_REVERSE
+	return _gear
 
 
 func _gear_above() -> int:
+	if _gear == GEAR_REVERSE:
+		return GEAR_NEUTRAL
 	if _gear < 0:
 		return 0
 	if _is_automatic():
@@ -862,7 +889,8 @@ func _set_gear(next: int) -> void:
 		return
 	_rumble.pulse(RUMBLE_SHIFT, 0.0)
 	_gear = next
-	_shift_timer = float(_gearbox.get("shift_time", 0.15))
+	# Nothing has to mesh going into neutral, so the next shift can follow at once.
+	_shift_timer = 0.0 if next == GEAR_NEUTRAL else float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
 
 

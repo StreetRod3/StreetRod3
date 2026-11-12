@@ -14,11 +14,12 @@ Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRo
 | Brake | S or Down |
 | Steer | A/D or Left/Right |
 | Shift | Q / E |
-| Reverse | Q from first gear (or drive) with the car stopped |
+| Neutral | Q from first gear (or drive); the engine revs free on the gas |
+| Reverse | Q from neutral with the car stopped |
 | Hand brake | Space |
 | Camera | C |
 | Pause | Esc |
-| Burnout | W and S with the car stopped, steering to swing the back round |
+| Burnout | W and S with the car stopped in gear, steering to swing the back round |
 
 These can be changed under Controls in the settings. On a phone or a narrow window, on-screen pedals and a steering wheel replace the keyboard hint.
 
