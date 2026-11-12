@@ -34,7 +34,7 @@
     ]
   },
   "parts": {
-    "engine": "v8-265",
+    "engine": "chevy-216",
     "transmission": "gb_man3",
     "wheels": "wheel-c1"
   },

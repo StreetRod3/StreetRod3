@@ -512,6 +512,9 @@ func gearbox_fit_trouble(box: Dictionary) -> String:
 func part_fit_trouble(part: Dictionary) -> String:
 	var kind := str(part.get("slot", ""))
 	var family := engine_family(part)
+	var six_trouble := _six_exhaust_trouble(part)
+	if not six_trouble.is_empty():
+		return six_trouble
 	if FAMILY_SLOTS.has(kind) and not family.is_empty() and has_engine():
 		var fitted := engine_family(get_equipped_engine())
 		if not fitted.is_empty() and fitted != family:
@@ -520,6 +523,21 @@ func part_fit_trouble(part: Dictionary) -> String:
 	var car_mk := car_make(current_car_id)
 	if MAKE_SLOTS.has(kind) and not make.is_empty() and not car_mk.is_empty() and make != car_mk:
 		return "That part is for a %s car, not a %s." % [make, car_mk]
+	return ""
+
+
+## The Chevy six's exhaust is all on its left: its stock manifold has the one outlet, so
+## a dual exhaust needs the split headers' two. Why `part` cannot go on for that, or "".
+func _six_exhaust_trouble(part: Dictionary) -> String:
+	if not has_engine() or engine_family(get_equipped_engine()) != "chevy-six":
+		return ""
+	var kind := str(part.get("slot", ""))
+	if kind == SLOT_EXHAUST and bool(part.get("dual", false)) \
+			and str(slot_part(SLOT_MANIFOLD).get("style", "")) != "split":
+		return "The six's manifold has one outlet. A dual exhaust needs the split headers."
+	if kind == SLOT_MANIFOLD and str(part.get("style", "")) != "split" \
+			and bool(slot_part(SLOT_EXHAUST).get("dual", false)):
+		return "That manifold has one outlet. Put a single exhaust on first."
 	return ""
 
 
@@ -2615,7 +2633,7 @@ func _part_stats_text(part: Dictionary) -> String:
 		bits.append("%d cfm" % int(part.get("cfm", 0)))
 	var carbs := int(part.get("carbs", 0))
 	if carbs > 1:
-		bits.append("%d %s" % [carbs, "four-barrels" if int(part.get("barrels", 4)) == 4 else "two-barrels"])
+		bits.append("%d %s" % [carbs, {4: "four-barrels", 2: "two-barrels", 1: "one-barrels"}.get(int(part.get("barrels", 4)), "carburetors")])
 	if float(part.get("drift", 1.0)) < 1.0:
 		bits.append("holds its timing")
 	var loud := float(part.get("loud_db", 0.0))

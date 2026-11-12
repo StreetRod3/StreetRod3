@@ -386,7 +386,7 @@ func _build_ui() -> void:
 	_ui.add_child(sticker)
 	var lines := VBoxContainer.new()
 	sticker.add_child(lines)
-	for text: String in ["ENGINE TUNE-UP", "%d CU. IN. V8" % GameState.engine_cid(), "Timing  %d° BTDC" % GameState.timing_degrees(GameState.engine_sweet_tune()), "at idle"]:
+	for text: String in ["ENGINE TUNE-UP", "%d CU. IN. %s" % [GameState.engine_cid(), "SIX" if GameState.engine_head_count() == 1 else "V8"], "Timing  %d° BTDC" % GameState.timing_degrees(GameState.engine_sweet_tune()), "at idle"]:
 		var label := Label.new()
 		label.text = text
 		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
