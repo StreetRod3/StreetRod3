@@ -45,11 +45,13 @@ const OPPONENTS_PATH := "res://assets/opponents/opponents.json"
 const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
+const BOOKS_REGISTRY := "res://assets/books/books.registry"
 const _CarFile := preload("res://scripts/car_file.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _Gamepad := preload("res://scripts/gamepad.gd")
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
+const _BooksRegister := preload("res://scripts/books_register.gd")
 
 const MILES_PER_KM := 0.621371
 const POUNDS_PER_KG := 2.20462
@@ -345,6 +347,9 @@ var spare_conditions: Dictionary = {}
 var spare_wheel_tires: Dictionary = {}
 ## The last offer made for each spare, so the next one differs.
 var _last_offers: Dictionary = {}
+## Shop manuals and hot-rodding books stored on the garage bookshelf.
+var BOOKS: Array[Dictionary] = []
+var owned_book_ids: Array[String] = []
 ## Parsed `PLAYER_CAR_FILE`. Empty sections mean the file failed to load.
 var car_spec: Dictionary = {}
 ## Paint for each listing during the current newspaper visit.
@@ -398,6 +403,7 @@ func _ready() -> void:
 	load_settings()
 	load_parts_register()
 	load_cars_register()
+	load_books_register()
 	load_player_car()
 	if not car_records.has(current_car_id):
 		set_fuel(_starting_fuel())
@@ -609,6 +615,15 @@ func load_cars_register() -> void:
 		for err: String in errors:
 			push_error(str(err))
 	USED_CARS = _dict_list(register.get("cars", []))
+
+
+func load_books_register() -> void:
+	var register: Dictionary = _BooksRegister.load_path(BOOKS_REGISTRY)
+	var errors: Variant = register.get("errors", [])
+	if typeof(errors) == TYPE_ARRAY:
+		for err: String in errors:
+			push_error(str(err))
+	BOOKS = _dict_list(register.get("books", []))
 
 
 func _dict_list(value: Variant) -> Array[Dictionary]:
@@ -1114,6 +1129,7 @@ func new_game() -> void:
 	spare_conditions.clear()
 	spare_wheel_tires.clear()
 	_last_offers.clear()
+	owned_book_ids.clear()
 	current_car_id = _add_owned_car(DEFAULT_CAR_ID, car_color)
 	_install_car(current_car_id)
 	set_fuel(_starting_fuel())
@@ -1205,6 +1221,7 @@ func save_game(slot: int) -> bool:
 		"equipped_wheel_id": equipped_wheel_id,
 		"spare_conditions": spare_conditions,
 		"spare_wheel_tires": spare_wheel_tires,
+		"owned_book_ids": owned_book_ids,
 	}
 	var json := JSON.stringify(data)
 	var path := save_slot_path(slot)
@@ -1285,6 +1302,10 @@ func load_game(slot: int) -> bool:
 	equipped_wheel_id = str(d.get("equipped_wheel_id", equipped_wheel_id))
 	spare_conditions = _conditions_pool_from(d.get("spare_conditions", null))
 	spare_wheel_tires = _spare_wheel_tires_from(d.get("spare_wheel_tires", null))
+	if d.has("owned_book_ids"):
+		owned_book_ids = _valid_book_ids(_string_array(d.get("owned_book_ids", [])))
+	else:
+		owned_book_ids.clear()
 	_last_offers.clear()
 	if owned_gearbox_ids.is_empty():
 		owned_gearbox_ids = [DEFAULT_GEARBOX_ID]
@@ -1833,6 +1854,172 @@ func owns_part(part_id: String) -> bool:
 	return owned_part_ids.has(part_id)
 
 
+func owns_book(book_id: String) -> bool:
+	return owned_book_ids.has(book_id)
+
+
+func book_count(book_id: String) -> int:
+	return owned_book_ids.count(book_id)
+
+
+func book_by_id(book_id: String) -> Dictionary:
+	return listing_by_id(BOOKS, book_id)
+
+
+func _valid_book_ids(ids: Array[String]) -> Array[String]:
+	var out: Array[String] = []
+	for book_id: String in ids:
+		if not book_id.is_empty() and not book_by_id(book_id).is_empty():
+			out.append(book_id)
+	return out
+
+
+## Unique books on the shelf, in catalog order. Duplicate copies do not stack bonuses.
+func owned_books() -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	var seen: Dictionary = {}
+	for book: Dictionary in BOOKS:
+		var book_id := str(book.get("id", ""))
+		if not book_id.is_empty() and not seen.has(book_id) and owned_book_ids.has(book_id):
+			seen[book_id] = true
+			list.append(book)
+	return list
+
+
+func add_book(book_id: String) -> bool:
+	if book_id.is_empty() or book_by_id(book_id).is_empty():
+		return false
+	owned_book_ids.append(book_id)
+	if has_active_car():
+		refresh_car_stats()
+		_sync_record_from_active()
+	return true
+
+
+## The garage console's `givebook <ID>`: puts a book from `BOOKS` onto the shelf.
+func give_book(raw_id: String) -> String:
+	var book_id := raw_id.strip_edges().to_lower()
+	if book_id.is_empty():
+		return "Usage: givebook <ID>"
+	var book := book_by_id(book_id)
+	if book.is_empty():
+		return "Unknown book: %s." % raw_id.strip_edges()
+	var title := str(book.get("title", book_id))
+	add_book(book_id)
+	var copies := book_count(book_id)
+	if copies > 1:
+		return "Added \"%s\" to the bookshelf (%d copies)." % [title, copies]
+	return "Added \"%s\" to the bookshelf." % title
+
+
+static func book_param(book: Dictionary) -> String:
+	return str(book.get("parameter-name", book.get("parameter_name", ""))).strip_edges()
+
+
+static func book_value(book: Dictionary) -> float:
+	if book.has("bonus_value"):
+		return float(book.get("bonus_value", 0.0))
+	return str(book.get("value", "0")).strip_edges().to_float()
+
+
+static func _part_matches_book_product(part: Dictionary, product: String) -> bool:
+	if part.is_empty() or product.is_empty():
+		return false
+	if str(part.get("id", "")) == product or str(part.get("base", "")) == product:
+		return true
+	if product == SLOT_TIRES and str(part.get("slot", "")) == SLOT_TIRES:
+		var style := str(part.get("style", ""))
+		return style == "slick" or style == "racing"
+	return false
+
+
+func _active_car_has_book_product(product: String) -> bool:
+	if not has_active_car() or product.is_empty():
+		return false
+	if has_engine() and _part_matches_book_product(get_equipped_engine(), product):
+		return true
+	if has_gearbox() and _part_matches_book_product(get_equipped_gearbox(), product):
+		return true
+	if has_wheels() and _part_matches_book_product(get_equipped_wheel(), product):
+		return true
+	for part_id: String in equipped_part_ids:
+		if _part_matches_book_product(listing_by_id(PARTS, part_id), product):
+			return true
+	for slot: String in active_slots():
+		if _part_matches_book_product(slot_part(slot), product):
+			return true
+	return false
+
+
+## Bonus from owned books for `param` ("hp", "grip", "vmax", ...) on the active owned car.
+func book_car_bonus(param: String) -> float:
+	if not has_active_car() or param.is_empty():
+		return 0.0
+	var total := 0.0
+	for book: Dictionary in owned_books():
+		if book_param(book) != param:
+			continue
+		var family := str(book.get("family", "")).strip_edges()
+		if not family.is_empty():
+			if not has_engine() or engine_family(get_equipped_engine()) != family:
+				continue
+		var product := str(book.get("product", "")).strip_edges()
+		if not product.is_empty():
+			if param == "grip":
+				if not has_tires() or not _part_matches_book_product(slot_part(SLOT_TIRES), product):
+					continue
+			elif not _active_car_has_book_product(product):
+				continue
+		total += book_value(book)
+	return total
+
+
+## Bonus from owned books for `param` on a specific part entry.
+func book_part_bonus(part: Dictionary, param: String) -> float:
+	if part.is_empty() or param.is_empty():
+		return 0.0
+	var total := 0.0
+	for book: Dictionary in owned_books():
+		if book_param(book) != param:
+			continue
+		var product := str(book.get("product", "")).strip_edges()
+		if product.is_empty() or not _part_matches_book_product(part, product):
+			continue
+		var family := str(book.get("family", "")).strip_edges()
+		if not family.is_empty() and not engine_family(part).is_empty() and engine_family(part) != family:
+			continue
+		total += book_value(book)
+	return total
+
+
+## Short human-readable line describing a book's stat bonus, for the bookshelf board.
+func book_effect_text(book: Dictionary) -> String:
+	var param := book_param(book)
+	var val := book_value(book)
+	if param.is_empty() or is_zero_approx(val):
+		return ""
+	var num := str(roundi(val)) if is_equal_approx(val, roundf(val)) else "%.1f" % val
+	var sign_prefix := "+" if val > 0.0 else ""
+	var stat_text := "%s%s %s" % [sign_prefix, num, param]
+	var target := ""
+	var family := str(book.get("family", "")).strip_edges()
+	var product := str(book.get("product", "")).strip_edges()
+	if not family.is_empty():
+		target = family_name(family)
+	elif product == SLOT_TIRES:
+		target = "racing tires"
+	elif not product.is_empty():
+		var part := listing_by_id(PARTS, product)
+		if part.is_empty():
+			part = listing_by_id(ENGINES, product)
+		if part.is_empty():
+			part = listing_by_id(GEARBOXES, product)
+		if part.is_empty():
+			part = listing_by_id(WHEELS, product)
+		target = str(part.get("name", product))
+	return "%s · %s" % [stat_text, target] if not target.is_empty() else stat_text
+
+
 func is_part_equipped(part_id: String) -> bool:
 	return equipped_part_ids.has(part_id) or slot_part_ids.values().has(part_id)
 
@@ -1865,9 +2052,9 @@ func get_equipped_engine() -> Dictionary:
 	return engine
 
 
-## How well the active car's tires hold the road, from 1 to 5.
+## How well the active car's tires hold the road, from 1 up (base 1 to 5, plus book bonuses).
 func tire_grip() -> float:
-	return _grip_of(slot_part(SLOT_TIRES)) if has_tires() else 1.0
+	return _grip_of(slot_part(SLOT_TIRES)) + book_car_bonus("grip") if has_tires() else 1.0
 
 
 func tires_worn_out() -> bool:
@@ -1942,7 +2129,7 @@ func _put_on_suspension(chassis: Dictionary, springs: Dictionary, shocks: Dictio
 
 
 func _grip_of(tires: Dictionary) -> float:
-	return clampf(float(tires.get("grip", 3.0)), 1.0, 5.0)
+	return maxf(float(tires.get("grip", 3.0)), 1.0)
 
 
 ## How much heavier the active car's wheels make it than the set it came on, in kg as they
@@ -2076,6 +2263,8 @@ func refresh_car_stats() -> void:
 	var flow := carb_flow_factor()
 	vmax_kmh *= flow
 	engine_power_hp *= flow
+	vmax_kmh += book_car_bonus("vmax")
+	engine_power_hp += book_car_bonus("hp")
 
 
 func _add_part_stats(part: Dictionary, share: float) -> void:
@@ -2625,7 +2814,11 @@ func _part_stats_text(part: Dictionary) -> String:
 			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
 			roundi(float(part.get("top_speed", 1.0)) * 100.0),
 		]
-	var bits: Array[String] = ["Grip %d" % int(part.get("grip", 0)) if part.has("grip") else "+%d hp" % int(part.get("hp", 0))]
+	var bits: Array[String] = [
+		"Grip %d" % roundi(float(part.get("grip", 0)) + book_part_bonus(part, "grip"))
+		if part.has("grip")
+		else "+%d hp" % roundi(float(part.get("hp", 0)) + book_part_bonus(part, "hp"))
+	]
 	var vmax := int(part.get("vmax", 0))
 	if vmax != 0:
 		bits.append(speed_change_text(vmax))
@@ -2960,6 +3153,31 @@ func apply_race_stake(player_won: bool) -> int:
 	var paid := mini(stake, money)
 	money -= paid
 	return -paid
+
+
+## True for Road Race, Aqueduct, and Mulholland Drive, where a beaten rival may offer a book instead of cash.
+func race_can_offer_book(race_type: String = "") -> bool:
+	var kind := selected_race_type if race_type.is_empty() else race_type
+	return kind == RACE_ROAD or kind == RACE_AQUEDUCT or kind == RACE_MULHOLLAND
+
+
+## Odds of a book offer after winning a money bet: 10% * bet_amount / 100.
+static func book_offer_chance(bet_amount: int) -> float:
+	if bet_amount <= 0:
+		return 0.0
+	return clampf(0.10 * float(bet_amount) / 100.0, 0.0, 1.0)
+
+
+## Rolls whether the rival proposes a random book instead of paying `bet_amount`.
+func roll_race_book_offer(bet_amount: int, race_type: String = "", roll: float = -1.0, pick_index: int = -1) -> Dictionary:
+	if bet_amount <= 0 or BOOKS.is_empty() or not race_can_offer_book(race_type):
+		return {}
+	var chance := book_offer_chance(bet_amount)
+	var sampled := randf() if roll < 0.0 else roll
+	if sampled >= chance:
+		return {}
+	var index := (randi() % BOOKS.size()) if pick_index < 0 else posmod(pick_index, BOOKS.size())
+	return BOOKS[index]
 
 
 func cheapest_car_price() -> int:

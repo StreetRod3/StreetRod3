@@ -464,6 +464,96 @@ radial_segments = 20
 height = 0.44
 radius = 0.09
 
+[sub_resource type="StandardMaterial3D" id="BookshelfBackMat"]
+albedo_color = Color(0.24, 0.14, 0.08, 1)
+roughness = 0.86
+
+[sub_resource type="BoxMesh" id="BookshelfBackMesh"]
+material = SubResource("BookshelfBackMat")
+size = Vector3(0.024, 0.76, 1.56)
+
+[sub_resource type="BoxMesh" id="BookshelfBoardMesh"]
+material = SubResource("ShelfMat")
+size = Vector3(0.28, 0.04, 1.64)
+
+[sub_resource type="BoxMesh" id="BookshelfMidMesh"]
+material = SubResource("ShelfMat")
+size = Vector3(0.26, 0.036, 1.52)
+
+[sub_resource type="BoxMesh" id="BookshelfSideMesh"]
+material = SubResource("ShelfMat")
+size = Vector3(0.27, 0.76, 0.04)
+
+[sub_resource type="BoxMesh" id="BookshelfWallBracketMesh"]
+material = SubResource("ShelfBracketMat")
+size = Vector3(0.16, 0.14, 0.04)
+
+[sub_resource type="StandardMaterial3D" id="BookMatNavy"]
+albedo_color = Color(0.11, 0.2, 0.38, 1)
+roughness = 0.65
+
+[sub_resource type="StandardMaterial3D" id="BookMatRed"]
+albedo_color = Color(0.62, 0.12, 0.1, 1)
+roughness = 0.62
+
+[sub_resource type="StandardMaterial3D" id="BookMatGreen"]
+albedo_color = Color(0.14, 0.34, 0.2, 1)
+roughness = 0.68
+
+[sub_resource type="StandardMaterial3D" id="BookMatMustard"]
+albedo_color = Color(0.74, 0.55, 0.16, 1)
+roughness = 0.66
+
+[sub_resource type="StandardMaterial3D" id="BookMatBurgundy"]
+albedo_color = Color(0.45, 0.11, 0.16, 1)
+roughness = 0.64
+
+[sub_resource type="StandardMaterial3D" id="BookMatLeather"]
+albedo_color = Color(0.38, 0.22, 0.11, 1)
+roughness = 0.72
+
+[sub_resource type="StandardMaterial3D" id="BookMatTeal"]
+albedo_color = Color(0.16, 0.34, 0.42, 1)
+roughness = 0.65
+
+[sub_resource type="StandardMaterial3D" id="BookMatOrange"]
+albedo_color = Color(0.72, 0.28, 0.11, 1)
+roughness = 0.64
+
+[sub_resource type="StandardMaterial3D" id="BookSpineTagMat"]
+albedo_color = Color(0.92, 0.87, 0.74, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="BookPagesMat"]
+albedo_color = Color(0.88, 0.84, 0.74, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BookMeshTall"]
+size = Vector3(0.21, 0.31, 0.066)
+
+[sub_resource type="BoxMesh" id="BookMeshMed"]
+size = Vector3(0.2, 0.285, 0.056)
+
+[sub_resource type="BoxMesh" id="BookMeshShort"]
+size = Vector3(0.19, 0.26, 0.05)
+
+[sub_resource type="BoxMesh" id="BookMeshFlatA"]
+size = Vector3(0.21, 0.054, 0.29)
+
+[sub_resource type="BoxMesh" id="BookMeshFlatB"]
+size = Vector3(0.195, 0.048, 0.26)
+
+[sub_resource type="BoxMesh" id="BookSpineTagMesh"]
+material = SubResource("BookSpineTagMat")
+size = Vector3(0.006, 0.052, 0.046)
+
+[sub_resource type="BoxMesh" id="BookPagesFlatMesh"]
+material = SubResource("BookPagesMat")
+size = Vector3(0.19, 0.042, 0.275)
+
+[sub_resource type="BoxShape3D" id="BookshelfShape"]
+size = Vector3(0.34, 0.88, 1.68)
+
 [node name="Garage" type="Node3D" unique_id=3918559]
 script = ExtResource("1")
 
@@ -721,6 +811,118 @@ outline_size = 0
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/InteractVodka" unique_id=210090011]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.22, 0)
 shape = SubResource("VodkaShape")
+
+[node name="InteractBookshelf" type="StaticBody3D" parent="." unique_id=210095001]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4.46, 2.12, 5.234)
+
+[node name="BackPanel" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095002]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.128, 0, 0)
+mesh = SubResource("BookshelfBackMesh")
+
+[node name="BottomShelf" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095003]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.38, 0)
+mesh = SubResource("BookshelfBoardMesh")
+
+[node name="MiddleShelf" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095004]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.01, 0.01, 0)
+mesh = SubResource("BookshelfMidMesh")
+
+[node name="TopShelf" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095005]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.38, 0)
+mesh = SubResource("BookshelfBoardMesh")
+
+[node name="SideLeft" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095006]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.005, 0, -0.78)
+mesh = SubResource("BookshelfSideMesh")
+
+[node name="SideRight" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095007]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.005, 0, 0.78)
+mesh = SubResource("BookshelfSideMesh")
+
+[node name="BracketLeft" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095008]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.05, -0.47, -0.56)
+mesh = SubResource("BookshelfWallBracketMesh")
+
+[node name="BracketRight" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095009]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.05, -0.47, 0.56)
+mesh = SubResource("BookshelfWallBracketMesh")
+
+[node name="Book1" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095010]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.01, -0.205, -0.69)
+mesh = SubResource("BookMeshTall")
+surface_material_override/0 = SubResource("BookMatNavy")
+
+[node name="Tag" type="MeshInstance3D" parent="InteractBookshelf/Book1" unique_id=210095011]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.106, 0.075, 0)
+mesh = SubResource("BookSpineTagMesh")
+
+[node name="Book2" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095012]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.015, -0.2175, -0.625)
+mesh = SubResource("BookMeshMed")
+surface_material_override/0 = SubResource("BookMatRed")
+
+[node name="Tag" type="MeshInstance3D" parent="InteractBookshelf/Book2" unique_id=210095013]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.101, 0.065, 0)
+mesh = SubResource("BookSpineTagMesh")
+
+[node name="Book3" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095014]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.018, -0.23, -0.568)
+mesh = SubResource("BookMeshShort")
+surface_material_override/0 = SubResource("BookMatGreen")
+
+[node name="Book4" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095015]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.015, -0.2175, -0.511)
+mesh = SubResource("BookMeshMed")
+surface_material_override/0 = SubResource("BookMatMustard")
+
+[node name="Tag" type="MeshInstance3D" parent="InteractBookshelf/Book4" unique_id=210095016]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.101, 0.065, 0)
+mesh = SubResource("BookSpineTagMesh")
+
+[node name="Book5" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095017]
+transform = Transform3D(1, 0, 0, 0, 0.971338, 0.237703, 0, -0.237703, 0.971338, -0.015, -0.215, -0.418)
+mesh = SubResource("BookMeshMed")
+surface_material_override/0 = SubResource("BookMatBurgundy")
+
+[node name="Book6" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095018]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.01, 0.055, -0.36)
+mesh = SubResource("BookMeshFlatA")
+surface_material_override/0 = SubResource("BookMatNavy")
+
+[node name="Pages" type="MeshInstance3D" parent="InteractBookshelf/Book6" unique_id=210095019]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.012, 0, 0)
+mesh = SubResource("BookPagesFlatMesh")
+
+[node name="Book7" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095020]
+transform = Transform3D(0.996195, 0, 0.087156, 0, 1, 0, -0.087156, 0, 0.996195, -0.012, 0.106, -0.355)
+mesh = SubResource("BookMeshFlatB")
+surface_material_override/0 = SubResource("BookMatRed")
+
+[node name="Book8" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095021]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.01, 0.183, 0.51)
+mesh = SubResource("BookMeshTall")
+surface_material_override/0 = SubResource("BookMatLeather")
+
+[node name="Tag" type="MeshInstance3D" parent="InteractBookshelf/Book8" unique_id=210095022]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.106, 0.075, 0)
+mesh = SubResource("BookSpineTagMesh")
+
+[node name="Book9" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095023]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.018, 0.158, 0.572)
+mesh = SubResource("BookMeshShort")
+surface_material_override/0 = SubResource("BookMatTeal")
+
+[node name="Book10" type="MeshInstance3D" parent="InteractBookshelf" unique_id=210095024]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.015, 0.1705, 0.63)
+mesh = SubResource("BookMeshMed")
+surface_material_override/0 = SubResource("BookMatOrange")
+
+[node name="Tag" type="MeshInstance3D" parent="InteractBookshelf/Book10" unique_id=210095025]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.101, 0.065, 0)
+mesh = SubResource("BookSpineTagMesh")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="InteractBookshelf" unique_id=210095026]
+shape = SubResource("BookshelfShape")
 
 [node name="Walls" type="Node3D" parent="." unique_id=730314795]
 

@@ -74,14 +74,20 @@ func _input(event: InputEvent) -> void:
 
 ## ~ (the key left of 1, with or without shift) opens and closes the prompt.
 static func is_toggle_key(key: InputEventKey) -> bool:
-	return key.physical_keycode == KEY_QUOTELEFT or key.keycode == KEY_QUOTELEFT or key.unicode == 0x7e
+	return key.physical_keycode == KEY_QUOTELEFT or key.keycode == KEY_QUOTELEFT or key.unicode == 0x7e or key.unicode == 0x60
 
 
 func _on_submitted(text: String) -> void:
-	var command := text.strip_edges().to_lower()
+	var trimmed := text.strip_edges()
 	_line.clear()
-	if command.is_empty():
+	if trimmed.is_empty():
 		return
+	var split_at := trimmed.find(" ")
+	var tab_at := trimmed.find("\t")
+	if tab_at >= 0 and (split_at < 0 or tab_at < split_at):
+		split_at = tab_at
+	var command := (trimmed if split_at < 0 else trimmed.left(split_at)).to_lower()
+	var arg := "" if split_at < 0 else trimmed.substr(split_at + 1).strip_edges()
 	if command == "help":
 		_show(_help())
 		return
@@ -90,7 +96,14 @@ func _on_submitted(text: String) -> void:
 		return
 	var entry: Dictionary = _commands[command]
 	var run: Callable = entry["run"]
-	var reply := str(run.call())
+	var reply := ""
+	if run.get_argument_count() > 0:
+		reply = str(run.call(arg))
+	elif not arg.is_empty():
+		_show("Unknown command: %s. Type help for the list." % trimmed.to_lower())
+		return
+	else:
+		reply = str(run.call())
 	if reply.is_empty():
 		closed.emit()
 	else:

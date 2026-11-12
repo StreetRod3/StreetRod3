@@ -79,6 +79,15 @@ var _nav := _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
 var _result_scene: String = ""
+var _book_offer_root: Control
+var _book_offer_panel: PanelContainer
+var _book_offer_title: Label
+var _book_offer_body: Label
+var _book_offer_accept: Button
+var _book_offer_decline: Button
+var _offered_book: Dictionary = {}
+var _offered_stake: int = 0
+var _offered_prefix: String = ""
 var _traffic_mgr: Node3D = null
 
 ## Dim “off” lamp colors (same hue, low value).
@@ -113,6 +122,7 @@ func _ready() -> void:
 	_setup_race_layout()
 	_result.visible = false
 	_build_result_bubble()
+	_build_book_offer()
 	_reset_pause_pages()
 	_pause_menu.visible = false
 	var opp := GameState.selected_opponent()
@@ -515,15 +525,20 @@ func _show_wreck() -> void:
 ## pink slips are void, but the money is still paid.
 func _show_rival_wreck() -> void:
 	_race_over = true
+	_result_shown_ms = Time.get_ticks_msec()
 	GameState.drift_engine_tune_after_race()
 	GameState.wear_parts_after_race()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
 	_player.begin_park(0.0)
 	_end_race_ui()
 	GameState.note_race_win()
+	var was_pink := GameState.race_pink_slips
 	GameState.race_pink_slips = false
+	var prefix := "%s's car is totaled!" % str(GameState.selected_opponent().get("name", "The rival"))
+	if not was_pink and _try_offer_book_instead(prefix):
+		return
 	var payout := GameState.apply_race_stake(true)
-	var text := "%s's car is totaled!" % str(GameState.selected_opponent().get("name", "The rival"))
+	var text := prefix
 	if payout > 0:
 		text += "\nYou just won %d bucks!" % payout
 	else:
@@ -537,6 +552,8 @@ func _show_result(player_won: bool) -> void:
 	_end_race_ui()
 	if player_won:
 		GameState.note_race_win()
+		if not GameState.race_pink_slips and _try_offer_book_instead(""):
+			return
 	var payout := GameState.apply_race_stake(player_won)
 	var pink := GameState.apply_pink_slips(player_won)
 	if player_won:
@@ -574,6 +591,7 @@ func _park_cars() -> void:
 
 func _end_race_ui() -> void:
 	_player.stop_mouse_driving()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_resume_race()
 	if _mobile != null:
 		_mobile.visible = false
@@ -587,6 +605,132 @@ func _build_result_bubble() -> void:
 	bubble.call("show_centered")
 	_result_bubble = bubble
 	_result.gui_input.connect(_on_result_input)
+
+
+func _build_book_offer() -> void:
+	_book_offer_root = Control.new()
+	_book_offer_root.name = "BookOffer"
+	_book_offer_root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_book_offer_root.visible = false
+	_book_offer_root.mouse_filter = Control.MOUSE_FILTER_STOP
+	$RaceUI.add_child(_book_offer_root)
+	var dim := ColorRect.new()
+	dim.color = Color(0.02, 0.015, 0.03, 0.62)
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_STOP
+	_book_offer_root.add_child(dim)
+	_book_offer_panel = PanelContainer.new()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.12, 0.09, 0.07, 0.96)
+	style.border_color = Color(0.55, 0.12, 0.1)
+	style.set_border_width_all(2)
+	style.content_margin_left = 4.0
+	style.content_margin_right = 4.0
+	style.content_margin_top = 4.0
+	style.content_margin_bottom = 4.0
+	_book_offer_panel.add_theme_stylebox_override(&"panel", style)
+	_book_offer_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	_book_offer_root.add_child(_book_offer_panel)
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override(&"margin_left", 20)
+	margin.add_theme_constant_override(&"margin_right", 20)
+	margin.add_theme_constant_override(&"margin_top", 16)
+	margin.add_theme_constant_override(&"margin_bottom", 16)
+	_book_offer_panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override(&"separation", 10)
+	margin.add_child(box)
+	_book_offer_title = Label.new()
+	_book_offer_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_book_offer_title.add_theme_font_size_override(&"font_size", 22)
+	_book_offer_title.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78))
+	box.add_child(_book_offer_title)
+	_book_offer_body = Label.new()
+	_book_offer_body.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_book_offer_body.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_book_offer_body.custom_minimum_size = Vector2(420, 48)
+	_book_offer_body.add_theme_color_override(&"font_color", Color(0.9, 0.84, 0.72))
+	box.add_child(_book_offer_body)
+	_book_offer_accept = Button.new()
+	_book_offer_accept.name = "TakeBookBtn"
+	_book_offer_accept.custom_minimum_size = Vector2(420, 42)
+	_book_offer_accept.pressed.connect(_on_book_offer_decided.bind(true))
+	box.add_child(_book_offer_accept)
+	_book_offer_decline = Button.new()
+	_book_offer_decline.name = "TakeCashBtn"
+	_book_offer_decline.custom_minimum_size = Vector2(420, 42)
+	_book_offer_decline.pressed.connect(_on_book_offer_decided.bind(false))
+	box.add_child(_book_offer_decline)
+
+
+func _try_offer_book_instead(prefix_text: String) -> bool:
+	var stake := maxi(GameState.race_stake, 0)
+	if stake <= 0:
+		return false
+	var book := GameState.roll_race_book_offer(stake)
+	if book.is_empty():
+		return false
+	GameState.race_stake = 0
+	_show_book_offer(book, stake, prefix_text)
+	return true
+
+
+func _show_book_offer(book: Dictionary, stake: int, prefix_text: String = "") -> void:
+	_offered_book = book
+	_offered_stake = stake
+	_offered_prefix = prefix_text
+	_result_shown_ms = Time.get_ticks_msec()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var rival := str(GameState.selected_opponent().get("name", "The rival"))
+	var title := str(book.get("title", "Book"))
+	var book_id := str(book.get("id", ""))
+	var effect := GameState.book_effect_text(book)
+	_book_offer_title.text = "%s makes an offer" % rival
+	var lines: Array[String] = []
+	if not prefix_text.is_empty():
+		lines.append(prefix_text)
+	lines.append("\"Instead of the $%d, how about taking my copy of '%s'?\"" % [stake, title])
+	if not effect.is_empty():
+		lines.append(effect)
+	if GameState.owns_book(book_id):
+		lines.append("(Already on your bookshelf — duplicate copies don't stack the bonus.)")
+	_book_offer_body.text = "\n\n".join(lines)
+	_book_offer_accept.text = "Take \"%s\"" % title
+	_book_offer_decline.text = "Take the $%d" % stake
+	var size := _book_offer_panel.get_combined_minimum_size()
+	_book_offer_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_book_offer_panel.offset_left = -size.x * 0.5
+	_book_offer_panel.offset_right = size.x * 0.5
+	_book_offer_panel.offset_top = -size.y * 0.5
+	_book_offer_panel.offset_bottom = size.y * 0.5
+	_book_offer_root.visible = true
+	_nav.setup([_book_offer_accept, _book_offer_decline])
+
+
+func _on_book_offer_decided(take_book: bool) -> void:
+	if _book_offer_root == null or not _book_offer_root.visible:
+		return
+	_book_offer_root.visible = false
+	_nav.clear()
+	var book := _offered_book
+	var stake := _offered_stake
+	var prefix := _offered_prefix
+	_offered_book = {}
+	_offered_stake = 0
+	_offered_prefix = ""
+	_result_shown_ms = Time.get_ticks_msec()
+	var msg := ""
+	if take_book:
+		var book_id := str(book.get("id", ""))
+		var title := str(book.get("title", "Book"))
+		GameState.add_book(book_id)
+		msg = "You got \"%s\"!" % title
+	else:
+		GameState.money += stake
+		msg = "You just won %d bucks!" % stake
+	if not prefix.is_empty():
+		msg = prefix + "\n" + msg
+	_show_bubble(msg, GameState.SCENE_DRIVE_IN)
 
 
 func _show_bubble(text: String, next_scene: String) -> void:
@@ -612,7 +756,27 @@ func _leave_result() -> void:
 	get_tree().change_scene_to_file(next_scene)
 
 
+func _input(event: InputEvent) -> void:
+	if _book_offer_root != null and _book_offer_root.visible:
+		if event is InputEventKey and (event as InputEventKey).keycode == KEY_SPACE and Time.get_ticks_msec() - _result_shown_ms < RESULT_SPACE_GUARD_MS:
+			var viewport := get_viewport()
+			if viewport != null:
+				viewport.set_input_as_handled()
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if _book_offer_root != null and _book_offer_root.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			var viewport := get_viewport()
+			if viewport != null:
+				viewport.set_input_as_handled()
+			_on_book_offer_decided(false)
+			return
+		if _nav.handle_event(self, event):
+			var viewport := get_viewport()
+			if viewport != null:
+				viewport.set_input_as_handled()
+		return
 	if _result.visible:
 		# Space is the hand brake a moment ago, so it does not skip past the result.
 		if event is InputEventKey and (event as InputEventKey).keycode == KEY_SPACE and Time.get_ticks_msec() - _result_shown_ms < RESULT_SPACE_GUARD_MS:
@@ -620,6 +784,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
 			get_viewport().set_input_as_handled()
 			_leave_result()
+		return
+	if _race_over:
 		return
 	if event.is_action_pressed(&"ui_cancel"):
 		_handle_escape()
