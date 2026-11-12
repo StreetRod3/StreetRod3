@@ -99,3 +99,15 @@ This needs a decision between these:
 - Raise `_DRIVE_ACCEL` and `_DRIVE_BRAKE`. This does not get far, because there is so little straight road: on the garage to drive-in route, raising acceleration, braking, and corner grip together from 3.6, 5.5, and 7 m/s to 7, 8.5, and 9.5 per second only took it from 24.6 s to 20.0 s.
 - Widen the corners with `_TURN_RADIUS`. Its 14 m is set to stay inside the width of the street, so this also needs wider streets on the map.
 - Keep it as it is.
+
+## The rival wrecks on Mulholland drive without the player near it
+
+With the player sitting on the start line, the rival does not finish Mulholland drive in either mode. It is wrecked part way, by traffic in arcade and by a wall in simulation. The same happens with or without the fix for issue #102.
+
+To reproduce (as run headless, stock first car against the first rival met, the player not driving):
+
+1. Start a Mulholland race and do not drive.
+2. Arcade: at about 16 s, near 200 m, a traffic car runs into the rival and stops it dead (a hit of 9.8 m/s from `_resolve_collisions()` in `scripts/mulholland_traffic.gd`). The rival is at about 2.4 m left of the middle then, the other side of the road from its usual 2 m right. While it crawls on from there, traffic hits it again about 5 m on (10.1 m/s) and it is wrecked at 19 s.
+3. Simulation: the rival scrapes the barrier at about 240 m, then at about 45 s, near 1020 m, it hits `TrackWalls` at 14.5 m/s (a hit of 16.7 m/s) and is wrecked.
+
+Not looked into yet: why the arcade rival is in the left lane where traffic meets it, whether it sees the traffic car in time to dodge it, and why the simulation rival runs into the wall in that corner.
