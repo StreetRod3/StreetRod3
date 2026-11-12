@@ -110,4 +110,6 @@ To reproduce (as run headless, stock first car against the first rival met, the 
 2. Arcade: at about 16 s, near 200 m, a traffic car runs into the rival and stops it dead (a hit of 9.8 m/s from `_resolve_collisions()` in `scripts/mulholland_traffic.gd`). The rival is at about 2.4 m left of the middle then, the other side of the road from its usual 2 m right. While it crawls on from there, traffic hits it again about 5 m on (10.1 m/s) and it is wrecked at 19 s.
 3. Simulation: the rival scrapes the barrier at about 240 m, then at about 45 s, near 1020 m, it hits `TrackWalls` at 14.5 m/s (a hit of 16.7 m/s) and is wrecked.
 
+GitHub issue #131.
+
 Not looked into yet: why the arcade rival is in the left lane where traffic meets it, whether it sees the traffic car in time to dodge it, and why the simulation rival runs into the wall in that corner.
