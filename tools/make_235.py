@@ -15,10 +15,11 @@ plugs, distributor, coil, fuel pump, oil filler and starter on the right. It has
                 gallery rib on the left, the flywheel housing behind
   head          a plain slab on the block, the bolt bosses down its right side between
                 the plugs, the water outlet on its front end
-  valve cover   the classic stamped one: tall, rounded over every top edge and corner, a
-                lip round its foot, a raised spine down the top, three raised bands across
-                it, acorn nuts on washers holding it down at the outer two, the eared
-                filler cap on its pad at the front
+  valve cover   the classic stamped one, as on the reference: tall, rounded over every top
+                edge and corner, a lip round its foot, round beads stamped in it (two
+                along the top and down the ends, a pair across it at each outer band and
+                one at the middle), acorn nuts on washers between the outer pairs, the
+                hollow filler cap with its ears at the front
   intake        a round log along the left side, turning in to the head at each end;
                 the heat riser box under the carburetor
   carburetor    a one-barrel: base, body and the neck up into the air cleaner
@@ -101,12 +102,15 @@ HEAD_Y = 3.25
 HEAD_HALF = 11.95
 
 # The valve cover on the head.
-COVER = (11.8, 2.6, 0.8)    # half length, half width, radius of every edge and corner
-COVER_TOP = 17.7
-STRAP_X = (-6.0, 0.0, 6.0)  # the raised bands across it, the outer two under the acorn nuts
-BAND_WIDTH = 0.75
-SPINE_HALF = 0.85       # the raised strip down the middle of the top
-COVER_BASE = HEAD_TOP + 0.25    # top of the lip, the shell's foot
+COVER = (11.84, 2.56, 0.85)  # half length, half width, radius of every edge and corner
+COVER_Y = 0.51          # its middle, out from the block's toward the plug side
+COVER_TOP = 17.56
+STRAP_X = (-6.0, 0.0, 6.0)  # the bands of beads across it, the outer two under the acorn nuts
+BAND_BEADS_X = (-6.25, -5.75, 0.0, 5.75, 6.25)
+SPINE_HALF = 0.88       # the beads along the top, out from its middle
+BEAD_R = 0.13
+LIP = 0.1               # the lip round the cover's foot, out from its walls
+COVER_BASE = HEAD_TOP + 0.15    # top of the lip, the shell's foot
 FILLER_X = -8.9
 
 # Left side: the intake log and the exhaust halves.
@@ -171,7 +175,7 @@ FINISHES = [
     ("engine_block_deck_holes", BLACK), ("intake_manifold_carb_bore", BLACK),
     ("carb_throat", BLACK), ("engine_block_distributor_hole", BLACK), ("cylinder_head_port", BLACK),
     ("flywheel_holes", BLACK), ("flywheel", STEEL), ("engine_block_deck", MACHINED), ("cylinder_bore", MACHINED),
-    ("piston", CAST_ALUMINUM), ("cylinder_head_bolt", STEEL),
+    ("piston", CAST_ALUMINUM),
     ("exhaust", CAST_IRON), ("carburetor_neck", STEEL), ("carburetor", CAST_ALUMINUM),
     ("air_cleaner_screen", SCREEN), ("air_cleaner", BLACK), ("plug_wire", WIRE),
     ("distributor_body", STEEL), ("distributor_shank", STEEL), ("distributor_cap", BLACK),
@@ -443,7 +447,7 @@ def deck_meshes():
 
 
 # Bodies left exact, not thinned: flat-faced, and their holes must stay round.
-KEEP_EXACT = ("engine_block", "engine_block_deck", "cylinder_head_bolts")
+KEEP_EXACT = ("engine_block", "engine_block_deck")
 
 
 def reduce_exact(src, dst, blender):
@@ -472,13 +476,6 @@ def head(d):
         d.c.append(cmd("sketch.circle.center", center=skp(x, HEAD_Y), radius=inch(0.4)))
     d.finish()
     d.extrude(sk, "cylinder_head_bosses", HEAD_TOP - DECK - 0.2)
-    # The plug side's row of head bolts shows outside the valve cover, on the bosses.
-    sk = d.sketch("XY", "Head bolts", offset=HEAD_TOP - 0.1)
-    for x in xs:
-        d.c.append(cmd("sketch.polygon.inscribed", center=skp(x, HEAD_Y - 0.2), radius=0.3 * 25.4,
-                       sides=6))
-    d.finish()
-    d.extrude(sk, "cylinder_head_bolts", 0.35)
 
     # Spark plugs out of the right side, leaning up.
     t = math.radians(PLUG_TILT)
@@ -495,56 +492,96 @@ def head(d):
 
 
 def valve_cover(d):
-    """The cover's lip, its acorn nuts and its filler cap; its stamped shell is drawn as
-    exact meshes (cover_meshes)."""
+    """The cover's lip, its acorn nuts and its filler cap; its stamped shell and beads are
+    drawn as exact meshes (cover_meshes)."""
     hl, hw, r = COVER
     sk = d.sketch("XY", "Valve cover lip", offset=HEAD_TOP)
-    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(-hl - 0.2, -hw - 0.2),
-                   p1=skp(hl + 0.2, hw + 0.2), radius=inch(r + 0.2)))
+    d.c.append(cmd("sketch.rectangle.rounded", p0=skp(-hl - LIP, COVER_Y - hw - LIP),
+                   p1=skp(hl + LIP, COVER_Y + hw + LIP), radius=inch(r + LIP)))
     d.finish()
     d.extrude(sk, "valve_cover_lip", COVER_BASE - HEAD_TOP)
 
-    # Acorn nuts on washers, on the studs through the bosses at the outer bands.
-    boss_top = COVER_TOP + 0.2
+    # Acorn nuts on washers, sitting on the outer bands' pairs of beads.
+    seat = COVER_TOP + BEAD_R
     for i, x in enumerate((STRAP_X[0], STRAP_X[-1])):
-        d.cylinder(f"valve_cover_washer_{i}", (x, 0.0, boss_top), (0, 0, 1), 0.8, 0.07)
-        sk = d.sketch("XY", f"Cover nut {i}", offset=boss_top + 0.07)
-        d.c.append(cmd("sketch.polygon.inscribed", center=skp(x, 0.0), radius=0.32 * 25.4, sides=6))
+        d.cylinder(f"valve_cover_washer_{i}", (x, COVER_Y, seat), (0, 0, 1), 0.6, 0.04)
+        sk = d.sketch("XY", f"Cover nut {i}", offset=seat + 0.04)
+        d.c.append(cmd("sketch.polygon.inscribed", center=skp(x, COVER_Y), radius=0.25 * 25.4, sides=6))
         d.finish()
-        d.extrude(sk, f"valve_cover_nut_{i}", 0.3)
-        sphere(d, f"valve_cover_nut_dome_{i}", (x, 0.0, boss_top + 0.37), 0.54)
+        d.extrude(sk, f"valve_cover_nut_{i}", 0.25)
+        sphere(d, f"valve_cover_nut_dome_{i}", (x, COVER_Y, seat + 0.29), 0.42)
 
-    # The twist-on filler cap in the hole at the front: neck, ring, a raised middle and
-    # two ears to turn it by.
-    z = COVER_TOP + 0.14
-    d.cylinder("valve_cover_filler", (FILLER_X, 0, z - 0.05), (0, 0, 1), 1.6, 0.25)
-    d.cylinder("valve_cover_filler_cap", (FILLER_X, 0, z + 0.2), (0, 0, 1), 2.1, 0.35)
-    d.cylinder("valve_cover_filler_cap_top", (FILLER_X, 0, z + 0.55), (0, 0, 1), 1.2, 0.08)
-    d.box("valve_cover_filler_cap_ears", (FILLER_X - 1.35, -0.22, z + 0.25), (FILLER_X + 1.35, 0.22, z + 0.5))
+    # The filler cap at the front: a neck, a hollow ring with its floor down inside, and
+    # two little ears to turn it by.
+    fx, z = FILLER_X, COVER_TOP - 0.06
+    d.cylinder("valve_cover_filler", (fx, COVER_Y, z), (0, 0, 1), 1.5, 0.25)
+    d.cylinder("valve_cover_filler_cap_floor", (fx, COVER_Y, z + 0.25), (0, 0, 1), 1.5, 0.13)
     for k in (-1, 1):
-        d.cylinder(f"valve_cover_filler_cap_ear_{k}", (FILLER_X + k * 1.35, 0, z + 0.25), (0, 0, 1), 0.44, 0.25)
+        d.cylinder(f"valve_cover_filler_cap_ear_{k}", (fx + k * 1.16, COVER_Y, z + 0.25), (0, 0, 1), 0.56, 0.22)
+        d.box(f"valve_cover_filler_cap_lug_{k}", (fx + k * 0.8 - 0.25, COVER_Y - 0.2, z + 0.25),
+              (fx + k * 0.8 + 0.25, COVER_Y + 0.2, z + 0.38))
 
 
-def cover_profile(grow, n):
-    """The cover's cross-section grown out by grow: [(y, z, ny, nz)] from the left foot,
-    up, over the top and down to the right foot."""
+def arc_points(c, r, a0, a1, n):
+    return [(c[0] + r * math.cos(t), c[1] + r * math.sin(t))
+            for t in np.linspace(math.radians(a0), math.radians(a1), n + 1)]
+
+
+def cover_section(n=8):
+    """The cover's cross-section (y, z), left foot up over the top to the right foot."""
     hl, hw, r = COVER
     cz = COVER_TOP - r
-    pts = [(-(hw + grow), COVER_BASE, -1.0, 0.0)]
-    for k in range(n + 1):
-        t = math.pi - k * math.pi / 2 / n
-        pts.append((-(hw - r) + (r + grow) * math.cos(t), cz + (r + grow) * math.sin(t), math.cos(t), math.sin(t)))
-    for k in range(n + 1):
-        t = math.pi / 2 - k * math.pi / 2 / n
-        pts.append(((hw - r) + (r + grow) * math.cos(t), cz + (r + grow) * math.sin(t), math.cos(t), math.sin(t)))
-    pts.append((hw + grow, COVER_BASE, 1.0, 0.0))
-    return pts
+    y0, y1 = COVER_Y - hw + r, COVER_Y + hw - r
+    return ([(COVER_Y - hw, COVER_BASE)] + arc_points((y0, cz), r, 180, 90, n)
+            + arc_points((y1, cz), r, 90, 0, n) + [(COVER_Y + hw, COVER_BASE)])
 
 
-def cover_shell(seg=6):
-    """The stamped shell: a box with every top edge and corner rounded to COVER's radius
-    and the corners up its sides too, its walls down to the lip. Columns run round the
-    plan, a quarter turn to each corner; rows from the foot up to the top."""
+def cover_length_section(n=8):
+    """The cover along its length (x, z) where it is not rounded across: down the front
+    end, over the top, down the back end."""
+    hl, hw, r = COVER
+    cz = COVER_TOP - r
+    return ([(-hl, COVER_BASE)] + arc_points((-hl + r, cz), r, 180, 90, n)
+            + arc_points((hl - r, cz), r, 90, 0, n) + [(hl, COVER_BASE)])
+
+
+def annulus(cx, cy, z, r0, r1, n):
+    """A flat ring facing up between radii r0 and r1."""
+    inner, outer = ring(n, r0) + [cx, cy], ring(n, r1) + [cx, cy]
+    p = np.array([[x, y, z] for x, y in inner] + [[x, y, z] for x, y in outer])
+    tris = []
+    for k in range(n):
+        k2 = (k + 1) % n
+        tris += [[k, n + k, n + k2], [k, n + k2, k2]]
+    return orient(p, np.tile([0.0, 0.0, 1.0], (2 * n, 1)), tris)
+
+
+def tube(path, normal, radius, sides=8):
+    """A round bead along a path in a plane (normal), its middle on the path: positions,
+    normals, indices."""
+    path = np.array(path, float)
+    b = unit(normal)
+    p, nrm = [], []
+    for k in range(len(path)):
+        t = unit(path[min(k + 1, len(path) - 1)] - path[max(k - 1, 0)])
+        n = np.cross(b, t)
+        for j in range(sides):
+            a = 2 * math.pi * j / sides
+            d = math.cos(a) * n + math.sin(a) * b
+            p.append(path[k] + radius * d)
+            nrm.append(d)
+    tris = []
+    for k in range(len(path) - 1):
+        for j in range(sides):
+            a, c = k * sides + j, k * sides + (j + 1) % sides
+            tris += [[a, c, c + sides], [a, c + sides, a + sides]]
+    return orient(np.array(p), np.array(nrm), tris)
+
+
+def cover_shell(seg=8):
+    """The stamped shell: a box with every top edge and corner rounded to COVER's radius,
+    the corners up its sides too, its walls down to the lip. Columns run round the plan, a
+    quarter turn to each corner; rows from the foot up to the top."""
     hl, hw, r = COVER
     cx, cy, cz = hl - r, hw - r, COVER_TOP - r
     cols = []
@@ -556,11 +593,11 @@ def cover_shell(seg=6):
     for t, sx, sy in cols:
         for f in rows:
             if f is None:
-                p.append([sx * cx + r * math.cos(t), sy * cy + r * math.sin(t), COVER_BASE])
+                p.append([sx * cx + r * math.cos(t), COVER_Y + sy * cy + r * math.sin(t), COVER_BASE])
                 nrm.append([math.cos(t), math.sin(t), 0.0])
             else:
                 n = [math.cos(f) * math.cos(t), math.cos(f) * math.sin(t), math.sin(f)]
-                p.append([sx * cx + r * n[0], sy * cy + r * n[1], cz + r * n[2]])
+                p.append([sx * cx + r * n[0], COVER_Y + sy * cy + r * n[1], cz + r * n[2]])
                 nrm.append(n)
     nr, nc = len(rows), len(cols)
     tris = []
@@ -586,64 +623,21 @@ def orient(p, nrm, tris):
     return p, nrm, np.array(out, dtype=np.uint32).ravel()
 
 
-def cover_band(x0, width, grow, seg=6):
-    """A raised band across the cover at x0: its face grow proud of the shell, and its two
-    edges back down to the shell."""
-    outer, inner = cover_profile(grow, seg), cover_profile(0.0, seg)
-    p, nrm, tris = [], [], []
-    xs = (x0 - width / 2, x0 + width / 2)
-    for x in xs:
-        for y, z, ny, nz in outer:
-            p.append([x, y, z])
-            nrm.append([0.0, ny, nz])
-    m = len(outer)
-    for k in range(m - 1):
-        tris += [[k, m + k, m + k + 1], [k, m + k + 1, k + 1]]
-    for x, sign in zip(xs, (-1.0, 1.0)):
-        base = len(p)
-        for (yo, zo, _, _), (yi, zi, _, _) in zip(outer, inner):
-            p += [[x, yo, zo], [x, yi, zi]]
-            nrm += [[sign, 0.0, 0.0], [sign, 0.0, 0.0]]
-        for k in range(m - 1):
-            a = base + 2 * k
-            tris += [[a, a + 1, a + 3], [a, a + 3, a + 2]]
-    return orient(np.array(p), np.array(nrm), tris)
-
-
-def rounded_plate(x0, x1, hy, r, z0, z1, seg=6):
-    """A flat plate with rounded corners in plan from z0 up to z1: its top and its sides."""
-    corners = [(x1 - r, hy - r, 0), (x0 + r, hy - r, 90), (x0 + r, -hy + r, 180), (x1 - r, -hy + r, 270)]
-    rim = [(cx + r * math.cos(math.radians(a0 + 90 * k / seg)), cy + r * math.sin(math.radians(a0 + 90 * k / seg)),
-            math.radians(a0 + 90 * k / seg)) for cx, cy, a0 in corners for k in range(seg + 1)]
-    mid = [(x0 + x1) / 2, 0.0, z1]
-    p, nrm, tris = [mid], [[0.0, 0.0, 1.0]], []
-    for x, y, _ in rim:
-        p.append([x, y, z1])
-        nrm.append([0.0, 0.0, 1.0])
-    n = len(rim)
-    tris += [[0, 1 + k, 1 + (k + 1) % n] for k in range(n)]
-    base = len(p)
-    for x, y, t in rim:
-        p += [[x, y, z0], [x, y, z1]]
-        nrm += [[math.cos(t), math.sin(t), 0.0]] * 2
-    for k in range(n):
-        a, b = base + 2 * k, base + 2 * ((k + 1) % n)
-        tris += [[a, b, b + 1], [a, b + 1, a + 1]]
-    return orient(np.array(p), np.array(nrm), tris)
-
-
 def cover_meshes():
-    """{name: mesh} in inches: the cover's shell, the raised spine down its top with the
-    filler's pad at the front end, the three bands across it, and the studs' bosses."""
-    hl, hw, r = COVER
-    spine = rounded_plate(-hl + 2.4, hl - 2.4, SPINE_HALF, 0.8, COVER_TOP - 0.05, COVER_TOP + 0.10)
-    pad = rounded_plate(FILLER_X - 1.3, FILLER_X + 1.3, 1.3, 1.29, COVER_TOP - 0.05, COVER_TOP + 0.14, 8)
-    bosses = [rounded_plate(x - 0.5, x + 0.5, 0.5, 0.49, COVER_TOP - 0.05, COVER_TOP + 0.2, 4)
-              for x in (STRAP_X[0], STRAP_X[-1])]
+    """{name: mesh} in inches: the cover's shell and its stamped beads, as on the
+    reference: two along the top either side of the middle, over the end shoulders and down
+    the ends to the lip, and across it a pair at each outer band and one at the middle,
+    over the top and down both sides."""
+    across = [[(x, y, z) for y, z in cover_section()] for x in BAND_BEADS_X]
+    along = [[(x, COVER_Y + s * SPINE_HALF, z) for x, z in cover_length_section()] for s in (-1, 1)]
+    fx, z = FILLER_X, COVER_TOP + 0.19
+    cap = [wall(fx, COVER_Y, z, z + 0.38, 0.94, 32, False), wall(fx, COVER_Y, z, z + 0.38, 0.75, 32, True),
+           annulus(fx, COVER_Y, z + 0.38, 0.75, 0.94, 32)]
     return {
+        "valve_cover_filler_cap": merge(cap),
         "valve_cover": cover_shell(),
-        "valve_cover_spine": merge([spine, pad] + bosses),
-        "valve_cover_bands": merge([cover_band(x, BAND_WIDTH, 0.12) for x in STRAP_X]),
+        "valve_cover_beads": merge([tube(pth, (1, 0, 0), BEAD_R) for pth in across]
+                                   + [tube(pth, (0, 1, 0), BEAD_R) for pth in along]),
     }
 
 
