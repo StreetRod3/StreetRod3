@@ -41,3 +41,5 @@ assets/locations/drive-in/organizer.glb filter=lfs diff=lfs merge=lfs -text
 assets/locations/drive-in/people.glb filter=lfs diff=lfs merge=lfs -text
 assets/parts/engine-chevy-235.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/engine-chevy-235.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/chevy-235-headers-split.glb filter=lfs diff=lfs merge=lfs -text
+resources/engines/chevy-235-headers-split.sc filter=lfs diff=lfs merge=lfs -text

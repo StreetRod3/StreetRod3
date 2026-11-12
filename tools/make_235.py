@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Build a Chevrolet 235 inline six in SolidCraft and export it as a game GLB.
 
-    python3 tools/make_235.py
+    python3 tools/make_235.py            # the engine, with the factory exhaust manifold
+    python3 tools/make_235.py headers    # the split headers alone
 
 The engine is the 235 cubic inch "stovebolt" six of the fifties: bore 3 9/16, stroke
 3 15/16, the overhead-valve head under a tall ribbed valve cover. Its proportions and
@@ -24,9 +25,13 @@ plugs, distributor, coil, fuel pump, oil filler and starter on the right. It has
                 the heat riser box under the carburetor
   carburetor    a one-barrel: base, body and the neck up into the air cleaner
   air cleaner   the tall round oil-bath one: pan, body, the screened band, the lid
-  exhaust       in two halves, front and back alike: a port off the head at the end
-                dropping to a log under the intake, a second port into the log, and the
-                log turning down at the middle to an outlet flange each
+  exhaust       the factory manifold: a log under the ports, hooked up at each end into
+                the end ports, a finger up into each middle pair's shared port, the heat
+                box under the carburetor's riser with its heat valve, and the outlet down
+                to a round eared flange
+  headers       (built alone: make_235.py headers) the split cast iron headers, two halves,
+                each from its end port down and along to its own outlet, the middle
+                pair's port joining from above, a round eared flange on each outlet
   front         the timing cover round the crank and the cam gear, the water pump high
                 on the front with the fan on its pulley, the generator low on the left,
                 and one belt round crank, pump and generator
@@ -119,9 +124,6 @@ INTAKE_Z = 11.5
 INTAKE_D = 1.7
 INTAKE_PORT_X = 8.5
 EXH_Y = -4.55
-EXH_D = 1.6
-EXH_TOP = 12.4
-EXH_END_X = 10.0
 EXH_PORT_X = 3.7
 EXH_LOG_Z = 9.0
 EXH_INNER_Z = 10.7      # the inner ports, high enough to sit wholly on the head
@@ -175,7 +177,8 @@ MACHINED = {"name": "machined iron", "pbrMetallicRoughness": {
     "baseColorFactor": [0.46, 0.46, 0.47, 1], "metallicFactor": 0.7, "roughnessFactor": 0.4}}
 FINISHES = [
     ("engine_block_deck_holes", BLACK), ("intake_manifold_carb_bore", BLACK),
-    ("carb_throat", BLACK), ("water_outlet_bore", BLACK), ("engine_block_distributor_hole", BLACK), ("cylinder_head_port", BLACK),
+    ("carb_throat", BLACK), ("water_outlet_bore", BLACK), ("exhaust_manifold_bore", BLACK),
+    ("exhaust_header_bore", BLACK), ("engine_block_distributor_hole", BLACK), ("cylinder_head_port", BLACK),
     ("flywheel_holes", BLACK), ("flywheel", STEEL), ("engine_block_deck", MACHINED), ("cylinder_bore", MACHINED),
     ("piston", CAST_ALUMINUM),
     ("exhaust", CAST_IRON), ("carburetor_neck", STEEL), ("carburetor", CAST_ALUMINUM),
@@ -411,8 +414,8 @@ def openings():
     left = (0.0, -1.0, 0.0)
     face = -HEAD_Y - 0.004
     ports = [disc_facing((k * INTAKE_PORT_X, face, INTAKE_Z), left, 0.6, 12) for k in (-1, 1)]
-    exhaust = [disc_facing((k * EXH_END_X, face, EXH_TOP - 0.5), left, 0.6, 12) for k in (-1, 1)]
-    exhaust += [disc_facing((k * EXH_PORT_X, face, EXH_INNER_Z), left, 0.6, 12) for k in (-1, 1)]
+    exhaust = [disc_facing((k * END_PORT[0], face, END_PORT[1]), left, 0.6, 12) for k in (-1, 1)]
+    exhaust += [disc_facing((k * INNER_PORT[0], face, INNER_PORT[1]), left, 0.6, 12) for k in (-1, 1)]
     a = unit(DIST_AXIS)
     return {
         "cylinder_head_ports": merge(ports + exhaust),
@@ -446,6 +449,7 @@ def deck_meshes():
         floors.append(disc(x, y, DECK - HOLE_DEPTH + 0.003, r, HOLE_SIDES))
     out["engine_block_deck_holes"] = merge(floors)
     out.update(openings())
+    out.update(stock_exhaust_meshes())
     out.update(cover_meshes())
     out.update(water_outlet_meshes())
     return out
@@ -714,24 +718,152 @@ def air_cleaner(d):
                    name="air_cleaner_top", body_name="air_cleaner_top"))
 
 
-def exhaust(d):
+# The exhaust ports on the head: the end ones high, the middle pairs' shared ones lower.
+END_PORT = (10.3, 11.9)         # x out from the middle, z
+INNER_PORT = (EXH_PORT_X, EXH_INNER_Z)
+EXH_R = 0.9                     # the cast tubes' radius
+FINGER_R = 0.78                 # the middle ports' fingers, thinner so they join as branches
+# The factory manifold: a log under the ports, a finger up into each, the heat box under
+# the carburetor's riser with the outlet down out of it.
+LOG = (-4.5, 9.4)               # y, z of the log's middle
+HEAT_BOX = (CARB_X, 1.7, -7.7, -4.0, 7.9, 9.6)  # x, half length, y0, y1, z0, z1
+STOCK_OUTLET = (CARB_X, -5.85, 6.6)             # x, y, the flange's face z
+
+
+def port_pads(d, name):
+    """The cast flange on each port, against the head's face."""
+    sk = d.sketch("XZ", f"{name} port pads", offset=-HEAD_Y - 0.3)
+    for k in (-1, 1):
+        for x, z in ((k * END_PORT[0], END_PORT[1]), (k * INNER_PORT[0], INNER_PORT[1])):
+            d.c.append(cmd("sketch.rectangle.rounded", p0=skp(x - 0.85, -(z + 0.7)),
+                           p1=skp(x + 0.85, -(z - 0.7)), radius=inch(0.45)))
+    d.finish()
+    d.extrude(sk, f"{name}_port_pads", 0.3)
+
+
+def eared_flange(d, name, x, y, z, radius=1.25, ear=(1.4, 0.33), thick=0.3):
+    """A round flange with a bolt ear either side along the engine, its face at z, down."""
+    circles = [((x + ear[0], y), ear[1]), ((x, y + 0.001), radius), ((x - ear[0], y), ear[1]),
+               ((x, y - 0.001), radius)]
+    sk = d.sketch("XY", name, offset=z + thick)
+    d.c += outline_commands(*hull_outline(circles))
+    for k in (-1, 1):
+        d.c.append(cmd("sketch.circle.center", center=skp(x + k * ear[0], y), radius=inch(0.15)))
+    d.finish()
+    d.extrude(sk, name, thick, "negative")
+
+
+def stock_exhaust(d):
+    """The factory manifold's cast flanges, heat box, outlet flange and heat valve; its log
+    and fingers are exact meshes (stock_exhaust_meshes)."""
+    port_pads(d, "exhaust_manifold")
+    x, hl, y0, y1, z0, z1 = HEAT_BOX
+    d.box("exhaust_manifold_heat_box", (x - hl, y0, z0), (x + hl, y1, z1))
+    ox, oy, oz = STOCK_OUTLET
+    eared_flange(d, "exhaust_manifold_outlet_flange", ox, oy, oz)
+    # The heat valve: its shaft out of the box's front, the counterweight hanging off it.
+    d.cylinder("exhaust_manifold_valve_shaft", (x - hl, (y0 + y1) / 2 - 0.6, 8.9), (-1, 0, 0), 0.3, 0.7)
+    d.box("exhaust_manifold_valve_weight", (x - hl - 0.62, (y0 + y1) / 2 - 1.3, 7.6),
+          (x - hl - 0.47, (y0 + y1) / 2 + 0.1, 9.1))
+
+
+def headers(d):
+    """The split cast iron headers' port flanges and round outlet flanges; their tubes are
+    exact meshes (header_meshes)."""
+    port_pads(d, "exhaust_header")
     for k, half in ((-1, "front"), (1, "back")):
-        name = f"exhaust_collector_{half}"
-        # XZ sketch: (x, -z), the plane moved along +y.
-        pts = [(k * EXH_END_X, -EXH_TOP), (k * EXH_END_X, -EXH_LOG_Z), (k * EXH_OUT_X, -EXH_LOG_Z),
-               (k * EXH_OUT_X, -(EXH_FLANGE_Z + 0.25))]
-        pipe(d, name, "XZ", EXH_Y, pts, 0.9, EXH_D)
-        sphere(d, f"exhaust_end_{half}", (k * EXH_END_X, EXH_Y, EXH_TOP), EXH_D)
-        # Ports off the head: one into the top of the end, one into the log.
-        d.cylinder(f"exhaust_port_{half}", (k * EXH_END_X, -HEAD_Y, EXH_TOP - 0.5), (0, -1, 0),
-                   1.4, HEAD_Y - (-EXH_Y))
-        d.cylinder(f"exhaust_port_stub_{half}", (k * EXH_PORT_X, EXH_Y, EXH_LOG_Z), (0, 0, 1), 1.4,
-                   EXH_INNER_Z - EXH_LOG_Z)
-        d.cylinder(f"exhaust_port_inner_{half}", (k * EXH_PORT_X, -HEAD_Y, EXH_INNER_Z),
-                   (0, -1, 0), 1.4, HEAD_Y - (-EXH_Y))
-        sphere(d, f"exhaust_port_bend_{half}", (k * EXH_PORT_X, EXH_Y, EXH_INNER_Z), 1.4)
-        d.box(f"exhaust_flange_{half}", (k * EXH_OUT_X - 1.3, EXH_Y - 0.95, EXH_FLANGE_Z),
-              (k * EXH_OUT_X + 1.3, EXH_Y + 0.95, EXH_FLANGE_Z + 0.25))
+        eared_flange(d, f"exhaust_header_flange_{half}", k * EXH_OUT_X, EXH_Y, EXH_FLANGE_Z,
+                     radius=1.2, ear=(1.37, 0.3))
+
+
+def fillet_path(pts, r, n=6):
+    """A 3D polyline with each corner rounded to radius r (less where a leg is short)."""
+    pts = [np.array(q, float) for q in pts]
+    out = [pts[0]]
+    for i in range(1, len(pts) - 1):
+        a, b = pts[i] - pts[i - 1], pts[i + 1] - pts[i]
+        d1, d2 = unit(a), unit(b)
+        turn = math.acos(max(-1.0, min(1.0, float(d1 @ d2))))
+        if turn < 1e-6:
+            out.append(pts[i])
+            continue
+        rr = min(r, 0.95 * min(np.linalg.norm(a), np.linalg.norm(b)) / 2 / math.tan(turn / 2))
+        cut = rr * math.tan(turn / 2)
+        t1, t2 = pts[i] - d1 * cut, pts[i] + d2 * cut
+        c = pts[i] + unit(d2 - d1) * rr / math.cos(turn / 2)
+        u, v = t1 - c, t2 - c
+        ang = math.acos(max(-1.0, min(1.0, float(unit(u) @ unit(v)))))
+        for k in range(n + 1):
+            f = k / n
+            out.append(c + (math.sin((1 - f) * ang) * u + math.sin(f * ang) * v) / math.sin(ang))
+    out.append(pts[-1])
+    return out
+
+
+def tube3(path, radius, sides=16):
+    """A round tube along a 3D path, its rings kept from twisting."""
+    path = [np.array(q, float) for q in path]
+    tans = [unit(path[min(k + 1, len(path) - 1)] - path[max(k - 1, 0)]) for k in range(len(path))]
+    n = unit(np.cross(tans[0], [0.0, 0.0, 1.0]) if abs(tans[0][2]) < 0.9 else np.cross(tans[0], [1.0, 0.0, 0.0]))
+    frames = []
+    for k, t in enumerate(tans):
+        if k:
+            # Turn the ring's frame by the turn from the last tangent to this one.
+            prev = tans[k - 1]
+            axis = np.cross(prev, t)
+            sn, cs = np.linalg.norm(axis), float(prev @ t)
+            if sn > 1e-9:
+                axis = axis / sn
+                n = n * cs + np.cross(axis, n) * sn + axis * (axis @ n) * (1 - cs)
+            n = unit(n - (n @ t) * t)
+        frames.append((n, np.cross(t, n)))
+    p, nrm, tris = [], [], []
+    for q, (n1, n2) in zip(path, frames):
+        for j in range(sides):
+            a = 2 * math.pi * j / sides
+            dvec = math.cos(a) * n1 + math.sin(a) * n2
+            p.append(q + radius * dvec)
+            nrm.append(dvec)
+    for k in range(len(path) - 1):
+        for j in range(sides):
+            a, c = k * sides + j, k * sides + (j + 1) % sides
+            tris += [[a, c, c + sides], [a, c + sides, a + sides]]
+    return orient(np.array(p), np.array(nrm), tris)
+
+
+def stock_exhaust_meshes():
+    """The factory manifold's log, hooked up at each end into the end ports, a finger up
+    from it into each middle port, the outlet down out of the heat box, and its dark bore."""
+    ly, lz = LOG
+    head = -HEAD_Y - 0.25
+    ex, ez = END_PORT
+    log = fillet_path([(-ex, head, ez), (-ex, ly, ez), (-ex, ly, lz), (ex, ly, lz), (ex, ly, ez), (ex, head, ez)],
+                      0.9)
+    fingers = [fillet_path([(k * INNER_PORT[0], head, INNER_PORT[1]), (k * INNER_PORT[0], ly, INNER_PORT[1]),
+                            (k * INNER_PORT[0], ly, lz + 0.3)], 0.6) for k in (-1, 1)]
+    ox, oy, oz = STOCK_OUTLET
+    outlet = [(ox, oy, HEAT_BOX[4] + 0.2), (ox, oy, oz + 0.3)]
+    return {
+        "exhaust_manifold": merge([tube3(log, EXH_R)] + [tube3(f, FINGER_R) for f in fingers]
+                                  + [tube3(outlet, 1.0)]),
+        "exhaust_manifold_bore": disc_facing((ox, oy, oz - 0.004), (0, 0, -1), 0.85, 16),
+    }
+
+
+def header_meshes():
+    """The split headers: each half from its end port out, down, along to its outlet and
+    down to the flange, with the middle pair's shared port joining it from above."""
+    out, bores = [], []
+    head = -HEAD_Y - 0.25
+    ex, ez = END_PORT
+    for k in (-1, 1):
+        main = fillet_path([(k * ex, head, ez), (k * ex, EXH_Y, ez), (k * ex, EXH_Y, EXH_LOG_Z),
+                            (k * EXH_OUT_X, EXH_Y, EXH_LOG_Z), (k * EXH_OUT_X, EXH_Y, EXH_FLANGE_Z + 0.3)], 0.9)
+        inner = fillet_path([(k * INNER_PORT[0], head, INNER_PORT[1]), (k * INNER_PORT[0], EXH_Y, INNER_PORT[1]),
+                             (k * INNER_PORT[0], EXH_Y, EXH_LOG_Z + 0.3)], 0.6)
+        out += [tube3(main, EXH_R), tube3(inner, FINGER_R)]
+        bores.append(disc_facing((k * EXH_OUT_X, EXH_Y, EXH_FLANGE_Z - 0.004), (0, 0, -1), 0.8, 16))
+    return {"exhaust_header": merge(out), "exhaust_header_bore": merge(bores)}
 
 
 def front(d):
@@ -892,14 +1024,18 @@ def oil_pan(d):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "headers"),
+                    help="the engine (default), with the factory exhaust manifold, or the split "
+                         "headers alone")
     ap.add_argument("--sc", help="design file (default resources/engines/STEM.sc)")
     ap.add_argument("--glb", help="mesh (default assets/parts/STEM.glb)")
     ap.add_argument("--solidcraft", default="solidcraft-cli",
                     help="solidcraft-cli, or the SolidCraft AppImage")
     ap.add_argument("--blender", default="blender", help="Blender, which thins the mesh")
     args = ap.parse_args()
-    sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", STEM + ".sc"))
-    glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", STEM + ".glb"))
+    stem = STEM if args.what == "engine" else "chevy-235-headers-split"
+    sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", stem + ".sc"))
+    glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", stem + ".glb"))
     tool = shutil.which(args.solidcraft) or args.solidcraft
     if not os.path.exists(tool):
         sys.exit(f"no SolidCraft command line at {args.solidcraft}")
@@ -908,17 +1044,22 @@ def main():
         sys.exit(f"no Blender at {args.blender}")
 
     d = Design()
-    block(d)
-    deck(d)
-    head(d)
-    valve_cover(d)
-    intake(d)
-    carburetor(d)
-    air_cleaner(d)
-    exhaust(d)
-    front(d)
-    right_side(d)
-    oil_pan(d)
+    if args.what == "headers":
+        headers(d)
+        meshes = header_meshes()
+    else:
+        block(d)
+        deck(d)
+        head(d)
+        valve_cover(d)
+        intake(d)
+        carburetor(d)
+        air_cleaner(d)
+        stock_exhaust(d)
+        front(d)
+        right_side(d)
+        oil_pan(d)
+        meshes = deck_meshes()
 
     with tempfile.TemporaryDirectory() as tmp:
         obj = os.path.join(tmp, "engine.obj")
@@ -927,7 +1068,7 @@ def main():
         with open(script, "w") as f:
             json.dump({"commands": d.c}, f)
         os.makedirs(os.path.dirname(sc), exist_ok=True)
-        print(f"building {STEM}")
+        print(f"building {stem}")
         SolidCraft(tool).run(script, "--save", sc)
         print("thinning the mesh")
         thin = os.path.join(tmp, "thin.obj")
@@ -945,7 +1086,7 @@ def main():
             merged[base] = (np.vstack([mp, p]), np.vstack([mn, nr]), np.concatenate([mi, i + len(mp)]))
         else:
             merged[base] = (p, nr, i)
-    for name, (p, nr, i) in deck_meshes().items():
+    for name, (p, nr, i) in meshes.items():
         merged[name] = (p * 25.4, nr, i)
     parts = []
     for name, (p, nr, i) in merged.items():
