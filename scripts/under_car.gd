@@ -920,28 +920,20 @@ func _build_exhaust(rig: Node3D, dual: bool) -> void:
 	var ends: Array[float] = [RIGHT]
 	if dual:
 		ends.append(-RIGHT)
+	if _is_six():
+		_build_six_exhaust(rig, dual, end_x, pipe, soot)
+		return
 	var flathead := _is_flathead()
-	var six := _is_six()
 	for side in ends:
 		var start := _pipe_start(side)
 		var end := Vector3(end_x, PIPE_Y, MUFFLER_Z * side)
-		if flathead or _is_sbc() or six:
+		if flathead or _is_sbc():
 			# Down from the outlet, then back beside the pan.
 			_pipe(rig, [start, Vector3(start.x + 0.08, PIPE_Y, start.z), end], 0.028, pipe)
 		else:
 			_tube(rig, start, end, 0.028, pipe)
 		_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * side, 16)
 	if dual:
-		return
-	if six:
-		# The split headers' back outlet drops and joins the pipe from the front one.
-		var outlets := _six_outlets()
-		if outlets.size() > 1:
-			var from := _pipe_start(RIGHT)
-			var join := from.lerp(Vector3(end_x, PIPE_Y, MUFFLER_Z * RIGHT), 0.35)
-			join.y = PIPE_Y
-			var back := outlets[outlets.size() - 1]
-			_pipe(rig, [back, Vector3(back.x + 0.06, PIPE_Y, back.z), join], 0.026, pipe)
 		return
 	if flathead:
 		# The left pipe drops and crosses under the front of the pan, ahead of the sump,
@@ -958,6 +950,36 @@ func _build_exhaust(rig: Node3D, dual: bool) -> void:
 	var join := Vector3(end_x - span * 0.15, PIPE_Y, MUFFLER_Z * RIGHT)
 	var cross: Array[Vector3] = [left, Vector3(left.x + span * 0.12, PIPE_Y, left.z), join]
 	_pipe(rig, cross, 0.026, pipe)
+
+
+## The six's pipes, all from its left: each drops from its outlet and runs straight back
+## beside the flywheel housing and the bellhousing, clear of them. The run to the right
+## muffler crosses under the gearbox's case behind the bellhousing, where it sits high
+## enough. On a dual exhaust (the split headers only) the front outlet's pipe keeps to the
+## outside on to the left muffler and the back one's runs inside it and crosses; on a single
+## the back outlet's pipe drops into the front one's run.
+func _build_six_exhaust(rig: Node3D, dual: bool, end_x: float, pipe: Material, soot: Material) -> void:
+	var left := -RIGHT
+	var outlets := _six_outlets()
+	# Out past the flywheel housing's flange (7.3 in round the crank) with a pipe's width
+	# to spare; the outer pipe outside that again.
+	var inside := 0.18 * left
+	var outside := 0.25 * left
+	var under := _engine_rear + 0.3
+	var over := _engine_rear + 0.6
+	var right_end := Vector3(end_x, PIPE_Y, MUFFLER_Z * RIGHT)
+	var front := outlets[0]
+	var back := outlets[outlets.size() - 1]
+	var crossing := outlets.size() > 1 and dual
+	var from := back if crossing else front
+	var drop := Vector3(from.x + 0.06, PIPE_Y, inside)
+	_pipe(rig, [from, drop, Vector3(under, PIPE_Y, inside), Vector3(over, PIPE_Y, MUFFLER_Z * RIGHT), right_end], 0.028, pipe)
+	_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * RIGHT, 16)
+	if crossing:
+		_pipe(rig, [front, Vector3(front.x + 0.06, PIPE_Y, outside), Vector3(end_x, PIPE_Y, MUFFLER_Z * left)], 0.028, pipe)
+		_cylinder_x(rig, 0.024, 0.024, 0.002, end_x, soot, PIPE_Y, MUFFLER_Z * left, 16)
+	elif outlets.size() > 1:
+		_pipe(rig, [back, Vector3(back.x + 0.05, PIPE_Y, inside)], 0.026, pipe)
 
 
 func _exhaust_pipe_mat() -> StandardMaterial3D:
