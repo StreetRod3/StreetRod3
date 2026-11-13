@@ -6,7 +6,8 @@
     "path": "res://assets/cars/studebaker-champion-1951.glb",
     "position": [0.0, 0.253, 0.0],
     "height": 1.256,
-    "ground_clearance": 0.253
+    "ground_clearance": 0.253,
+    "dither_cell": 0.04
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {

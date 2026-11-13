@@ -459,6 +459,7 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			if tagged is Texture2D:
 				tex = tagged
 			existing.set_shader_parameter("paint_color", color)
+			existing.set_shader_parameter("dither_cell", _dither_cell())
 			if tex != null:
 				continue
 		var orm: Texture2D = null
@@ -484,6 +485,7 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 		shader_mat.shader = _PaintShader
 		shader_mat.set_shader_parameter("albedo_tex", tex)
 		shader_mat.set_shader_parameter("paint_color", color)
+		shader_mat.set_shader_parameter("dither_cell", _dither_cell())
 		if orm != null:
 			shader_mat.set_shader_parameter("orm_tex", orm)
 			shader_mat.set_shader_parameter("use_orm", 1.0)
@@ -522,6 +524,14 @@ func _ground_clearance() -> float:
 	if typeof(model) != TYPE_DICTIONARY:
 		return 0.0
 	return float((model as Dictionary).get("ground_clearance", 0.0))
+
+
+## The size of the paint's dither squares (car_paint_mask.gdshader), 0 for none.
+func _dither_cell() -> float:
+	var model: Variant = _active_spec().get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return 0.0
+	return float((model as Dictionary).get("dither_cell", 0.0))
 
 
 func _snap_node_bottom_to_y(node: Node3D, floor_top_y: float) -> void:
