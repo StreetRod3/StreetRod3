@@ -673,9 +673,9 @@ func _build_hud(track: Dictionary) -> void:
 	meter.anchor_right = 0.5
 	meter.anchor_top = 1.0
 	meter.anchor_bottom = 1.0
-	meter.offset_left = -150.0
+	meter.offset_left = -180.0
 	meter.offset_top = -196.0
-	meter.offset_right = 150.0
+	meter.offset_right = 180.0
 	meter.offset_bottom = -16.0
 	meter.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	meter.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -738,13 +738,17 @@ func _update_hud() -> void:
 		_hud_gear.text = "Gear: %s" % str(_roam_car.call(&"get_gear_label"))
 		_hud_damage.text = "Damage: %d%%" % roundi(float(_roam_car.call(&"damage_amount")) * 100.0)
 		if _rpm_meter != null and _rpm_meter.has_method(&"set_reading"):
+			var short_gear := str(_roam_car.call(&"get_short_gear_label")) if _roam_car.has_method(&"get_short_gear_label") else str(_roam_car.call(&"get_gear_label"))
 			_rpm_meter.call(
 				&"set_reading",
 				float(_roam_car.call(&"get_rpm")),
 				float(_roam_car.call(&"get_rpm_shift_start")),
 				float(_roam_car.call(&"get_rpm_redline")),
 				float(_roam_car.call(&"get_rpm_critical")),
-				bool(_roam_car.call(&"is_engine_blown"))
+				bool(_roam_car.call(&"is_engine_blown")),
+				speed * 3.6,
+				short_gear,
+				GameState.imperial_units
 			)
 		return
 

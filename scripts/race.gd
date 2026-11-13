@@ -434,7 +434,10 @@ func _update_rpm_meter() -> void:
 		_player.get_rpm_shift_start(),
 		_player.get_rpm_redline(),
 		_player.get_rpm_critical(),
-		_player.is_engine_blown()
+		_player.is_engine_blown(),
+		absf(_player.get_forward_speed()) * 3.6,
+		_player.get_short_gear_label(),
+		GameState.imperial_units
 	)
 
 

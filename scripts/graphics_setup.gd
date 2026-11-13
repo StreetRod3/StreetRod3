@@ -175,13 +175,13 @@ func _build_preview() -> Control:
 	_preview_meter.anchor_right = 0.5
 	_preview_meter.anchor_top = 1.0
 	_preview_meter.anchor_bottom = 1.0
-	_preview_meter.offset_left = -150.0
+	_preview_meter.offset_left = -180.0
 	_preview_meter.offset_top = -196.0
-	_preview_meter.offset_right = 150.0
+	_preview_meter.offset_right = 180.0
 	_preview_meter.offset_bottom = -16.0
 	_preview_meter.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	screen.add_child(_preview_meter)
-	_preview_meter.call(&"set_reading", PREVIEW_RPM, _Player.RPM_SHIFT_START, _Player.RPM_REDLINE, _Player.RPM_CRITICAL, false)
+	_preview_meter.call(&"set_reading", PREVIEW_RPM, _Player.RPM_SHIFT_START, _Player.RPM_REDLINE, _Player.RPM_CRITICAL, false, 96.0, "2", GameState.imperial_units)
 	return holder
 
 

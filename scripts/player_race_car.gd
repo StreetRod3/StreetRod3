@@ -346,6 +346,16 @@ func get_gear_label() -> String:
 	return "%d / %d" % [_gear + 1, count]
 
 
+func get_short_gear_label() -> String:
+	if _gear == GEAR_REVERSE:
+		return "R"
+	if _gear == GEAR_NEUTRAL:
+		return "N"
+	if _is_automatic():
+		return "D"
+	return str(_gear + 1)
+
+
 func is_automatic_gearbox() -> bool:
 	return _is_automatic()
 
