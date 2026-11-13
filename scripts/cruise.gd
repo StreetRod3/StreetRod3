@@ -26,6 +26,7 @@ const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
 const _CruiseMinimap := preload("res://scripts/cruise_minimap.gd")
 const _CarFile := preload("res://scripts/car_file.gd")
 const _RearMirror := preload("res://scripts/rear_mirror.gd")
+const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 ## Spawn at least this far from the place just left, toward the street, in meters.
 const _ROAM_CLEAR := 8.5
 ## A stop in front of a place. Faster than this is still driving past.
@@ -151,6 +152,7 @@ var _rpm_meter: Control
 var _minimap: Control
 var _touch: Node
 var _ui_layer: CanvasLayer
+var _gear_popup: Control
 
 
 func _ready() -> void:
@@ -382,6 +384,7 @@ func _start_roam(from_poi: String) -> void:
 	_build_roam_car(track, from_poi)
 	if _roam_car != null:
 		_add_rear_mirror(_roam_car)
+		_gear_popup = _GearShiftPopup.attach(_ensure_ui_layer(), _roam_car)
 	if _touch != null and _roam_car != null:
 		_roam_car.set(&"_touch", _touch)
 	if _roam_car != null:

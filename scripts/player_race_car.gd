@@ -81,6 +81,8 @@ const LANDING_SPEED_LOSS := 0.15
 ## it starts to lift touches down every step or two.
 const LANDING_FELT_MPS := 0.5
 
+signal gear_changed(from_gear: int, to_gear: int)
+
 @export var debug_dynamics: bool = false
 
 @onready var _cam: Camera3D = $RaceCamera
@@ -346,6 +348,18 @@ func get_gear_label() -> String:
 
 func is_automatic_gearbox() -> bool:
 	return _is_automatic()
+
+
+func is_cockpit_camera() -> bool:
+	return _cam_mode == CAM_COCKPIT
+
+
+func get_gear_index() -> int:
+	return _gear
+
+
+func get_gear_count() -> int:
+	return _gear_count()
 
 
 func is_engine_blown() -> bool:
@@ -905,11 +919,13 @@ func _can_engage_reverse() -> bool:
 func _set_gear(next: int) -> void:
 	if next == _gear:
 		return
+	var prev := _gear
 	_rumble.pulse(RUMBLE_SHIFT, 0.0)
 	_gear = next
 	# Nothing has to mesh going into neutral, so the next shift can follow at once.
 	_shift_timer = 0.0 if next == GEAR_NEUTRAL else float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
+	gear_changed.emit(prev, next)
 
 
 func _request_shift(direction: int) -> void:
@@ -918,9 +934,11 @@ func _request_shift(direction: int) -> void:
 	var next := _gear + direction
 	if next < 0 or next >= _gear_count():
 		return
+	var prev := _gear
 	_gear = next
 	_shift_timer = float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
+	gear_changed.emit(prev, next)
 
 
 func _auto_shift(throttle: bool, brake: bool) -> void:
