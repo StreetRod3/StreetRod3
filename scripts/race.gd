@@ -973,9 +973,29 @@ func _hide_pause_confirm() -> void:
 
 
 func _on_pause_confirm_leave_pressed() -> void:
-	_leave_race()
+	_forfeit_race()
+
+
+## Leaving mid-race loses it, as the confirm box warns: the bet is paid and, at pink slips,
+## the rival takes the car. With nothing riding on it, the player just goes home.
+func _forfeit_race() -> void:
+	_race_over = true
+	_result_shown_ms = Time.get_ticks_msec()
+	GameState.wear_parts_from_crashes(_player.damage_amount())
+	_park_cars()
+	_end_race_ui()
+	var payout := GameState.apply_race_stake(false)
+	var lost_car := GameState.apply_pink_slips(false) == GameState.PINK_LOST
+	if not lost_car and payout >= 0:
+		_leave_race()
+		return
+	var text := "You gave up the race."
+	if lost_car:
+		text += "\n" + _took_your_car()
+	_show_bubble(text + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 
 
 func _leave_race() -> void:
 	get_tree().paused = false
+	GameState.current_scene_path = GameState.SCENE_GARAGE
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
