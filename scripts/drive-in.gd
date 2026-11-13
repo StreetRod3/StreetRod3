@@ -277,6 +277,9 @@ func _rival_present() -> bool:
 
 func _engage_rival() -> void:
 	_rival_engaged = true
+	# Coming back from under the rival's hood rebuilds this scene without choosing
+	# the rival again, so fill in the race lengths and the tank here every time.
+	_refresh_race_popup()
 	_race_root.visible = true
 	_hover_prompt.visible = false
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
