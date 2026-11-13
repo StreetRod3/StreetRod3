@@ -431,7 +431,14 @@ func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 				(mat_copy as ShaderMaterial).set_shader_parameter("albedo_color", color)
 
 
+func _is_dash_gauge(node: Node) -> bool:
+	var n := String(node.name).to_lower()
+	return n.begins_with("dash_") or n == "speedo_needle" or n == "tach_needle"
+
+
 func _paint_masked_meshes(node: Node, color: Color) -> void:
+	if _is_dash_gauge(node):
+		return
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
 		if mesh_instance.mesh != null and mesh_instance.visible and not _is_baked_wheel(mesh_instance):

@@ -26,6 +26,7 @@ const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
 const _CruiseMinimap := preload("res://scripts/cruise_minimap.gd")
 const _CarFile := preload("res://scripts/car_file.gd")
 const _RearMirror := preload("res://scripts/rear_mirror.gd")
+const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 ## Spawn at least this far from the place just left, toward the street, in meters.
 const _ROAM_CLEAR := 8.5
 ## A stop in front of a place. Faster than this is still driving past.
@@ -151,6 +152,7 @@ var _rpm_meter: Control
 var _minimap: Control
 var _touch: Node
 var _ui_layer: CanvasLayer
+var _gear_popup: Control
 
 
 func _ready() -> void:
@@ -189,6 +191,7 @@ func _ready() -> void:
 	_plan_speeds()
 	_place_car(0.0)
 	_yaw_rate = 0.0
+	_cam_mode = posmod(GameState.driving_camera, 4)
 	_apply_auto_camera_mode()
 	_add_rear_mirror(_car)
 	if GameState.engine_runs():
@@ -299,7 +302,7 @@ func _ride(delta: float) -> void:
 	# Not before the first frame: the visuals are fitted to the floor once `_ready` is done.
 	_body_motion.capture()
 	var steer := atan(_yaw_rate * _dynamics.config.wheelbase_m / maxf(_speed, 1.0))
-	_body_motion.pose(delta, _speed, steer, clampf(_yaw_rate / _FULL_STEER_YAW_RATE, -1.0, 1.0))
+	_body_motion.pose(delta, _speed, steer, clampf(_yaw_rate / _FULL_STEER_YAW_RATE, -1.0, 1.0), 0.0, clampf(_speed * 110.0, 900.0, 4500.0))
 	_place_auto_camera(delta)
 
 
@@ -307,6 +310,7 @@ func _poll_auto_camera() -> void:
 	var held := _Controller.action_down(_Controller.CAMERA)
 	if (held and not _camera_held) or _tapped_camera:
 		_cam_mode = (_cam_mode + 1) % 4
+		GameState.driving_camera = _cam_mode
 		_apply_auto_camera_mode()
 	_camera_held = held
 	_tapped_camera = false
@@ -382,6 +386,7 @@ func _start_roam(from_poi: String) -> void:
 	_build_roam_car(track, from_poi)
 	if _roam_car != null:
 		_add_rear_mirror(_roam_car)
+		_gear_popup = _GearShiftPopup.attach(_ensure_ui_layer(), _roam_car)
 	if _touch != null and _roam_car != null:
 		_roam_car.set(&"_touch", _touch)
 	if _roam_car != null:
@@ -670,9 +675,9 @@ func _build_hud(track: Dictionary) -> void:
 	meter.anchor_right = 0.5
 	meter.anchor_top = 1.0
 	meter.anchor_bottom = 1.0
-	meter.offset_left = -150.0
+	meter.offset_left = -180.0
 	meter.offset_top = -196.0
-	meter.offset_right = 150.0
+	meter.offset_right = 180.0
 	meter.offset_bottom = -16.0
 	meter.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	meter.grow_vertical = Control.GROW_DIRECTION_BEGIN
@@ -735,14 +740,21 @@ func _update_hud() -> void:
 		_hud_gear.text = "Gear: %s" % str(_roam_car.call(&"get_gear_label"))
 		_hud_damage.text = "Damage: %d%%" % roundi(float(_roam_car.call(&"damage_amount")) * 100.0)
 		if _rpm_meter != null and _rpm_meter.has_method(&"set_reading"):
-			_rpm_meter.call(
-				&"set_reading",
-				float(_roam_car.call(&"get_rpm")),
-				float(_roam_car.call(&"get_rpm_shift_start")),
-				float(_roam_car.call(&"get_rpm_redline")),
-				float(_roam_car.call(&"get_rpm_critical")),
-				bool(_roam_car.call(&"is_engine_blown"))
-			)
+			var in_cockpit := _roam_car.has_method(&"is_cockpit_camera") and bool(_roam_car.call(&"is_cockpit_camera"))
+			_rpm_meter.visible = GameState.hud_shows(_DrivingHud.RPM) and not in_cockpit
+			if _rpm_meter.visible:
+				var short_gear := str(_roam_car.call(&"get_short_gear_label")) if _roam_car.has_method(&"get_short_gear_label") else str(_roam_car.call(&"get_gear_label"))
+				_rpm_meter.call(
+					&"set_reading",
+					float(_roam_car.call(&"get_rpm")),
+					float(_roam_car.call(&"get_rpm_shift_start")),
+					float(_roam_car.call(&"get_rpm_redline")),
+					float(_roam_car.call(&"get_rpm_critical")),
+					bool(_roam_car.call(&"is_engine_blown")),
+					speed * 3.6,
+					short_gear,
+					GameState.imperial_units
+				)
 		return
 
 

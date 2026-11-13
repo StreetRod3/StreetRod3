@@ -9,6 +9,7 @@ const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _MulhollandTraffic := preload("res://scripts/mulholland_traffic.gd")
+const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 
 const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
@@ -89,6 +90,7 @@ var _offered_book: Dictionary = {}
 var _offered_stake: int = 0
 var _offered_prefix: String = ""
 var _traffic_mgr: Node3D = null
+var _gear_popup: Control = null
 
 ## Dim “off” lamp colors (same hue, low value).
 const _DIM_RED := Color(0.12, 0.05, 0.05, 1)
@@ -134,6 +136,7 @@ func _ready() -> void:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
 	refresh_control_hint()
 	refresh_hud()
+	_gear_popup = _GearShiftPopup.attach($RaceUI, _player)
 	_traffic.visible = true
 	if _street_start:
 		_build_start_word()
@@ -424,6 +427,10 @@ func _maybe_finish_by_progress() -> void:
 func _update_rpm_meter() -> void:
 	if _rpm_meter == null or not _rpm_meter.has_method(&"set_reading"):
 		return
+	var in_cockpit: bool = _player != null and _player.has_method(&"is_cockpit_camera") and bool(_player.is_cockpit_camera())
+	_rpm_meter.visible = GameState.hud_shows(_DrivingHud.RPM) and not in_cockpit
+	if not _rpm_meter.visible:
+		return
 	if not _player.has_method(&"get_rpm"):
 		return
 	_rpm_meter.set_reading(
@@ -431,7 +438,10 @@ func _update_rpm_meter() -> void:
 		_player.get_rpm_shift_start(),
 		_player.get_rpm_redline(),
 		_player.get_rpm_critical(),
-		_player.is_engine_blown()
+		_player.is_engine_blown(),
+		absf(_player.get_forward_speed()) * 3.6,
+		_player.get_short_gear_label(),
+		GameState.imperial_units
 	)
 
 
@@ -899,6 +909,11 @@ func _on_pause_graphics_pressed() -> void:
 ## The HUD as set on the graphics page. Also called when that page closes.
 func refresh_hud() -> void:
 	_DrivingHud.apply($RaceUI/Panel, _rpm_meter)
+	if _rpm_meter != null and _player != null and _player.has_method(&"is_cockpit_camera") and _player.is_cockpit_camera():
+		_rpm_meter.visible = false
+	if _gear_popup != null:
+		var hud_scale := clampf(GameState.hud_size, _DrivingHud.SMALLEST, 1.0)
+		_gear_popup.scale = Vector2(hud_scale, hud_scale)
 	if _mobile != null and _mobile.has_method(&"refresh"):
 		_mobile.call(&"refresh")
 

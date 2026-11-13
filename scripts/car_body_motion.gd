@@ -17,6 +17,11 @@ const _ACCEL_RESPONSE := 14.0
 const _STEERING_WHEEL_RATIO := 5.0
 const _MAX_STEERING_WHEEL_RAD := PI * 5.0 / 6.0
 const _STEERING_WHEEL_RESPONSE := 18.0
+const _GAUGE_SWEEP_RAD := deg_to_rad(250.0)
+const _GAUGE_MAX_MPH := 160.0
+const _GAUGE_MAX_RPM := 7000.0
+const _GAUGE_NEEDLE_RESPONSE := 14.0
+const _MPS_TO_MPH := 2.23693629
 
 var _visual: Node3D
 var _dynamics: _Dynamics
@@ -29,6 +34,14 @@ var _steering_model_root: Node
 var _steering_wheel: Node3D
 var _steering_rest := Transform3D.IDENTITY
 var _steering_angle := 0.0
+var _speedo_needle: Node3D
+var _speedo_rest := Transform3D.IDENTITY
+var _speedo_angle := 0.0
+var _speedo_sweep_rad := _GAUGE_SWEEP_RAD
+var _speedo_linear_travel := 0.0
+var _tach_needle: Node3D
+var _tach_rest := Transform3D.IDENTITY
+var _tach_angle := 0.0
 var _captured := false
 var _last_velocity := Vector3.ZERO
 var _long_accel := 0.0
@@ -111,7 +124,7 @@ func _lean_transform() -> Transform3D:
 ## Moves the body and wheels to match. `steer` is the road-wheel angle in radians, and
 ## `steer_input` the driver's input, -1 to 1. `rear_spin` is how much faster than the car
 ## the rear wheels are turning, in m/s.
-func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: float = 0.0) -> void:
+func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: float = 0.0, rpm: float = 0.0) -> void:
 	if not _captured:
 		return
 	if _body != null:
@@ -119,6 +132,7 @@ func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: 
 	var sim_wheels: Array = _dynamics.wheels() if _dynamics != null else []
 	var shown := _shown_steer(steer, steer_input)
 	_pose_steering_wheel(dt, shown)
+	_pose_gauges(dt, speed, rpm)
 	for i in _wheels.size():
 		var wheel: Dictionary = _wheels[i]
 		if wheel.is_empty():
@@ -152,6 +166,26 @@ func _refresh_steering_wheel() -> void:
 	_steering_wheel = _find_steering_wheel(model_root) if model_root != null else null
 	if _steering_wheel != null:
 		_steering_rest = _steering_wheel.transform
+	_speedo_needle = model_root.find_child("speedo_needle", true, false) as Node3D if model_root != null else null
+	_speedo_sweep_rad = _GAUGE_SWEEP_RAD
+	_speedo_linear_travel = 0.0
+	if _speedo_needle != null:
+		_speedo_rest = _speedo_needle.transform
+		var speedo_pod := _speedo_needle.get_parent()
+		if speedo_pod != null:
+			var pod_name := String(speedo_pod.name)
+			if pod_name.contains("linear_"):
+				var parts := pod_name.split("linear_")
+				if parts.size() > 1:
+					var num_str := parts[1].replace("_pod", "").replace("_", ".")
+					_speedo_linear_travel = maxf(num_str.to_float(), 0.0)
+			elif pod_name.contains("arch_160"):
+				_speedo_sweep_rad = deg_to_rad(160.0)
+			elif pod_name.contains("arch_150"):
+				_speedo_sweep_rad = deg_to_rad(150.0)
+	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
+	if _tach_needle != null:
+		_tach_rest = _tach_needle.transform
 
 
 func _find_steering_wheel(root: Node) -> Node3D:
@@ -174,6 +208,26 @@ func _pose_steering_wheel(dt: float, shown_steer: float) -> void:
 	_steering_angle = lerpf(_steering_angle, target, blend)
 	var wheel_turn := Basis(Vector3(0.0, 0.0, 1.0), -_steering_angle)
 	_steering_wheel.transform = _steering_rest * Transform3D(wheel_turn, Vector3.ZERO)
+
+
+func _pose_gauges(dt: float, speed: float, rpm: float) -> void:
+	var blend := 1.0 if dt <= 0.0 else 1.0 - exp(-_GAUGE_NEEDLE_RESPONSE * dt)
+	var mph := absf(speed) * _MPS_TO_MPH
+	var speedo_norm := clampf(mph / _GAUGE_MAX_MPH, 0.0, 1.0)
+	if _speedo_linear_travel > 0.0:
+		var target_pos := speedo_norm * _speedo_linear_travel
+		_speedo_angle = lerpf(_speedo_angle, target_pos, blend)
+		if _speedo_needle != null and is_instance_valid(_speedo_needle):
+			_speedo_needle.transform = _speedo_rest * Transform3D(Basis.IDENTITY, Vector3(-_speedo_angle, 0.0, 0.0))
+	else:
+		var speedo_target := speedo_norm * _speedo_sweep_rad
+		_speedo_angle = lerpf(_speedo_angle, speedo_target, blend)
+		if _speedo_needle != null and is_instance_valid(_speedo_needle):
+			_speedo_needle.transform = _speedo_rest * Transform3D(Basis(Vector3.UP, _speedo_angle), Vector3.ZERO)
+	var tach_target := clampf(rpm / _GAUGE_MAX_RPM, 0.0, 1.0) * _GAUGE_SWEEP_RAD
+	_tach_angle = lerpf(_tach_angle, tach_target, blend)
+	if _tach_needle != null and is_instance_valid(_tach_needle):
+		_tach_needle.transform = _tach_rest * Transform3D(Basis(Vector3.UP, _tach_angle), Vector3.ZERO)
 
 
 func _mesh_bounds(node: Node, to_space: Transform3D) -> AABB:

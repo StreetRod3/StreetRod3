@@ -81,6 +81,8 @@ const LANDING_SPEED_LOSS := 0.15
 ## it starts to lift touches down every step or two.
 const LANDING_FELT_MPS := 0.5
 
+signal gear_changed(from_gear: int, to_gear: int)
+
 @export var debug_dynamics: bool = false
 
 @onready var _cam: Camera3D = $RaceCamera
@@ -155,6 +157,7 @@ func _ready() -> void:
 	add_child(_skids)
 	_burnout_wander.seed = randi()
 	_burnout_wander.frequency = 0.5
+	_cam_mode = posmod(GameState.driving_camera, 4)
 	_apply_camera_mode()
 	_gearbox = GameState.get_equipped_gearbox()
 	_gear = 0
@@ -344,8 +347,30 @@ func get_gear_label() -> String:
 	return "%d / %d" % [_gear + 1, count]
 
 
+func get_short_gear_label() -> String:
+	if _gear == GEAR_REVERSE:
+		return "R"
+	if _gear == GEAR_NEUTRAL:
+		return "N"
+	if _is_automatic():
+		return "D"
+	return str(_gear + 1)
+
+
 func is_automatic_gearbox() -> bool:
 	return _is_automatic()
+
+
+func is_cockpit_camera() -> bool:
+	return _cam_mode == CAM_COCKPIT
+
+
+func get_gear_index() -> int:
+	return _gear
+
+
+func get_gear_count() -> int:
+	return _gear_count()
 
 
 func is_engine_blown() -> bool:
@@ -653,7 +678,7 @@ func _pose_body(delta: float) -> void:
 	var on_arcade := GameState.arcade_drive and not _parking
 	var steer: float = _arcade.steer_angle if on_arcade else _dynamics.steer_angle()
 	var steer_input: float = _arcade.steer_input() if on_arcade else _dynamics.steer_input()
-	_body_motion.pose(delta, forward_speed, steer, steer_input, _burnout * BURNOUT_WHEEL_SPEED)
+	_body_motion.pose(delta, forward_speed, steer, steer_input, _burnout * BURNOUT_WHEEL_SPEED, get_rpm())
 	_place_camera(delta)
 
 
@@ -905,11 +930,13 @@ func _can_engage_reverse() -> bool:
 func _set_gear(next: int) -> void:
 	if next == _gear:
 		return
+	var prev := _gear
 	_rumble.pulse(RUMBLE_SHIFT, 0.0)
 	_gear = next
 	# Nothing has to mesh going into neutral, so the next shift can follow at once.
 	_shift_timer = 0.0 if next == GEAR_NEUTRAL else float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
+	gear_changed.emit(prev, next)
 
 
 func _request_shift(direction: int) -> void:
@@ -918,9 +945,11 @@ func _request_shift(direction: int) -> void:
 	var next := _gear + direction
 	if next < 0 or next >= _gear_count():
 		return
+	var prev := _gear
 	_gear = next
 	_shift_timer = float(_gearbox.get("shift_time", 0.15))
 	_overrev_time = 0.0
+	gear_changed.emit(prev, next)
 
 
 func _auto_shift(throttle: bool, brake: bool) -> void:
@@ -988,6 +1017,7 @@ func _poll_camera() -> void:
 	var held := _Controller.action_down(_Controller.CAMERA)
 	if (held and not _camera_held) or _tapped_camera:
 		_cam_mode = (_cam_mode + 1) % 4
+		GameState.driving_camera = _cam_mode
 		_apply_camera_mode()
 	_camera_held = held
 	_tapped_camera = false
