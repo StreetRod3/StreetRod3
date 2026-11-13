@@ -89,7 +89,9 @@ CLOCK_AT = (0.377, 0.783, 0.811)
 DROP_NODES = {'polySurface28_Chrome_0'}
 
 PLAIN = (255, round(0.82 * 255), round(0.05 * 255))
-CHROME = ((238, 238, 238), False, (255, 26, 128))
+## Chrome: fully metallic and nearly mirror smooth, so it reflects the sky instead of
+## reading as flat grey paint (metallic 0.5 left half of it diffuse grey).
+CHROME = ((240, 240, 244), False, (255, 15, 255))
 ## (color, paint, (AO, roughness, metallic)) by the scene's material names.
 LOOKS = {
     BODY: ((255, 255, 255), True, PLAIN),
