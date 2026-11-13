@@ -42,6 +42,14 @@ var _speedo_linear_travel := 0.0
 var _tach_needle: Node3D
 var _tach_rest := Transform3D.IDENTITY
 var _tach_angle := 0.0
+## Set by the player's car only: its gas gauge follows GameState.fuel. A rival's stays at
+## full, since nothing about a rival may read the player's car.
+var shows_fuel := false
+var _fuel_needle: Node3D
+var _fuel_rest := Transform3D.IDENTITY
+## How far the pointer slides from F to E, in the model's units, from its pod's name.
+var _fuel_travel := 0.0
+var _fuel_shown := -1.0
 var _captured := false
 ## A blown tire's corner sinks onto the rim: roll and pitch in radians on top of the springs',
 ## by the same signs as theirs.
@@ -195,6 +203,17 @@ func _refresh_steering_wheel() -> void:
 	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
 	if _tach_needle != null:
 		_tach_rest = _tach_needle.transform
+	# A gas gauge's pointer rests at F inside a pod named for its travel, as
+	# "dash_fuel_linear_0.0288_pod" (Godot turns the point into "_").
+	_fuel_needle = model_root.find_child("fuel_needle", true, false) as Node3D if model_root != null else null
+	_fuel_travel = 0.0
+	_fuel_shown = -1.0
+	if _fuel_needle != null:
+		_fuel_rest = _fuel_needle.transform
+		var fuel_pod := _fuel_needle.get_parent()
+		if fuel_pod != null and String(fuel_pod.name).contains("linear_"):
+			var travel := String(fuel_pod.name).split("linear_")[1].replace("_pod", "").replace("_", ".")
+			_fuel_travel = maxf(travel.to_float(), 0.0)
 
 
 func _find_steering_wheel(root: Node) -> Node3D:
@@ -237,6 +256,11 @@ func _pose_gauges(dt: float, speed: float, rpm: float) -> void:
 	_tach_angle = lerpf(_tach_angle, tach_target, blend)
 	if _tach_needle != null and is_instance_valid(_tach_needle):
 		_tach_needle.transform = _tach_rest * Transform3D(Basis(Vector3.UP, _tach_angle), Vector3.ZERO)
+	if shows_fuel and _fuel_travel > 0.0 and _fuel_needle != null and is_instance_valid(_fuel_needle):
+		var used := 1.0 - clampf(GameState.fuel / GameState.DEFAULT_TANK_L, 0.0, 1.0)
+		# It starts where the tank is, then follows it down, as at the green light.
+		_fuel_shown = used if _fuel_shown < 0.0 else lerpf(_fuel_shown, used, blend)
+		_fuel_needle.transform = _fuel_rest * Transform3D(Basis.IDENTITY, Vector3(-_fuel_shown * _fuel_travel, 0.0, 0.0))
 
 
 func _mesh_bounds(node: Node, to_space: Transform3D) -> AABB:

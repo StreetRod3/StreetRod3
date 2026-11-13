@@ -14,8 +14,11 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          lfs: true
+
+      # reference/ (source models, photos, drawings) is in LFS too but the game never
+      # loads it, so the build skips it rather than download hundreds of MB each run.
+      - name: Pull LFS files the game uses
+        run: git lfs pull --exclude="reference/**"
 
       - name: Setup Godot 4.6.1
         uses: chickensoft-games/setup-godot@v2

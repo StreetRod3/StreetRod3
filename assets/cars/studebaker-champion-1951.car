@@ -1,0 +1,74 @@
+{
+  "id": "studebaker-champion-1951",
+  "name": "Studebaker Champion 1951",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/studebaker-champion-1951.glb",
+    "position": [0.0, 0.253, 0.0],
+    "height": 1.256,
+    "ground_clearance": 0.253,
+    "dither_cell": 0.04
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.684, 0.343, 1.566],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.684, 0.343, 1.566],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.684, 0.343, -1.348],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.684, 0.343, -1.348],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "chevy-216",
+    "transmission": "gb_man3",
+    "wheels": "wheel-c1"
+  },
+  "driver": {
+    "position": [0.377, 1.21, 0.3]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.6, -10.4],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.88, -6.1],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.377, 1.27, 0.3],
+      "pitch": 0.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.55, 2.62],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "chassis": {
+    "mass": 1250,
+    "wheelbase": 2.914,
+    "cg_height": 0.55,
+    "front_axle_fraction": 0.47,
+    "max_steer_deg": 30
+  }
+}

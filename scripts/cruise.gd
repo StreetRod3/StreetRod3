@@ -2013,6 +2013,7 @@ func _build_car() -> void:
 	_car.add_child(_dynamics)
 	_dynamics.apply_setup(GameState.race_chassis(), GameState.tire_grip())
 	_lay_out_wheels()
+	_body_motion.shows_fuel = true
 	_body_motion.setup(_pivot, _dynamics)
 	if _pivot.has_method(&"align_wheels_to_floor") and _floor != null:
 		_pivot.call_deferred(&"align_wheels_to_floor", _floor)
