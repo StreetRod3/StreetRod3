@@ -65,8 +65,12 @@ GLASS_MATERIAL = {
     'doubleSided': True,
 }
 MIRROR_NODES = {'Side_Mirror_Chrome_0', 'Side_Mirror_Mirror1_0'}
-## The steering wheel and its horn button: their own node, so the game can turn them.
-STEERING_NODES = {'Steering_Wheel_Rubber1_0', 'pCylinder24_lambert1_0'}
+## The steering wheel (rim, spokes and hub): its own node, so the game can turn it. The
+## grey column behind it (pCylinder24) stays with the body: it is not on the wheel's axis,
+## so it would swing round if it turned.
+STEERING_NODES = {'Steering_Wheel_Rubber1_0'}
+## The wheel itself (rim and spokes), whose rim sets the axis it turns about.
+STEERING_RIM = 'Steering_Wheel_Rubber1_0'
 ## The driver's eye, in the GLB's frame (body bottom at Y = 0), for aiming the gauges.
 EYE = (0.377, 0.95, 0.30)
 ## The cluster's needle pivot, standing out from the upright dash face (Z 0.86) ahead of
@@ -179,6 +183,37 @@ def inside(lo, hi, outer_lo, outer_hi, margin=0.03):
     return bool(np.all(lo >= outer_lo - margin) and np.all(hi <= outer_hi + margin))
 
 
+def ring_axis(points):
+    """The center and axis of a steering wheel's rim: a circle fitted to the rim's outer
+    edge (the farthest point in each 10 degree slice, so the spokes and hub don't pull
+    it), refined a few times. The axis points away from the driver (+Z)."""
+    center = (points.min(0) + points.max(0)) / 2
+    _, _, vt = np.linalg.svd(points - points.mean(0))
+    axis = vt[2]
+    for _ in range(8):
+        u = np.cross(axis, [0.0, 1.0, 0.0])
+        u /= np.linalg.norm(u)
+        v = np.cross(axis, u)
+        q = points - center
+        x, y = q @ u, q @ v
+        ang = np.degrees(np.arctan2(y, x))
+        r = np.hypot(x, y)
+        edge = []
+        for a0 in range(-180, 180, 10):
+            m = np.nonzero((ang >= a0) & (ang < a0 + 10))[0]
+            if len(m):
+                edge.append(m[np.argmax(r[m])])
+        ring = points[edge]
+        _, _, vt = np.linalg.svd(ring - ring.mean(0))
+        axis = vt[2]
+        q = ring - center
+        x, y = q @ u, q @ v
+        a = np.stack([x, y, np.ones_like(x)], 1)
+        (ca, cb, _), *_ = np.linalg.lstsq(a, -(x * x + y * y), rcond=None)
+        center = center + (-ca / 2) * u + (-cb / 2) * v
+    return center, (axis if axis[2] > 0 else -axis)
+
+
 def drawn_once(tris, normals):
     """True for a closed part whose faces all wind to match their normals: its inside is
     never seen, so it needs no turned-round copy."""
@@ -218,7 +253,10 @@ def main():
         q = np.asarray(q, np.float64)
         return np.stack([(q[..., 0] - center[0]) * stretch, q[..., 1] - lo[1], q[..., 2] - (lo[2] + hi[2]) / 2], -1) * scale
 
+    rim_src = [t for nm, _, t, _ in kept if nm == STEERING_RIM][0].reshape(-1, 3)
+    wheel_x = (rim_src[:, 0].min() + rim_src[:, 0].max()) / 2
     looks = []
+    rim_points = None
     groups = {'body': ([], [], []), 'wheel': ([], [], [])}
     glass_pos, glass_nrm = [], []
     once = 0
@@ -228,6 +266,11 @@ def main():
             # Moved as a whole by as much as its inner edge moved, so it keeps its shape.
             inner = tris[..., 0].min() - center[0]
             p[..., 0] = (tris[..., 0] - center[0] + inner * (stretch - 1)) * scale
+            n = normals
+        elif name in STEERING_NODES:
+            # Moved out with the stretch by its middle but not stretched itself, so the
+            # wheel stays round and turns true.
+            p[..., 0] = (tris[..., 0] - center[0] + (wheel_x - center[0]) * (stretch - 1)) * scale
             n = normals
         else:
             n = normals / np.array([stretch, 1.0, 1.0])
@@ -244,6 +287,8 @@ def main():
         else:
             p = np.concatenate([p, p[:, ::-1]])
             n = np.concatenate([n, -n[:, ::-1]])
+        if name == STEERING_RIM:
+            rim_points = p.reshape(-1, 3)
         gpos, gnrm, glook = groups['wheel' if name in STEERING_NODES else 'body']
         gpos.append(p)
         gnrm.append(n)
@@ -272,11 +317,8 @@ def main():
         uv = np.repeat(np.array([cells[k] for k in glook], np.float32), 3, 0)
         return share_corners(pos.astype(np.float32), nrm.astype(np.float32), uv)
 
-    # The steering wheel's frame: its middle, +Z along the column toward the dash.
-    rim = np.concatenate(groups['wheel'][0]).reshape(-1, 3)
-    hub = (rim.min(0) + rim.max(0)) / 2
-    _, _, vt = np.linalg.svd(rim - rim.mean(0))
-    axis = vt[2] if vt[2][2] > 0 else -vt[2]
+    # The steering wheel's frame: the middle of its rim, +Z along the column toward the dash.
+    hub, axis = ring_axis(rim_points)
     across = np.array([1.0, 0.0, 0.0]) - axis[0] * axis
     across /= np.linalg.norm(across)
     wheel_basis = np.stack([across, np.cross(axis, across), axis], 1)
