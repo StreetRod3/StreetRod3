@@ -43,6 +43,13 @@ var _tach_needle: Node3D
 var _tach_rest := Transform3D.IDENTITY
 var _tach_angle := 0.0
 var _captured := false
+## A blown tire's corner sinks onto the rim: roll and pitch in radians on top of the springs',
+## by the same signs as theirs.
+var flat_roll := 0.0
+var flat_pitch := 0.0
+## The blown wheel, by its place in WHEEL_NAMES, or -1; and how far down it sits, in meters.
+var flat_wheel := -1
+var flat_drop := 0.0
 var _last_velocity := Vector3.ZERO
 var _long_accel := 0.0
 var _lat_accel := 0.0
@@ -116,7 +123,7 @@ func lean_in_car_space() -> Transform3D:
 func _lean_transform() -> Transform3D:
 	if _dynamics == null:
 		return Transform3D.IDENTITY
-	var turn := Basis(Vector3.RIGHT, -_dynamics.body_pitch()) * Basis(Vector3.BACK, _dynamics.body_roll())
+	var turn := Basis(Vector3.RIGHT, -(_dynamics.body_pitch() + flat_pitch)) * Basis(Vector3.BACK, _dynamics.body_roll() + flat_roll)
 	var lift := Vector3(0.0, _dynamics.body_heave() - _dynamics.ride_lower(), 0.0)
 	return Transform3D(Basis.IDENTITY, _lean_center + lift) * Transform3D(turn, Vector3.ZERO) * Transform3D(Basis.IDENTITY, -_lean_center)
 
@@ -145,6 +152,8 @@ func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: 
 		var hub: Vector3 = wheel["hub"]
 		if i < sim_wheels.size():
 			hub += Vector3(0.0, (sim_wheels[i] as _Dynamics.Wheel).hub_lift, 0.0)
+		if i == flat_wheel:
+			hub.y -= flat_drop
 		var mesh := Transform3D(turn, hub) * Transform3D(Basis.IDENTITY, -(wheel["hub"] as Vector3))
 		(wheel["node"] as Node3D).transform = mesh * (wheel["rest"] as Transform3D)
 
