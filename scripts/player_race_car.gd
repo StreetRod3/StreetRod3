@@ -90,6 +90,8 @@ const FLAT_YAW_KICK := 0.4
 ## How far the blown corner of the body sinks onto the rim, in meters, and how fast.
 const FLAT_DROP_M := 0.12
 const FLAT_DROP_S := 0.15
+## A car out of the race slides to a stop at this rate, in m/s².
+const HALT_DECEL := 9.0
 ## A landing softer than this, in m/s into the road, isn't felt: a car skimming a crest at the speed
 ## it starts to lift touches down every step or two.
 const LANDING_FELT_MPS := 0.5
@@ -143,6 +145,8 @@ var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _cam_rest := Transform3D.IDENTITY
 var _chase_cam: _ChaseCamera = _ChaseCamera.new()
 var _parking := false
+## Out of the race where it is, with nobody driving: wrecked, engine blown, or on a flat.
+var _halting := false
 var _park_speed := 0.0
 var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
@@ -296,6 +300,8 @@ func get_forward_speed() -> float:
 
 
 func planar_velocity() -> Vector3:
+	if _halting:
+		return Vector3(velocity.x, 0.0, velocity.z)
 	if GameState.arcade_drive:
 		return _arcade.planar_velocity()
 	return _dynamics.cg_velocity
@@ -687,7 +693,7 @@ func _handbrake_down() -> bool:
 
 
 func begin_park(slot: float) -> void:
-	if _parking:
+	if _parking or _halting:
 		return
 	stop_mouse_driving()
 	_parking = true
@@ -699,9 +705,43 @@ func begin_park(slot: float) -> void:
 	_skids.end_strips()
 
 
+## Takes the controls away from a car whose race is over and lets it slide to a stop where it
+## is, as a wreck or a car that lost its engine or a tire would. A car that finished parks instead.
+func halt() -> void:
+	if _parking or _halting:
+		return
+	stop_mouse_driving()
+	_halting = true
+	_burnout = 0.0
+	_clutch_rpm = 0.0
+	_clutch_kicks = false
+	_skids.end_strips()
+
+
+func _halt_step(delta: float) -> void:
+	var planar := Vector3(velocity.x, 0.0, velocity.z)
+	var speed := planar.length()
+	if speed > 0.0:
+		planar *= move_toward(speed, 0.0, HALT_DECEL * delta) / speed
+	velocity = planar
+	move_and_slide()
+	planar = Vector3(velocity.x, 0.0, velocity.z)
+	velocity = planar
+	heading_yaw = rotation.y
+	forward_speed = planar.dot(Vector3(sin(heading_yaw), 0.0, cos(heading_yaw)))
+	_dynamics.cg_velocity = planar
+	_stick_to_road()
+	_update_engine_sound(false)
+	_body_motion.ride_from_motion(delta, planar, heading_yaw)
+	_pose_body(delta)
+
+
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
 	_poll_camera()
+	if _halting:
+		_halt_step(delta)
+		return
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed

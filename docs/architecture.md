@@ -200,7 +200,7 @@ Five layouts share `scenes/race.tscn`:
 
 Street Rod 2's three races run at night, set by `_set_night()` in `race.gd`. The quarter mile and the road course run by day.
 
-A win is crossing the finish before the opponent. Holding a manual gearbox past critical RPM for 0.55 s blows the engine and ends the race. After winning a money bet on Road Race (`RACE_ROAD`), Aqueduct (`RACE_AQUEDUCT`), or Mulholland Drive (`RACE_MULHOLLAND`), the rival may propose giving a randomly chosen book from `BOOKS` instead of paying the stake (`book_offer_chance()`: `10% * bet_amount / 100`); duplicate copies on the bookshelf do not multiply stat bonuses (`owned_books()`).
+A win is crossing the finish before the opponent. Holding a manual gearbox past critical RPM for 0.55 s blows the engine and ends the race. A race lost to a wreck, a blown engine or a blowout ends with `_halt_cars()`: the player's car `halt()`s, taking the controls away and sliding to a stop at `HALT_DECEL` where it is, and the rival parks. A finished or abandoned race parks both cars at the roadside instead (`_park_cars()`, `race_park.gd`). After winning a money bet on Road Race (`RACE_ROAD`), Aqueduct (`RACE_AQUEDUCT`), or Mulholland Drive (`RACE_MULHOLLAND`), the rival may propose giving a randomly chosen book from `BOOKS` instead of paying the stake (`book_offer_chance()`: `10% * bet_amount / 100`); duplicate copies on the bookshelf do not multiply stat bonuses (`owned_books()`).
 
 ### Cars
 

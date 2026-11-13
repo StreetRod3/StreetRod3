@@ -504,6 +504,7 @@ func _play_crunch(speed_change: float) -> void:
 
 func _show_engine_blown() -> void:
 	_race_over = true
+	_halt_cars()
 	_end_race_ui()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
 	GameState.remove_engine()
@@ -531,6 +532,7 @@ func _blow_tire() -> void:
 ## The car rode out the blowout without crashing.
 func _show_tire_blowout() -> void:
 	_race_over = true
+	_halt_cars()
 	_end_race_ui()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
 	var payout := GameState.apply_race_stake(false)
@@ -545,6 +547,7 @@ func _show_wreck() -> void:
 	if _race_over:
 		return
 	_race_over = true
+	_halt_cars()
 	_end_race_ui()
 	# A wrecked car can't be handed over, so pink slips are void.
 	GameState.race_pink_slips = false
@@ -612,6 +615,13 @@ func _lost_bucks_line(payout: int) -> String:
 	if payout >= 0:
 		return ""
 	return "\nYou lost %d bucks!" % -payout
+
+
+## The player is out of the race where they are, and the rival pulls over.
+func _halt_cars() -> void:
+	_player.halt()
+	if _opponent.has_method(&"begin_park"):
+		_opponent.begin_park(4.2)
 
 
 func _park_cars() -> void:
