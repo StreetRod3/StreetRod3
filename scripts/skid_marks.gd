@@ -4,6 +4,7 @@ extends MeshInstance3D
 ## wheel keeps its own strip, and a gap or a teleport starts a new one.
 
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
+const _SmokePuff := preload("res://scripts/smoke_puff.gd")
 
 const MARK_Y := 0.035
 const MIN_STEP := 0.15
@@ -34,7 +35,6 @@ var _dirty := false
 var _smoke_wanted: Array[float] = []
 var _smoke_at: Array[Vector3] = []
 var _smokes: Array[CPUParticles3D] = []
-var _smoke_mesh: QuadMesh = null
 var _burn_ticks: Array[int] = []
 ## Anything with `paved_height(world)`, for paving drawn over the ground with no track to say how
 ## high it is, such as free roam's driveways and the slabs in front of each place.
@@ -264,49 +264,23 @@ func _smoke_for(index: int) -> CPUParticles3D:
 		smoke.gravity = Vector3(0.0, 0.7, 0.0)
 		smoke.initial_velocity_min = 0.4
 		smoke.initial_velocity_max = 1.3
+		# Fades in over the first moments so a new puff does not pop out of the tire.
 		var fade := Gradient.new()
-		fade.set_color(0, Color(0.9, 0.9, 0.9, 0.42))
-		fade.set_color(1, Color(0.9, 0.9, 0.9, 0.0))
+		fade.set_color(0, Color(1.0, 1.0, 1.0, 0.0))
+		fade.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
+		fade.add_point(0.1, Color(1.0, 1.0, 1.0, 0.5))
+		fade.add_point(0.45, Color(1.0, 1.0, 1.0, 0.3))
 		smoke.color_ramp = fade
+		_SmokePuff.vary(smoke, Color(0.78, 0.78, 0.8), Color(0.95, 0.95, 0.95))
+		_SmokePuff.spin(smoke)
 		var growth := Curve.new()
 		growth.add_point(Vector2(0.0, SMOKE_PUFF_START))
 		growth.add_point(Vector2(1.0, 1.0))
 		smoke.scale_amount_curve = growth
-		smoke.mesh = _smoke_puff()
+		smoke.mesh = _SmokePuff.mesh()
 		add_child(smoke)
 		_smokes[index] = smoke
 	return _smokes[index]
-
-
-func _smoke_puff() -> QuadMesh:
-	if _smoke_mesh == null:
-		_smoke_mesh = QuadMesh.new()
-		var mat := StandardMaterial3D.new()
-		mat.vertex_color_use_as_albedo = true
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mat.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
-		# Without this a particle's size is ignored. One not in use has none, and it would be drawn
-		# full size and black at the emitter.
-		mat.billboard_keep_scale = true
-		mat.albedo_texture = _soft_puff_texture()
-		_smoke_mesh.material = mat
-	return _smoke_mesh
-
-
-## White in the middle, fading to nothing at the edge, so a puff has no corners.
-func _soft_puff_texture() -> GradientTexture2D:
-	var falloff := Gradient.new()
-	falloff.set_color(0, Color(1.0, 1.0, 1.0, 1.0))
-	falloff.set_color(1, Color(1.0, 1.0, 1.0, 0.0))
-	var texture := GradientTexture2D.new()
-	texture.gradient = falloff
-	texture.fill = GradientTexture2D.FILL_RADIAL
-	texture.fill_from = Vector2(0.5, 0.5)
-	texture.fill_to = Vector2(1.0, 0.5)
-	texture.width = 64
-	texture.height = 64
-	return texture
 
 
 func _push(point: Vector3, color: Color) -> void:

@@ -3,6 +3,8 @@ extends RefCounted
 ## What a race has done to a car, from nothing to totaled. How bad a hit is goes by how
 ## suddenly the car's speed changed, so a heavy car takes less from a light one.
 
+const _SmokePuff := preload("res://scripts/smoke_puff.gd")
+
 ## A change of speed this small does no harm, in m/s.
 const FREE_MPS := 1.5
 ## A single change of speed this large totals a car, in m/s.
@@ -62,15 +64,21 @@ func update_smoke(body: Node3D) -> void:
 	_smoke.gravity = Vector3(0.0, 0.8, 0.0)
 	_smoke.initial_velocity_min = 0.6
 	_smoke.initial_velocity_max = 1.2
-	_smoke.scale_amount_min = 0.5
-	_smoke.scale_amount_max = 1.2
-	var puff := QuadMesh.new()
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.14, 0.14, 0.14, 0.55)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	puff.material = mat
-	_smoke.mesh = puff
+	_smoke.scale_amount_min = 0.8
+	_smoke.scale_amount_max = 1.6
+	var growth := Curve.new()
+	growth.add_point(Vector2(0.0, 0.4))
+	growth.add_point(Vector2(1.0, 1.0))
+	_smoke.scale_amount_curve = growth
+	# Thick and dark off the engine, thinning and paling as it spreads.
+	var fade := Gradient.new()
+	fade.set_color(0, Color(0.16, 0.16, 0.16, 0.0))
+	fade.set_color(1, Color(0.45, 0.45, 0.45, 0.0))
+	fade.add_point(0.12, Color(0.18, 0.18, 0.18, 0.7))
+	fade.add_point(0.55, Color(0.3, 0.3, 0.3, 0.4))
+	_smoke.color_ramp = fade
+	_SmokePuff.vary(_smoke, Color(0.75, 0.75, 0.75), Color(1.0, 1.0, 1.0))
+	_SmokePuff.spin(_smoke)
+	_smoke.mesh = _SmokePuff.mesh()
 	_smoke.position = Vector3(0.0, 0.8, 1.2)
 	body.add_child(_smoke)
