@@ -123,8 +123,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				else:
 					_open_catalog(str(display.get_meta(&"catalog_filter", "")))
 				return
-	if _nav.handle_event(self, event):
-		get_viewport().set_input_as_handled()
+	var viewport := get_viewport()
+	if _nav.handle_event(self, event) and viewport != null:
+		viewport.set_input_as_handled()
 
 
 func _leave(home: bool) -> void:

@@ -52,6 +52,7 @@ The Mouse tab under Controls enables steering and acceleration/braking independe
 | I | Car stats |
 | D | Drive out to free roam |
 | G | Drive to the gas station |
+| Space | Skip the garage departure animation |
 | M | City map |
 | X | Calendar |
 | R | Radio on and off |

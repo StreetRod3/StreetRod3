@@ -24,6 +24,8 @@ const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _StreetLamp := preload("res://scripts/street_lamp.gd")
 const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
 const _CruiseMinimap := preload("res://scripts/cruise_minimap.gd")
+const _CarFile := preload("res://scripts/car_file.gd")
+const _RearMirror := preload("res://scripts/rear_mirror.gd")
 ## Spawn at least this far from the place just left, toward the street, in meters.
 const _ROAM_CLEAR := 8.5
 ## A stop in front of a place. Faster than this is still driving past.
@@ -104,6 +106,9 @@ var _car: CharacterBody3D
 var _pivot: Node3D
 var _camera: Camera3D
 var _cam_rest := Transform3D.IDENTITY
+var _cam_mode: int = _PlayerCar.CAM_FAR
+var _camera_held: bool = false
+var _tapped_camera: bool = false
 var _chase_cam: _ChaseCamera = _ChaseCamera.new()
 var _dynamics: _VehicleDynamics
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
@@ -145,6 +150,7 @@ var _hud_hint: Label
 var _rpm_meter: Control
 var _minimap: Control
 var _touch: Node
+var _ui_layer: CanvasLayer
 
 
 func _ready() -> void:
@@ -183,8 +189,8 @@ func _ready() -> void:
 	_plan_speeds()
 	_place_car(0.0)
 	_yaw_rate = 0.0
-	_chase_cam.settle(_car.rotation.y)
-	_chase_cam.place(_camera, _car, _pivot.position, _cam_rest, Vector3.ZERO, 0.0)
+	_apply_auto_camera_mode()
+	_add_rear_mirror(_car)
 	if GameState.engine_runs():
 		_engine = _EngineSound.new()
 		_car.add_child(_engine)
@@ -198,15 +204,27 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if _wrecked:
 		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
-			get_viewport().set_input_as_handled()
+			var wreck_vp := get_viewport()
+			if wreck_vp != null:
+				wreck_vp.set_input_as_handled()
 			_leave_after_wreck()
 		return
 	if _roaming or _finished or not event is InputEventKey:
 		return
 	var key := event as InputEventKey
-	if not key.pressed or key.echo or (key.keycode != KEY_SPACE and key.keycode != KEY_ENTER):
+	if not key.pressed or key.echo:
 		return
-	get_viewport().set_input_as_handled()
+	if _Controller.keys_for(_Controller.CAMERA).has(int(key.keycode)):
+		_tapped_camera = true
+		var cam_vp := get_viewport()
+		if cam_vp != null:
+			cam_vp.set_input_as_handled()
+		return
+	if key.keycode != KEY_SPACE and key.keycode != KEY_ENTER:
+		return
+	var skip_vp := get_viewport()
+	if skip_vp != null:
+		skip_vp.set_input_as_handled()
 	_finish()
 
 
@@ -224,6 +242,7 @@ func _process(delta: float) -> void:
 			return
 		_check_roam_arrival()
 		return
+	_poll_auto_camera()
 	if _phase == 0:
 		_fade = maxf(_fade - delta / _FADE_IN_S, 0.0)
 		_paint_fade()
@@ -281,6 +300,65 @@ func _ride(delta: float) -> void:
 	_body_motion.capture()
 	var steer := atan(_yaw_rate * _dynamics.config.wheelbase_m / maxf(_speed, 1.0))
 	_body_motion.pose(delta, _speed, steer, clampf(_yaw_rate / _FULL_STEER_YAW_RATE, -1.0, 1.0))
+	_place_auto_camera(delta)
+
+
+func _poll_auto_camera() -> void:
+	var held := _Controller.action_down(_Controller.CAMERA)
+	if (held and not _camera_held) or _tapped_camera:
+		_cam_mode = (_cam_mode + 1) % 4
+		_apply_auto_camera_mode()
+	_camera_held = held
+	_tapped_camera = false
+
+
+func _auto_camera_slot() -> String:
+	match _cam_mode:
+		_PlayerCar.CAM_CLOSE:
+			return "close"
+		_PlayerCar.CAM_COCKPIT:
+			return "cockpit"
+		_PlayerCar.CAM_BUMPER:
+			return "bumper"
+		_:
+			return "far"
+
+
+func _apply_auto_camera_mode() -> void:
+	if _camera == null or _car == null or _pivot == null:
+		return
+	var slot := _auto_camera_slot()
+	var defaults: Dictionary = _CarFile.DEFAULT_CAMERAS[slot]
+	var pos: Vector3 = defaults["position"]
+	var pitch_deg := float(defaults["pitch"])
+	var fov_deg := float(defaults["fov"])
+	var cameras: Variant = GameState.car_spec.get("cameras", {})
+	if typeof(cameras) == TYPE_DICTIONARY and (cameras as Dictionary).has(slot):
+		var entry: Variant = (cameras as Dictionary)[slot]
+		if typeof(entry) == TYPE_DICTIONARY:
+			var cam_dict: Dictionary = entry
+			var raw_pos: Variant = cam_dict.get("position", null)
+			if raw_pos is Vector3:
+				pos = raw_pos
+			pitch_deg = float(cam_dict.get("pitch", pitch_deg))
+			fov_deg = float(cam_dict.get("fov", fov_deg))
+	var local_pos := Vector3(_pivot.position.x + pos.x, pos.y - _BODY_Y, _pivot.position.z + pos.z)
+	_cam_rest = Transform3D(Basis.from_euler(Vector3(deg_to_rad(pitch_deg), PI, 0.0)), local_pos)
+	_camera.fov = fov_deg
+	_camera.top_level = true
+	_camera.current = true
+	_chase_cam.settle(_car.rotation.y)
+	_place_auto_camera(0.0)
+
+
+func _place_auto_camera(delta: float) -> void:
+	if _camera == null or _car == null or _pivot == null:
+		return
+	if _cam_mode == _PlayerCar.CAM_COCKPIT or _cam_mode == _PlayerCar.CAM_BUMPER:
+		_camera.global_transform = _car.global_transform * _body_motion.lean_in_car_space() * _cam_rest
+		return
+	var yaw := _car.rotation.y
+	var velocity := Vector3(sin(yaw), 0.0, cos(yaw)) * _speed
 	_chase_cam.place(_camera, _car, _pivot.position, _cam_rest, velocity, delta)
 
 
@@ -302,6 +380,8 @@ func _start_roam(from_poi: String) -> void:
 		_set_garage_doors_open()
 	_build_hud(track)
 	_build_roam_car(track, from_poi)
+	if _roam_car != null:
+		_add_rear_mirror(_roam_car)
 	if _touch != null and _roam_car != null:
 		_roam_car.set(&"_touch", _touch)
 	if _roam_car != null:
@@ -527,12 +607,27 @@ func _scene_for_roam(place_id: String) -> String:
 	return ""
 
 
+func _ensure_ui_layer() -> CanvasLayer:
+	if _ui_layer == null:
+		_ui_layer = CanvasLayer.new()
+		_ui_layer.name = "CruiseUI"
+		_ui_layer.layer = 10
+		add_child(_ui_layer)
+	return _ui_layer
+
+
+func _add_rear_mirror(car: Node3D) -> void:
+	if car == null:
+		return
+	var layer := _ensure_ui_layer()
+	var mirror: Control = _RearMirror.build_housing(car)
+	layer.add_child(mirror)
+	layer.move_child(mirror, 0)
+
+
 ## The race cluster while the player is driving. A scripted cruise stays clear.
 func _build_hud(track: Dictionary) -> void:
-	var layer := CanvasLayer.new()
-	layer.name = "CruiseUI"
-	layer.layer = 10
-	add_child(layer)
+	var layer := _ensure_ui_layer()
 	var panel := PanelContainer.new()
 	panel.name = "Panel"
 	panel.anchor_left = 1.0

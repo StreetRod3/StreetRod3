@@ -17,6 +17,7 @@ const _CarDamage := preload("res://scripts/car_damage.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 const _AirTime := preload("res://scripts/air_time.gd")
 const _MouseDrive := preload("res://scripts/mouse_drive.gd")
+const _CarFile := preload("res://scripts/car_file.gd")
 
 const RPM_IDLE_MIN := 500.0
 const RPM_IDLE := 600.0 ## C1 idle sits between 500 and 700.
@@ -213,22 +214,39 @@ func _unhandled_input(event: InputEvent) -> void:
 	_tapped_camera = _tapped_camera or _Controller.keys_for(_Controller.CAMERA).has(code)
 
 
+func _camera_slot_name() -> String:
+	match _cam_mode:
+		CAM_CLOSE:
+			return "close"
+		CAM_COCKPIT:
+			return "cockpit"
+		CAM_BUMPER:
+			return "bumper"
+		_:
+			return "far"
+
+
 func _apply_camera_mode() -> void:
 	if _cam == null:
 		return
-	match _cam_mode:
-		CAM_FAR:
-			_cam_rest = _camera_pose(Vector3(0.0, 2.2, -8.5), -14.0)
-			_cam.fov = 68.0
-		CAM_CLOSE:
-			_cam_rest = _camera_pose(Vector3(0.0, 1.45, -4.2), -10.0)
-			_cam.fov = 70.0
-		CAM_COCKPIT:
-			_cam_rest = _camera_pose(Vector3(0.42, 0.88, 1.52), -2.0)
-			_cam.fov = 72.0
-		CAM_BUMPER:
-			_cam_rest = _camera_pose(Vector3(0.0, 0.16, 4.85), -1.0)
-			_cam.fov = 72.0
+	var slot := _camera_slot_name()
+	var defaults: Dictionary = _CarFile.DEFAULT_CAMERAS[slot]
+	var pos: Vector3 = defaults["position"]
+	var pitch_deg := float(defaults["pitch"])
+	var fov_deg := float(defaults["fov"])
+	var cameras: Variant = GameState.car_spec.get("cameras", {})
+	if typeof(cameras) == TYPE_DICTIONARY and (cameras as Dictionary).has(slot):
+		var entry: Variant = (cameras as Dictionary)[slot]
+		if typeof(entry) == TYPE_DICTIONARY:
+			var cam_dict: Dictionary = entry
+			var raw_pos: Variant = cam_dict.get("position", null)
+			if raw_pos is Vector3:
+				pos = raw_pos
+			pitch_deg = float(cam_dict.get("pitch", pitch_deg))
+			fov_deg = float(cam_dict.get("fov", fov_deg))
+	var local_pos := Vector3(_car_center.x + pos.x, pos.y - _road_base_y, _car_center.z + pos.z)
+	_cam_rest = _camera_pose(local_pos, pitch_deg)
+	_cam.fov = fov_deg
 	_cam.top_level = true
 	_cam.current = true
 	_chase_cam.settle(rotation.y)
