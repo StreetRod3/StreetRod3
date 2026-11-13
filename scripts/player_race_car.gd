@@ -170,6 +170,7 @@ func _ready() -> void:
 	_apply_car_spec()
 	_cache_axles()
 	_layout_wheels()
+	_body_motion.shows_fuel = true
 	_body_motion.setup(_visual, _dynamics)
 	_dynamics.yaw = rotation.y
 	heading_yaw = rotation.y
