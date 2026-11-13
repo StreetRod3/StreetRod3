@@ -77,6 +77,21 @@ const REVERSE_TOP_FRACTION := 0.38
 const REVERSE_TOP_MIN := 7.0
 ## Share of how hard a landing is that comes off the car's speed.
 const LANDING_SPEED_LOSS := 0.15
+## A blown tire pulls the car towards its side, as in Street Rod 2. The pull is steering input,
+## -1 to 1, added to the driver's, and it grows as the tire shreds until full opposite lock
+## can't hold the car straight.
+const FLAT_PULL_START := 0.6
+const FLAT_PULL_FULL := 1.5
+const FLAT_PULL_RAMP_S := 1.5
+## A flat drags the car down, in m/s².
+const FLAT_DRAG := 4.0
+## The nose jerks towards the flat as the tire goes, in rad/s.
+const FLAT_YAW_KICK := 0.4
+## How far the blown corner of the body sinks onto the rim, in meters, and how fast.
+const FLAT_DROP_M := 0.12
+const FLAT_DROP_S := 0.15
+## A car out of the race slides to a stop at this rate, in m/s².
+const HALT_DECEL := 9.0
 ## A landing softer than this, in m/s into the road, isn't felt: a car skimming a crest at the speed
 ## it starts to lift touches down every step or two.
 const LANDING_FELT_MPS := 0.5
@@ -119,12 +134,19 @@ var _clutch_rpm: float = 0.0
 var _clutch_kicks: bool = false
 var _overrev_time: float = 0.0
 var _engine_blown: bool = false
+## Which way a blown tire pulls, as steering input: 1 or -1, or 0 with all four up.
+var _flat_side: float = 0.0
+var _flat_s: float = 0.0
+## The blown corner, in the car's space.
+var _flat_corner := Vector3.ZERO
 var _damage: _CarDamage = _CarDamage.new()
 var _arcade_active: bool = false
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _cam_rest := Transform3D.IDENTITY
 var _chase_cam: _ChaseCamera = _ChaseCamera.new()
 var _parking := false
+## Out of the race where it is, with nobody driving: wrecked, engine blown, or on a flat.
+var _halting := false
 var _park_speed := 0.0
 var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
@@ -278,6 +300,8 @@ func get_forward_speed() -> float:
 
 
 func planar_velocity() -> Vector3:
+	if _halting:
+		return Vector3(velocity.x, 0.0, velocity.z)
 	if GameState.arcade_drive:
 		return _arcade.planar_velocity()
 	return _dynamics.cg_velocity
@@ -377,6 +401,55 @@ func is_engine_blown() -> bool:
 	return _engine_blown
 
 
+## A tire blows at `corner`, an index into the wheels (front left, front right, rear left,
+## rear right).
+func blow_tire(corner: int) -> void:
+	if has_flat_tire():
+		return
+	var wheels := _dynamics.wheels()
+	_flat_corner = wheels[corner].local_position if corner >= 0 and corner < wheels.size() else _car_center + Vector3(0.75, 0.0, 1.5)
+	_flat_side = 1.0 if _flat_corner.x >= _car_center.x else -1.0
+	_body_motion.flat_wheel = corner
+	_flat_s = 0.0
+	_rumble.pulse(0.8, 1.0)
+	_chase_cam.jolt(6.0)
+	if GameState.arcade_drive:
+		_arcade.kick_yaw(_flat_side * FLAT_YAW_KICK)
+	else:
+		_dynamics.yaw_rate += _flat_side * FLAT_YAW_KICK
+
+
+func has_flat_tire() -> bool:
+	return _flat_side != 0.0
+
+
+func _flat_pull() -> float:
+	if not has_flat_tire():
+		return 0.0
+	return _flat_side * lerpf(FLAT_PULL_START, FLAT_PULL_FULL, clampf(_flat_s / FLAT_PULL_RAMP_S, 0.0, 1.0))
+
+
+## The flat slows the car, and its corner of the body sits down onto the rim.
+func _ride_on_flat(delta: float) -> void:
+	if not has_flat_tire():
+		return
+	_flat_s += delta
+	if not _air.airborne:
+		var lost := FLAT_DRAG * delta
+		if GameState.arcade_drive:
+			_arcade.forward_speed = move_toward(_arcade.forward_speed, 0.0, lost)
+		else:
+			var speed := _dynamics.cg_velocity.length()
+			if speed > 0.01:
+				_dynamics.cg_velocity *= maxf(speed - lost, 0.0) / speed
+	var drop := FLAT_DROP_M * clampf(_flat_s / FLAT_DROP_S, 0.0, 1.0)
+	_body_motion.flat_drop = drop
+	var from_center := _flat_corner - _car_center
+	# Half the drop from rolling and half from pitching puts the whole of it on that corner.
+	_body_motion.flat_roll = -signf(from_center.x) * 0.5 * drop / maxf(absf(from_center.x), 0.3)
+	_body_motion.flat_pitch = -signf(from_center.z) * 0.5 * drop / maxf(absf(from_center.z), 0.5)
+
+
 func is_wrecked() -> bool:
 	return _damage.is_totaled()
 
@@ -460,7 +533,7 @@ func _steer_input() -> float:
 			s = touch_steer
 	if is_zero_approx(s):
 		s = _Controller.steer()
-	return clampf(s + _mouse_drive.steering, -1.0, 1.0)
+	return clampf(s + _mouse_drive.steering + _flat_pull(), -1.0, 1.0)
 
 
 func _throttle_down() -> bool:
@@ -620,7 +693,7 @@ func _handbrake_down() -> bool:
 
 
 func begin_park(slot: float) -> void:
-	if _parking:
+	if _parking or _halting:
 		return
 	stop_mouse_driving()
 	_parking = true
@@ -632,9 +705,43 @@ func begin_park(slot: float) -> void:
 	_skids.end_strips()
 
 
+## Takes the controls away from a car whose race is over and lets it slide to a stop where it
+## is, as a wreck or a car that lost its engine or a tire would. A car that finished parks instead.
+func halt() -> void:
+	if _parking or _halting:
+		return
+	stop_mouse_driving()
+	_halting = true
+	_burnout = 0.0
+	_clutch_rpm = 0.0
+	_clutch_kicks = false
+	_skids.end_strips()
+
+
+func _halt_step(delta: float) -> void:
+	var planar := Vector3(velocity.x, 0.0, velocity.z)
+	var speed := planar.length()
+	if speed > 0.0:
+		planar *= move_toward(speed, 0.0, HALT_DECEL * delta) / speed
+	velocity = planar
+	move_and_slide()
+	planar = Vector3(velocity.x, 0.0, velocity.z)
+	velocity = planar
+	heading_yaw = rotation.y
+	forward_speed = planar.dot(Vector3(sin(heading_yaw), 0.0, cos(heading_yaw)))
+	_dynamics.cg_velocity = planar
+	_stick_to_road()
+	_update_engine_sound(false)
+	_body_motion.ride_from_motion(delta, planar, heading_yaw)
+	_pose_body(delta)
+
+
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
 	_poll_camera()
+	if _halting:
+		_halt_step(delta)
+		return
 	if _parking:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
@@ -653,6 +760,7 @@ func _physics_process(delta: float) -> void:
 	if _shift_timer > 0.0:
 		_shift_timer = maxf(0.0, _shift_timer - delta)
 	_update_clutch(delta)
+	_ride_on_flat(delta)
 	if _air.airborne:
 		_physics_air(delta)
 	elif GameState.arcade_drive:

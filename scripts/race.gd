@@ -13,6 +13,11 @@ const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 
 const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
+## After a blowout the car pulls towards the flat until it crashes. If it has not crashed this
+## long after, or has come to a stop, the race ends as a blowout.
+const FLAT_TIRE_RACE_END_S := 6.0
+const FLAT_TIRE_STOPPED_MPS := 1.5
+const FLAT_TIRE_STOP_GRACE_S := 1.0
 
 const COUNTDOWN_RED_S := 1.2
 const COUNTDOWN_RED_ORANGE_S := 1.0
@@ -76,6 +81,8 @@ var _start_word: Label
 var _elapsed: float = 0.0
 ## How far from the finish the player's tires blow out, or below zero if they will last.
 var _tire_blowout_m: float = -1.0
+## Seconds since a tire blew, or below zero while all four are up.
+var _flat_tire_s: float = -1.0
 var _nav := _MenuNav.new()
 var _result_bubble: Control
 ## Scene the result bubble leads to when clicked. Empty until the race ends.
@@ -321,7 +328,12 @@ func _process(delta: float) -> void:
 	_show_speed_and_distance()
 	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
-		_show_tire_blowout()
+		_blow_tire()
+	if _flat_tire_s >= 0.0:
+		_flat_tire_s += delta
+		if _flat_tire_s >= FLAT_TIRE_RACE_END_S or (_flat_tire_s >= FLAT_TIRE_STOP_GRACE_S and absf(_player.get_forward_speed()) < FLAT_TIRE_STOPPED_MPS):
+			_show_tire_blowout()
+		# The line doesn't count on a flat: the race is already lost.
 		return
 	_maybe_finish_by_progress()
 
@@ -390,7 +402,8 @@ func _on_finish_area_body_entered(body: Node3D) -> void:
 	if _race_over or not _race_started:
 		return
 	if body == _player:
-		_finish_player()
+		if _flat_tire_s < 0.0:
+			_finish_player()
 	elif body == _opponent:
 		_opponent_finished = true
 
@@ -491,6 +504,7 @@ func _play_crunch(speed_change: float) -> void:
 
 func _show_engine_blown() -> void:
 	_race_over = true
+	_halt_cars()
 	_end_race_ui()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
 	GameState.remove_engine()
@@ -502,15 +516,25 @@ func _show_engine_blown() -> void:
 	_show_bubble(text, GameState.SCENE_GARAGE)
 
 
-func _show_tire_blowout() -> void:
-	_race_over = true
-	_end_race_ui()
+## A worn tire blows, on a random corner, as in Street Rod 2: the car pulls hard towards it until
+## it crashes, and the race is lost either way.
+func _blow_tire() -> void:
+	_tire_blowout_m = -1.0
+	_flat_tire_s = 0.0
 	var bang := AudioStreamPlayer.new()
 	bang.stream = _ShopSounds.stream("blowout")
+	bang.finished.connect(bang.queue_free)
 	add_child(bang)
 	bang.play()
+	_player.blow_tire(randi_range(0, 3))
+
+
+## The car rode out the blowout without crashing.
+func _show_tire_blowout() -> void:
+	_race_over = true
+	_halt_cars()
+	_end_race_ui()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
-	GameState.blow_tires()
 	var payout := GameState.apply_race_stake(false)
 	var text := "You blew a tire!\nThat set of tires is finished."
 	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
@@ -523,6 +547,7 @@ func _show_wreck() -> void:
 	if _race_over:
 		return
 	_race_over = true
+	_halt_cars()
 	_end_race_ui()
 	# A wrecked car can't be handed over, so pink slips are void.
 	GameState.race_pink_slips = false
@@ -592,6 +617,13 @@ func _lost_bucks_line(payout: int) -> String:
 	return "\nYou lost %d bucks!" % -payout
 
 
+## The player is out of the race where they are, and the rival pulls over.
+func _halt_cars() -> void:
+	_player.halt()
+	if _opponent.has_method(&"begin_park"):
+		_opponent.begin_park(4.2)
+
+
 func _park_cars() -> void:
 	if _player.has_method(&"begin_park"):
 		_player.begin_park(0.0)
@@ -600,6 +632,11 @@ func _park_cars() -> void:
 
 
 func _end_race_ui() -> void:
+	# Every ending comes through here before the car is wrecked or handed over, so the blown
+	# set is gone whichever way the race ended.
+	if _flat_tire_s >= 0.0:
+		_flat_tire_s = -1.0
+		GameState.blow_tires()
 	_player.stop_mouse_driving()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_resume_race()
