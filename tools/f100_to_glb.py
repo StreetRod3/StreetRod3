@@ -52,7 +52,8 @@ PLAIN = (255, round(0.82 * 255), round(0.05 * 255))
 LOOKS = {
     'Material #19': ((255, 255, 255), True, PLAIN),
     'JPEG File': ((59, 59, 59), False, (255, 140, 20)),
-    'Metal_Chrome': ((238, 238, 238), False, (255, 26, 128)),
+    # Fully metallic and nearly mirror smooth, so it reflects like chrome rather than grey paint.
+    'Metal_Chrome': ((238, 238, 238), False, (255, 15, 255)),
     'Ground_Water': ((40, 58, 70), False, (255, 13, 60)),
     'LED race Engine ': ((200, 12, 18), False, (255, 60, 10)),
     'LED race Engi1': ((14, 14, 14), False, (255, 230, 0)),
