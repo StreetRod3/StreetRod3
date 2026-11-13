@@ -427,6 +427,10 @@ func _maybe_finish_by_progress() -> void:
 func _update_rpm_meter() -> void:
 	if _rpm_meter == null or not _rpm_meter.has_method(&"set_reading"):
 		return
+	var in_cockpit: bool = _player != null and _player.has_method(&"is_cockpit_camera") and bool(_player.is_cockpit_camera())
+	_rpm_meter.visible = GameState.hud_shows(_DrivingHud.RPM) and not in_cockpit
+	if not _rpm_meter.visible:
+		return
 	if not _player.has_method(&"get_rpm"):
 		return
 	_rpm_meter.set_reading(
@@ -905,6 +909,8 @@ func _on_pause_graphics_pressed() -> void:
 ## The HUD as set on the graphics page. Also called when that page closes.
 func refresh_hud() -> void:
 	_DrivingHud.apply($RaceUI/Panel, _rpm_meter)
+	if _rpm_meter != null and _player != null and _player.has_method(&"is_cockpit_camera") and _player.is_cockpit_camera():
+		_rpm_meter.visible = false
 	if _gear_popup != null:
 		var hud_scale := clampf(GameState.hud_size, _DrivingHud.SMALLEST, 1.0)
 		_gear_popup.scale = Vector2(hud_scale, hud_scale)

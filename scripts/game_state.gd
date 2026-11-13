@@ -226,6 +226,8 @@ var save_dir: String = SAVE_DIR
 var legacy_save_path: String = LEGACY_SAVE_PATH
 ## The slot this game was last saved to or loaded from, or 0 for a new game.
 var save_slot: int = 0
+## Driving camera mode (`0` far, `1` close, `2` cockpit, `3` bumper). Preserved across drives and saves.
+var driving_camera: int = 0
 var car_name: String = "Corvette 1956"
 ## Current paint color for the active car.
 var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
@@ -1083,6 +1085,7 @@ func get_stock_transmission() -> Dictionary:
 
 func new_game() -> void:
 	save_slot = 0
+	driving_camera = 0
 	driver_name = ""
 	driver_traits = DRIVER_TRAITS_DEFAULT.duplicate()
 	car_name = "Corvette 1956"
@@ -1191,6 +1194,7 @@ func save_game(slot: int) -> bool:
 	var data := {
 		"version": 2,
 		"saved_at": int(Time.get_unix_time_from_system()),
+		"driving_camera": driving_camera,
 		"car_name": car_name,
 		"car_color": [car_color.r, car_color.g, car_color.b, car_color.a],
 		"fuel": fuel,
@@ -1247,6 +1251,7 @@ func load_game(slot: int) -> bool:
 	if typeof(parsed) != TYPE_DICTIONARY:
 		return false
 	var d: Dictionary = parsed
+	driving_camera = posmod(int(d.get("driving_camera", 0)), 4)
 	car_name = str(d.get("car_name", car_name))
 	var loaded_color: Variant = d.get("car_color", null)
 	if typeof(loaded_color) == TYPE_ARRAY and loaded_color.size() >= 3:

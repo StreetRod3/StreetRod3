@@ -191,6 +191,7 @@ func _ready() -> void:
 	_plan_speeds()
 	_place_car(0.0)
 	_yaw_rate = 0.0
+	_cam_mode = posmod(GameState.driving_camera, 4)
 	_apply_auto_camera_mode()
 	_add_rear_mirror(_car)
 	if GameState.engine_runs():
@@ -301,7 +302,7 @@ func _ride(delta: float) -> void:
 	# Not before the first frame: the visuals are fitted to the floor once `_ready` is done.
 	_body_motion.capture()
 	var steer := atan(_yaw_rate * _dynamics.config.wheelbase_m / maxf(_speed, 1.0))
-	_body_motion.pose(delta, _speed, steer, clampf(_yaw_rate / _FULL_STEER_YAW_RATE, -1.0, 1.0))
+	_body_motion.pose(delta, _speed, steer, clampf(_yaw_rate / _FULL_STEER_YAW_RATE, -1.0, 1.0), 0.0, clampf(_speed * 110.0, 900.0, 4500.0))
 	_place_auto_camera(delta)
 
 
@@ -309,6 +310,7 @@ func _poll_auto_camera() -> void:
 	var held := _Controller.action_down(_Controller.CAMERA)
 	if (held and not _camera_held) or _tapped_camera:
 		_cam_mode = (_cam_mode + 1) % 4
+		GameState.driving_camera = _cam_mode
 		_apply_auto_camera_mode()
 	_camera_held = held
 	_tapped_camera = false
@@ -738,18 +740,21 @@ func _update_hud() -> void:
 		_hud_gear.text = "Gear: %s" % str(_roam_car.call(&"get_gear_label"))
 		_hud_damage.text = "Damage: %d%%" % roundi(float(_roam_car.call(&"damage_amount")) * 100.0)
 		if _rpm_meter != null and _rpm_meter.has_method(&"set_reading"):
-			var short_gear := str(_roam_car.call(&"get_short_gear_label")) if _roam_car.has_method(&"get_short_gear_label") else str(_roam_car.call(&"get_gear_label"))
-			_rpm_meter.call(
-				&"set_reading",
-				float(_roam_car.call(&"get_rpm")),
-				float(_roam_car.call(&"get_rpm_shift_start")),
-				float(_roam_car.call(&"get_rpm_redline")),
-				float(_roam_car.call(&"get_rpm_critical")),
-				bool(_roam_car.call(&"is_engine_blown")),
-				speed * 3.6,
-				short_gear,
-				GameState.imperial_units
-			)
+			var in_cockpit := _roam_car.has_method(&"is_cockpit_camera") and bool(_roam_car.call(&"is_cockpit_camera"))
+			_rpm_meter.visible = GameState.hud_shows(_DrivingHud.RPM) and not in_cockpit
+			if _rpm_meter.visible:
+				var short_gear := str(_roam_car.call(&"get_short_gear_label")) if _roam_car.has_method(&"get_short_gear_label") else str(_roam_car.call(&"get_gear_label"))
+				_rpm_meter.call(
+					&"set_reading",
+					float(_roam_car.call(&"get_rpm")),
+					float(_roam_car.call(&"get_rpm_shift_start")),
+					float(_roam_car.call(&"get_rpm_redline")),
+					float(_roam_car.call(&"get_rpm_critical")),
+					bool(_roam_car.call(&"is_engine_blown")),
+					speed * 3.6,
+					short_gear,
+					GameState.imperial_units
+				)
 		return
 
 

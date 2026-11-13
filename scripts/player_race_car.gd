@@ -157,6 +157,7 @@ func _ready() -> void:
 	add_child(_skids)
 	_burnout_wander.seed = randi()
 	_burnout_wander.frequency = 0.5
+	_cam_mode = posmod(GameState.driving_camera, 4)
 	_apply_camera_mode()
 	_gearbox = GameState.get_equipped_gearbox()
 	_gear = 0
@@ -677,7 +678,7 @@ func _pose_body(delta: float) -> void:
 	var on_arcade := GameState.arcade_drive and not _parking
 	var steer: float = _arcade.steer_angle if on_arcade else _dynamics.steer_angle()
 	var steer_input: float = _arcade.steer_input() if on_arcade else _dynamics.steer_input()
-	_body_motion.pose(delta, forward_speed, steer, steer_input, _burnout * BURNOUT_WHEEL_SPEED)
+	_body_motion.pose(delta, forward_speed, steer, steer_input, _burnout * BURNOUT_WHEEL_SPEED, get_rpm())
 	_place_camera(delta)
 
 
@@ -1016,6 +1017,7 @@ func _poll_camera() -> void:
 	var held := _Controller.action_down(_Controller.CAMERA)
 	if (held and not _camera_held) or _tapped_camera:
 		_cam_mode = (_cam_mode + 1) % 4
+		GameState.driving_camera = _cam_mode
 		_apply_camera_mode()
 	_camera_held = held
 	_tapped_camera = false
