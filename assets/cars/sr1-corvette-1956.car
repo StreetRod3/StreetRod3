@@ -41,6 +41,28 @@
   "driver": {
     "position": [-0.4, 1.03, -1]
   },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.55, -10.4],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.8, -6.1],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.37, 1.21, -0.35],
+      "pitch": -2.5,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.51, 2.95],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
   "chassis": {
     "mass": 1290,
     "wheelbase": 2.59,

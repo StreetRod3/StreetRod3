@@ -123,6 +123,9 @@ func _hide_baked_wheels(node: Node) -> void:
 
 func _is_baked_wheel(mesh_instance: MeshInstance3D) -> bool:
 	var label := String(mesh_instance.name).to_lower()
+	var parent_label := String(mesh_instance.get_parent().name).to_lower() if mesh_instance.get_parent() != null else ""
+	if label.contains("driving_wheel") or label.contains("steering") or parent_label.contains("driving_wheel") or parent_label.contains("steering"):
+		return false
 	if label.contains("wheel") or label.contains("tire"):
 		return true
 	if mesh_instance.mesh == null:
@@ -456,6 +459,8 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 		var normal_scale := 1.0
 		if mat is StandardMaterial3D:
 			var std := mat as StandardMaterial3D
+			if std.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+				continue
 			tex = std.albedo_texture
 			orm = std.metallic_texture
 			if orm == null:

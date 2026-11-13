@@ -6,7 +6,10 @@ extends RefCounted
 ## wheels are ids into the parts register named by `register`.
 ##
 ## `driver.position` is the driver's head in car space, same axes as wheel
-## mounts: +X right, +Y up, +Z forward.
+## mounts: +X left, +Y up from the road, +Z forward.
+##
+## `cameras` names optional `far`, `close`, `cockpit`, and `bumper` views in
+## the same car space (`position`, plus optional `pitch` and `fov` in degrees).
 ##
 ## `model.ground_clearance` is how far the body's lowest point sits above the
 ## floor when it is snapped there, for bodies without wheels of their own.
@@ -18,6 +21,14 @@ extends RefCounted
 ## whose tires are bigger or smaller than the wheel parts draw them (1 if left out).
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
+
+const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
+const DEFAULT_CAMERAS: Dictionary = {
+	"far": {"position": Vector3(0.0, 2.55, -10.4), "pitch": -14.0, "fov": 68.0},
+	"close": {"position": Vector3(0.0, 1.8, -6.1), "pitch": -10.0, "fov": 70.0},
+	"cockpit": {"position": Vector3(0.42, 1.23, -0.38), "pitch": -2.0, "fov": 72.0},
+	"bumper": {"position": Vector3(0.0, 0.51, 2.95), "pitch": -1.0, "fov": 72.0},
+}
 
 
 static func load_path(path: String) -> Dictionary:
@@ -63,6 +74,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	_parse_parts(root, result)
 	_parse_chassis(root, result)
 	_parse_driver(root, result)
+	_parse_cameras(root, result)
 	return result
 
 
@@ -205,6 +217,56 @@ static func _parse_driver(root: Dictionary, result: Dictionary) -> void:
 	result.driver = {"position": pos}
 
 
+static func _default_cameras_copy() -> Dictionary:
+	var out: Dictionary = {}
+	for mode: String in CAMERA_MODES:
+		var def_cam: Dictionary = DEFAULT_CAMERAS[mode]
+		out[mode] = {
+			"position": def_cam["position"],
+			"pitch": float(def_cam["pitch"]),
+			"fov": float(def_cam["fov"]),
+		}
+	return out
+
+
+static func _parse_cameras(root: Dictionary, result: Dictionary) -> void:
+	var parsed := _default_cameras_copy()
+	var raw_cameras: Variant = root.get("cameras", null)
+	if raw_cameras == null:
+		result.cameras = parsed
+		return
+	if typeof(raw_cameras) != TYPE_DICTIONARY:
+		result.errors.append("Car cameras must be an object.")
+		result.cameras = parsed
+		return
+	var block: Dictionary = raw_cameras
+	for mode: String in CAMERA_MODES:
+		if not block.has(mode):
+			continue
+		var entry: Variant = block[mode]
+		var cam_out: Dictionary = parsed[mode]
+		if typeof(entry) == TYPE_ARRAY:
+			if (entry as Array).size() < 3:
+				result.errors.append("Car camera '%s' position must be [x, y, z]." % mode)
+			else:
+				cam_out["position"] = _vec3(entry)
+		elif typeof(entry) == TYPE_DICTIONARY:
+			var cam_dict: Dictionary = entry
+			if cam_dict.has("position"):
+				var raw_pos: Variant = cam_dict["position"]
+				if typeof(raw_pos) != TYPE_ARRAY or (raw_pos as Array).size() < 3:
+					result.errors.append("Car camera '%s' position must be [x, y, z]." % mode)
+				else:
+					cam_out["position"] = _vec3(raw_pos)
+			if cam_dict.has("pitch"):
+				cam_out["pitch"] = float(cam_dict["pitch"])
+			if cam_dict.has("fov"):
+				cam_out["fov"] = float(cam_dict["fov"])
+		else:
+			result.errors.append("Car camera '%s' must be an object or [x, y, z]." % mode)
+	result.cameras = parsed
+
+
 static func _vec3(value: Variant) -> Vector3:
 	if typeof(value) != TYPE_ARRAY or (value as Array).size() < 3:
 		return Vector3.ZERO
@@ -225,5 +287,6 @@ static func _empty_result() -> Dictionary:
 		"transmission": {},
 		"chassis": {},
 		"driver": {},
+		"cameras": _default_cameras_copy(),
 		"errors": [],
 	}

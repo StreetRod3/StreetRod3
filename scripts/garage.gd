@@ -106,6 +106,8 @@ var _lift_home: Transform3D
 var _lift_arm_home: Vector3
 var _bay_busy: bool = false
 var _departing: bool = false
+var _departure_finished: bool = false
+var _departure_destination: String = ""
 var _swapping_car: bool = false
 ## Where the car sits in the bay. Kept while it rolls in from outside.
 var _bay_home: Vector3 = Vector3.ZERO
@@ -1316,6 +1318,7 @@ func _start_drive_out(destination: String) -> void:
 			_go_to_drive_destination(destination, poi)
 		return
 	_departing = true
+	_departure_destination = destination
 	_orbiting = false
 	_snap_calendar_home()
 	_snap_map_home()
@@ -1327,10 +1330,18 @@ func _start_drive_out(destination: String) -> void:
 	await _play_drive_out()
 	if not is_instance_valid(self):
 		return
-	if destination.is_empty():
+	_finish_drive_out()
+
+
+func _finish_drive_out() -> void:
+	if _departure_finished:
+		return
+	_departure_finished = true
+	_stop_roll_engine()
+	if _departure_destination.is_empty():
 		GameState.begin_roam(GameState.POI_GARAGE)
 		return
-	_go_to_drive_destination(destination, poi)
+	_go_to_drive_destination(_departure_destination, _poi_for_scene(_departure_destination))
 
 
 func _poi_for_scene(destination: String) -> String:
@@ -2688,6 +2699,12 @@ func _on_car_list_switch() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	if _departing and event is InputEventKey:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo and key.keycode == KEY_SPACE:
+			get_viewport().set_input_as_handled()
+			_finish_drive_out()
+			return
 	if _try_say_bubble_key(event) or (_car_sale != null and _try_sale_key(event)):
 		get_viewport().set_input_as_handled()
 		return
