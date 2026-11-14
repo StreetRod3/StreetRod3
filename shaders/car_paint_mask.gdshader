@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_schlick_ggx;
+render_mode blend_mix, depth_draw_opaque, cull_disabled, diffuse_burley, specular_schlick_ggx;
 
 uniform vec4 paint_color : source_color = vec4(1.0);
 uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;
