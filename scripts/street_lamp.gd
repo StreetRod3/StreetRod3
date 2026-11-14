@@ -4,6 +4,7 @@ extends Node3D
 ## knocks it apart. Either way the harm stays well short of wrecking the car.
 
 const _Sounds := preload("res://scripts/shop_sounds.gd")
+const _BoxBatch := preload("res://scripts/box_batch.gd")
 
 const _POLE := Color(0.3, 0.31, 0.33)
 const _HEAD := Color(0.16, 0.16, 0.18)
@@ -24,9 +25,35 @@ var _light: OmniLight3D
 var _area: Area3D
 var _spent := false
 var _bits: Array[Dictionary] = []
+var _shared: MultiMesh
+var _slot := -1
+
+## Pole, base, arm, head and lens in one mesh, shared by every lamp.
+static var _mesh: ArrayMesh
 
 
-func setup(at: Vector3, toward: Vector3) -> void:
+## The whole lamp, standing at the origin with its arm out along +X.
+static func lamp_mesh() -> ArrayMesh:
+	if _mesh != null:
+		return _mesh
+	var batch := _BoxBatch.new()
+	batch.set_look(_POLE, 0.42, 0.55)
+	batch.add_post(0.08, 0.065, 4.7, 8, Transform3D.IDENTITY)
+	batch.set_look(Color(0.22, 0.22, 0.24), 0.55, 0.35)
+	batch.add_box(Vector3(0.36, 0.08, 0.36), Transform3D(Basis.IDENTITY, Vector3(0.0, 0.04, 0.0)))
+	batch.set_look(_POLE, 0.4, 0.5)
+	batch.add_box(Vector3(_REACH, 0.055, 0.055), Transform3D(Basis.IDENTITY, Vector3(_REACH * 0.45, 4.62, 0.0)))
+	batch.set_look(_HEAD, 0.45, 0.4)
+	batch.add_box(Vector3(0.4, 0.08, 0.22), Transform3D(Basis.IDENTITY, Vector3(_REACH, 4.5, 0.0)))
+	batch.set_look(_GLOW, 0.28, 0.0, _GLOW, 1.6)
+	batch.add_box(Vector3(0.26, 0.035, 0.14), Transform3D(Basis.IDENTITY, Vector3(_REACH, 4.43, 0.0)))
+	_mesh = batch.commit()
+	return _mesh
+
+
+## With `shared`, the lamp is drawn as instance `slot` of that MultiMesh, which must sit in
+## this lamp's parent, until a hit gives it its own mesh. Otherwise it draws itself.
+func setup(at: Vector3, toward: Vector3, shared: MultiMesh = null, slot: int = -1) -> void:
 	position = at
 	var face := Vector3(toward.x, 0.0, toward.z)
 	if face.length_squared() > 0.001:
@@ -36,9 +63,12 @@ func setup(at: Vector3, toward: Vector3) -> void:
 	_bend = Node3D.new()
 	_bend.name = "Bend"
 	add_child(_bend)
-	_pole()
-	_arm()
-	_head()
+	_shared = shared
+	_slot = slot
+	if _shared != null:
+		_shared.set_instance_transform(_slot, transform)
+	else:
+		_draw_own()
 	_light = OmniLight3D.new()
 	_light.position = Vector3(_REACH, 4.35, 0.0)
 	_light.light_color = _GLOW
@@ -74,6 +104,7 @@ func _on_body_entered(body: Node) -> void:
 		return
 	_spent = true
 	_area.set_deferred(&"monitoring", false)
+	_take_over()
 	var signed := float(body.get("forward_speed"))
 	var car := body as Node3D
 	var nose := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
@@ -170,60 +201,17 @@ func _play() -> void:
 	smash.play()
 
 
-func _pole() -> void:
-	var mesh := CylinderMesh.new()
-	mesh.top_radius = 0.065
-	mesh.bottom_radius = 0.08
-	mesh.height = 4.7
-	mesh.radial_segments = 8
-	mesh.material = _metal(_POLE, 0.42, 0.55)
-	var pole := MeshInstance3D.new()
-	pole.mesh = mesh
-	pole.position = Vector3(0.0, 2.35, 0.0)
-	_bend.add_child(pole)
-	var base_mesh := BoxMesh.new()
-	base_mesh.size = Vector3(0.36, 0.08, 0.36)
-	base_mesh.material = _metal(Color(0.22, 0.22, 0.24), 0.55, 0.35)
-	var base := MeshInstance3D.new()
-	base.mesh = base_mesh
-	base.position = Vector3(0.0, 0.04, 0.0)
-	_bend.add_child(base)
+func _draw_own() -> void:
+	var lamp := MeshInstance3D.new()
+	lamp.name = "Lamp"
+	lamp.mesh = lamp_mesh()
+	_bend.add_child(lamp)
 
 
-func _arm() -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(_REACH, 0.055, 0.055)
-	mesh.material = _metal(_POLE, 0.4, 0.5)
-	var arm := MeshInstance3D.new()
-	arm.mesh = mesh
-	arm.position = Vector3(_REACH * 0.45, 4.62, 0.0)
-	_bend.add_child(arm)
-
-
-func _head() -> void:
-	var housing_mesh := BoxMesh.new()
-	housing_mesh.size = Vector3(0.4, 0.08, 0.22)
-	housing_mesh.material = _metal(_HEAD, 0.45, 0.4)
-	var housing := MeshInstance3D.new()
-	housing.mesh = housing_mesh
-	housing.position = Vector3(_REACH, 4.5, 0.0)
-	_bend.add_child(housing)
-	var lens_mesh := BoxMesh.new()
-	lens_mesh.size = Vector3(0.26, 0.035, 0.14)
-	var lens_mat := _metal(_GLOW, 0.28, 0.0)
-	lens_mat.emission_enabled = true
-	lens_mat.emission = _GLOW
-	lens_mat.emission_energy_multiplier = 1.6
-	lens_mesh.material = lens_mat
-	var lens := MeshInstance3D.new()
-	lens.mesh = lens_mesh
-	lens.position = Vector3(_REACH, 4.43, 0.0)
-	_bend.add_child(lens)
-
-
-func _metal(color: Color, roughness: float, metallic: float) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = roughness
-	mat.metallic = metallic
-	return mat
+## A hit lamp bends or breaks on its own, so it leaves the shared MultiMesh for a mesh of its own.
+func _take_over() -> void:
+	if _shared == null:
+		return
+	_shared.set_instance_transform(_slot, Transform3D(Basis.from_scale(Vector3.ZERO), transform.origin))
+	_shared = null
+	_draw_own()

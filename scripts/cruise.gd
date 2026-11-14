@@ -27,6 +27,10 @@ const _CruiseMinimap := preload("res://scripts/cruise_minimap.gd")
 const _CarFile := preload("res://scripts/car_file.gd")
 const _RearMirror := preload("res://scripts/rear_mirror.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
+const _BoxBatch := preload("res://scripts/box_batch.gd")
+## The scenery buildings are merged into one mesh per square of this size, in meters, so
+## the ones out of view are still skipped.
+const _BATCH_CELL := 40.0
 ## Spawn at least this far from the place just left, toward the street, in meters.
 const _ROAM_CLEAR := 8.5
 ## A stop in front of a place. Faster than this is still driving past.
@@ -153,6 +157,12 @@ var _minimap: Control
 var _touch: Node
 var _ui_layer: CanvasLayer
 var _gear_popup: Control
+## While true, `_add_box()` and the like add to `_batches` instead of making nodes.
+var _batching := false
+## Merged scenery, keyed by cell x, cell z, and 1 for the pieces that cast shadows.
+var _batches: Dictionary = {}
+## One StandardMaterial3D per look, shared by every unmerged box that has it.
+var _box_materials: Dictionary = {}
 
 
 func _ready() -> void:
@@ -839,6 +849,8 @@ func _build_world() -> void:
 	sun.rotation_degrees = Vector3(-42.0, -35.0, 0.0)
 	sun.light_energy = 1.1
 	sun.shadow_enabled = true
+	# The default 100 m draws much of the city a second time for shadows.
+	sun.directional_shadow_max_distance = 60.0
 	add_child(sun)
 
 
@@ -1097,18 +1109,36 @@ func _build_streetscape(track: Dictionary) -> void:
 	var root := Node3D.new()
 	root.name = "Streetscape"
 	add_child(root)
-	for spec: Dictionary in lamps:
+	var lamp_multi := MultiMesh.new()
+	lamp_multi.transform_format = MultiMesh.TRANSFORM_3D
+	lamp_multi.mesh = _StreetLamp.lamp_mesh()
+	lamp_multi.instance_count = lamps.size()
+	var lamp_draw := MultiMeshInstance3D.new()
+	lamp_draw.name = "Lamps"
+	lamp_draw.multimesh = lamp_multi
+	root.add_child(lamp_draw)
+	for i in lamps.size():
+		var spec := lamps[i]
 		var lamp := Node3D.new()
 		lamp.set_script(_StreetLamp)
 		root.add_child(lamp)
-		lamp.call(&"setup", spec["at"], spec["toward"])
+		lamp.call(&"setup", spec["at"], spec["toward"], lamp_multi, i)
 	var shrub := SphereMesh.new()
 	shrub.radius = 1.0
 	shrub.height = 2.0
 	shrub.radial_segments = 8
 	shrub.rings = 5
-	_add_multimesh(root, shrub, _facade_material(_BUSH_DARK, 0.92, 0.0), dark_bush, false)
-	_add_multimesh(root, shrub, _facade_material(_BUSH_MID, 0.9, 0.0), mid_bush, false)
+	var bushes: Array[Transform3D] = dark_bush.duplicate()
+	bushes.append_array(mid_bush)
+	var greens: Array[Color] = []
+	for i in dark_bush.size():
+		greens.append(_BUSH_DARK)
+	for i in mid_bush.size():
+		greens.append(_BUSH_MID)
+	var leaf := _facade_material(Color.WHITE, 0.91, 0.0)
+	leaf.vertex_color_use_as_albedo = true
+	leaf.vertex_color_is_srgb = true
+	_add_multimesh(root, shrub, leaf, bushes, false, greens)
 	_StreetScenery.add_flat_trees(root, trees, big_trees, bare_trees)
 	_add_tree_barriers(root, trees, 0.22, 5.5)
 	_add_tree_barriers(root, big_trees, 0.34, 7.5)
@@ -1200,15 +1230,35 @@ func _lot_blocked(point: Vector2, pad: float, blocks: Array, keep_out: Array[Vec
 	return false
 
 
-func _add_multimesh(parent: Node3D, mesh: Mesh, mat: Material, xforms: Array[Transform3D], shadow: bool) -> void:
-	if xforms.is_empty():
+## One MultiMesh per `_BATCH_CELL` square, so the ones out of view are skipped. `colors`, if
+## given, has one per transform, for a material that takes its albedo from vertex color.
+func _add_multimesh(parent: Node3D, mesh: Mesh, mat: Material, xforms: Array[Transform3D], shadow: bool, colors: Array[Color] = []) -> void:
+	var cells: Dictionary = {}
+	for i in xforms.size():
+		var xform := xforms[i]
+		var key := Vector2i(floori(xform.origin.x / _BATCH_CELL), floori(xform.origin.z / _BATCH_CELL))
+		if not cells.has(key):
+			var fresh: Array[int] = []
+			cells[key] = fresh
+		var held: Array[int] = cells[key]
+		held.append(i)
+	for key: Vector2i in cells:
+		var held: Array[int] = cells[key]
+		_add_multimesh_cell(parent, mesh, mat, xforms, colors, held, shadow)
+
+
+func _add_multimesh_cell(parent: Node3D, mesh: Mesh, mat: Material, xforms: Array[Transform3D], colors: Array[Color], picks: Array[int], shadow: bool) -> void:
+	if picks.is_empty():
 		return
 	var multi := MultiMesh.new()
 	multi.transform_format = MultiMesh.TRANSFORM_3D
+	multi.use_colors = not colors.is_empty()
 	multi.mesh = mesh
-	multi.instance_count = xforms.size()
-	for i in xforms.size():
-		multi.set_instance_transform(i, xforms[i])
+	multi.instance_count = picks.size()
+	for slot in picks.size():
+		multi.set_instance_transform(slot, xforms[picks[slot]])
+		if multi.use_colors:
+			multi.set_instance_color(slot, colors[picks[slot]])
 	var node := MultiMeshInstance3D.new()
 	node.multimesh = multi
 	node.material_override = mat
@@ -1576,7 +1626,21 @@ func _brick_material() -> StandardMaterial3D:
 
 
 func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough: float = 0.82, metal: float = 0.0, emission: Color = Color.BLACK, energy: float = 0.0, rot: Vector3 = Vector3.ZERO, shadow: bool = true) -> void:
-	var mat := StandardMaterial3D.new()
+	if _batching:
+		var batch := _batch_for(parent, shadow and size.y >= 0.1)
+		batch.set_look(albedo, rough, metal, emission, energy)
+		batch.add_box(size, parent.transform * Transform3D(Basis.from_euler(rot), pos))
+		return
+	_add_box_mat(parent, size, pos, _shared_material(albedo, rough, metal, emission, energy), rot, shadow)
+
+
+## Boxes that look alike share one material, so they can be drawn together.
+func _shared_material(albedo: Color, rough: float, metal: float, emission: Color, energy: float) -> StandardMaterial3D:
+	var key := [albedo, rough, metal, emission if energy > 0.0 else Color.BLACK, energy]
+	var mat: StandardMaterial3D = _box_materials.get(key)
+	if mat != null:
+		return mat
+	mat = StandardMaterial3D.new()
 	mat.albedo_color = albedo
 	mat.roughness = rough
 	mat.metallic = metal
@@ -1584,7 +1648,35 @@ func _add_box(parent: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough:
 		mat.emission_enabled = true
 		mat.emission = emission
 		mat.emission_energy_multiplier = energy
-	_add_box_mat(parent, size, pos, mat, rot, shadow)
+	_box_materials[key] = mat
+	return mat
+
+
+## The merged mesh for the cell `parent` stands in. `parent` is a direct child of this scene.
+func _batch_for(parent: Node3D, shadow: bool) -> _BoxBatch:
+	var key := Vector3i(floori(parent.position.x / _BATCH_CELL), floori(parent.position.z / _BATCH_CELL), 1 if shadow else 0)
+	var batch: _BoxBatch = _batches.get(key)
+	if batch == null:
+		batch = _BoxBatch.new()
+		_batches[key] = batch
+	return batch
+
+
+## Turns every batch into a mesh in the scene. Each cell draws in two calls: what casts
+## shadows, and the facade trim that does not.
+func _flush_batches() -> void:
+	for key: Vector3i in _batches:
+		var batch: _BoxBatch = _batches[key]
+		var mesh := batch.commit()
+		if mesh == null:
+			continue
+		var mi := MeshInstance3D.new()
+		mi.name = "Blocks_%d_%d_%s" % [key.x, key.y, "solid" if key.z == 1 else "trim"]
+		mi.mesh = mesh
+		if key.z == 0:
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+	_batches.clear()
 
 
 ## The slab in front of a place, noted so skid marks can lie on top of it.
@@ -1594,6 +1686,11 @@ func _add_apron(root: Node3D, size: Vector3, pos: Vector3, albedo: Color, rough:
 
 
 func _add_box_mat(parent: Node3D, size: Vector3, pos: Vector3, mat: Material, rot: Vector3 = Vector3.ZERO, shadow: bool = true) -> void:
+	if _batching:
+		var batch := _batch_for(parent, shadow and size.y >= 0.1)
+		batch.set_look_from(mat)
+		batch.add_box(size, parent.transform * Transform3D(Basis.from_euler(rot), pos))
+		return
 	var mi := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = size
@@ -1628,6 +1725,11 @@ func _add_sphere(parent: Node3D, radius: float, pos: Vector3, albedo: Color, rou
 
 
 func _add_cylinder(parent: Node3D, radius: float, height: float, pos: Vector3, albedo: Color, rough: float) -> void:
+	if _batching:
+		var batch := _batch_for(parent, true)
+		batch.set_look(albedo, rough, 0.0)
+		batch.add_post(radius, radius, height, 10, parent.transform * Transform3D(Basis.IDENTITY, pos - Vector3.UP * height * 0.5))
+		return
 	var mi := MeshInstance3D.new()
 	var mesh := CylinderMesh.new()
 	mesh.top_radius = radius
@@ -1681,10 +1783,13 @@ func _build_blocks(track: Dictionary) -> void:
 	for color in _SIGN_COLORS:
 		signs.append(_facade_material(color, 0.45, 0.0))
 	var index := 0
+	_batching = true
 	for raw: Dictionary in track.get("buildings", []):
 		var block: Dictionary = raw
 		_build_city_building(block, index, glass, lit, frame, doors, signs)
 		index += 1
+	_batching = false
+	_flush_batches()
 
 
 ## A scenery box dressed as a building. One entrance on the nearest street, two on some lots.
