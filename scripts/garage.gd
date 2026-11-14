@@ -128,6 +128,10 @@ const SALE_PRICE_STEP := 50
 const SALE_PRICE_MAX := 99999
 
 var _nav := _MenuNav.new()
+## The paint menu's Body and Cove choice, shown for a car with a cove (car file model.cove).
+var _spray_zones: HBoxContainer
+var _spray_body_btn: Button
+var _spray_cove_btn: Button
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
@@ -306,6 +310,7 @@ func _ready() -> void:
 	_clock_menu.visible = false
 	_stats_panel.visible = false
 	_spray_menu.visible = false
+	_build_spray_zones()
 	_build_parts_board()
 	_build_books_board()
 	$InteractClock.set_meta(&"garage_interact", &"clock")
@@ -1099,10 +1104,14 @@ func _sync_menu_nav() -> void:
 	elif _stats_panel.visible:
 		_nav.setup([$GarageUI/StatsPanel/Panel/Margin/VBox/StatsClose])
 	elif _spray_menu.visible:
-		_nav.setup([
+		var spray_buttons: Array = []
+		if _spray_zones.visible:
+			spray_buttons = [_spray_body_btn, _spray_cove_btn]
+		spray_buttons.append_array([
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
 		])
+		_nav.setup(spray_buttons)
 	elif _offer_panel != null and _offer_panel.visible:
 		_nav.setup([_offer_accept, _offer_reject])
 	elif _sale_panel != null and _sale_panel.visible:
@@ -1573,13 +1582,49 @@ func _show_spray_picker() -> void:
 		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
+	_spray_zones.visible = GameState.car_has_cove()
+	_spray_body_btn.button_pressed = true
 	_spray_color_picker.color = GameState.car_color
 	_spray_menu.visible = true
 	_sync_menu_nav()
 
 
+func _build_spray_zones() -> void:
+	var vbox := $GarageUI/ColorPickerMenu/Panel/Margin/VBox as VBoxContainer
+	_spray_zones = HBoxContainer.new()
+	_spray_zones.alignment = BoxContainer.ALIGNMENT_CENTER
+	var group := ButtonGroup.new()
+	_spray_body_btn = Button.new()
+	_spray_body_btn.text = "Body"
+	_spray_cove_btn = Button.new()
+	_spray_cove_btn.text = "Cove"
+	for btn: Button in [_spray_body_btn, _spray_cove_btn]:
+		btn.toggle_mode = true
+		btn.button_group = group
+		btn.custom_minimum_size = Vector2(110, 0)
+		_spray_zones.add_child(btn)
+	_spray_body_btn.button_pressed = true
+	_spray_body_btn.pressed.connect(_on_spray_zone_pressed)
+	_spray_cove_btn.pressed.connect(_on_spray_zone_pressed)
+	vbox.add_child(_spray_zones)
+	vbox.move_child(_spray_zones, 1)
+	_spray_zones.visible = false
+
+
+## The picker shows the chosen zone's paint; an unpainted cove shows the body's.
+func _on_spray_zone_pressed() -> void:
+	var cove := GameState.car_cove_color
+	if _spray_cove_btn.button_pressed and cove.a > 0.5:
+		_spray_color_picker.color = cove
+	else:
+		_spray_color_picker.color = GameState.car_color
+
+
 func _on_spray_confirm_pressed() -> void:
-	GameState.set_car_color(_spray_color_picker.color)
+	if _spray_zones.visible and _spray_cove_btn.button_pressed:
+		GameState.set_car_cove_color(_spray_color_picker.color)
+	else:
+		GameState.set_car_color(_spray_color_picker.color)
 	# Update the preview immediately.
 	if _car_pivot.has_method(&"set_car_body_color"):
 		_car_pivot.set_car_body_color(GameState.car_color)

@@ -21,6 +21,8 @@ var _waiting_for_stl: bool = false
 var _previewing: bool = false
 var _preview_spec: Dictionary = {}
 var _preview_color: Color = Color.WHITE
+## The previewed car's cove paint; alpha 0 leaves the cove the body color.
+var _preview_cove: Color = Color(0, 0, 0, 0)
 
 
 ## Load a catalog car for a viewport that is not the player's garage car.
@@ -36,12 +38,15 @@ func driver_seat_position() -> Vector3:
 	return Vector3(-0.35, 1.05, 0.2)
 
 
-func prepare_preview(car_file: String, paint: Color) -> bool:
+## `cove` is the cove's own paint, for a car with one (alpha 0: the cove is the body color).
+func prepare_preview(car_file: String, paint: Color, cove := Color(0, 0, 0, 0)) -> bool:
+	_preview_cove = cove
 	return _load_preview(car_file, paint)
 
 
 ## Swap the preview to another catalog car after this node is already on screen.
 func preview_listing(car_file: String, paint: Color) -> bool:
+	_preview_cove = Color(0, 0, 0, 0)
 	if not _load_preview(car_file, paint):
 		return false
 	if is_inside_tree():
@@ -84,6 +89,12 @@ func _active_paint_color() -> Color:
 	if _previewing:
 		return _preview_color
 	return GameState.car_color
+
+
+func _active_cove_color() -> Color:
+	if _previewing:
+		return _preview_cove
+	return GameState.car_cove_color
 
 
 func _enter_tree() -> void:
@@ -422,8 +433,8 @@ func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			mat = mesh_instance.mesh.surface_get_material(i)
 		if mat == null:
 			mat = StandardMaterial3D.new()
-		if mat is StandardMaterial3D and _dither_cell() > 0.0:
-			mesh_instance.set_surface_override_material(i, _dithered_solid_paint(mat as StandardMaterial3D, color, mesh_instance))
+		if mat is StandardMaterial3D and (_dither_cell() > 0.0 or _has_cove()):
+			mesh_instance.set_surface_override_material(i, _shaded_solid_paint(mat as StandardMaterial3D, color, mesh_instance))
 			continue
 		var mat_copy := mat.duplicate()
 		mesh_instance.set_surface_override_material(i, mat_copy)
@@ -431,15 +442,18 @@ func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			(mat_copy as StandardMaterial3D).albedo_texture = null
 			(mat_copy as StandardMaterial3D).albedo_color = color
 		elif mat_copy is ShaderMaterial:
-			if (mat_copy as ShaderMaterial).shader != null:
+			if (mat_copy as ShaderMaterial).shader == _PaintShader:
+				_set_paint_params(mat_copy as ShaderMaterial, color, mesh_instance)
+			elif (mat_copy as ShaderMaterial).shader != null:
 				(mat_copy as ShaderMaterial).set_shader_parameter("paint_color", color)
 				(mat_copy as ShaderMaterial).set_shader_parameter("albedo_color", color)
 
 
-## A solid-painted body (a mesh named "body") in a car whose file sets dither_cell: the
-## paint shader over plain white instead of the model's texture, keeping its shine and
-## normal map. Painting it again only changes the color, in the ShaderMaterial branch.
-func _dithered_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: MeshInstance3D) -> ShaderMaterial:
+## A solid-painted body (a mesh named "body") in a car whose file sets dither_cell or a
+## cove: the paint shader over plain white instead of the model's texture, keeping its
+## shine and normal map. Painting it again only changes the colors, in the ShaderMaterial
+## branch.
+func _shaded_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: MeshInstance3D) -> ShaderMaterial:
 	if _white_texture == null:
 		var img := Image.create(1, 1, false, Image.FORMAT_RGBA8)
 		img.fill(Color.WHITE)
@@ -447,9 +461,7 @@ func _dithered_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance:
 	var shader_mat := ShaderMaterial.new()
 	shader_mat.shader = _PaintShader
 	shader_mat.set_shader_parameter("albedo_tex", _white_texture)
-	shader_mat.set_shader_parameter("paint_color", color)
-	shader_mat.set_shader_parameter("dither_cell", _dither_cell())
-	shader_mat.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
+	_set_paint_params(shader_mat, color, mesh_instance)
 	shader_mat.set_shader_parameter("metallic", std.metallic)
 	shader_mat.set_shader_parameter("roughness", std.roughness)
 	if std.normal_enabled and std.normal_texture != null:
@@ -457,6 +469,34 @@ func _dithered_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance:
 		shader_mat.set_shader_parameter("use_normal", 1.0)
 		shader_mat.set_shader_parameter("normal_scale", std.normal_scale)
 	return shader_mat
+
+
+## Everything car_paint_mask.gdshader takes from the car rather than the material: the
+## body and cove colors, the dither, the cove's outline, and where the mesh sits in the car.
+func _set_paint_params(shader_mat: ShaderMaterial, color: Color, mesh_instance: MeshInstance3D) -> void:
+	shader_mat.set_shader_parameter("paint_color", color)
+	shader_mat.set_shader_parameter("dither_cell", _dither_cell())
+	shader_mat.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
+	var cove := _cove()
+	var outline: PackedVector2Array = cove.get("outline", PackedVector2Array())
+	var cove_color := _active_cove_color()
+	cove_color.a = 1.0 if cove_color.a > 0.5 else 0.0
+	shader_mat.set_shader_parameter("cove_color", cove_color)
+	shader_mat.set_shader_parameter("cove_count", outline.size())
+	shader_mat.set_shader_parameter("cove_outline", outline)
+	shader_mat.set_shader_parameter("cove_min_x", float(cove.get("min_x", 0.0)))
+
+
+func _cove() -> Dictionary:
+	var model: Variant = _active_spec().get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return {}
+	var cove: Variant = (model as Dictionary).get("cove", {})
+	return cove if typeof(cove) == TYPE_DICTIONARY else {}
+
+
+func _has_cove() -> bool:
+	return not _cove().is_empty()
 
 
 func _is_dash_gauge(node: Node) -> bool:
@@ -486,9 +526,7 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			var tagged: Variant = existing.get_shader_parameter("albedo_tex")
 			if tagged is Texture2D:
 				tex = tagged
-			existing.set_shader_parameter("paint_color", color)
-			existing.set_shader_parameter("dither_cell", _dither_cell())
-			existing.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
+			_set_paint_params(existing, color, mesh_instance)
 			if tex != null:
 				continue
 		var orm: Texture2D = null
@@ -513,9 +551,7 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 		var shader_mat := ShaderMaterial.new()
 		shader_mat.shader = _PaintShader
 		shader_mat.set_shader_parameter("albedo_tex", tex)
-		shader_mat.set_shader_parameter("paint_color", color)
-		shader_mat.set_shader_parameter("dither_cell", _dither_cell())
-		shader_mat.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
+		_set_paint_params(shader_mat, color, mesh_instance)
 		if orm != null:
 			shader_mat.set_shader_parameter("orm_tex", orm)
 			shader_mat.set_shader_parameter("use_orm", 1.0)
