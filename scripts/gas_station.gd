@@ -1869,12 +1869,9 @@ func _build_parked_cars() -> void:
 func _build_player_car() -> void:
 	if not GameState.has_active_car():
 		return
+	# Not a preview: the visual draws the player's own car from GameState, so the fitted
+	# wheels and tires, paint, cove and stripped bumpers all match the garage.
 	var car := _CAR_SCENE.instantiate() as Node3D
-	var path := GameState.current_car_file_path()
-	if not car.has_method(&"prepare_preview") or not bool(car.call(&"prepare_preview", path, GameState.car_color, GameState.car_cove_color, GameState.bumpers_off)):
-		push_warning("Gas station car failed to load: %s" % path)
-		car.free()
-		return
 	car.name = "PlayerCar"
 	car.position = Vector3(_PARK_X, 0.0, _LANE_Z)
 	car.rotation.y = _CAR_YAW
