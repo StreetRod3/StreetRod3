@@ -19,8 +19,15 @@ extends RefCounted
 ##
 ## `wheels.size` multiplies the size of whatever wheels are fitted, for a car
 ## whose tires are bigger or smaller than the wheel parts draw them (1 if left out).
+##
+## `model.cove` is a second paint zone, like the side coves of the 1956-62 Corvettes:
+## `outline` is its shape seen from the side, [z, y] points in meters in the body's
+## space (the model's CarBody, Y up, +Z forward), and `min_x` how far from the middle
+## its faces are. It is the same on both sides.
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
+## Most points a cove outline may have (car_paint_mask.gdshader's cove_outline).
+const COVE_POINTS_MAX := 24
 
 const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
 const DEFAULT_CAMERAS: Dictionary = {
@@ -96,6 +103,23 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		# Size of the paint's EGA-style dither squares in meters (car_paint_mask.gdshader); 0 is none.
 		"dither_cell": float(body.get("dither_cell", 0.0)),
 	}
+	# A second paint zone (the Corvettes' side coves): a side-view outline of [z, y] points
+	# in meters, in the car's space, and how far out from the middle its faces lie.
+	var cove: Variant = body.get("cove", null)
+	if typeof(cove) == TYPE_DICTIONARY:
+		var outline := PackedVector2Array()
+		var points: Variant = (cove as Dictionary).get("outline", [])
+		if typeof(points) == TYPE_ARRAY:
+			for point: Variant in points:
+				if typeof(point) == TYPE_ARRAY and (point as Array).size() >= 2:
+					outline.append(Vector2(float(point[0]), float(point[1])))
+		if outline.size() < 3 or outline.size() > COVE_POINTS_MAX:
+			result.errors.append("Car model cove needs 3 to %d outline points." % COVE_POINTS_MAX)
+		else:
+			result.model["cove"] = {
+				"outline": outline,
+				"min_x": float((cove as Dictionary).get("min_x", 0.0)),
+			}
 
 
 static func _parse_wheels(root: Dictionary, result: Dictionary) -> void:
