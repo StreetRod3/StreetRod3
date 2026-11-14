@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Convert the Sketchfab Studebaker (a 1951 Champion Starlight coupe) into a car body GLB.
+"""Convert the Sketchfab Studebaker (a 1950 Champion Starlight coupe) into a car body GLB.
 
-    python3 -I tools/studebaker_to_glb.py reference/cars/51studebaker/model/studebaker_-_car_model.glb \
-        assets/cars/studebaker-champion-1951.glb
+    python3 -I tools/studebaker_to_glb.py reference/cars/50studebaker/model/studebaker_-_car_model.glb \
+        assets/cars/studebaker-champion-1950.glb
 
 Source: "Studebaker - Car Model" by Allie2k, CC-BY-4.0,
 https://sketchfab.com/3d-models/studebaker-car-model-c7578ec0f82043e6b392fcdf9b00c743
@@ -234,7 +234,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('src')
     ap.add_argument('dst')
-    ap.add_argument('--name', default='studebaker-champion-1951')
+    ap.add_argument('--name', default='studebaker-champion-1950')
     args = ap.parse_args()
 
     gltf, accessor = read_glb(args.src)

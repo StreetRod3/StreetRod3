@@ -1,9 +1,9 @@
 {
-  "id": "studebaker-champion-1951",
-  "name": "Studebaker Champion 1951",
+  "id": "studebaker-champion-1950",
+  "name": "Studebaker Champion 1950",
   "make": "GM",
   "model": {
-    "path": "res://assets/cars/studebaker-champion-1951.glb",
+    "path": "res://assets/cars/studebaker-champion-1950.glb",
     "position": [0.0, 0.253, 0.0],
     "height": 1.256,
     "ground_clearance": 0.253,

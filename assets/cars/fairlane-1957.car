@@ -4,31 +4,31 @@
   "make": "Ford",
   "model": {
     "path": "res://assets/cars/sr1-fairlane-1957.glb",
-    "position": [0.0, 0.185, 0.0],
-    "height": 1.365,
-    "ground_clearance": 0.185
+    "position": [0.0, 0.201, 0.0],
+    "height": 1.226,
+    "ground_clearance": 0.201
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-1.1, 0.34, 1.992],
+        "position": [-0.794, 0.34, 1.627],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [1.1, 0.34, 1.995],
+        "position": [0.794, 0.34, 1.63],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-1.1, 0.34, -1.676],
+        "position": [-0.794, 0.34, -1.369],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [1.1, 0.34, -1.677],
+        "position": [0.794, 0.34, -1.37],
         "rotation": [0, 180, -90]
       }
     ]
@@ -39,7 +39,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [-0.62, 1.13, -1]
+    "position": [-0.448, 1.049, -0.817]
   },
   "cameras": {
     "far": {
@@ -53,12 +53,12 @@
       "fov": 70.0
     },
     "cockpit": {
-      "position": [0.41, 1.25, -0.05],
+      "position": [0.296, 1.157, -0.041],
       "pitch": -2.5,
       "fov": 72.0
     },
     "bumper": {
-      "position": [0.0, 0.54, 3.46],
+      "position": [0.0, 0.52, 2.827],
       "pitch": -1.0,
       "fov": 72.0
     }

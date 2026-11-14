@@ -1,7 +1,7 @@
-"""The 1951 Studebaker Champion's instrument cluster and an add-on tachometer.
+"""The 1950 Studebaker Champion's instrument cluster and an add-on tachometer.
 
 Used by tools/studebaker_to_glb.py. Reference: page 5 of "Your 1952 Champion Owner's
-Guide" (reference/cars/51studebaker): a wide chrome-framed cluster with a ribbed face, a
+Guide" (reference/cars/50studebaker): a wide chrome-framed cluster with a ribbed face, a
 half-moon speedometer in the middle with its needle pivoting at the bottom over the
 odometer, and four small gauges in the corners (gasoline, ammeter, oil, heat). The look
 follows the photos in that folder: slanted white numerals every 20 mph on a black band, a
