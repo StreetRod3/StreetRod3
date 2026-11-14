@@ -153,10 +153,7 @@ func _ready() -> void:
 	var player_pivot := _player.get_node_or_null("CarPivot")
 	if player_pivot != null and player_pivot.has_method(&"set_car_body_color"):
 		player_pivot.set_car_body_color(GameState.car_color)
-	# Defer so the MeshInstance child scripts have a chance
-	# to populate `MeshInstance3D.mesh` before we inspect it.
-	call_deferred(&"_debug_car_mesh_resource_load")
-	call_deferred(&"_debug_car_mesh_instances")
+	# Defer so the car's mesh scripts have built their meshes first.
 	call_deferred(&"_align_race_cars_to_ground")
 
 
@@ -222,28 +219,6 @@ func _set_night() -> void:
 	moon.light_energy *= NIGHT_LIGHT_SCALE
 
 
-func _debug_car_mesh_instances() -> void:
-	# Prints bounds and surface counts for each MeshInstance3D under player/opponent.
-	# Wheels will also show up; the car body node is usually the one named `MeshInstance3D`.
-	_debug_body_mesh_instances(_player, "player")
-	_debug_body_mesh_instances(_opponent, "opponent")
-
-
-func _debug_car_mesh_resource_load() -> void:
-	# One-time check: whether Godot can actually load the STL import resource.
-	var stl_path := "res://assets/vette-c1.stl"
-	var exists_array_mesh := ResourceLoader.exists(stl_path, &"ArrayMesh")
-	var loaded := ResourceLoader.load(stl_path)
-	var loaded_type := "<null>"
-	if loaded != null:
-		loaded_type = loaded.get_class()
-
-	print("[DEBUG CAR][race] ResourceLoader stl_path=", stl_path,
-		" exists(ArrayMesh)=", exists_array_mesh,
-		" loaded=", loaded != null,
-		" loaded_type=", loaded_type)
-
-
 func _align_race_cars_to_ground() -> void:
 	# Wheels sit on height 0. A road course then lifts the whole car by the track's z.
 	var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
@@ -251,39 +226,6 @@ func _align_race_cars_to_ground() -> void:
 		var pivot: Node = car.get_node_or_null("CarPivot")
 		if pivot != null and pivot.has_method(&"align_wheels_to_floor"):
 			pivot.align_wheels_to_floor(floor_mi)
-
-
-func _debug_body_mesh_instances(body: Node, label: String) -> void:
-	if body == null:
-		print("[DEBUG CAR][race] Missing body for ", label)
-		return
-
-	_debug_mesh_instances_recursive(body, label)
-
-
-func _debug_mesh_instances_recursive(node: Node, label: String) -> void:
-	for child in node.get_children():
-		if child is MeshInstance3D:
-			var mi := child as MeshInstance3D
-			var mesh := mi.mesh
-			var surfaces := 0
-			var resource_path := "<null>"
-			if mesh != null:
-				resource_path = mesh.resource_path
-				if mesh.has_method(&"get_surface_count"):
-					surfaces = mesh.get_surface_count()
-
-			var aabb := mi.get_aabb() # local-space bounds
-			var center_local := aabb.position + aabb.size * 0.5
-			var center_world := mi.global_transform * center_local
-
-			print("[DEBUG CAR][race] ", label, " node=", mi.get_path(), " visible=", mi.visible,
-				" mesh_null=", mesh == null,
-				" mesh_resource=", resource_path,
-				" surface_count=", surfaces,
-				" local_aabb_size=", aabb.size,
-				" center_world=", center_world)
-		_debug_mesh_instances_recursive(child, label)
 
 
 func _physics_process(delta: float) -> void:
