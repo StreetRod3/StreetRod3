@@ -4,31 +4,31 @@
   "make": "GM",
   "model": {
     "path": "res://assets/cars/sr1-c56.glb",
-    "position": [0.0, 0.123, 0.0],
-    "height": 1.330,
-    "ground_clearance": 0.123
+    "position": [0.0, 0.151, 0.0],
+    "height": 1.157,
+    "ground_clearance": 0.151
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.9, 0.34, 1.787],
+        "position": [-0.721, 0.34, 1.349],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.9, 0.34, 1.807],
+        "position": [0.721, 0.34, 1.364],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.9, 0.34, -1.643],
+        "position": [-0.721, 0.34, -1.24],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.9, 0.34, -1.624],
+        "position": [0.721, 0.34, -1.226],
         "rotation": [0, 180, -90]
       }
     ]
@@ -39,7 +39,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [-0.4, 1.03, -1]
+    "position": [-0.32, 0.94, -0.755]
   },
   "cameras": {
     "far": {
@@ -53,12 +53,12 @@
       "fov": 70.0
     },
     "cockpit": {
-      "position": [0.37, 1.21, -0.35],
+      "position": [0.296, 1.097, -0.264],
       "pitch": -2.5,
       "fov": 72.0
     },
     "bumper": {
-      "position": [0.0, 0.51, 2.95],
+      "position": [0.0, 0.488, 2.227],
       "pitch": -1.0,
       "fov": 72.0
     }

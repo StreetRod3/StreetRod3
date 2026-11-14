@@ -13,22 +13,22 @@
     "mounts": [
       {
         "node": "WheelFrontLeft",
-        "position": [-0.8, 0.34, 1.919],
+        "position": [-0.711, 0.34, 1.457],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelFrontRight",
-        "position": [0.8, 0.34, 1.918],
+        "position": [0.711, 0.34, 1.456],
         "rotation": [0, 180, -90]
       },
       {
         "node": "WheelBackLeft",
-        "position": [-0.8, 0.34, -1.627],
+        "position": [-0.711, 0.34, -1.235],
         "rotation": [0, 180, 90]
       },
       {
         "node": "WheelBackRight",
-        "position": [0.8, 0.34, -1.627],
+        "position": [0.711, 0.34, -1.235],
         "rotation": [0, 180, -90]
       }
     ]
@@ -39,7 +39,7 @@
     "wheels": "wheel-c1"
   },
   "driver": {
-    "position": [-0.25, 1.06, -0.1]
+    "position": [-0.222, 1.06, -0.076]
   },
   "cameras": {
     "far": {
@@ -53,12 +53,12 @@
       "fov": 70.0
     },
     "cockpit": {
-      "position": [0.38, 1.21, -0.1],
+      "position": [0.338, 1.21, -0.076],
       "pitch": -2.0,
       "fov": 72.0
     },
     "bumper": {
-      "position": [0.0, 0.5, 2.5],
+      "position": [0.0, 0.5, 1.897],
       "pitch": -1.0,
       "fov": 72.0
     }
