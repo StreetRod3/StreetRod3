@@ -67,7 +67,8 @@ const ROOM_MIN := Vector3(-5.244, 0.3, -4.422)
 const ROOM_MAX := Vector3(3.6, 2.848, 4.422)
 const CAM_DISTANCE_MIN := 2.5
 const CAM_DISTANCE_MAX := 10.0
-const ZOOM_STEP := 0.75
+# Zoom per notch of the wheel. The release used to zoom too, so a notch went 2 x 0.75.
+const ZOOM_STEP := 1.5
 const PINCH_SENSITIVITY := 1.5
 # How quickly we interpolate camera distance (higher = snappier).
 const ZOOM_SMOOTH_SPEED := 12.0
@@ -765,7 +766,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# Pinch gesture zoom (touch / trackpad).
 	if event is InputEventMagnifyGesture:
-		if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or (_books_board != null and _books_board.visible):
+		if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or (_books_board != null and _books_board.visible) or _pointer_over_ui():
 			return
 		var mg := event as InputEventMagnifyGesture
 		# `factor` grows when fingers spread (zoom in).
@@ -782,26 +783,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_orbiting = mb.pressed
 			get_viewport().set_input_as_handled()
 			return
-		# Mouse wheel: use `factor` when available so trackpads behave better.
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			var factor_any: Variant = mb.get(&"factor") # May be missing depending on platform/version.
-			var raw_factor: float = 1.0
-			if typeof(factor_any) == TYPE_FLOAT or typeof(factor_any) == TYPE_INT:
-				raw_factor = float(factor_any)
-			var factor := absf(raw_factor)
-			if factor < 0.0001:
-				factor = 1.0
-
-			var dir := -1.0 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
-			# Some platforms encode scroll direction in `factor`; if the sign disagrees,
-			# flip the direction so zoom in/out is consistent.
-			if raw_factor < 0.0:
-				dir *= -1.0
-			_cam_distance_target = clampf(
-				_cam_distance_target + dir * ZOOM_STEP * factor,
-				CAM_DISTANCE_MIN,
-				CAM_DISTANCE_MAX
-			)
+			_wheel_zoom(mb)
 			get_viewport().set_input_as_handled()
 			return
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
@@ -833,6 +816,39 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## True while the pointer is over a window or other control, which the wheel scrolls, not the camera.
+func _pointer_over_ui() -> bool:
+	var viewport := get_viewport()
+	return viewport != null and viewport.gui_get_hovered_control() != null
+
+
+## Zooms the camera one step for a notch of the mouse wheel.
+## A notch comes as a press and then a release, and only the press zooms. Neither zooms over
+## an open window: a scroll list that has nothing left to scroll lets the wheel through to the
+## garage, which zoomed the garage behind the window (#118).
+func _wheel_zoom(mb: InputEventMouseButton) -> void:
+	if not mb.pressed or _pointer_over_ui():
+		return
+	# Use `factor` when available so trackpads behave better.
+	var factor_any: Variant = mb.get(&"factor") # May be missing depending on platform/version.
+	var raw_factor: float = 1.0
+	if typeof(factor_any) == TYPE_FLOAT or typeof(factor_any) == TYPE_INT:
+		raw_factor = float(factor_any)
+	var factor := absf(raw_factor)
+	if factor < 0.0001:
+		factor = 1.0
+	var dir := -1.0 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
+	# Some platforms encode scroll direction in `factor`; if the sign disagrees,
+	# flip the direction so zoom in/out is consistent.
+	if raw_factor < 0.0:
+		dir *= -1.0
+	_cam_distance_target = clampf(
+		_cam_distance_target + dir * ZOOM_STEP * factor,
+		CAM_DISTANCE_MIN,
+		CAM_DISTANCE_MAX
+	)
+
+
 func _handle_camera_only(event: InputEvent) -> void:
 	if event is InputEventMagnifyGesture:
 		var mg := event as InputEventMagnifyGesture
@@ -849,21 +865,7 @@ func _handle_camera_only(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP or mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			var factor_any: Variant = mb.get(&"factor")
-			var raw_factor: float = 1.0
-			if typeof(factor_any) == TYPE_FLOAT or typeof(factor_any) == TYPE_INT:
-				raw_factor = float(factor_any)
-			var factor := absf(raw_factor)
-			if factor < 0.0001:
-				factor = 1.0
-			var dir := -1.0 if mb.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0
-			if raw_factor < 0.0:
-				dir *= -1.0
-			_cam_distance_target = clampf(
-				_cam_distance_target + dir * ZOOM_STEP * factor,
-				CAM_DISTANCE_MIN,
-				CAM_DISTANCE_MAX
-			)
+			_wheel_zoom(mb)
 			get_viewport().set_input_as_handled()
 		return
 	if event is InputEventMouseMotion and _orbiting:
