@@ -196,10 +196,11 @@ func _refresh_steering_wheel() -> void:
 				if parts.size() > 1:
 					var num_str := parts[1].replace("_pod", "").replace("_", ".")
 					_speedo_linear_travel = maxf(num_str.to_float(), 0.0)
-			elif pod_name.contains("arch_160"):
-				_speedo_sweep_rad = deg_to_rad(160.0)
-			elif pod_name.contains("arch_150"):
-				_speedo_sweep_rad = deg_to_rad(150.0)
+			elif pod_name.contains("arch_"):
+				# A pod named "dash_speedo_arch_270_pod" sweeps 270 degrees from 0 to full range.
+				var sweep_deg := pod_name.split("arch_")[1].get_slice("_", 0).to_float()
+				if sweep_deg > 0.0:
+					_speedo_sweep_rad = deg_to_rad(sweep_deg)
 	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
 	if _tach_needle != null:
 		_tach_rest = _tach_needle.transform
