@@ -4021,6 +4021,9 @@ func _migrate_car_id(car_id: String) -> String:
 		return "corvette-1962"
 	if car_id == "vette-1956":
 		return DEFAULT_CAR_ID
+	# Listed as a 1951 at first; it is a 1950.
+	if car_id == "studebaker-champion-1951":
+		return "studebaker-champion-1950"
 	return car_id
 
 

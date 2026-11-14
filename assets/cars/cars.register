@@ -55,13 +55,13 @@
       "car_file": "res://assets/cars/ford-f100-1970.car"
     },
     {
-      "id": "studebaker-champion-1951",
-      "name": "1951 Studebaker Champion",
+      "id": "studebaker-champion-1950",
+      "name": "1950 Studebaker Champion",
       "price": 850,
       "vmax": 185.0,
       "hp": 230.0,
       "color": [0.12, 0.16, 0.42, 1.0],
-      "car_file": "res://assets/cars/studebaker-champion-1951.car"
+      "car_file": "res://assets/cars/studebaker-champion-1950.car"
     }
   ]
 }

@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://ds4d0jq1d51e5"
-path="res://.godot/imported/studebaker-champion-1951.glb-ddbd97c2128d079c35336421a7141cb1.scn"
+path="res://.godot/imported/studebaker-champion-1950.glb-4bd91bc65f7891faa89c2f708df3e300.scn"
 
 [deps]
 
-source_file="res://assets/cars/studebaker-champion-1951.glb"
-dest_files=["res://.godot/imported/studebaker-champion-1951.glb-ddbd97c2128d079c35336421a7141cb1.scn"]
+source_file="res://assets/cars/studebaker-champion-1950.glb"
+dest_files=["res://.godot/imported/studebaker-champion-1950.glb-4bd91bc65f7891faa89c2f708df3e300.scn"]
 
 [params]
 
