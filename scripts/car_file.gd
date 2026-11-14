@@ -93,7 +93,7 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		"rotation": _vec3(body.get("rotation", [0.0, 0.0, 0.0])),
 		"height": float(body.get("height", 5.0)),
 		"ground_clearance": float(body.get("ground_clearance", 0.0)),
-		# Size of the paint's EGA-style dither squares (car_paint_mask.gdshader); 0 is none.
+		# Size of the paint's EGA-style dither squares in meters (car_paint_mask.gdshader); 0 is none.
 		"dither_cell": float(body.get("dither_cell", 0.0)),
 	}
 

@@ -11,8 +11,8 @@ uniform float use_orm : hint_range(0.0, 1.0) = 0.0;
 uniform float use_normal : hint_range(0.0, 1.0) = 0.0;
 uniform float normal_scale = 1.0;
 // An EGA-style checkerboard dither in the paint, like the 1956 Corvette's texture, for
-// cars whose .car file sets model.dither_cell: the size of one square in model units
-// (0 leaves it off). The paint comes in three flat shades by which way the surface faces:
+// cars whose .car file sets model.dither_cell: the size of one square in meters (0
+// leaves it off). The paint comes in three flat shades by which way the surface faces:
 // its own color on the tops and the shoulders, a solid darker shade down the sides, and
 // darker again underneath. Where one shade gives way to the next there is a band of
 // squares of the two on a checkerboard rather than a blend.
@@ -24,13 +24,16 @@ uniform float dither_upper = 0.25;
 uniform float dither_lower = -0.35;
 // Half the width of a band of squares, in the same terms.
 uniform float dither_band : hint_range(0.0, 0.5) = 0.12;
+// The mesh's own coordinates to the car's (meters, Y up), set per mesh by
+// car_vehicle_visual.gd, so the squares and shades don't depend on how the model was built.
+uniform mat4 car_from_mesh = mat4(1.0);
 
 varying vec3 model_pos;
 varying vec3 model_normal;
 
 void vertex() {
-	model_pos = VERTEX;
-	model_normal = NORMAL;
+	model_pos = (car_from_mesh * vec4(VERTEX, 1.0)).xyz;
+	model_normal = mat3(car_from_mesh) * NORMAL;
 }
 
 float paint_tone() {
