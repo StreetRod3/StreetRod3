@@ -128,7 +128,7 @@ const SALE_PRICE_STEP := 50
 const SALE_PRICE_MAX := 99999
 
 var _nav := _MenuNav.new()
-## The paint menu's Body and Cove choice, shown for a car with a cove (car file model.cove).
+## The paint menu's Body and Accent choice; Accent paints the cove, on a car with one (car file model.cove).
 var _spray_zones: HBoxContainer
 var _spray_body_btn: Button
 var _spray_cove_btn: Button
@@ -1597,7 +1597,7 @@ func _build_spray_zones() -> void:
 	_spray_body_btn = Button.new()
 	_spray_body_btn.text = "Body"
 	_spray_cove_btn = Button.new()
-	_spray_cove_btn.text = "Cove"
+	_spray_cove_btn.text = "Accent"
 	for btn: Button in [_spray_body_btn, _spray_cove_btn]:
 		btn.toggle_mode = true
 		btn.button_group = group
