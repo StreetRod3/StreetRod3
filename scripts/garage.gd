@@ -224,7 +224,7 @@ const _SLOT_NAMES := {
 	"air_cleaner": "Air cleaner",
 }
 ## Where the creeper lies on the floor, beside the car on the camera's side.
-const _CREEPER_SPOT := Vector3(-1.85, 0.0, -1.75)
+const _CREEPER_SPOT := Vector3(-1.85, 0.0, -2.15)
 
 const _MONTHS := [
 	"", "January", "February", "March", "April", "May", "June",

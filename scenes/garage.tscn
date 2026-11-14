@@ -1079,7 +1079,7 @@ surface_material_override/0 = SubResource("LampMetalMat")
 shape = SubResource("DoorShape")
 
 [node name="InteractSprayPistol" type="StaticBody3D" parent="." unique_id=753276932]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 0.55, 2.05)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 0.55, 1.85)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="InteractSprayPistol" unique_id=867806488]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.37807608, 0)
@@ -1100,7 +1100,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.264, 0)
 shape = SubResource("FuelCanShape")
 
 [node name="InteractLift" type="StaticBody3D" parent="." unique_id=210050001]
-transform = Transform3D(0.8525245, 0, 0.52268726, 0, 1, 0, -0.52268726, 0, 0.8525245, -2, 0.06, 0.05)
+transform = Transform3D(0.8525245, 0, 0.52268726, 0, 1, 0, -0.52268726, 0, 0.8525245, -2, 0.06, -0.15)
 
 [node name="Chassis" type="MeshInstance3D" parent="InteractLift" unique_id=210050002]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0)
