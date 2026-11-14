@@ -1091,7 +1091,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.4793353, 0)
 shape = SubResource("SprayShape")
 
 [node name="InteractFuelCan" type="StaticBody3D" parent="." unique_id=1523101691]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 0, 4.172)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.0, 0, 2.2)
 
 [node name="Model" parent="InteractFuelCan" instance=ExtResource("4")]
 
