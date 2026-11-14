@@ -64,6 +64,10 @@
       "fov": 72.0
     }
   },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 25.0},
+    "rear": {"node": "bumper_rear", "mass": 32.0}
+  },
   "chassis": {
     "mass": 1630,
     "wheelbase": 3.317,

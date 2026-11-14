@@ -15,9 +15,13 @@ Holding gas and brake with the car stopped is mostly for show so far: the rear w
 - **A line lock part.** A part to buy that holds only the front brakes, which is what real drag cars use to do this.
 - **Look.** The patch of rubber under a stopped tire is a simple dark quad, and it could grow and blend better. Smoke could hang longer in still air and depend on the tires, with more from slicks.
 
-## Removable bumpers on the other cars
+## Removable bumpers on the last two cars
 
-Bumpers can be stripped and put back as in Street Rod 2, but only on the 1950 Studebaker so far. Each car needs its bumpers split out of its model into their own nodes, brackets included (they are unbolted from the frame with the bumper, not left hanging), and a `bumpers` block in its car file with each one's weight. The 1960 Corvette's Sketchfab source and the Styleline's and F100's chrome should split cleanly; the 1956 Corvette and the Fairlane are single fused meshes converted from Street Rod 1, so cutting their bumpers out will be rougher. The 1932 Ford has none. Street Rod 2 also chopped roofs, which is not started.
+Bumpers can be stripped and put back as in Street Rod 2 on the Studebaker, the 1960 Corvette, the Styleline and the F100. The 1956 Corvette and the Fairlane are left: they are single fused meshes converted from Street Rod 1, so their bumpers have to be cut out of the body, brackets included (they are unbolted from the frame with the bumper, not left hanging), and whatever the bumper hid modeled (`tools/split_bumpers.py` takes a rule per car). The 1932 Ford has none.
+
+## Chopped roofs
+
+Street Rod 2 also chopped roofs for $70. No car here has a roof that can be chopped yet, so it waits for one.
 
 ## Time of day
 
