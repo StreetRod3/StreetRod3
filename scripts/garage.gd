@@ -53,15 +53,15 @@ var _cam_distance: float = CAM_DISTANCE_DEFAULT
 var _cam_distance_target: float = CAM_DISTANCE_DEFAULT
 
 # Camera zoom limits (mouse wheel + pinch).
-const CAM_DISTANCE_DEFAULT := 6.6
-## Height above the car the camera aims at. Above the roof, so the back wall, its
-## shelves and clock, and the ceiling fill the frame the way Street Rod 2's garage did.
-const CAM_LOOK_HEIGHT := 1.9
+const CAM_DISTANCE_DEFAULT := 4.0
+## Height above the floor the camera aims at: about the car's beltline, so the whole
+## car and the wall behind it, with its shelves and clock, are in the frame.
+const CAM_LOOK_HEIGHT := 1.2
 ## Inside faces of the walls and ceiling, less a margin. The camera stays in the room.
-const ROOM_MIN := Vector3(-6.75, 0.3, -7.05)
-const ROOM_MAX := Vector3(4.45, 6.2, 6.85)
+const ROOM_MIN := Vector3(-4.15, 0.3, -3.5)
+const ROOM_MAX := Vector3(2.85, 2.55, 3.5)
 const CAM_DISTANCE_MIN := 2.5
-const CAM_DISTANCE_MAX := 20.0
+const CAM_DISTANCE_MAX := 8.0
 const ZOOM_STEP := 0.75
 const PINCH_SENSITIVITY := 1.5
 # How quickly we interpolate camera distance (higher = snappier).
@@ -258,7 +258,7 @@ const _LIFT_HEIGHT := 0.42
 ## The tire machine stands against the front wall, ahead of the car. With the car up on
 ## the jack, the wheels roll straight ahead under it along their own tracks and wait in
 ## front of the machine, the front pair nearer it.
-const _TIRE_MACHINE_SPOT := Vector3(1.9, 0.0, 6.7)
+const _TIRE_MACHINE_SPOT := Vector3(1.0, 0.0, 3.25)
 const _TIRE_TABLE_Y := 0.66
 const _TIRE_WAIT_Z := {
 	"WheelFrontLeft": 5.0,
@@ -272,8 +272,8 @@ const _TIRE_ROLL_SPEED := 5.0
 const _TIRE_RADIUS := 0.3255
 const _RIM_RADIUS := 0.211
 ## The new set waits beside the machine, and the old set piles up on the other side.
-const _TIRE_STACK_NEW := Vector3(1.0, 0.0, 6.75)
-const _TIRE_STACK_OLD := Vector3(2.8, 0.0, 6.75)
+const _TIRE_STACK_NEW := Vector3(-0.15, 0.0, 3.3)
+const _TIRE_STACK_OLD := Vector3(-1.05, 0.0, 3.3)
 const _TIRE_THICK := 0.13
 ## Wheels start this far apart, so that the wrench is heard on each.
 const _T_WRENCH_GAP := 0.3
@@ -3814,7 +3814,7 @@ func _build_city_map() -> void:
 	_map.name = "InteractMap"
 	# The wall the garage opens facing. Local -Z points into the room.
 	_map.basis = Basis(Vector3(0.0, 0.0, -1.0), Vector3(0.0, 1.0, 0.0), Vector3(1.0, 0.0, 0.0))
-	_map.position = Vector3(4.55, 4.15, -3.4)
+	_map.position = Vector3(2.95, 1.65, -2.0)
 	add_child(_map)
 	_map.set_meta(&"garage_interact", &"map")
 	_map_board(_map, Vector3(_MAP_SHEET.x + 0.1, _MAP_SHEET.y + 0.1, 0.03), Vector3(0.0, 0.0, 0.006), Color(0.32, 0.2, 0.11), 0.62)
