@@ -231,6 +231,10 @@ var driving_camera: int = 0
 var car_name: String = "Corvette 1956"
 ## Current paint color for the active car.
 var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
+## The cove's own paint, on a car with a cove (car file model.cove). Until the cove is
+## painted on its own it is NO_COVE_PAINT and takes the body color.
+const NO_COVE_PAINT := Color(0, 0, 0, 0)
+var car_cove_color: Color = NO_COVE_PAINT
 ## Fuel in the active car's tank, in liters.
 var fuel: float = DEFAULT_TANK_L
 ## Top speed and horsepower after parts and engine tune.
@@ -1090,6 +1094,7 @@ func new_game() -> void:
 	driver_traits = DRIVER_TRAITS_DEFAULT.duplicate()
 	car_name = "Corvette 1956"
 	car_color = Color(0.78, 0.14, 0.14, 1.0)
+	car_cove_color = NO_COVE_PAINT
 	fuel = DEFAULT_TANK_L
 	vmax_kmh = 220.0
 	engine_power_hp = 280.0
@@ -3091,6 +3096,17 @@ func set_car_color(next: Color) -> void:
 	_sync_record_from_active()
 
 
+func set_car_cove_color(next: Color) -> void:
+	car_cove_color = next
+	_sync_record_from_active()
+
+
+## Whether the active car has a cove to paint on its own.
+func car_has_cove() -> bool:
+	var model: Variant = car_spec.get("model", {})
+	return typeof(model) == TYPE_DICTIONARY and (model as Dictionary).has("cove")
+
+
 func set_fuel(amount: float) -> void:
 	fuel = clampf(amount, 0.0, DEFAULT_TANK_L)
 
@@ -3826,6 +3842,7 @@ func _sync_record_from_active() -> void:
 		model_id = current_car_id
 	rec["model_id"] = model_id
 	rec["color"] = car_color
+	rec["cove_color"] = car_cove_color
 	rec["fuel"] = fuel
 	rec["engine_id"] = equipped_engine_id
 	rec["gearbox_id"] = equipped_gearbox_id
@@ -3854,6 +3871,8 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	var paint: Variant = rec.get("color", car_color)
 	if paint is Color:
 		car_color = paint
+	var cove_paint: Variant = rec.get("cove_color", NO_COVE_PAINT)
+	car_cove_color = cove_paint if cove_paint is Color else NO_COVE_PAINT
 	fuel = float(rec.get("fuel", DEFAULT_TANK_L))
 	equipped_engine_id = str(rec.get("engine_id", equipped_engine_id))
 	equipped_gearbox_id = str(rec.get("gearbox_id", equipped_gearbox_id))
@@ -3887,9 +3906,14 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 	var stored_paint: Variant = rec.get("color", null)
 	if stored_paint is Color:
 		paint = stored_paint
+	var cove_paint: Color = NO_COVE_PAINT
+	var stored_cove: Variant = rec.get("cove_color", null)
+	if stored_cove is Color:
+		cove_paint = stored_cove
 	var row := {
 		"model_id": str(rec.get("model_id", model_id)),
 		"color": [paint.r, paint.g, paint.b, paint.a],
+		"cove_color": [cove_paint.r, cove_paint.g, cove_paint.b, cove_paint.a],
 		"fuel": float(rec.get("fuel", fuel)),
 		"engine_id": str(rec.get("engine_id", "")),
 		"gearbox_id": str(rec.get("gearbox_id", "")),
@@ -3967,6 +3991,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 	var rec := {
 		"model_id": model_id,
 		"color": _color_from_save(row.get("color", null), car_color),
+		"cove_color": _color_from_save(row.get("cove_color", null), NO_COVE_PAINT),
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
 		"engine_id": str(row.get("engine_id", "")),
 		"gearbox_id": str(row.get("gearbox_id", "")),

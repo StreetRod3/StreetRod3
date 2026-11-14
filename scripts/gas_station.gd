@@ -1871,7 +1871,7 @@ func _build_player_car() -> void:
 		return
 	var car := _CAR_SCENE.instantiate() as Node3D
 	var path := GameState.current_car_file_path()
-	if not car.has_method(&"prepare_preview") or not bool(car.call(&"prepare_preview", path, GameState.car_color)):
+	if not car.has_method(&"prepare_preview") or not bool(car.call(&"prepare_preview", path, GameState.car_color, GameState.car_cove_color)):
 		push_warning("Gas station car failed to load: %s" % path)
 		car.free()
 		return

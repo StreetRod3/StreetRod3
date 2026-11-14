@@ -27,6 +27,15 @@ uniform float dither_band : hint_range(0.0, 0.5) = 0.12;
 // The mesh's own coordinates to the car's (meters, Y up), set per mesh by
 // car_vehicle_visual.gd, so the squares and shades don't depend on how the model was built.
 uniform mat4 car_from_mesh = mat4(1.0);
+// A second paint zone, the side coves of the 1956-62 Corvettes, for cars whose .car file
+// gives model.cove. A face is in it if it looks out to the side, lies at least
+// cove_min_x from the car's middle, and falls inside cove_outline, a side-view outline in
+// the car's (z, y), the same on both sides. cove_color's alpha is 0 until the cove is
+// painted on its own, and then the cove takes the body's color.
+uniform vec4 cove_color = vec4(0.0);
+uniform int cove_count = 0;
+uniform vec2 cove_outline[24];
+uniform float cove_min_x = 0.0;
 
 varying vec3 model_pos;
 varying vec3 model_normal;
@@ -59,9 +68,32 @@ float paint_tone() {
 	return 1.0 - dither_depth * level;
 }
 
+bool in_cove() {
+	if (cove_count < 3 || cove_color.a < 0.5 || abs(model_pos.x) < cove_min_x) {
+		return false;
+	}
+	vec3 n = normalize(model_normal);
+	if (n.x * sign(model_pos.x) < 0.3) {
+		return false;
+	}
+	vec2 p = model_pos.zy;
+	bool inside = false;
+	int j = cove_count - 1;
+	for (int i = 0; i < cove_count; i++) {
+		vec2 a = cove_outline[i];
+		vec2 b = cove_outline[j];
+		if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+			inside = !inside;
+		}
+		j = i;
+	}
+	return inside;
+}
+
 void fragment() {
 	vec4 tex = texture(albedo_tex, UV);
-	vec3 painted = paint_color.rgb * tex.rgb;
+	vec3 paint = in_cove() ? cove_color.rgb : paint_color.rgb;
+	vec3 painted = paint * tex.rgb;
 	if (dither_cell > 0.0) {
 		painted *= paint_tone();
 	}
