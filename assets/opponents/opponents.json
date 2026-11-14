@@ -12,9 +12,9 @@
     {"car": "fairlane-1957", "tires": "tires-bias", "accel_scale": 0.26, "vmax_scale": 0.89, "shift_time": 0.4},
     {"car": "chevy-styleline-1950", "tires": "tires-bias", "accel_scale": 0.28, "vmax_scale": 0.9, "shift_time": 0.36},
     {"car": "sr1-corvette-1956", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.9, "shift_time": 0.34},
-    {"car": "corvette-1962", "engine": "v8-327", "gearbox": "gb_man4", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.92, "shift_time": 0.28},
+    {"car": "corvette-1960", "engine": "v8-327", "gearbox": "gb_man4", "tires": "tires-radial", "accel_scale": 0.3, "vmax_scale": 0.92, "shift_time": 0.28},
     {"car": "ford-coupe-1932", "engine": "ford-302", "gearbox": "gb_man4-ford", "tires": "tires-radial", "parts": {"cam": "cam", "heads": "heads-ported", "air_cleaner": "air-cleaner-chrome"}, "accel_scale": 0.32, "vmax_scale": 0.97, "shift_time": 0.26},
-    {"car": "corvette-1962", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "parts": {"cam": "cam"}, "springs": "springs-heavy", "shocks": "shocks-gas", "accel_scale": 0.33, "vmax_scale": 0.94, "shift_time": 0.22},
+    {"car": "corvette-1960", "engine": "v8-350", "gearbox": "gb_man5", "tires": "tires", "parts": {"cam": "cam"}, "springs": "springs-heavy", "shocks": "shocks-gas", "accel_scale": 0.33, "vmax_scale": 0.94, "shift_time": 0.22},
     {"car": "ford-coupe-1932", "engine": "ford-302", "gearbox": "gb_man5-ford", "tires": "tires", "parts": {"cam": "cam", "heads": "heads-aluminum", "intake": "intake", "carb": "carb-750", "distributor": "dist-transistor", "air_cleaner": "air-cleaner-chrome"}, "springs": "springs-racing", "shocks": "shocks-racing", "accel_scale": 0.34, "vmax_scale": 1.04, "shift_time": 0.18}
   ]
 }
