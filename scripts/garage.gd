@@ -382,10 +382,8 @@ func _ready() -> void:
 	_build_view_above_status()
 	_update_camera_transform()
 
-	# Defer so MeshInstance scripts (like the STL loader) have a chance
-	# to populate `MeshInstance3D.mesh` before we inspect it.
-	call_deferred(&"_debug_car_mesh")
-	# Also align wheels to the floor after meshes are ready.
+	# Defer so the car's mesh scripts have built their meshes first:
+	# align wheels to the floor after meshes are ready.
 	call_deferred(&"_align_wheels_to_floor")
 	call_deferred(&"_place_bay_targets")
 	if _wants_drive_in():
@@ -624,55 +622,6 @@ func _interact_kind_at(screen_pos: Vector2) -> Variant:
 			return node.get_meta(&"garage_interact")
 		node = node.get_parent()
 	return null
-
-
-func _debug_car_mesh() -> void:
-	# Deterministic debug to see whether the imported car mesh is loaded and
-	# where its bounds end up (world vs camera framing issues).
-	var car_body := _car_pivot.get_node_or_null("CarBody") as MeshInstance3D
-	if car_body == null:
-		print("[DEBUG CAR][garage] Missing node `CarPivot/CarBody`.")
-		return
-
-	var mesh := car_body.mesh
-	var surfaces := 0
-	var resource_path := "<null>"
-	if mesh != null:
-		resource_path = mesh.resource_path
-		if mesh.has_method(&"get_surface_count"):
-			surfaces = mesh.get_surface_count()
-
-	var aabb := car_body.get_aabb() # local-space bounds
-	var center_local := aabb.position + aabb.size * 0.5
-	var center_world := car_body.global_transform * center_local
-
-	# Also explicitly try loading the STL resource path.
-	# This distinguishes "scene reference failed" vs "import/load failed".
-	var stl_path := "res://assets/vette-c1.stl"
-	var exists_any := ResourceLoader.exists(stl_path)
-	var exists_array_mesh := ResourceLoader.exists(stl_path, &"ArrayMesh")
-	var loaded_any := ResourceLoader.load(stl_path)
-	var loaded_any_type := "<null>"
-	if loaded_any != null:
-		loaded_any_type = loaded_any.get_class()
-
-	var exists_mesh := ResourceLoader.exists(stl_path, &"Mesh")
-	var loaded_mesh := ResourceLoader.load(stl_path, &"Mesh")
-	var loaded_mesh_type := "<null>"
-	if loaded_mesh != null:
-		loaded_mesh_type = loaded_mesh.get_class()
-
-	var abs_path := ProjectSettings.globalize_path(stl_path)
-	var abs_exists := FileAccess.file_exists(abs_path)
-
-	print("[DEBUG CAR][garage] CarBody visible=", car_body.visible, " mesh_null=", mesh == null)
-	print("[DEBUG CAR][garage] mesh_resource=", resource_path, " surface_count=", surfaces)
-	print("[DEBUG CAR][garage] local_aabb_size=", aabb.size, " local_aabb_pos=", aabb.position)
-	print("[DEBUG CAR][garage] global_position=", car_body.global_position, " scale=", car_body.scale)
-	print("[DEBUG CAR][garage] center_world=", center_world)
-	print("[DEBUG CAR][garage] stl_path_exists(any)=", exists_any, " stl_path_exists(ArrayMesh)=", exists_array_mesh, " loaded_any=", loaded_any != null, " loaded_any_type=", loaded_any_type)
-	print("[DEBUG CAR][garage] stl_path_exists(Mesh)=", exists_mesh, " loaded_mesh=", loaded_mesh != null, " loaded_mesh_type=", loaded_mesh_type)
-	print("[DEBUG CAR][garage] stl_abs_path=", abs_path, " abs_exists=", abs_exists)
 
 
 func _unhandled_input(event: InputEvent) -> void:

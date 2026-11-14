@@ -285,4 +285,4 @@ Street Rod 3/
   .github/workflows/     # headless Web export and GitHub Pages deploy
 ```
 
-`assets/vette-c1.stl` and `assets/wheel-c1.stl` remain in the tree. Runtime loading in `stl_mesh_instance.gd` currently points at GLB paths under `assets/cars/` and `assets/parts/`.
+Despite its name, `stl_mesh_instance.gd` loads GLB models from `assets/cars/` and `assets/parts/`; there are no STL files in the tree.
