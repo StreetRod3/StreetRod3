@@ -1807,10 +1807,18 @@ func _load_saved_opponents(d: Dictionary) -> void:
 	for item: Variant in saved:
 		if typeof(item) != TYPE_DICTIONARY:
 			continue
-		var row: Dictionary = item
+		var row: Dictionary = (item as Dictionary).duplicate()
 		var name := str(row.get("name", "")).strip_edges()
 		if name.is_empty():
 			continue
+		# A rival on a car that has since been renamed takes the catalog's new name and file.
+		var saved_car_id := str(row.get("car_id", ""))
+		row["car_id"] = _migrate_car_id(saved_car_id)
+		if row["car_id"] != saved_car_id:
+			var listing := listing_by_id(USED_CARS, str(row["car_id"]))
+			if not listing.is_empty():
+				row["car_name"] = str(listing.get("name", row.get("car_name", "Car")))
+				row["car_file"] = str(listing.get("car_file", row.get("car_file", "")))
 		opponents.append({
 			"id": i,
 			"name": name,
@@ -4018,7 +4026,10 @@ func _color_from_save(value: Variant, fallback: Color) -> Color:
 
 func _migrate_car_id(car_id: String) -> String:
 	if car_id == "basic":
-		return "corvette-1962"
+		return "corvette-1960"
+	# Listed as a 1962 (and named a 1961) at first; it is a 1960.
+	if car_id == "corvette-1962":
+		return "corvette-1960"
 	if car_id == "vette-1956":
 		return DEFAULT_CAR_ID
 	# Listed as a 1951 at first; it is a 1950.

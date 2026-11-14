@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://lnri4tucalj6"
-path="res://.godot/imported/c-1962.glb-3e990cc5b3fabf304b494c3036fbdbc7.scn"
+path="res://.godot/imported/corvette-1960.glb-0d5d3a89ebc88f7ad5f0b851b8ff3205.scn"
 
 [deps]
 
-source_file="res://assets/cars/c-1962.glb"
-dest_files=["res://.godot/imported/c-1962.glb-3e990cc5b3fabf304b494c3036fbdbc7.scn"]
+source_file="res://assets/cars/corvette-1960.glb"
+dest_files=["res://.godot/imported/corvette-1960.glb-0d5d3a89ebc88f7ad5f0b851b8ff3205.scn"]
 
 [params]
 

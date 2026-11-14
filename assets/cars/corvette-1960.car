@@ -1,9 +1,9 @@
 {
-  "id": "corvette-1962-1",
-  "name": "Corvette 1962",
+  "id": "corvette-1960",
+  "name": "Corvette 1960",
   "make": "GM",
   "model": {
-    "path": "res://assets/cars/c-1962.glb",
+    "path": "res://assets/cars/corvette-1960.glb",
     "position": [0.024, 0.101, 0.0],
     "height": 4.501,
     "ground_clearance": 0.203,

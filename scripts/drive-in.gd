@@ -62,7 +62,7 @@ const _PARKED: Array[Dictionary] = [
 	{"file": "res://assets/cars/sr1-corvette-1956.car", "paint": Color(0.72, 0.08, 0.08), "x": -7.2, "yaw": PI},
 	{"file": "res://assets/cars/fairlane-1957.car", "paint": Color(0.93, 0.9, 0.82), "x": -2.4, "yaw": PI},
 	{"file": "res://assets/cars/ford-coupe-1932.car", "paint": Color(0.08, 0.22, 0.55), "x": 2.4, "yaw": PI},
-	{"file": "res://assets/cars/corvette-1962-1.car", "paint": Color(0.82, 0.68, 0.12), "x": 7.2, "yaw": PI},
+	{"file": "res://assets/cars/corvette-1960.car", "paint": Color(0.82, 0.68, 0.12), "x": 7.2, "yaw": PI},
 ]
 
 @onready var _camera: Camera3D = $Camera3D

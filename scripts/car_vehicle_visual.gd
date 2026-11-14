@@ -11,6 +11,8 @@ extends Node3D
 
 const _CarFile := preload("res://scripts/car_file.gd")
 const _PaintShader := preload("res://shaders/car_paint_mask.gdshader")
+## Plain white under a solid body's dithered paint; made once.
+static var _white_texture: ImageTexture
 ## Wheel parts are the wheel alone; the tires are drawn on them from this model unless the
 ## tire part names its own `model`.
 const _TIRE_MODEL := "res://assets/parts/tire-225-60r15.glb"
@@ -420,6 +422,9 @@ func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			mat = mesh_instance.mesh.surface_get_material(i)
 		if mat == null:
 			mat = StandardMaterial3D.new()
+		if mat is StandardMaterial3D and _dither_cell() > 0.0:
+			mesh_instance.set_surface_override_material(i, _dithered_solid_paint(mat as StandardMaterial3D, color, mesh_instance))
+			continue
 		var mat_copy := mat.duplicate()
 		mesh_instance.set_surface_override_material(i, mat_copy)
 		if mat_copy is StandardMaterial3D:
@@ -429,6 +434,29 @@ func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			if (mat_copy as ShaderMaterial).shader != null:
 				(mat_copy as ShaderMaterial).set_shader_parameter("paint_color", color)
 				(mat_copy as ShaderMaterial).set_shader_parameter("albedo_color", color)
+
+
+## A solid-painted body (a mesh named "body") in a car whose file sets dither_cell: the
+## paint shader over plain white instead of the model's texture, keeping its shine and
+## normal map. Painting it again only changes the color, in the ShaderMaterial branch.
+func _dithered_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: MeshInstance3D) -> ShaderMaterial:
+	if _white_texture == null:
+		var img := Image.create(1, 1, false, Image.FORMAT_RGBA8)
+		img.fill(Color.WHITE)
+		_white_texture = ImageTexture.create_from_image(img)
+	var shader_mat := ShaderMaterial.new()
+	shader_mat.shader = _PaintShader
+	shader_mat.set_shader_parameter("albedo_tex", _white_texture)
+	shader_mat.set_shader_parameter("paint_color", color)
+	shader_mat.set_shader_parameter("dither_cell", _dither_cell())
+	shader_mat.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
+	shader_mat.set_shader_parameter("metallic", std.metallic)
+	shader_mat.set_shader_parameter("roughness", std.roughness)
+	if std.normal_enabled and std.normal_texture != null:
+		shader_mat.set_shader_parameter("normal_tex", std.normal_texture)
+		shader_mat.set_shader_parameter("use_normal", 1.0)
+		shader_mat.set_shader_parameter("normal_scale", std.normal_scale)
+	return shader_mat
 
 
 func _is_dash_gauge(node: Node) -> bool:
@@ -460,6 +488,7 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 				tex = tagged
 			existing.set_shader_parameter("paint_color", color)
 			existing.set_shader_parameter("dither_cell", _dither_cell())
+			existing.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
 			if tex != null:
 				continue
 		var orm: Texture2D = null
@@ -486,6 +515,7 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 		shader_mat.set_shader_parameter("albedo_tex", tex)
 		shader_mat.set_shader_parameter("paint_color", color)
 		shader_mat.set_shader_parameter("dither_cell", _dither_cell())
+		shader_mat.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
 		if orm != null:
 			shader_mat.set_shader_parameter("orm_tex", orm)
 			shader_mat.set_shader_parameter("use_orm", 1.0)
@@ -526,7 +556,21 @@ func _ground_clearance() -> float:
 	return float((model as Dictionary).get("ground_clearance", 0.0))
 
 
-## The size of the paint's dither squares (car_paint_mask.gdshader), 0 for none.
+## Takes a body mesh's own coordinates to the car's: meters, Y up, as CarBody holds the model.
+## The paint's dither squares and shades are laid out in these, so a model's units and
+## up axis (Z in Sketchfab exports) don't change them.
+func _car_from_mesh(mesh_instance: MeshInstance3D) -> Transform3D:
+	var body := get_node_or_null("CarBody")
+	var xf := Transform3D.IDENTITY
+	var node: Node = mesh_instance
+	while node != null and node != body and node != self:
+		if node is Node3D:
+			xf = (node as Node3D).transform * xf
+		node = node.get_parent()
+	return xf
+
+
+## The size of the paint's dither squares in meters (car_paint_mask.gdshader), 0 for none.
 func _dither_cell() -> float:
 	var model: Variant = _active_spec().get("model", {})
 	if typeof(model) != TYPE_DICTIONARY:
