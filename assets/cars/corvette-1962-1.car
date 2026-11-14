@@ -6,7 +6,8 @@
     "path": "res://assets/cars/c-1962.glb",
     "position": [0.024, 0.101, 0.0],
     "height": 4.501,
-    "ground_clearance": 0.203
+    "ground_clearance": 0.203,
+    "dither_cell": 0.04
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {
