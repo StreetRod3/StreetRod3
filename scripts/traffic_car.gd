@@ -9,6 +9,8 @@ const _MASS_KG := 1360.0
 const _CENTER_Z := 1.9
 const _BODY_Y := 0.35
 const _WHEEL_RADIUS := 0.32
+## Traffic is not drawn past this many meters from the camera.
+const _DRAW_RANGE := 150.0
 
 var edge_i: int = 0
 var along: float = 0.0
@@ -57,6 +59,16 @@ func setup(car_file: String, paint: Color, edge: int, distance: float, pace: flo
 	if _visual.has_method(&"prepare_preview"):
 		_visual.call(&"prepare_preview", car_file, paint)
 	add_child(_visual)
+	_draw_near(_visual)
+
+
+## Past `_DRAW_RANGE` the car is a few pixels tall, and its models cost as much as close up.
+func _draw_near(node: Node) -> void:
+	var geo := node as GeometryInstance3D
+	if geo != null:
+		geo.visibility_range_end = _DRAW_RANGE
+	for child in node.get_children():
+		_draw_near(child)
 
 
 ## `center` is the middle of the car on the lane. `floor_mesh` sits the tires on the road.

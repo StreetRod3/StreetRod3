@@ -264,7 +264,7 @@ flowchart LR
   query --> ai[Opponent placement]
 ```
 
-`TrackFile` (`class_name`, `RefCounted`) validates the graph and walks directed roads from the start node to the first finish node. Optional `pois` are separate places, each attached to a street node with `at`. `assets/maps/city.trk` places the garage, the drive-in, and the gas station. Leaving any of those for one of the others plays `scenes/cruise.tscn`, a few seconds of automatic driving along that route, then opens the destination. `race_track.gd` fillets corners, bakes samples (position, yaw, width, surface, road type), and builds meshes plus narrow-road signs from `assets/signs/`. Surfaces (`wet`, `icy`, and so on) are stored on samples and do not change grip yet.
+`TrackFile` (`class_name`, `RefCounted`) validates the graph and walks directed roads from the start node to the first finish node. Optional `pois` are separate places, each attached to a street node with `at`. `assets/maps/city.trk` places the garage, the drive-in, and the gas station. Leaving any of those for one of the others plays `scenes/cruise.tscn`, a few seconds of automatic driving along that route, then opens the destination. `race_track.gd` fillets corners, bakes samples (position, yaw, width, surface, road type), and builds meshes plus narrow-road signs from `assets/signs/`. Surfaces (`wet`, `icy`, and so on) are stored on samples and do not change grip yet. In the city, `cruise.gd` merges the scenery buildings with `box_batch.gd` into one mesh per 40 m square, each box's color, roughness, metal and glow on its vertices for `shaders/scenery_box.gdshader`, and draws the street lamps as one MultiMesh until a lamp is hit and takes its own mesh.
 
 ## File structure
 
