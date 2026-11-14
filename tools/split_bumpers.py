@@ -30,7 +30,8 @@ each car picks its bumpers its own way:
     and in from beside the fenders, so the fenders show whole.
   * chevy-styleline-1950: a Goxel voxel model, so by voxel: the chrome voxels low at
     each end and the guards that stand up from them, and the grey brackets inside the
-    rear bar. Goxel leaves out the faces between
+    rear bar. The frame the bumpers hid is the model's light grey, so it is painted the
+    model's dark grey. Goxel leaves out the faces between
     touching voxels, so the body's faces against the bumper are added back, or the body
     would show holes where the bumper was.
 """
@@ -48,8 +49,11 @@ WIDTH = {'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT4': 16}
 ENDS = ('front', 'rear')
 ## The palette's chrome color in the F100's and the Styleline's palette textures.
 PALETTE_CHROME = (238, 238, 238)
-## The Styleline's light grey: its frame, and the brackets inside its rear bumper.
+## The Styleline's light grey: its frame, and the brackets inside its rear bumper. It
+## showed as light grey bits at the ends with the bumpers off, so the frame takes the
+## model's dark grey instead, as a real frame is painted black.
 STYLELINE_FRAME = (223, 223, 223)
+STYLELINE_FRAME_PAINT = (102, 102, 102)
 
 
 class Glb:
@@ -367,10 +371,22 @@ def styleline(glb, prim):
     # where the one-sided chrome strip up the fender's edge is kept. The rear bar has its
     # brackets inside it in the frame's grey; the frame's crossmember behind it stays, as
     # do the frame horns behind the front bar.
-    front = chrome & (z >= top[2] - 20) & ((y <= 11) | ((y <= 17) & (z >= top[2] - 2)))
-    rear = (chrome & (z <= 10) & ((y <= 8) | ((y <= 17) & (z <= 4) & (np.abs(x - mid_x) < 30)))) \
+    # The posts between the bar's top (row 11) and the grille's bottom bar (row 15) go
+    # with it, or they hang under the grille.
+    front = chrome & (z >= top[2] - 20) & ((y <= 14) | ((y <= 17) & (z >= top[2] - 2)))
+    # The rear bar's ends wrap round the corners and run along the bottoms of the rear
+    # fenders, 21 voxels in from the tail; no other chrome is that low back there.
+    rear = (chrome & (((y <= 8) & (z <= 21)) | ((y <= 17) & (z <= 4) & (np.abs(x - mid_x) < 30)))) \
         | (frame & (z <= 7) & (y <= 8))
     masks = {'front': front, 'rear': rear}
+
+    # The frame in the dark grey: its corners take that palette cell's coordinate.
+    uv_all = glb.arrays[prim['attributes']['TEXCOORD_0']]
+    dark = np.nonzero(np.all(colors == STYLELINE_FRAME_PAINT, axis=1))[0]
+    if not len(dark):
+        sys.exit('no dark grey in the palette')
+    dark_uv = uv_all[idx[dark[0], 0]].copy()
+    uv_all[np.unique(idx[frame].reshape(-1))] = dark_uv
 
     # Fill the body's faces against the bumper. A voxel's faces are the triangles facing
     # out of it; a side with none is against another voxel.
@@ -388,7 +404,7 @@ def styleline(glb, prim):
     # side with no face is against another solid voxel, a bumper one if it is not drawn
     # and lies where the bumpers do.
     def bumper_place(c):
-        return c[1] <= 17 and (c[2] >= top[2] - 20 or c[2] <= 10)
+        return c[1] <= 17 and (c[2] >= top[2] - 20 or c[2] <= 21)
 
     frontier = list(gone)
     while frontier:
