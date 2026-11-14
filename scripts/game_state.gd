@@ -87,6 +87,11 @@ const ROAD_STAKE_HIGH := 100
 const NO_ENGINE_ID := "none"
 ## Races the player runs before a rival has a new engine in a car that came with none.
 const RIVAL_ENGINE_WAIT_RACES := 3
+## What stripping a bumper costs, and what putting it back costs, as in Street Rod 2.
+const BUMPER_JOB_PRICE := 15
+## The chance a rival's car comes with both bumpers stripped, if it has any. Street Rod 2
+## strips the two together too.
+const RIVAL_STRIPPED_CHANCE := 1.0 / 6.0
 ## Gearbox id for a car whose transmission was taken out. The gearbox goes to spare parts.
 const NO_GEARBOX_ID := "none"
 ## A car with its wheels off. It stays in the bay until it gets some.
@@ -235,6 +240,8 @@ var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
 ## painted on its own it is NO_COVE_PAINT and takes the body color.
 const NO_COVE_PAINT := Color(0, 0, 0, 0)
 var car_cove_color: Color = NO_COVE_PAINT
+## The active car's stripped bumpers, by end ("front", "rear"; car file `bumpers`).
+var bumpers_off: Array[String] = []
 ## Fuel in the active car's tank, in liters.
 var fuel: float = DEFAULT_TANK_L
 ## Top speed and horsepower after parts and engine tune.
@@ -1095,6 +1102,7 @@ func new_game() -> void:
 	car_name = "Corvette 1956"
 	car_color = Color(0.78, 0.14, 0.14, 1.0)
 	car_cove_color = NO_COVE_PAINT
+	bumpers_off = []
 	fuel = DEFAULT_TANK_L
 	vmax_kmh = 220.0
 	engine_power_hp = 280.0
@@ -1654,7 +1662,18 @@ func _apply_rival_build(opp: Dictionary, row: Dictionary) -> void:
 	build["hood_parts"] = hood
 	opp.erase("taken_car")
 	build["gearbox"] = str(row.get("gearbox", build["gearbox"]))
+	build["bumpers_off"] = _rival_stripped_bumpers(opp["car_file"])
 	opp.merge(build, true)
+
+
+## Both of a rival car's bumpers, now and then, or none.
+func _rival_stripped_bumpers(car_file: String) -> Array[String]:
+	var off: Array[String] = []
+	if randf() >= RIVAL_STRIPPED_CHANCE:
+		return off
+	for end: String in spec_bumpers(_CarFile.load_path(car_file)).keys():
+		off.append(end)
+	return off
 
 
 ## Adds what the parts in `slots` give to a rival's `build`. Each muffler of a dual exhaust
@@ -1794,6 +1813,7 @@ func _opponents_for_save() -> Array:
 			"gearbox": str(opp.get("gearbox", DEFAULT_GEARBOX_ID)),
 			"tier": int(opp.get("tier", 0)),
 			"beaten": bool(opp.get("beaten", false)),
+			"bumpers_off": bumper_ends(opp.get("bumpers_off", [])),
 		})
 		var taken: Variant = opp.get("taken_car", null)
 		if typeof(taken) == TYPE_DICTIONARY:
@@ -1839,6 +1859,7 @@ func _load_saved_opponents(d: Dictionary) -> void:
 			"shocks": str(row.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS])),
 			"tier": int(row.get("tier", i)),
 			"beaten": bool(row.get("beaten", false)),
+			"bumpers_off": bumper_ends(row.get("bumpers_off", [])),
 		})
 		# Rivals in older saves went by the player's car, so they start on what theirs came with.
 		var saved_build := row if row.has("hp") else _opponent_stock_build(str(row.get("car_file", "")))
@@ -2132,8 +2153,20 @@ func opponent_chassis(opp: Dictionary) -> Dictionary:
 	if typeof(stored) != TYPE_DICTIONARY or (stored as Dictionary).is_empty():
 		return {}
 	var chassis: Dictionary = (stored as Dictionary).duplicate()
+	chassis["mass"] = float(chassis.get("mass", 1360.0)) + bumper_mass_delta_kg(spec, bumper_ends(opp.get("bumpers_off", [])))
 	_put_on_suspension(chassis, listing_by_id(PARTS, str(opp.get("springs", ""))), listing_by_id(PARTS, str(opp.get("shocks", ""))), 1.0, 1.0)
 	return chassis
+
+
+## `weight_accel()` for a rival's car: more than 1 with its bumpers stripped.
+func opponent_weight_accel(opp: Dictionary) -> float:
+	var spec := _CarFile.load_path(str(opp.get("car_file", "")))
+	var stored: Variant = spec.get("chassis", {})
+	if typeof(stored) != TYPE_DICTIONARY or (stored as Dictionary).is_empty():
+		return 1.0
+	var stock := float((stored as Dictionary).get("mass", 1360.0))
+	var mass := stock + bumper_mass_delta_kg(spec, bumper_ends(opp.get("bumpers_off", [])))
+	return stock / maxf(mass, 1.0)
 
 
 ## Sets a chassis's spring and shock rates and its ride height from the parts on it and
@@ -2160,25 +2193,33 @@ func wheel_mass_delta_kg() -> float:
 	return (float(fitted.get("mass", 0.0)) - float(stock.get("mass", 0.0))) * WHEEL_ROTATING_FACTOR
 
 
-## The active car's chassis for a race, with its wheels' weight counted in.
+## The active car's weight against the car as it came, in kg: its wheels' weight and the
+## bumpers stripped off it.
+func mass_delta_kg() -> float:
+	return wheel_mass_delta_kg() + bumper_mass_delta_kg(car_spec, bumpers_off)
+
+
+## The active car's chassis for a race, with its wheels' weight and its stripped bumpers
+## counted in.
 func race_chassis() -> Dictionary:
 	var spec: Variant = car_spec.get("chassis", {})
 	if typeof(spec) != TYPE_DICTIONARY or (spec as Dictionary).is_empty():
 		return {}
 	var chassis: Dictionary = (spec as Dictionary).duplicate()
-	chassis["mass"] = float(chassis.get("mass", 1360.0)) + wheel_mass_delta_kg()
+	chassis["mass"] = float(chassis.get("mass", 1360.0)) + mass_delta_kg()
 	_put_on_suspension(chassis, slot_part(SLOT_SPRINGS), slot_part(SLOT_SHOCKS), mount_condition("slot:" + SLOT_SPRINGS), mount_condition("slot:" + SLOT_SHOCKS))
 	return chassis
 
 
-## What the wheels' weight does to the pull in every gear, for the arcade drive, whose
-## acceleration does not come from the mass. 1 on the wheels the car came on.
-func wheel_weight_accel() -> float:
+## What the car's weight does to the pull in every gear, for the arcade drive, whose
+## acceleration does not come from the mass. 1 on the car as it came: heavier wheels make
+## it less, lighter wheels and stripped bumpers more.
+func weight_accel() -> float:
 	var chassis := race_chassis()
 	if chassis.is_empty():
 		return 1.0
 	var mass := float(chassis["mass"])
-	return (mass - wheel_mass_delta_kg()) / maxf(mass, 1.0)
+	return (mass - mass_delta_kg()) / maxf(mass, 1.0)
 
 
 func wheel_detail(wheel: Dictionary) -> String:
@@ -3107,6 +3148,61 @@ func car_has_cove() -> bool:
 	return typeof(model) == TYPE_DICTIONARY and (model as Dictionary).has("cove")
 
 
+## The bumpers a car file's `spec` has, by end: {"node", "mass"}.
+static func spec_bumpers(spec: Dictionary) -> Dictionary:
+	var bumpers: Variant = spec.get("bumpers", {})
+	return bumpers if typeof(bumpers) == TYPE_DICTIONARY else {}
+
+
+## Whether the active car has a bumper at `end` ("front" or "rear") to strip or put back.
+func car_has_bumper(end: String) -> bool:
+	return spec_bumpers(car_spec).has(end)
+
+
+func bumper_stripped(end: String) -> bool:
+	return bumpers_off.has(end)
+
+
+## Strips the active car's bumper at `end`, or puts it back if it is stripped, for
+## `BUMPER_JOB_PRICE`. Returns what went wrong, or "".
+func toggle_bumper(end: String) -> String:
+	if not has_active_car() or not car_has_bumper(end):
+		return "This car has no bumper there."
+	if money < BUMPER_JOB_PRICE:
+		return "Customization ain't free!"
+	money -= BUMPER_JOB_PRICE
+	if bumpers_off.has(end):
+		bumpers_off.erase(end)
+	else:
+		bumpers_off.append(end)
+	_sync_record_from_active()
+	return ""
+
+
+## Only the ends a bumper can be on, once each, from a saved or stored list.
+static func bumper_ends(value: Variant) -> Array[String]:
+	var ends: Array[String] = []
+	if typeof(value) != TYPE_ARRAY:
+		return ends
+	for item: Variant in value:
+		var end := str(item)
+		if end in _CarFile.BUMPER_ENDS and not ends.has(end):
+			ends.append(end)
+	return ends
+
+
+## What the stripped bumpers in `off` take off the weight of a car with `spec`, in kg:
+## zero or less.
+static func bumper_mass_delta_kg(spec: Dictionary, off: Array[String]) -> float:
+	var bumpers := spec_bumpers(spec)
+	var delta := 0.0
+	for end in off:
+		var bumper: Variant = bumpers.get(end, {})
+		if typeof(bumper) == TYPE_DICTIONARY:
+			delta -= float((bumper as Dictionary).get("mass", 0.0))
+	return delta
+
+
 func set_fuel(amount: float) -> void:
 	fuel = clampf(amount, 0.0, DEFAULT_TANK_L)
 
@@ -3271,6 +3367,7 @@ func _take_opponent_car() -> bool:
 		parts[SLOT_SPRINGS] = str(opp.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS]))
 		parts[SLOT_SHOCKS] = str(opp.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS]))
 		won_id = _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), parts)
+		car_records[won_id]["bumpers_off"] = bumper_ends(opp.get("bumpers_off", []))
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
 	return true
@@ -3303,6 +3400,7 @@ func _lose_raced_car() -> void:
 		"engine": equipped_engine_id,
 		"engine_wait": RIVAL_ENGINE_WAIT_RACES,
 		"gearbox": equipped_gearbox_id,
+		"bumpers_off": bumpers_off.duplicate(),
 	}
 	_set_opponent_car(selected_opponent_id, model_id, car_color, str(tires.get("id", "")), build)
 	# What is on the car goes with it. Spares of the same parts stay the player's.
@@ -3688,9 +3786,11 @@ func _make_car_record(model_id: String, paint: Color) -> Dictionary:
 	if gearbox_id.is_empty():
 		gearbox_id = DEFAULT_GEARBOX_ID
 	var parts: Array[String] = []
+	var stripped: Array[String] = []
 	return {
 		"model_id": model_id,
 		"color": paint,
+		"bumpers_off": stripped,
 		"fuel": DEFAULT_TANK_L,
 		"engine_id": engine_id,
 		"gearbox_id": gearbox_id,
@@ -3843,6 +3943,7 @@ func _sync_record_from_active() -> void:
 	rec["model_id"] = model_id
 	rec["color"] = car_color
 	rec["cove_color"] = car_cove_color
+	rec["bumpers_off"] = bumpers_off.duplicate()
 	rec["fuel"] = fuel
 	rec["engine_id"] = equipped_engine_id
 	rec["gearbox_id"] = equipped_gearbox_id
@@ -3873,6 +3974,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 		car_color = paint
 	var cove_paint: Variant = rec.get("cove_color", NO_COVE_PAINT)
 	car_cove_color = cove_paint if cove_paint is Color else NO_COVE_PAINT
+	bumpers_off = bumper_ends(rec.get("bumpers_off", []))
 	fuel = float(rec.get("fuel", DEFAULT_TANK_L))
 	equipped_engine_id = str(rec.get("engine_id", equipped_engine_id))
 	equipped_gearbox_id = str(rec.get("gearbox_id", equipped_gearbox_id))
@@ -3914,6 +4016,7 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 		"model_id": str(rec.get("model_id", model_id)),
 		"color": [paint.r, paint.g, paint.b, paint.a],
 		"cove_color": [cove_paint.r, cove_paint.g, cove_paint.b, cove_paint.a],
+		"bumpers_off": bumper_ends(rec.get("bumpers_off", [])),
 		"fuel": float(rec.get("fuel", fuel)),
 		"engine_id": str(rec.get("engine_id", "")),
 		"gearbox_id": str(rec.get("gearbox_id", "")),
@@ -3992,6 +4095,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"model_id": model_id,
 		"color": _color_from_save(row.get("color", null), car_color),
 		"cove_color": _color_from_save(row.get("cove_color", null), NO_COVE_PAINT),
+		"bumpers_off": bumper_ends(row.get("bumpers_off", [])),
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
 		"engine_id": str(row.get("engine_id", "")),
 		"gearbox_id": str(row.get("gearbox_id", "")),

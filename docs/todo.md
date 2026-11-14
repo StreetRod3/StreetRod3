@@ -15,6 +15,10 @@ Holding gas and brake with the car stopped is mostly for show so far: the rear w
 - **A line lock part.** A part to buy that holds only the front brakes, which is what real drag cars use to do this.
 - **Look.** The patch of rubber under a stopped tire is a simple dark quad, and it could grow and blend better. Smoke could hang longer in still air and depend on the tires, with more from slicks.
 
+## Removable bumpers on the other cars
+
+Bumpers can be stripped and put back as in Street Rod 2, but only on the 1950 Studebaker so far. Each car needs its bumpers split out of its model into their own nodes, brackets included (they are unbolted from the frame with the bumper, not left hanging), and a `bumpers` block in its car file with each one's weight. The 1960 Corvette's Sketchfab source and the Styleline's and F100's chrome should split cleanly; the 1956 Corvette and the Fairlane are single fused meshes converted from Street Rod 1, so cutting their bumpers out will be rougher. The 1932 Ford has none. Street Rod 2 also chopped roofs, which is not started.
+
 ## Time of day
 
 Street Rod 2's three races run at night for now and the other two by day (`_set_night()` in `race.gd`). Time could become a factor in races later.

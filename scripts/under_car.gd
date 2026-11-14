@@ -755,9 +755,11 @@ func _build_chassis() -> void:
 			post.material_override = stand
 			post.position = Vector3(stand_x, (FRAME_Y - 0.05) * 0.5, FRAME_HALF * side)
 			add_child(post)
-	# Bumpers at both ends.
-	_box(self, Vector3(0.1, 0.1, BODY_HALF * 2.0), Vector3(front, PAN_Y - 0.08, 0.0), chrome)
-	_box(self, Vector3(0.1, 0.1, BODY_HALF * 2.0), Vector3(back, PAN_Y - 0.08, 0.0), chrome)
+	# Bumpers at both ends, unless one is stripped.
+	if not GameState.bumper_stripped("front"):
+		_box(self, Vector3(0.1, 0.1, BODY_HALF * 2.0), Vector3(front, PAN_Y - 0.08, 0.0), chrome)
+	if not GameState.bumper_stripped("rear"):
+		_box(self, Vector3(0.1, 0.1, BODY_HALF * 2.0), Vector3(back, PAN_Y - 0.08, 0.0), chrome)
 	# Front crossmember under the engine and the rear one ahead of the tank.
 	_box(self, Vector3(0.12, 0.08, FRAME_HALF * 2.0), Vector3(_front_x + 0.1, FRAME_Y - 0.02, 0.0), frame)
 	_box(self, Vector3(0.1, 0.08, FRAME_HALF * 2.0), Vector3(_rear_x + 0.45, FRAME_Y, 0.0), frame)

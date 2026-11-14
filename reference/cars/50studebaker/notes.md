@@ -49,3 +49,7 @@ Unlike the other cars, the Studebaker's paint is dithered like the 1956 Corvette
 - The car had no tachometer.
 
 Photos pasted 2026-11-13 (no source given): `dash-photo.png` (a 40-140 dial), `dash-photo-2.png` and `dash-photo-3.png` (10-100 dials). They show slanted white numerals every 10 mph on a black band, a cream dome inside the half-moon with the odometer, small black windows for AMP and OIL (top) and GAS and HEAT (bottom) with their names printed outside the windows, a ribbed dark face in a chrome frame, louvers to the right of the cluster, and a round clock in a winged chrome pod on top of the steering column below the speedometer.
+
+## Bumpers
+
+The source model groups each bumper (bar, guards and grey mounting irons) as `Front_Bumper` and `Rear_Bumper`; `tools/studebaker_to_glb.py` makes them the `bumper_front` and `bumper_rear` nodes so the game can strip them. Their weights in the car file (20 kg front, 18 kg rear) are estimates for a chromed steel bar with guards and brackets, not measured or sourced.

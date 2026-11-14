@@ -23,6 +23,8 @@ var _preview_spec: Dictionary = {}
 var _preview_color: Color = Color.WHITE
 ## The previewed car's cove paint; alpha 0 leaves the cove the body color.
 var _preview_cove: Color = Color(0, 0, 0, 0)
+## The previewed car's stripped bumpers, by end ("front", "rear").
+var _preview_bumpers_off: Array[String] = []
 
 
 ## Load a catalog car for a viewport that is not the player's garage car.
@@ -39,14 +41,17 @@ func driver_seat_position() -> Vector3:
 
 
 ## `cove` is the cove's own paint, for a car with one (alpha 0: the cove is the body color).
-func prepare_preview(car_file: String, paint: Color, cove := Color(0, 0, 0, 0)) -> bool:
+## `bumpers_off` are the ends whose bumpers are stripped.
+func prepare_preview(car_file: String, paint: Color, cove := Color(0, 0, 0, 0), bumpers_off: Array[String] = []) -> bool:
 	_preview_cove = cove
+	_preview_bumpers_off = bumpers_off.duplicate()
 	return _load_preview(car_file, paint)
 
 
 ## Swap the preview to another catalog car after this node is already on screen.
-func preview_listing(car_file: String, paint: Color) -> bool:
+func preview_listing(car_file: String, paint: Color, bumpers_off: Array[String] = []) -> bool:
 	_preview_cove = Color(0, 0, 0, 0)
+	_preview_bumpers_off = bumpers_off.duplicate()
 	if not _load_preview(car_file, paint):
 		return false
 	if is_inside_tree():
@@ -76,6 +81,7 @@ func reload_player_car() -> void:
 	var loaded_body := get_node_or_null("CarBody") as Node
 	if loaded_body != null:
 		_hide_baked_wheels(loaded_body)
+	apply_bumpers()
 	set_car_body_color(_active_paint_color())
 
 
@@ -97,6 +103,26 @@ func _active_cove_color() -> Color:
 	return GameState.car_cove_color
 
 
+func _active_bumpers_off() -> Array[String]:
+	if _previewing:
+		return _preview_bumpers_off
+	return GameState.bumpers_off
+
+
+## Shows each of the car's bumpers unless it is stripped. The garage calls it again after
+## a bumper comes off or goes back on; a bumper put back is painted with the rest.
+func apply_bumpers() -> void:
+	var body := get_node_or_null("CarBody")
+	if body == null:
+		return
+	var off := _active_bumpers_off()
+	var bumpers: Dictionary = GameState.spec_bumpers(_active_spec())
+	for end: String in bumpers.keys():
+		var node := body.find_child(str((bumpers[end] as Dictionary).get("node", "")), true, false) as Node3D
+		if node != null:
+			node.visible = not off.has(end)
+
+
 func _enter_tree() -> void:
 	_apply_car_file()
 
@@ -110,6 +136,7 @@ func _ready() -> void:
 		_hide_baked_wheels(loaded_body)
 		if loaded_body.has_signal(&"stl_loaded"):
 			loaded_body.connect(&"stl_loaded", Callable(self, "_on_body_hide_wheels"))
+	apply_bumpers()
 	set_car_body_color(_active_paint_color())
 	var car_body := get_node_or_null("body") as MeshInstance3D
 	if car_body != null and body_paint != null:
@@ -124,6 +151,7 @@ func _on_body_hide_wheels(_mesh: Variant) -> void:
 	var loaded_body := get_node_or_null("CarBody") as Node
 	if loaded_body != null:
 		_hide_baked_wheels(loaded_body)
+	apply_bumpers()
 	set_car_body_color(_active_paint_color())
 
 

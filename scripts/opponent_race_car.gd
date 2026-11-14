@@ -140,7 +140,7 @@ func _ready() -> void:
 	_max_mps = top_mps * float(opp.get("vmax_scale", 0.90))
 	_power_hp = GameState.opponent_power_hp(opp)
 	_arcade_grip = GameState.opponent_tire_grip(opp)
-	_arcade_driver = ARCADE_DRIVER_PULL * float(opp.get("accel_scale", 0.30)) * _ArcadeDrive.grip_accel_scale(_arcade_grip)
+	_arcade_driver = ARCADE_DRIVER_PULL * float(opp.get("accel_scale", 0.30)) * _ArcadeDrive.grip_accel_scale(_arcade_grip) * GameState.opponent_weight_accel(opp)
 	_lane_x = global_position.x
 	_apply_car_spec()
 	_layout_wheels()
@@ -546,7 +546,7 @@ func _apply_opponent_look(opp: Dictionary) -> void:
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
-	if not bool(_visual.call(&"preview_listing", path, paint)):
+	if not bool(_visual.call(&"preview_listing", path, paint, GameState.bumper_ends(opp.get("bumpers_off", [])))):
 		push_warning("Opponent car failed to load: %s" % path)
 
 
