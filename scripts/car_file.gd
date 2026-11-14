@@ -24,11 +24,18 @@ extends RefCounted
 ## `outline` is its shape seen from the side, [z, y] points in meters in the body's
 ## space (the model's CarBody, Y up, +Z forward), and `min_x` how far from the middle
 ## its faces are. It is the same on both sides.
+##
+## `bumpers` names the bumpers that can be stripped, `front` and `rear`: `node` is the
+## mesh in the model that is the bumper with its brackets, and `mass` what it weighs in
+## kg, which comes off the chassis mass when it is stripped. A car without the block has
+## no bumpers to strip.
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 ## Most points a cove outline may have (car_paint_mask.gdshader's cove_outline).
 const COVE_POINTS_MAX := 24
 
+## The two ends a bumper can be on.
+const BUMPER_ENDS: Array[String] = ["front", "rear"]
 const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
 const DEFAULT_CAMERAS: Dictionary = {
 	"far": {"position": Vector3(0.0, 2.55, -10.4), "pitch": -14.0, "fov": 68.0},
@@ -80,6 +87,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	_parse_wheels(root, result)
 	_parse_parts(root, result)
 	_parse_chassis(root, result)
+	_parse_bumpers(root, result)
 	_parse_driver(root, result)
 	_parse_cameras(root, result)
 	return result
@@ -221,6 +229,25 @@ static func _parse_chassis(root: Dictionary, result: Dictionary) -> void:
 	}
 
 
+static func _parse_bumpers(root: Dictionary, result: Dictionary) -> void:
+	var bumpers: Variant = root.get("bumpers", {})
+	if typeof(bumpers) != TYPE_DICTIONARY:
+		result.errors.append("Car bumpers must be an object.")
+		return
+	for end: String in (bumpers as Dictionary).keys():
+		var item: Variant = (bumpers as Dictionary)[end]
+		if end not in BUMPER_ENDS:
+			result.errors.append("Car bumper end must be front or rear, not %s." % end)
+			continue
+		if typeof(item) != TYPE_DICTIONARY or str((item as Dictionary).get("node", "")).is_empty():
+			result.errors.append("Car %s bumper needs a node." % end)
+			continue
+		result.bumpers[end] = {
+			"node": str((item as Dictionary)["node"]),
+			"mass": float((item as Dictionary).get("mass", 0.0)),
+		}
+
+
 static func _parse_driver(root: Dictionary, result: Dictionary) -> void:
 	var fallback := Vector3(-0.35, 1.05, 0.2)
 	var driver: Variant = root.get("driver", null)
@@ -312,6 +339,7 @@ static func _empty_result() -> Dictionary:
 		"engine": {},
 		"transmission": {},
 		"chassis": {},
+		"bumpers": {},
 		"driver": {},
 		"cameras": _default_cameras_copy(),
 		"errors": [],

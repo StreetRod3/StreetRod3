@@ -54,6 +54,11 @@ var _cam_distance_target: float = CAM_DISTANCE_DEFAULT
 
 # Camera zoom limits (mouse wheel + pinch).
 const CAM_DISTANCE_DEFAULT := 4.8
+## How much bigger than the bumper its click box is, in meters.
+const BUMPER_CLICK_MARGIN := 0.06
+## How far in from the bumper's outer face its click box reaches: the bar, its ends and
+## guards, but not the mounting irons that run back under the body to the frame.
+const BUMPER_CLICK_DEPTH := 0.45
 ## Height above the floor the camera aims at: about the car's beltline, so the whole
 ## car and the wall behind it, with its shelves and clock, are in the frame.
 const CAM_LOOK_HEIGHT := 1.2
@@ -167,6 +172,16 @@ var _hood: StaticBody3D
 var _hood_shape: BoxShape3D
 var _under_car: StaticBody3D
 var _under_car_shape: BoxShape3D
+## Click boxes on the car's bumpers, by end, fitted to the bumper meshes (a stripped one's
+## too, so it can be put back).
+var _bumper_targets: Dictionary[String, StaticBody3D] = {}
+## The box that offers to strip a bumper or put it back, as Street Rod 2's did.
+var _bumper_panel: Control
+var _bumper_label: Label
+var _bumper_do: Button
+var _bumper_forget: Button
+## The end whose bumper the box is about.
+var _bumper_end: String = ""
 var _creeper: StaticBody3D
 var _tire_machine: StaticBody3D
 ## Players for the jack, wheels, and tire machine, by sound name.
@@ -200,6 +215,8 @@ const _TOOLTIPS := {
 	&"transmission": "Transmission (A)",
 	&"creeper": "Under the car (U)",
 	&"vodka": "Wanna drink?",
+	&"bumper_front": "Front bumper",
+	&"bumper_rear": "Rear bumper",
 }
 const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
@@ -327,6 +344,8 @@ func _ready() -> void:
 	_build_engine_sound()
 	_build_hood_target()
 	_build_under_car_target()
+	_build_bumper_targets()
+	_build_bumper_panel()
 	_build_creeper()
 	_build_tire_machine()
 	_lift.set_meta(&"garage_interact", &"lift")
@@ -711,6 +730,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_nav.handle_event(self, event)
 		get_viewport().set_input_as_handled()
 		return
+	if _bumper_panel != null and _bumper_panel.visible:
+		if event.is_action_pressed(&"ui_cancel"):
+			_close_bumper_panel()
+		else:
+			_nav.handle_event(self, event)
+		get_viewport().set_input_as_handled()
+		return
 	if _clock_menu.visible and event.is_action_pressed(&"ui_cancel"):
 		if _clock_settings.visible:
 			_close_clock_settings()
@@ -995,6 +1021,8 @@ func _car_management_available() -> bool:
 		return false
 	if _offer_panel != null and _offer_panel.visible:
 		return false
+	if _bumper_panel != null and _bumper_panel.visible:
+		return false
 	return true
 
 
@@ -1070,6 +1098,8 @@ func _hide_garage_overlays() -> void:
 		_books_board.visible = false
 	if _car_list != null:
 		_car_list.visible = false
+	if _bumper_panel != null:
+		_bumper_panel.visible = false
 	_dismiss_here_bubble()
 	_sync_menu_nav()
 
@@ -1080,7 +1110,9 @@ func _reset_clock_menu_page() -> void:
 
 
 func _sync_menu_nav() -> void:
-	if _clock_menu.visible and _clock_settings.visible:
+	if _bumper_panel != null and _bumper_panel.visible:
+		_nav.setup([_bumper_do, _bumper_forget] if _bumper_do.visible else [_bumper_forget])
+	elif _clock_menu.visible and _clock_settings.visible:
 		_nav.setup([
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
 			_clock_master,
@@ -1282,11 +1314,15 @@ func _handle_interact(kind: Variant) -> void:
 			_open_under_car()
 		&"vodka":
 			_show_vodka_bubble()
+		&"bumper_front":
+			_offer_bumper_job("front")
+		&"bumper_rear":
+			_offer_bumper_job("rear")
 
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear":
 			return true
 	return false
 
@@ -3060,7 +3096,11 @@ func _place_bay_targets() -> void:
 	var body := _car_pivot.get_node_or_null("CarBody") as Node3D
 	if body == null:
 		return
-	var box := _world_mesh_aabb(body)
+	# The body without its bumpers, so the hood's box does not reach out over the front one.
+	var bumper_nodes: Array[String] = []
+	for bumper: Variant in GameState.spec_bumpers(GameState.car_spec).values():
+		bumper_nodes.append(str((bumper as Dictionary).get("node", "")))
+	var box := _world_mesh_aabb(body, bumper_nodes)
 	if box.size.y < 0.2 or box.size.z < 0.4:
 		return
 	var origin := box.position
@@ -3068,6 +3108,7 @@ func _place_bay_targets() -> void:
 	var hood := GameState.hood_click_box(box)
 	_hood.global_position = hood.get_center()
 	_hood_shape.size = hood.size
+	_place_bumper_targets(body)
 	if _under_car == null or _under_car_shape == null:
 		return
 	# Low band between the axles, just behind the engine: where the gearbox sits.
@@ -3088,6 +3129,117 @@ func _build_under_car_target() -> void:
 	_under_car.position = Vector3(0.0, 0.2, 0.3)
 	_car_pivot.add_child(_under_car)
 	_under_car.set_meta(&"garage_interact", &"transmission")
+
+
+func _build_bumper_targets() -> void:
+	for end: String in ["front", "rear"]:
+		var target := StaticBody3D.new()
+		target.name = "InteractBumper" + end.capitalize()
+		var col := CollisionShape3D.new()
+		col.shape = BoxShape3D.new()
+		col.disabled = true
+		target.add_child(col)
+		_car_pivot.add_child(target)
+		target.set_meta(&"garage_interact", StringName("bumper_" + end))
+		_bumper_targets[end] = target
+
+
+## Fits each bumper's click box round the outer part of its mesh, a little bigger. The
+## car's nose is +Z, as the hood's box has it. A car with no bumper at an end has no box
+## there.
+func _place_bumper_targets(body: Node3D) -> void:
+	var bumpers: Dictionary = GameState.spec_bumpers(GameState.car_spec) if GameState.has_active_car() else {}
+	for end: String in _bumper_targets.keys():
+		var target := _bumper_targets[end]
+		var col := target.get_child(0) as CollisionShape3D
+		var mesh: Node = null
+		if bumpers.has(end):
+			mesh = body.find_child(str((bumpers[end] as Dictionary).get("node", "")), true, false)
+		var box: AABB = _world_mesh_aabb(mesh) if mesh != null else AABB()
+		col.disabled = box.size == Vector3.ZERO
+		if col.disabled:
+			continue
+		var depth := minf(box.size.z, BUMPER_CLICK_DEPTH)
+		if end == "front":
+			box.position.z = box.end.z - depth
+		box.size.z = depth
+		target.global_position = box.get_center()
+		(col.shape as BoxShape3D).size = box.size + Vector3.ONE * BUMPER_CLICK_MARGIN
+
+
+func _build_bumper_panel() -> void:
+	var shade := ColorRect.new()
+	shade.name = "BumperPanel"
+	shade.color = Color(0.0, 0.0, 0.0, 0.45)
+	shade.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.mouse_filter = Control.MOUSE_FILTER_STOP
+	shade.visible = false
+	$GarageUI.add_child(shade)
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	shade.add_child(center)
+	var panel := PanelContainer.new()
+	center.add_child(panel)
+	var margin := MarginContainer.new()
+	for side: String in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
+		margin.add_theme_constant_override(side, 18)
+	panel.add_child(margin)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 12)
+	margin.add_child(box)
+	_bumper_label = Label.new()
+	_bumper_label.custom_minimum_size = Vector2(320, 0)
+	_bumper_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_bumper_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(_bumper_label)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 16)
+	box.add_child(row)
+	_bumper_do = Button.new()
+	_bumper_do.custom_minimum_size = Vector2(200, 36)
+	_mark_switch_button(_bumper_do)
+	_bumper_do.pressed.connect(_on_bumper_do)
+	row.add_child(_bumper_do)
+	_bumper_forget = Button.new()
+	_bumper_forget.text = "Forget it"
+	_bumper_forget.custom_minimum_size = Vector2(120, 36)
+	_bumper_forget.pressed.connect(_close_bumper_panel)
+	row.add_child(_bumper_forget)
+	_bumper_panel = shade
+
+
+## Offers to strip the bumper at `end`, or to put it back if it is stripped.
+func _offer_bumper_job(end: String) -> void:
+	if not GameState.car_has_bumper(end):
+		return
+	_bumper_end = end
+	_bumper_label.text = "%s bumper" % end.capitalize()
+	var job := "Restore bumper - $%d" if GameState.bumper_stripped(end) else "Strip bumper - $%d"
+	_bumper_do.text = job % GameState.BUMPER_JOB_PRICE
+	_bumper_do.visible = true
+	_bumper_panel.visible = true
+	_sync_menu_nav()
+	_bumper_do.grab_focus()
+
+
+## Pays for the job; without the money the box says so and only Forget it is left.
+func _on_bumper_do() -> void:
+	var err := GameState.toggle_bumper(_bumper_end)
+	if not err.is_empty():
+		_bumper_label.text = err
+		_bumper_do.visible = false
+		_sync_menu_nav()
+		_bumper_forget.grab_focus()
+		return
+	_close_bumper_panel()
+	_refresh_hud()
+	_apply_active_car_visual()
+
+
+func _close_bumper_panel() -> void:
+	_bumper_panel.visible = false
+	_sync_menu_nav()
 
 
 ## A mechanic's creeper on the floor beside the car: padded deck on six casters.
@@ -3188,15 +3340,18 @@ func _prop_mat(color: Color, metallic: float, roughness: float) -> StandardMater
 	return mat
 
 
-func _world_mesh_aabb(node: Node) -> AABB:
+## The world box round every mesh under `node`, leaving out nodes named in `skip`.
+func _world_mesh_aabb(node: Node, skip: Array[String] = []) -> AABB:
 	var box := AABB()
+	if skip.has(String(node.name)):
+		return box
 	var started := false
 	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
 		var mi := node as MeshInstance3D
 		box = _transformed_aabb(mi.global_transform, mi.mesh.get_aabb())
 		started = true
 	for child in node.get_children():
-		var child_box := _world_mesh_aabb(child)
+		var child_box := _world_mesh_aabb(child, skip)
 		if child_box.size == Vector3.ZERO:
 			continue
 		if not started:

@@ -1071,7 +1071,7 @@ func _present_rival(parked: bool = false) -> void:
 	var opp: Dictionary = GameState.opponents[_chosen_index]
 	var path := str(opp.get("car_file", ""))
 	var car := _CAR_SCENE.instantiate() as Node3D
-	if not bool(car.call(&"prepare_preview", path, _opponent_color(opp))):
+	if not bool(car.call(&"prepare_preview", path, _opponent_color(opp), Color(0, 0, 0, 0), GameState.bumper_ends(opp.get("bumpers_off", [])))):
 		push_warning("Rival car failed to load: %s" % path)
 		car.free()
 		_show_opponents()

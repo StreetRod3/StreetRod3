@@ -15,6 +15,14 @@ Holding gas and brake with the car stopped is mostly for show so far: the rear w
 - **A line lock part.** A part to buy that holds only the front brakes, which is what real drag cars use to do this.
 - **Look.** The patch of rubber under a stopped tire is a simple dark quad, and it could grow and blend better. Smoke could hang longer in still air and depend on the tires, with more from slicks.
 
+## Removable bumpers on the last two cars
+
+Bumpers can be stripped and put back as in Street Rod 2 on the Studebaker, the 1960 Corvette, the Styleline and the F100. The 1956 Corvette and the Fairlane are left: they are single fused meshes converted from Street Rod 1, so their bumpers have to be cut out of the body, brackets included (they are unbolted from the frame with the bumper, not left hanging), and whatever the bumper hid modeled (`tools/split_bumpers.py` takes a rule per car). The 1932 Ford has none.
+
+## Chopped roofs
+
+Street Rod 2 also chopped roofs for $70. No car here has a roof that can be chopped yet, so it waits for one.
+
 ## Time of day
 
 Street Rod 2's three races run at night for now and the other two by day (`_set_night()` in `race.gd`). Time could become a factor in races later.
@@ -35,10 +43,9 @@ The torq wheel's spokes (`tools/make_wheels.py`) have square front edges, where 
 
 ## Engines for every make and era
 
-Engines come in families now (`families` in `parts.register`), and only the Ford flathead is drawn for its era. Its numbers (150 hp, $600) sit well below the Chevy small-blocks on purpose: it is meant to line up against period Chevys that are coming, not against the 265 and up. Still to come:
+Engines come in families now (`families` in `parts.register`), and the Ford flathead and the Chevy inline six (216 and 235, the Styleline's stock engine) are drawn for their era. The flathead's numbers (150 hp, $600) sit well below the Chevy small-blocks on purpose: it lines up against period Chevys like the six, not against the 265 and up. Still to come:
 
-- **Period Chevys** to match the flathead, each a family with its own stock heads, intake, camshaft, distributor and manifolds, and speed parts like the flathead's finned heads and three two-barrel intake.
-- **Chevy inline six, 216 and 235.** The first period Chevy: one family in two variants, the 216 and the 235, the 235 with more performance. `tools/make_235.py` has the model (block, factory exhaust manifold, stock intake and stamped valve cover) and its speed parts: split cast iron headers, the finned aluminum valve cover and the two-carburetor intake. None of it is in the game yet: the parts, their stats and the hood screen's placement are still to do.
+- **More period Chevys** to match the flathead, each a family with its own stock heads, intake, camshaft, distributor and manifolds, and speed parts like the flathead's finned heads and three two-barrel intake.
 - **Real Ford Y-block and small-block.** The 292 and the 302 are stand-ins drawn with the Chevy models, and their speed parts are Ford copies of the Chevy ones with the same stats and looks.
 - **Small-block speed parts as models.** The Chevys are drawn from `tools/make_sbc.py`'s model now, with its cast-iron manifolds and headers, but the high-rise, tri-power and dual-quad intakes, the two-barrel carburetor and the chrome air cleaner are still built from primitives in `engine_assembly.gd`. The Ford stand-ins still use the old `engine-v8-*.glb`.
 - **Chrysler.** The issue names it as a third make (issue #8); there are no Chrysler cars or engines yet.

@@ -4,8 +4,8 @@
       "name": "Chevy small-block",
       "make": "GM"
     },
-    "chevy-six": {
-      "name": "Chevy six",
+    "chevy-stovebolt": {
+      "name": "Chevy stovebolt",
       "make": "GM"
     },
     "ford-flathead": {
@@ -69,14 +69,14 @@
     {
       "id": "chevy-216",
       "make": "GM",
-      "family": "chevy-six",
-      "name": "216 six",
+      "family": "chevy-stovebolt",
+      "name": "216 stovebolt",
       "price": 500,
       "hp": 135,
       "vmax": 160,
       "cid": 216,
       "heads": 1,
-      "badge": "216 Six",
+      "badge": "216 Stovebolt",
       "model": "res://assets/parts/engine-chevy-235.glb",
       "charger": "generator",
       "stock": {
@@ -86,14 +86,14 @@
     {
       "id": "chevy-235",
       "make": "GM",
-      "family": "chevy-six",
-      "name": "235 six",
+      "family": "chevy-stovebolt",
+      "name": "235 stovebolt",
       "price": 700,
       "hp": 155,
       "vmax": 175,
       "cid": 235,
       "heads": 1,
-      "badge": "235 Six",
+      "badge": "235 Stovebolt",
       "model": "res://assets/parts/engine-chevy-235.glb",
       "charger": "generator",
       "stock": {
@@ -289,20 +289,20 @@
       "vmax": 2
     },
     {
-      "id": "heads-six-stock",
+      "id": "heads-stovebolt-stock",
       "slot": "heads",
-      "family": "chevy-six",
-      "name": "Six cylinder head",
+      "family": "chevy-stovebolt",
+      "name": "Stovebolt cylinder head",
       "price": 160,
       "stock": true,
       "hp": 0,
       "vmax": 0
     },
     {
-      "id": "heads-six-finned",
+      "id": "heads-stovebolt-finned",
       "slot": "heads",
-      "family": "chevy-six",
-      "name": "High-performance six head, finned cover",
+      "family": "chevy-stovebolt",
+      "name": "High-performance stovebolt head, finned cover",
       "price": 380,
       "finish": "finned",
       "model": "res://assets/parts/chevy-235-valve-cover-finned.glb",
@@ -387,25 +387,25 @@
       "vmax": 3
     },
     {
-      "id": "intake-six-stock",
+      "id": "intake-stovebolt-stock",
       "slot": "intake",
-      "family": "chevy-six",
-      "name": "Six intake",
+      "family": "chevy-stovebolt",
+      "name": "Stovebolt intake",
       "price": 80,
       "stock": true,
-      "style": "six",
+      "style": "stovebolt",
       "carbs": 1,
       "barrels": 1,
       "hp": 0,
       "vmax": 0
     },
     {
-      "id": "intake-six-2x1",
+      "id": "intake-stovebolt-2x1",
       "slot": "intake",
-      "family": "chevy-six",
-      "name": "Six two-carburetor intake",
+      "family": "chevy-stovebolt",
+      "name": "Stovebolt two-carburetor intake",
       "price": 300,
-      "style": "six-2x1",
+      "style": "stovebolt-2x1",
       "carbs": 2,
       "barrels": 1,
       "model": "res://assets/parts/chevy-235-intake-2x1.glb",
@@ -540,10 +540,10 @@
       "vmax": 0
     },
     {
-      "id": "dist-six",
+      "id": "dist-stovebolt",
       "slot": "distributor",
-      "family": "chevy-six",
-      "name": "Six distributor",
+      "family": "chevy-stovebolt",
+      "name": "Stovebolt distributor",
       "price": 60,
       "stock": true,
       "cap": "black",
@@ -586,10 +586,10 @@
       "vmax": 0
     },
     {
-      "id": "cam-six-stock",
+      "id": "cam-stovebolt-stock",
       "slot": "cam",
-      "family": "chevy-six",
-      "name": "Six camshaft",
+      "family": "chevy-stovebolt",
+      "name": "Stovebolt camshaft",
       "price": 90,
       "stock": true,
       "style": "stock",
@@ -676,10 +676,10 @@
       "vmax": 0
     },
     {
-      "id": "manifold-six-iron",
+      "id": "manifold-stovebolt-iron",
       "slot": "manifold",
-      "family": "chevy-six",
-      "name": "Six exhaust manifold",
+      "family": "chevy-stovebolt",
+      "name": "Stovebolt exhaust manifold",
       "price": 80,
       "stock": true,
       "style": "log",
@@ -687,9 +687,9 @@
       "vmax": 0
     },
     {
-      "id": "headers-six-split",
+      "id": "headers-stovebolt-split",
       "slot": "manifold",
-      "family": "chevy-six",
+      "family": "chevy-stovebolt",
       "name": "Split cast-iron headers",
       "price": 260,
       "style": "split",
@@ -863,7 +863,7 @@
   "mounts": [
     {
       "id": "mounts",
-      "families": ["chevy-sbc", "chevy-six", "ford-flathead", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "chevy-stovebolt", "ford-flathead", "ford-yblock", "ford-windsor"],
       "name": "Engine mounts",
       "price": 150,
       "shop": "speed",

@@ -981,11 +981,11 @@ func _signed_gear_accel() -> float:
 		var ratio := float(ratios[0]) * GameState.final_drive_accel()
 		var backing := absf(forward_speed) if forward_speed <= 0.0 else 0.0
 		var pull := _ArcadeDrive.gear_acceleration(ratio, _reverse_top(), backing, GameState.engine_power_hp)
-		return -pull * GameState.wheel_weight_accel() * _damage.power_left()
+		return -pull * GameState.weight_accel() * _damage.power_left()
 	var ratios := _ratios()
 	var ratio := float(ratios[clampi(_gear, 0, ratios.size() - 1)]) * GameState.final_drive_accel()
 	var pull := _ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(_gear), maxf(forward_speed, 0.0), GameState.engine_power_hp)
-	return pull * GameState.wheel_weight_accel() * _damage.power_left()
+	return pull * GameState.weight_accel() * _damage.power_left()
 
 
 ## Lowest and highest speed this gear allows, in m/s. Neutral coasts either way.

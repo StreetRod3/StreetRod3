@@ -87,6 +87,9 @@ CLOCK_AT = (0.377, 0.783, 0.811)
 ## The front axle beam: its ends sit in the wheel wells, where the game's own wheels
 ## and suspension go.
 DROP_NODES = {'polySurface28_Chrome_0'}
+## The bumpers, each its own node so the game can strip it: every mesh under the scene's
+## group of that name (the bar, its guards and its grey mounting irons).
+BUMPER_GROUPS = {'Front_Bumper': 'bumper_front', 'Rear_Bumper': 'bumper_rear'}
 
 PLAIN = (255, round(0.82 * 255), round(0.05 * 255))
 ## Chrome: fully metallic and nearly mirror smooth, so it reflects the sky instead of
@@ -147,11 +150,13 @@ def node_matrix(node):
 
 
 def pieces(gltf, accessor):
-    """(node name, material name, triangle corners, corner normals) in world space."""
+    """(node name, material name, triangle corners, corner normals, group) in world space,
+    the group being the BUMPER_GROUPS node the mesh is under, or 'body'."""
     out = []
 
-    def walk(i, parent):
+    def walk(i, parent, group='body'):
         node = gltf['nodes'][i]
+        group = BUMPER_GROUPS.get(node['name'], group)
         world = parent @ node_matrix(node)
         if 'mesh' in node:
             lin = world[:3, :3]
@@ -167,9 +172,9 @@ def pieces(gltf, accessor):
                 nrm = nrm @ nlin.T
                 nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
                 mat = gltf['materials'][prim['material']]['name']
-                out.append((node['name'], mat, pos[idx], nrm[idx]))
+                out.append((node['name'], mat, pos[idx], nrm[idx], group))
         for c in node.get('children', []):
-            walk(c, world)
+            walk(c, world, group)
 
     for root in gltf['scenes'][gltf.get('scene', 0)]['nodes']:
         walk(root, np.eye(4))
@@ -255,14 +260,14 @@ def main():
         q = np.asarray(q, np.float64)
         return np.stack([(q[..., 0] - center[0]) * stretch, q[..., 1] - lo[1], q[..., 2] - (lo[2] + hi[2]) / 2], -1) * scale
 
-    rim_src = [t for nm, _, t, _ in kept if nm == STEERING_RIM][0].reshape(-1, 3)
+    rim_src = [t for nm, _, t, _, _ in kept if nm == STEERING_RIM][0].reshape(-1, 3)
     wheel_x = (rim_src[:, 0].min() + rim_src[:, 0].max()) / 2
     looks = []
     rim_points = None
-    groups = {'body': ([], [], []), 'wheel': ([], [], [])}
+    groups = {g: ([], [], []) for g in ['body', 'wheel', *BUMPER_GROUPS.values()]}
     glass_pos, glass_nrm = [], []
     once = 0
-    for name, mat, tris, normals in kept:
+    for name, mat, tris, normals, group in kept:
         p = to_game(tris)
         if name in MIRROR_NODES:
             # Moved as a whole by as much as its inner edge moved, so it keeps its shape.
@@ -291,7 +296,7 @@ def main():
             n = np.concatenate([n, -n[:, ::-1]])
         if name == STEERING_RIM:
             rim_points = p.reshape(-1, 3)
-        gpos, gnrm, glook = groups['wheel' if name in STEERING_NODES else 'body']
+        gpos, gnrm, glook = groups['wheel' if name in STEERING_NODES else group]
         gpos.append(p)
         gnrm.append(n)
         glook += [looks.index(look)] * len(p)
@@ -342,6 +347,9 @@ def main():
         'alphaMode': 'OPAQUE'}, GLASS_MATERIAL]
     body_mesh = out.mesh(args.name, [out.primitive(p, n, index, 0, uv), out.primitive(gp, gn, gindex, 1)])
     roots = [out.node(args.name, mesh=body_mesh)]
+    for group in BUMPER_GROUPS.values():
+        bp, bn, buv, bindex = palette_mesh(group)
+        roots.append(out.node(group, mesh=out.mesh(group, [out.primitive(bp, bn, bindex, 0, buv)])))
     wheel_mesh = out.mesh('driving_wheel_mesh', [out.primitive(wp, wn, windex, 0, wuv)])
     roots.append(out.node('driving_wheel', translation=hub, rotation=dash.quaternion(wheel_basis),
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
