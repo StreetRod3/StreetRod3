@@ -47,6 +47,15 @@ func is_totaled() -> bool:
 	return amount >= 1.0
 
 
+## Back to no damage at all, and the smoke stops.
+func repair() -> void:
+	amount = 0.0
+	_barrier_peak = 0.0
+	if _smoke != null:
+		_smoke.queue_free()
+		_smoke = null
+
+
 func power_left() -> float:
 	return 1.0 - amount * POWER_LOSS
 

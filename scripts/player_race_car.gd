@@ -140,6 +140,9 @@ var _flat_s: float = 0.0
 ## The blown corner, in the car's space.
 var _flat_corner := Vector3.ZERO
 var _damage: _CarDamage = _CarDamage.new()
+## The race console's `iddqd`: hits do no harm and the engine can't be blown. Its tires
+## can't blow either; the race sees to that.
+var invincible := false
 var _arcade_active: bool = false
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _cam_rest := Transform3D.IDENTITY
@@ -330,7 +333,7 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> 
 
 ## A hit from a barrier or the other car, by how much it changed this car's speed.
 func take_hit(speed_change: float) -> bool:
-	if not _damage.take_hit(speed_change):
+	if invincible or not _damage.take_hit(speed_change):
 		return false
 	var jolt := clampf(speed_change / _CarDamage.TOTAL_MPS, 0.3, 1.0)
 	_rumble.pulse(jolt * 0.6, jolt)
@@ -359,6 +362,18 @@ func scrape_road(speed_lost: float) -> void:
 
 func damage_amount() -> float:
 	return _damage.amount
+
+
+## The race console's `showme`: no damage, no smoke, and a flat tire is whole again.
+func repair() -> void:
+	_damage.repair()
+	_overrev_time = 0.0
+	_flat_side = 0.0
+	_flat_s = 0.0
+	_body_motion.flat_wheel = -1
+	_body_motion.flat_drop = 0.0
+	_body_motion.flat_roll = 0.0
+	_body_motion.flat_pitch = 0.0
 
 
 func get_gear_label() -> String:
@@ -1105,7 +1120,7 @@ func _exit_tree() -> void:
 
 
 func _update_overrev(delta: float) -> void:
-	if _engine_blown or _is_automatic():
+	if _engine_blown or _is_automatic() or invincible:
 		_overrev_time = 0.0
 		return
 	if get_rpm() >= RPM_CRITICAL:
