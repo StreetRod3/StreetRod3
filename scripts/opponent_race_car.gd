@@ -102,6 +102,8 @@ var _rail_shove: float = 0.0
 var _rail_spin: float = 0.0
 var _rail_wobble: float = 0.0
 var _damage: _CarDamage = _CarDamage.new()
+## Asleep at the wheel: the car coasts on straight until it stops, like a totaled one.
+var asleep := false
 var _arcade_gear: int = 0
 var _arcade_shift: float = 0.0
 var _arcade_driver: float = 0.3
@@ -195,6 +197,20 @@ func is_wrecked() -> bool:
 	return _damage.is_totaled()
 
 
+## The race console's `wreckit`: the car is totaled where it is.
+func wreck() -> void:
+	take_hit(_CarDamage.TOTAL_MPS)
+
+
+## The race console's `sleepytime`: the driver nods off and the car coasts to a stop.
+func fall_asleep() -> void:
+	asleep = true
+
+
+func is_asleep() -> bool:
+	return asleep
+
+
 ## Moves this car out of another car, keeps the bumped speed, and sets it turning.
 func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> void:
 	var planar := Vector3(new_velocity.x, 0.0, new_velocity.z)
@@ -232,7 +248,7 @@ func begin_park(slot: float) -> void:
 
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
-	if _damage.is_totaled():
+	if _coasting():
 		_coast_to_a_stop(delta)
 		return
 	if _parking:
@@ -252,6 +268,11 @@ func _physics_process(delta: float) -> void:
 		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_stick_to_road()
 	_pose_body(delta)
+
+
+## Totaled or asleep at the wheel: no one is driving.
+func _coasting() -> bool:
+	return asleep or _damage.is_totaled()
 
 
 ## A totaled car rolls straight on until it stops, and sits there smoking.
@@ -301,7 +322,7 @@ func _pose_body(delta: float) -> void:
 	_body_motion.capture()
 	var steer := _dynamics.steer_angle()
 	var steer_input := _dynamics.steer_input()
-	if GameState.arcade_drive and not _parking and not _damage.is_totaled():
+	if GameState.arcade_drive and not _parking and not _coasting():
 		steer = atan(_rail_yaw_rate * _dynamics.config.wheelbase_m / maxf(forward_speed, 1.0))
 		steer_input = clampf(_rail_yaw_rate / _RAIL_FULL_YAW_RATE, -1.0, 1.0)
 	_body_motion.pose(delta, forward_speed, steer, steer_input)
@@ -505,7 +526,7 @@ func _stick_to_road() -> void:
 
 ## Flat velocity on the road, in m/s. On the rails the car only goes where its nose points.
 func _ground_velocity(forward: Vector3) -> Vector3:
-	if GameState.arcade_drive or _parking or _damage.is_totaled():
+	if GameState.arcade_drive or _parking or _coasting():
 		return forward * maxf(forward_speed, 0.0)
 	return Vector3(_dynamics.cg_velocity.x, 0.0, _dynamics.cg_velocity.z)
 

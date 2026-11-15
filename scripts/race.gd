@@ -10,6 +10,7 @@ const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _MulhollandTraffic := preload("res://scripts/mulholland_traffic.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
+const _Console := preload("res://scripts/console.gd")
 
 const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
@@ -109,6 +110,9 @@ var _offered_stake: int = 0
 var _offered_prefix: String = ""
 var _traffic_mgr: Node3D = null
 var _gear_popup: Control = null
+## The ~ prompt, while it is up. The race is paused under it.
+var _console: Control = null
+var _console_layer: CanvasLayer = null
 
 ## Dim “off” lamp colors (same hue, low value).
 const _DIM_RED := Color(0.12, 0.05, 0.05, 1)
@@ -307,7 +311,7 @@ func _process(delta: float) -> void:
 		_hud_damage.text = "Damage: %d%%" % roundi(_player.damage_amount() * 100.0)
 	else:
 		_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
-	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
+	if _tire_blowout_m >= 0.0 and not _player.invincible and _distance_to_finish() <= _tire_blowout_m:
 		_blow_tire()
 	if _flat_tire_s >= 0.0:
 		_flat_tire_s += delta
@@ -864,8 +868,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			_leave_result()
 		return
-	if _race_over:
+	if _race_over or _console != null:
 		return
+	if event is InputEventKey and not _pause_menu.visible and not get_tree().paused:
+		var key := event as InputEventKey
+		if key.pressed and not key.echo and _Console.is_toggle_key(key):
+			get_viewport().set_input_as_handled()
+			_open_console()
+			return
 	if event.is_action_pressed(&"ui_cancel"):
 		_handle_escape()
 		var viewport := get_viewport()
@@ -877,6 +887,83 @@ func _unhandled_input(event: InputEvent) -> void:
 			var viewport := get_viewport()
 			if viewport != null:
 				viewport.set_input_as_handled()
+
+
+func _open_console() -> void:
+	if _console_layer == null:
+		_console_layer = CanvasLayer.new()
+		_console_layer.name = "ConsoleLayer"
+		_console_layer.layer = 10
+		_console_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(_console_layer)
+	var console: Control = _Console.new()
+	console.call("add_command", "showme", "fix the car: no damage, no flat, every part in 100% condition", _on_showme)
+	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
+	console.call("add_command", "iddqd", "your car can't be hurt: no damage, no blown engine or tire (again to turn off)", _on_iddqd)
+	console.call("add_command", "sleepytime", "the rival falls asleep and coasts to a stop", _on_sleepytime)
+	console.call("add_command", "wreckit", "the rival's car is totaled, and the race is yours", _on_wreckit)
+	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
+	_console = console
+	_console_layer.add_child(console)
+	get_tree().paused = true
+
+
+func _on_console_closed() -> void:
+	if _console != null:
+		_console.queue_free()
+		_console = null
+	get_tree().paused = false
+
+
+## The console's `showme`. Lines stay on the prompt, the race waiting under it.
+func _on_showme() -> String:
+	_player.repair()
+	_flat_tire_s = -1.0
+	var line := "Your car is fixed."
+	if not _test_drive:
+		line = GameState.restore_car_parts()
+		if line.begins_with("Every part"):
+			line = "Your car is fixed, and every part on it is in 100% condition."
+		# Fresh tires don't blow.
+		_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
+	return line
+
+
+func _on_tiger() -> String:
+	if _test_drive:
+		return "Gas is free on a test drive."
+	return GameState.fill_tank_free()
+
+
+func _on_iddqd() -> String:
+	_player.invincible = not _player.invincible
+	return "Your car can't be hurt." if _player.invincible else "Your car can be hurt again."
+
+
+func _on_sleepytime() -> String:
+	if _test_drive:
+		return "There is no rival on a test drive."
+	if _opponent.is_wrecked():
+		return "The rival's car is already totaled."
+	if _opponent_finished:
+		return "The rival has already finished."
+	if _opponent.is_asleep():
+		return "The rival is already asleep."
+	_opponent.fall_asleep()
+	return "%s falls asleep at the wheel." % _rival_name()
+
+
+func _on_wreckit() -> String:
+	if _test_drive:
+		return "There is no rival on a test drive."
+	if _opponent.is_wrecked():
+		return "The rival's car is already totaled."
+	_opponent.wreck()
+	return "%s's car is totaled." % _rival_name()
+
+
+func _rival_name() -> String:
+	return str(GameState.selected_opponent().get("name", "The rival"))
 
 
 func _handle_escape() -> void:
