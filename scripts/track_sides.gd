@@ -27,6 +27,7 @@ const AQUEDUCT_PUSH_MPS := 0.8
 const AQUEDUCT_PUSH_HIGH_MPS := 2.1
 const AQUEDUCT_HIGH_AT := AQUEDUCT_FLOOR_HALF + 180.0 * 8.0 / 1800.0
 
+## How far the ground beside the road reaches, unless another part of the course is nearer.
 const _FAR_M := 280.0
 const _HILL_TOP_M := 30.0
 const _HILL_TOP_RISE := 1.25
@@ -109,7 +110,9 @@ static func build_mountain(
 	right: PackedFloat32Array,
 	rails: PackedByteArray,
 	far_y: PackedFloat32Array,
-	run_in_m: float
+	run_in_m: float,
+	reaches: Array[PackedFloat32Array],
+	back_reach: Vector2
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
@@ -117,14 +120,16 @@ static func build_mountain(
 	var back := _behind_start(pts, yaws, run_in_m)
 	for side: float in [1.0, -1.0]:
 		var heights := left if side > 0.0 else right
-		_add_side_span(st, _mountain_section(back, yaws[0], side, half_ws[0], heights[0], far_y[0]), _mountain_section(pts[0], yaws[0], side, half_ws[0], heights[0], far_y[0]))
+		var reach: PackedFloat32Array = reaches[0] if side > 0.0 else reaches[1]
+		var back_side := back_reach.x if side > 0.0 else back_reach.y
+		_add_side_span(st, _mountain_section(back, yaws[0], side, half_ws[0], heights[0], far_y[0], back_side), _mountain_section(pts[0], yaws[0], side, half_ws[0], heights[0], far_y[0], reach[0]))
 		for k in range(sections.size() - 1):
 			var a := sections[k]
 			var b := sections[k + 1]
 			_add_side_span(
 				st,
-				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a]),
-				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b])
+				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a]),
+				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b])
 			)
 	_add_mesh(track, "Sides", st, _vertex_color_material())
 	var railed := rails.duplicate()
@@ -140,17 +145,28 @@ static func build_mountain(
 	_build_mountains(track, pts)
 
 
-static func build_aqueduct(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, run_in_m: float) -> void:
+## `reaches` is how far out the ground may go on the left and right of each sample, and
+## `back_reach` the same behind the start: as far as halfway to another part of the course.
+static func build_aqueduct(
+	track: Node3D,
+	pts: PackedVector3Array,
+	yaws: PackedFloat32Array,
+	run_in_m: float,
+	reaches: Array[PackedFloat32Array],
+	back_reach: Vector2
+) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
 	for side: float in [1.0, -1.0]:
-		_add_side_span(st, _aqueduct_section(back, yaws[0], side), _aqueduct_section(pts[0], yaws[0], side))
+		var reach: PackedFloat32Array = reaches[0] if side > 0.0 else reaches[1]
+		var back_side := back_reach.x if side > 0.0 else back_reach.y
+		_add_side_span(st, _aqueduct_section(back, yaws[0], side, back_side), _aqueduct_section(pts[0], yaws[0], side, reach[0]))
 		for k in range(sections.size() - 1):
 			var a := sections[k]
 			var b := sections[k + 1]
-			_add_side_span(st, _aqueduct_section(pts[a], yaws[a], side), _aqueduct_section(pts[b], yaws[b], side))
+			_add_side_span(st, _aqueduct_section(pts[a], yaws[a], side, reach[a]), _aqueduct_section(pts[b], yaws[b], side, reach[b]))
 	_add_mesh(track, "Channel", st, _vertex_color_material())
 	var faces := PackedVector3Array()
 	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
@@ -177,8 +193,11 @@ static func _behind_start(pts: PackedVector3Array, yaws: PackedFloat32Array, run
 	return pts[0] - Vector3(sin(yaws[0]), 0.0, cos(yaws[0])) * run_in_m
 
 
-## The road's height with its rises and dips averaged out, for ground far from it to follow.
-static func slow_heights(pts: PackedVector3Array) -> PackedFloat32Array:
+## The road's height with its rises and dips averaged out, for ground far from it to follow. On a
+## `loop`, whose last sample is the start again, the average runs on round past the start.
+static func slow_heights(pts: PackedVector3Array, loop: bool = false) -> PackedFloat32Array:
+	if loop and pts.size() > 2 * _SLOW_SAMPLES + 2:
+		return _slow_heights_round(pts)
 	var sums := PackedFloat32Array()
 	sums.resize(pts.size() + 1)
 	sums[0] = 0.0
@@ -193,11 +212,28 @@ static func slow_heights(pts: PackedVector3Array) -> PackedFloat32Array:
 	return out
 
 
-## Columns across one side of the road, from the road's edge outward, each {point, color}.
-static func _mountain_section(center: Vector3, yaw: float, side: float, half: float, height: float, far_y: float) -> Array[Dictionary]:
+static func _slow_heights_round(pts: PackedVector3Array) -> PackedFloat32Array:
+	var lap := pts.size() - 1
+	var out := PackedFloat32Array()
+	out.resize(pts.size())
+	var window := 2 * _SLOW_SAMPLES + 1
+	var sum := 0.0
+	for k in range(-_SLOW_SAMPLES, _SLOW_SAMPLES + 1):
+		sum += pts[posmod(k, lap)].y
+	for i in lap:
+		out[i] = sum / float(window)
+		sum += pts[posmod(i + _SLOW_SAMPLES + 1, lap)].y - pts[posmod(i - _SLOW_SAMPLES, lap)].y
+	out[lap] = out[0]
+	return out
+
+
+## Columns across one side of the road, from the road's edge outward, each {point, color}. Nothing
+## goes past `reach` from the middle of the road, except the verge.
+static func _mountain_section(center: Vector3, yaw: float, side: float, half: float, height: float, far_y: float, reach: float) -> Array[Dictionary]:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
 	var verge := half + MOUNTAIN_VERGE
-	var slope_end := verge + MOUNTAIN_BANK_RUN
+	var limit := maxf(reach, verge)
+	var slope_end := minf(verge + MOUNTAIN_BANK_RUN, limit)
 	var near := _GREEN if height == 0.0 else _VERGE_GRAY
 	var bank := _GREEN
 	if height > 0.0:
@@ -209,15 +245,16 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 		_column(center + across * verge, 0.0, near if height != 0.0 else _GREEN),
 		_column(center + across * verge, 0.0, bank),
 		_column(center + across * slope_end, height, bank),
-		_column(far_center + across * (slope_end + _HILL_TOP_M), top, bank),
-		_column(far_center + across * (slope_end + _FAR_M), top, bank if height > 0.0 else _GREEN),
+		_column(far_center + across * minf(slope_end + _HILL_TOP_M, limit), top, bank),
+		_column(far_center + across * minf(slope_end + _FAR_M, limit), top, bank if height > 0.0 else _GREEN),
 	]
 
 
-static func _aqueduct_section(center: Vector3, yaw: float, side: float) -> Array[Dictionary]:
+static func _aqueduct_section(center: Vector3, yaw: float, side: float, reach: float) -> Array[Dictionary]:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
 	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
 	const EDGE_LINE := 0.22
+	var limit := maxf(reach, top + EDGE_LINE)
 	return [
 		_column(center, 0.0, _CONCRETE),
 		_column(center + across * AQUEDUCT_FLOOR_HALF, 0.0, _CONCRETE),
@@ -225,7 +262,7 @@ static func _aqueduct_section(center: Vector3, yaw: float, side: float) -> Array
 		_column(center + across * top, AQUEDUCT_BANK_HIGH, _YELLOW_EDGE),
 		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH, _YELLOW_EDGE),
 		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP),
-		_column(center + across * (top + _FAR_M), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP),
+		_column(center + across * minf(top + _FAR_M, limit), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP),
 	]
 
 

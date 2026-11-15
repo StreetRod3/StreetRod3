@@ -92,6 +92,8 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	result.name = str(root.get("name", ""))
 	result.style = str(root.get("style", STYLE_CIRCUIT))
 	result.jumps = bool(root.get("jumps", false))
+	result.loop = bool(root.get("loop", false))
+	result.laps = maxi(int(root.get("laps", 1)), 1)
 	if not _STYLES.has(result.style):
 		result.errors.append("Unknown track style `%s`." % result.style)
 	_parse_nodes(root, result)
@@ -124,6 +126,8 @@ static func _empty_result() -> Dictionary:
 		"buildings": [], # scenery boxes: x, y, w, d, h, sign
 		"style": STYLE_CIRCUIT,
 		"jumps": false, # cars can leave the road where it drops away
+		"loop": false, # the course comes back round to the start, which is also the finish
+		"laps": 1, # times round a loop
 		"scenery": [], # what stands beside a street track: kind, x, y
 		"errors": [],
 		"warnings": [],
@@ -183,7 +187,9 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 	if result.finish_ids.is_empty() and not result.node_order.is_empty():
 		var last_id := int(result.node_order[result.node_order.size() - 1])
 		result.finish_ids.append(last_id)
-		result.warnings.append("No finish node; using last node %d." % last_id)
+		# A loop finishes on its start, so it has no finish node.
+		if not result.loop:
+			result.warnings.append("No finish node; using last node %d." % last_id)
 
 
 ## Missing `z`, or a value that is not a number, is ground level.
@@ -262,8 +268,12 @@ static func _build_race_path(result: Dictionary) -> void:
 			outgoing[from_id] = []
 		outgoing[from_id].append(road)
 	var finish_set: Dictionary = {}
-	for fid: int in result.finish_ids:
-		finish_set[int(fid)] = true
+	if result.loop:
+		# Round and back to the start, which ends the lap. The path ends on the start again.
+		finish_set[int(result.start_id)] = true
+	else:
+		for fid: int in result.finish_ids:
+			finish_set[int(fid)] = true
 	var path: Array[int] = []
 	var used: Dictionary = {}
 	var current: int = int(result.start_id)
@@ -290,7 +300,11 @@ static func _build_race_path(result: Dictionary) -> void:
 	if path.size() < 2:
 		result.errors.append("Could not walk a race path from start to finish.")
 		return
-	if not finish_set.has(path[path.size() - 1]):
+	if result.loop:
+		if path[path.size() - 1] != int(result.start_id) or path.size() < 4:
+			result.errors.append("A loop needs at least three nodes and a road from the last back to the start.")
+			return
+	elif not finish_set.has(path[path.size() - 1]):
 		result.warnings.append("Race path does not end on a finish node.")
 	result.path_ids = path
 

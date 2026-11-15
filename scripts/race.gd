@@ -75,6 +75,17 @@ var _car_bump: _CarBump = _CarBump.new()
 var _fuel_used: bool = false
 var _opponent_finished: bool = false
 var _is_road: bool = false
+## A drive from the track maker: no rival, nothing riding on it, and nothing done to the car is
+## kept. Every ending goes back to the track maker.
+var _test_drive: bool = false
+## On a loop: the laps to drive, how far round the player has gone in all (backing up takes it
+## off again), the last place along the lap it was read, and each finished lap's time.
+var _laps: int = 1
+var _lap_length: float = 0.0
+var _progress: float = 0.0
+var _last_lap_s: float = 0.0
+var _lap_started_at: float = 0.0
+var _lap_times: PackedFloat32Array = PackedFloat32Array()
 var _street_start: bool = false
 var _street_wait_s: float = 0.0
 var _start_word: Label
@@ -126,8 +137,12 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_RACE
 	GameState.update_music()
 	_is_road = GameState.race_on_track()
+	_test_drive = GameState.is_test_drive()
 	_street_start = GameState.race_from_sr2()
-	_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
+	_tire_blowout_m = -1.0 if _test_drive else GameState.tire_blowout_distance_m(GameState.race_length_m())
+	if _test_drive:
+		_bench_rival()
+		($RaceUI/PauseMenu/Panel/Margin/VBox/ExitBtn as Button).text = "Back to track maker"
 	_setup_race_layout()
 	_result.visible = false
 	_build_result_bubble()
@@ -137,7 +152,9 @@ func _ready() -> void:
 	var opp := GameState.selected_opponent()
 	var rival := str(opp.get("name", "Rival"))
 	var car_name := str(opp.get("car_name", ""))
-	if car_name.is_empty():
+	if _test_drive:
+		_hud_opp.text = "Test drive"
+	elif car_name.is_empty():
 		_hud_opp.text = "Opponent: %s" % rival
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
@@ -155,6 +172,16 @@ func _ready() -> void:
 		player_pivot.set_car_body_color(GameState.car_color)
 	# Defer so the car's mesh scripts have built their meshes first.
 	call_deferred(&"_align_race_cars_to_ground")
+
+
+## Takes the rival out of a test drive: out of sight, far below the course, and still, so it
+## never bumps, finishes, or wrecks.
+func _bench_rival() -> void:
+	_opponent.visible = false
+	_opponent.collision_layer = 0
+	_opponent.collision_mask = 0
+	_opponent.global_position = Vector3(0.0, -1000.0, 0.0)
+	_opponent.process_mode = Node.PROCESS_MODE_DISABLED
 
 
 func is_race_started() -> bool:
@@ -177,6 +204,9 @@ func _setup_race_layout() -> void:
 		_set_night()
 	if _track.has_method(&"finish_basis"):
 		_finish.global_transform = _track.finish_basis()
+	if _track.has_method(&"is_loop") and _track.is_loop():
+		_laps = _track.get_laps()
+		_lap_length = _track.get_length()
 	var col := _finish.get_node_or_null("CollisionShape3D") as CollisionShape3D
 	if col != null:
 		var box := BoxShape3D.new()
@@ -223,6 +253,8 @@ func _align_race_cars_to_ground() -> void:
 	# Wheels sit on height 0. A road course then lifts the whole car by the track's z.
 	var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
 	for car: CharacterBody3D in [_player, _opponent]:
+		if _test_drive and car == _opponent:
+			continue
 		var pivot: Node = car.get_node_or_null("CarPivot")
 		if pivot != null and pivot.has_method(&"align_wheels_to_floor"):
 			pivot.align_wheels_to_floor(floor_mi)
@@ -231,11 +263,14 @@ func _align_race_cars_to_ground() -> void:
 func _physics_process(delta: float) -> void:
 	if get_tree().paused or _race_over or not _race_started:
 		return
-	var hit := _car_bump.resolve(_player, _opponent)
-	var hurt_player: bool = _player.take_hit(hit.x)
-	var hurt_rival: bool = _opponent.take_hit(hit.y)
-	if hurt_player or hurt_rival:
-		_play_crunch(maxf(hit.x, hit.y))
+	# A test drive's rival is benched below the start, and the bump works across the ground
+	# only, so on a loop the player would run into it at the line.
+	if not _test_drive:
+		var hit := _car_bump.resolve(_player, _opponent)
+		var hurt_player: bool = _player.take_hit(hit.x)
+		var hurt_rival: bool = _opponent.take_hit(hit.y)
+		if hurt_player or hurt_rival:
+			_play_crunch(maxf(hit.x, hit.y))
 	if _traffic_mgr != null and _traffic_mgr.has_method(&"tick"):
 		_traffic_mgr.tick(delta)
 	_check_wrecks()
@@ -268,7 +303,10 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	_hud_time.text = "Time: %.2f s" % _elapsed
 	_show_speed_and_distance()
-	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
+	if _test_drive:
+		_hud_damage.text = "Damage: %d%%" % roundi(_player.damage_amount() * 100.0)
+	else:
+		_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
 		_blow_tire()
 	if _flat_tire_s >= 0.0:
@@ -300,7 +338,7 @@ func _start_race() -> void:
 	_countdown_phase = 2
 	_phase_time = 0.0
 	_race_started = true
-	if not _fuel_used:
+	if not _fuel_used and not _test_drive:
 		_fuel_used = true
 		GameState.consume_race_fuel()
 	_refresh_traffic_lights()
@@ -341,7 +379,7 @@ func _refresh_traffic_lights() -> void:
 
 
 func _on_finish_area_body_entered(body: Node3D) -> void:
-	if _race_over or not _race_started:
+	if _race_over or not _race_started or _on_loop():
 		return
 	if body == _player:
 		if _flat_tire_s < 0.0:
@@ -351,6 +389,8 @@ func _on_finish_area_body_entered(body: Node3D) -> void:
 
 
 func _distance_to_finish() -> float:
+	if _on_loop():
+		return maxf(0.0, _lap_length * float(_laps) - _progress)
 	if _is_road and _track.has_method(&"remaining_distance"):
 		return _track.remaining_distance(_player.global_position)
 	return maxf(0.0, QUARTER_MILE_M - _player.global_position.z)
@@ -369,6 +409,11 @@ func _maybe_finish_by_progress() -> void:
 		return
 	if _track == null:
 		return
+	if _on_loop():
+		_count_laps()
+		if _distance_to_finish() <= 1.0:
+			_finish_player()
+		return
 	var p_rem: float = _track.remaining_distance(_player.global_position)
 	var o_rem := INF
 	if _opponent.has_method(&"get_path_s"):
@@ -377,6 +422,35 @@ func _maybe_finish_by_progress() -> void:
 		_opponent_finished = true
 	if p_rem <= 1.0:
 		_finish_player()
+
+
+func _on_loop() -> bool:
+	return _is_road and _lap_length > 0.0
+
+
+## Adds how far the player went round since the last frame. Across the line, the place along the
+## lap jumps between its end and 0, which is a short step forward or back, not a lap.
+func _count_laps() -> void:
+	var s: float = _track.lap_s(_player.global_position)
+	var step := s - _last_lap_s
+	if step < -_lap_length * 0.5:
+		step += _lap_length
+	elif step > _lap_length * 0.5:
+		step -= _lap_length
+	_last_lap_s = s
+	var laps_before := floori(_progress / _lap_length)
+	_progress += step
+	var laps_now := floori(_progress / _lap_length)
+	if laps_now > laps_before and laps_now > _lap_times.size():
+		_lap_times.append(_elapsed - _lap_started_at)
+		_lap_started_at = _elapsed
+
+
+## "Lap 2 of 3", or "" off a loop or on a one-lap loop.
+func _lap_text() -> String:
+	if not _on_loop() or _laps <= 1:
+		return ""
+	return "Lap %d of %d" % [clampi(floori(_progress / _lap_length) + 1, 1, _laps), _laps]
 
 
 func _update_rpm_meter() -> void:
@@ -404,6 +478,16 @@ func _finish_player() -> void:
 	if _race_over:
 		return
 	_race_over = true
+	if _test_drive:
+		_park_cars()
+		var text := "Finished in %.2f s." % _elapsed
+		if _lap_times.size() > 1:
+			var best := _lap_times[0]
+			for lap: float in _lap_times:
+				best = minf(best, lap)
+			text = "%d laps in %.2f s.\nBest lap %.2f s." % [_lap_times.size(), _elapsed, best]
+		_end_test_drive(text)
+		return
 	GameState.drift_engine_tune_after_race()
 	GameState.wear_parts_after_race()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
@@ -447,6 +531,9 @@ func _play_crunch(speed_change: float) -> void:
 func _show_engine_blown() -> void:
 	_race_over = true
 	_halt_cars()
+	if _test_drive:
+		_end_test_drive("You blew the engine!\nNothing is kept on a test drive.")
+		return
 	_end_race_ui()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
 	GameState.remove_engine()
@@ -490,6 +577,9 @@ func _show_wreck() -> void:
 		return
 	_race_over = true
 	_halt_cars()
+	if _test_drive:
+		_end_test_drive("You wrecked it.\nNothing is kept on a test drive.")
+		return
 	_end_race_ui()
 	# A wrecked car can't be handed over, so pink slips are void.
 	GameState.race_pink_slips = false
@@ -931,10 +1021,19 @@ func _on_pause_controls_pressed() -> void:
 
 func _show_speed_and_distance() -> void:
 	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
+	var lap := _lap_text()
+	if not lap.is_empty():
+		_hud_dist.text = "%s · %s" % [lap, _hud_dist.text]
 	_hud_speed.text = "Speed: %s" % GameState.speed_text(absf(_player.get_forward_speed()) * 3.6)
 
 
 func _on_pause_exit_pressed() -> void:
+	if _test_drive:
+		_race_over = true
+		_park_cars()
+		_end_race_ui()
+		_leave_test_drive()
+		return
 	_pause_main.visible = false
 	_pause_settings.visible = false
 	_pause_confirm.visible = true
@@ -972,6 +1071,19 @@ func _forfeit_race() -> void:
 	if lost_car:
 		text += "\n" + _took_your_car()
 	_show_bubble(text + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+
+
+## A test drive's ending: a line, then back to the track maker. The car keeps nothing from it.
+func _end_test_drive(text: String) -> void:
+	_result_shown_ms = Time.get_ticks_msec()
+	_end_race_ui()
+	_show_bubble(text, GameState.SCENE_TRACK_MAKER)
+
+
+func _leave_test_drive() -> void:
+	get_tree().paused = false
+	GameState.current_scene_path = GameState.SCENE_TRACK_MAKER
+	get_tree().change_scene_to_file(GameState.SCENE_TRACK_MAKER)
 
 
 func _leave_race() -> void:
