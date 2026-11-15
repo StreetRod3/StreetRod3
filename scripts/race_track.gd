@@ -639,7 +639,7 @@ func _fill_sides(data: Dictionary, path_ids: Array) -> void:
 	_rails.fill(0)
 	if _style != TrackFile.STYLE_MOUNTAIN:
 		return
-	_far_ys = _TrackSides.slow_heights(_pts)
+	_far_ys = _TrackSides.slow_heights(_pts, _loop)
 	var k := 0
 	for i in _pts.size():
 		var s := _dists[i]

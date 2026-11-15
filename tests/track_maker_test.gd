@@ -4,6 +4,7 @@ extends SceneTree
 ## rules, and switches the race to a test drive and back.
 
 const _Doc := preload("res://scripts/track_maker_doc.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
 
 
 func _initialize() -> void:
@@ -117,6 +118,14 @@ func _loops() -> void:
 	var short := _Doc.blank()
 	short.set_loop(true)
 	assert(not short.check().errors.is_empty())
+	# Far ground on a loop follows heights averaged round past the start, so it matches at the line.
+	var ring := PackedVector3Array()
+	for k in 401:
+		ring.append(Vector3(0.0, 4.0 if k < 100 else 0.0, float(k)))
+	ring[400] = ring[0]
+	var far := _TrackSides.slow_heights(ring, true)
+	assert(is_equal_approx(far[0], far[far.size() - 1]))
+	assert(far[399] > 0.5, "the average before the line takes in the rise after it")
 	# Unticking drops the road back.
 	doc.set_loop(false)
 	assert(doc.loop_road.is_empty() and TrackFile.parse_text(doc.to_text()).errors.is_empty())

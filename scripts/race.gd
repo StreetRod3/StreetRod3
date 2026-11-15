@@ -263,11 +263,14 @@ func _align_race_cars_to_ground() -> void:
 func _physics_process(delta: float) -> void:
 	if get_tree().paused or _race_over or not _race_started:
 		return
-	var hit := _car_bump.resolve(_player, _opponent)
-	var hurt_player: bool = _player.take_hit(hit.x)
-	var hurt_rival: bool = _opponent.take_hit(hit.y)
-	if hurt_player or hurt_rival:
-		_play_crunch(maxf(hit.x, hit.y))
+	# A test drive's rival is benched below the start, and the bump works across the ground
+	# only, so on a loop the player would run into it at the line.
+	if not _test_drive:
+		var hit := _car_bump.resolve(_player, _opponent)
+		var hurt_player: bool = _player.take_hit(hit.x)
+		var hurt_rival: bool = _opponent.take_hit(hit.y)
+		if hurt_player or hurt_rival:
+			_play_crunch(maxf(hit.x, hit.y))
 	if _traffic_mgr != null and _traffic_mgr.has_method(&"tick"):
 		_traffic_mgr.tick(delta)
 	_check_wrecks()

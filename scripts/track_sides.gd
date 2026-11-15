@@ -193,8 +193,11 @@ static func _behind_start(pts: PackedVector3Array, yaws: PackedFloat32Array, run
 	return pts[0] - Vector3(sin(yaws[0]), 0.0, cos(yaws[0])) * run_in_m
 
 
-## The road's height with its rises and dips averaged out, for ground far from it to follow.
-static func slow_heights(pts: PackedVector3Array) -> PackedFloat32Array:
+## The road's height with its rises and dips averaged out, for ground far from it to follow. On a
+## `loop`, whose last sample is the start again, the average runs on round past the start.
+static func slow_heights(pts: PackedVector3Array, loop: bool = false) -> PackedFloat32Array:
+	if loop and pts.size() > 2 * _SLOW_SAMPLES + 2:
+		return _slow_heights_round(pts)
 	var sums := PackedFloat32Array()
 	sums.resize(pts.size() + 1)
 	sums[0] = 0.0
@@ -206,6 +209,21 @@ static func slow_heights(pts: PackedVector3Array) -> PackedFloat32Array:
 		var from_i := maxi(i - _SLOW_SAMPLES, 0)
 		var to_i := mini(i + _SLOW_SAMPLES + 1, pts.size())
 		out[i] = (sums[to_i] - sums[from_i]) / float(to_i - from_i)
+	return out
+
+
+static func _slow_heights_round(pts: PackedVector3Array) -> PackedFloat32Array:
+	var lap := pts.size() - 1
+	var out := PackedFloat32Array()
+	out.resize(pts.size())
+	var window := 2 * _SLOW_SAMPLES + 1
+	var sum := 0.0
+	for k in range(-_SLOW_SAMPLES, _SLOW_SAMPLES + 1):
+		sum += pts[posmod(k, lap)].y
+	for i in lap:
+		out[i] = sum / float(window)
+		sum += pts[posmod(i + _SLOW_SAMPLES + 1, lap)].y - pts[posmod(i - _SLOW_SAMPLES, lap)].y
+	out[lap] = out[0]
 	return out
 
 
