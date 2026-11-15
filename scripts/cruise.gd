@@ -29,7 +29,7 @@ const _RearMirror := preload("res://scripts/rear_mirror.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _Console := preload("res://scripts/console.gd")
-const _GrassMaterial := preload("res://scripts/grass_material.gd")
+const _GroundMaterial := preload("res://scripts/ground_material.gd")
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
 ## the ones out of view are still skipped.
 const _BATCH_CELL := 40.0
@@ -60,7 +60,6 @@ const _CREEP_SPEED := 2.0
 const _FULL_STEER_YAW_RATE := 0.8
 const _LONGEST_RIDE_STEP_S := 1.0 / 30.0
 
-const _ROAD_COLOR := Color(0.32, 0.33, 0.35, 1)
 const _EDGE_COLOR := Color(0.86, 0.84, 0.78, 1)
 const _LANE_COLOR := Color(0.95, 0.86, 0.45, 1)
 ## Streets at least this wide, from the center to the curb, get two lanes.
@@ -919,9 +918,7 @@ func _build_city(track: Dictionary) -> void:
 	var ground_box := ground.mesh as BoxMesh
 	if ground_box != null:
 		_add_solid_world(ground.position, ground_box.size)
-	var road_mat := StandardMaterial3D.new()
-	road_mat.albedo_color = _ROAD_COLOR
-	road_mat.roughness = 0.92
+	var road_mat := _GroundMaterial.asphalt().duplicate() as StandardMaterial3D
 	road_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var roads := MeshInstance3D.new()
 	var edges := MeshInstance3D.new()
@@ -979,7 +976,7 @@ func _build_ground(track: Dictionary) -> MeshInstance3D:
 	var pad := 40.0
 	var box := BoxMesh.new()
 	box.size = Vector3(max_x - min_x + pad * 2.0, 1.0, max_z - min_z + pad * 2.0)
-	box.material = _GrassMaterial.get_material()
+	box.material = _GroundMaterial.grass()
 	var ground := MeshInstance3D.new()
 	ground.mesh = box
 	ground.position = Vector3((min_x + max_x) * 0.5, -0.5, (min_z + max_z) * 0.5)

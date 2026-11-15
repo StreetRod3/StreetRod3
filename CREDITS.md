@@ -13,6 +13,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | In the game | Credit | License |
 | --- | --- | --- |
 | Grass ground (`assets/textures/grass/`) | "Grass Patchy Ground" 4585 by Poliigon (https://www.poliigon.com) | Not recorded yet |
+| Road asphalt (`assets/textures/asphalt/`) | "City Street Asphalt Generic Clean 001" by Poliigon (https://www.poliigon.com) | Not recorded yet |
 
 ## Fonts
 

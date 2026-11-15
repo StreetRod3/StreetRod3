@@ -1,4 +1,4 @@
-# Grass ground (`scripts/grass_material.gd`)
+# Grass ground (`scripts/ground_material.gd`)
 
 Poliigon "Grass Patchy Ground" 4585, the 2K set, pasted 2026-11-15. No link or license file came with it.
 
