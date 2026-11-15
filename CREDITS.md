@@ -8,6 +8,12 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | --- | --- | --- |
 | 1950 Studebaker Champion body (`assets/cars/studebaker-champion-1950.glb`) | This work is based on "Studebaker - Car Model" (https://sketchfab.com/3d-models/studebaker-car-model-c7578ec0f82043e6b392fcdf9b00c743) by Allie2k (https://sketchfab.com/Allie2k) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 
+## Textures
+
+| In the game | Credit | License |
+| --- | --- | --- |
+| Grass ground (`assets/textures/grass/`) | "Grass Patchy Ground" 4585 by Poliigon (https://www.poliigon.com) | Not recorded yet |
+
 ## Fonts
 
 | Font | License |

@@ -60,3 +60,6 @@ reference/**/*.usdz filter=lfs diff=lfs merge=lfs -text
 reference/**/*.zip filter=lfs diff=lfs merge=lfs -text
 assets/cars/studebaker-champion-1950.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/chevy-styleline-1950.glb filter=lfs diff=lfs merge=lfs -text
+reference/**/*.tiff filter=lfs diff=lfs merge=lfs -text
+assets/textures/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+assets/textures/**/*.png filter=lfs diff=lfs merge=lfs -text

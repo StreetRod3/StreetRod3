@@ -5,6 +5,7 @@ extends Node3D
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CourseScenery := preload("res://scripts/course_scenery.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
+const _GrassMaterial := preload("res://scripts/grass_material.gd")
 
 @export_file("*.trk") var track_path: String = "res://assets/tracks/track1.trk"
 
@@ -47,8 +48,6 @@ const CHECK_BLACK := Color(0.06, 0.06, 0.07, 1)
 const CHECK_WHITE := Color(0.94, 0.94, 0.92, 1)
 const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const ROAD_COLOR := Color(0.18, 0.19, 0.2, 1)
-const TERRAIN_COLOR := Color(0.14, 0.16, 0.13, 1)
-const STREET_TERRAIN_COLOR := Color(0.16, 0.27, 0.11, 1)
 ## Mulholland's road, black in Street Rod 2.
 const MOUNTAIN_ROAD_COLOR := Color(0.045, 0.045, 0.05, 1)
 const _GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
@@ -1040,7 +1039,6 @@ func _build_terrain() -> void:
 				y = minf(y, -_TERRAIN_SINK)
 			if _street and _grass_dist_sq <= _half_ws[0] * _half_ws[0]:
 				y -= _STREET_UNDER_ROAD_SINK
-			st.set_uv(Vector2(float(col), float(row)))
 			st.add_vertex(Vector3(x, y, z))
 	var stride := cols + 1
 	for row in rows:
@@ -1057,7 +1055,7 @@ func _build_terrain() -> void:
 			st.add_index(i01)
 	st.generate_normals()
 	var mesh := st.commit()
-	mesh.surface_set_material(0, _make_mat(STREET_TERRAIN_COLOR if _street else TERRAIN_COLOR, 0.95))
+	mesh.surface_set_material(0, _GrassMaterial.get_material())
 	var mi := MeshInstance3D.new()
 	mi.name = "Terrain"
 	mi.mesh = mesh

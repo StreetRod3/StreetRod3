@@ -29,6 +29,7 @@ const _RearMirror := preload("res://scripts/rear_mirror.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _Console := preload("res://scripts/console.gd")
+const _GrassMaterial := preload("res://scripts/grass_material.gd")
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
 ## the ones out of view are still skipped.
 const _BATCH_CELL := 40.0
@@ -69,7 +70,6 @@ const _LANE_GAP := 2.6
 ## White line sits this far inside the pavement edge. Its half-width is `_CURB_HALF`.
 const _CURB_FROM_EDGE := 0.28
 const _CURB_HALF := 0.12
-const _GROUND_COLOR := Color(0.2, 0.28, 0.18, 1)
 const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
 const _BUSH_DARK := Color(0.14, 0.32, 0.13)
 const _BUSH_MID := Color(0.24, 0.42, 0.17)
@@ -979,10 +979,7 @@ func _build_ground(track: Dictionary) -> MeshInstance3D:
 	var pad := 40.0
 	var box := BoxMesh.new()
 	box.size = Vector3(max_x - min_x + pad * 2.0, 1.0, max_z - min_z + pad * 2.0)
-	var ground_mat := StandardMaterial3D.new()
-	ground_mat.albedo_color = _GROUND_COLOR
-	ground_mat.roughness = 0.95
-	box.material = ground_mat
+	box.material = _GrassMaterial.get_material()
 	var ground := MeshInstance3D.new()
 	ground.mesh = box
 	ground.position = Vector3((min_x + max_x) * 0.5, -0.5, (min_z + max_z) * 0.5)
