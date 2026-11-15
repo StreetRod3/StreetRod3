@@ -16,6 +16,12 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | Road asphalt (`assets/textures/asphalt/`) | "City Street Asphalt Generic Clean 001" by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
 | Aqueduct and street shoulder concrete (`assets/textures/concrete/`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
 
+## Skies
+
+| In the game | Credit | License |
+| --- | --- | --- |
+| Day sky (`assets/skies/kloofendal_48d_partly_cloudy_puresky_4k.hdr`) | "Kloofendal 48d Partly Cloudy (Pure Sky)" by Greg Zaal and Jarod Guest, Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+
 ## Fonts
 
 | Font | License |

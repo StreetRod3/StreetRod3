@@ -30,6 +30,7 @@ const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _Console := preload("res://scripts/console.gd")
 const _GroundMaterial := preload("res://scripts/ground_material.gd")
+const _Skies := preload("res://scripts/skies.gd")
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
 ## the ones out of view are still skipped.
 const _BATCH_CELL := 40.0
@@ -888,15 +889,6 @@ func _add_solid_world(pos: Vector3, size: Vector3) -> void:
 
 func _build_world() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.25, 0.35, 0.55)
-	sky_mat.sky_horizon_color = Color(0.55, 0.6, 0.65)
-	sky_mat.ground_bottom_color = Color(0.15, 0.16, 0.18)
-	sky_mat.ground_horizon_color = Color(0.4, 0.42, 0.45)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.5, 0.52, 0.55)
 	env.ambient_light_energy = 0.55
@@ -910,6 +902,7 @@ func _build_world() -> void:
 	# The default 100 m draws much of the city a second time for shadows.
 	sun.directional_shadow_max_distance = 60.0
 	add_child(sun)
+	_Skies.use_day(env, sun.basis)
 
 
 func _build_city(track: Dictionary) -> void:
