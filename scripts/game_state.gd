@@ -21,6 +21,7 @@ const SCENE_UNDER_CAR := "res://scenes/under_car.tscn"
 const SCENE_HOOD := "res://scenes/hood.tscn"
 const SCENE_TUNE := "res://scenes/tune.tscn"
 const SCENE_CRUISE := "res://scenes/cruise.tscn"
+const SCENE_TRACK_MAKER := "res://scenes/track_maker.tscn"
 
 const POI_GARAGE := "garage"
 const POI_DRIVE_IN := "drive-in"
@@ -77,6 +78,11 @@ const AQUEDUCT_LENGTH_M := 1670.0
 const RACE_STUNT := "stunt"
 const STUNT_TRACK := "res://assets/tracks/stunt.trk"
 const STUNT_LENGTH_M := 1506.0
+## A drive on a course from the track maker: no rival, nothing riding on it, and nothing it
+## does to the car is kept. See `begin_test_drive()`.
+const RACE_TEST := "test_drive"
+## Where the track maker writes the course it sends on a test drive.
+const TEST_DRIVE_TRACK := "user://track_maker_test.trk"
 const QUARTER_MILE_M := 402.336
 const ROAD_RACE_LENGTH_M := QUARTER_MILE_M * 6.0
 const DRAG_STAKE_LOW := 10
@@ -257,6 +263,12 @@ var selected_opponent_id: int = 0
 ## `RACE_DRAG` (straight quarter mile), `RACE_ROAD` (turning course), or Street Rod 2's three:
 ## `RACE_STREET_DRAG`, `RACE_MULHOLLAND` and `RACE_AQUEDUCT`; or `RACE_STUNT`, the jumps.
 var selected_race_type: String = RACE_DRAG
+## The course a test drive runs on, set by `begin_test_drive()`.
+var test_track_path: String = ""
+## The track maker's work while it is away on a test drive, so it comes back as it was.
+var track_maker_session: Dictionary = {}
+## The race type to go back to after a test drive.
+var _race_type_before_test: String = RACE_DRAG
 ## Which of Mulholland's courses this game has. Street Rod 2 keeps one for a whole game too.
 var mulholland_course: int = 0
 ## Cash side bet for the next race. Zero is a race for nothing.
@@ -1282,7 +1294,7 @@ func load_game(slot: int) -> bool:
 	selected_opponent_id = int(d.get("selected_opponent_id", 0))
 	_load_saved_opponents(d)
 	var race_type := str(d.get("selected_race_type", RACE_DRAG))
-	if race_on_track(race_type):
+	if race_on_track(race_type) and race_type != RACE_TEST:
 		selected_race_type = race_type
 	else:
 		selected_race_type = RACE_DRAG
@@ -3234,7 +3246,28 @@ func race_length_m(race_type: String = "") -> float:
 ## True for a race on a `.trk` course, false for the hardcoded quarter mile.
 func race_on_track(race_type: String = "") -> bool:
 	var kind := selected_race_type if race_type.is_empty() else race_type
-	return kind == RACE_ROAD or kind == RACE_STUNT or race_from_sr2(kind)
+	return kind == RACE_ROAD or kind == RACE_STUNT or kind == RACE_TEST or race_from_sr2(kind)
+
+
+func is_test_drive(race_type: String = "") -> bool:
+	var kind := selected_race_type if race_type.is_empty() else race_type
+	return kind == RACE_TEST
+
+
+## Sets up a test drive on the course at `path`. The race scene runs it with no rival, burns no
+## fuel, wears nothing, and sends the player back to the track maker.
+func begin_test_drive(path: String) -> void:
+	if not is_test_drive():
+		_race_type_before_test = selected_race_type
+	test_track_path = path
+	selected_race_type = RACE_TEST
+
+
+func end_test_drive() -> void:
+	if not is_test_drive():
+		return
+	selected_race_type = _race_type_before_test
+	test_track_path = ""
 
 
 ## True for Street Rod 2's cruise races, which start with no lights.
@@ -3254,6 +3287,8 @@ func race_track_path(race_type: String = "") -> String:
 		return AQUEDUCT_TRACK
 	if kind == RACE_STUNT:
 		return STUNT_TRACK
+	if kind == RACE_TEST:
+		return test_track_path
 	return ""
 
 

@@ -41,6 +41,7 @@ func _open_console() -> void:
 	_nav.clear()
 	var console: Control = _Console.new()
 	console.call("add_command", "saveedit", "edit a saved game: cars, spare parts and money", _open_save_editor)
+	console.call("add_command", "trackmaker", "draw race tracks and test-drive them", _open_track_maker)
 	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
 	_console = console
 	add_child(console)
@@ -62,6 +63,12 @@ func _open_save_editor() -> String:
 	editor.closed.connect(_on_save_editor_closed, CONNECT_DEFERRED)
 	_save_editor = editor
 	add_child(editor)
+	return ""
+
+
+## The console's `trackmaker`.
+func _open_track_maker() -> String:
+	get_tree().change_scene_to_file.call_deferred(GameState.SCENE_TRACK_MAKER)
 	return ""
 
 

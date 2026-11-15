@@ -1,6 +1,6 @@
 # Track file format (`.trk`)
 
-Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race, `res://assets/tracks/street_drag.trk` for the street drag, `res://assets/tracks/mulholland_0.trk` to `mulholland_9.trk` for Mulholland drive, `res://assets/tracks/aqueduct.trk` for the Aqueduct race, and `res://assets/tracks/stunt.trk` for the stunt track.
+Race courses are stored as JSON graphs. The file extension is `.trk`. Street Rod 3 currently loads `res://assets/tracks/track1.trk` for the road race, `res://assets/tracks/street_drag.trk` for the street drag, `res://assets/tracks/mulholland_0.trk` to `mulholland_9.trk` for Mulholland drive, `res://assets/tracks/aqueduct.trk` for the Aqueduct race, and `res://assets/tracks/stunt.trk` for the stunt track. The developers' track maker ([track-maker.md](track-maker.md)) draws and edits these files and test-drives them.
 
 The drag strip in `scenes/race.tscn` is still a separate, hardcoded layout. It does not use this format yet.
 

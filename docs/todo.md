@@ -2,6 +2,10 @@
 
 Ideas that are wanted but not built yet. Bugs go in [bugs.md](bugs.md). Remove an entry when it lands, and record it in `changelog.md`.
 
+## Track maker for players
+
+The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened from the main menu's ~ prompt, with a solo test drive. Wanted later: rivals on made tracks (how a rival drives a course it has never seen is the hard part), a way in for players and somewhere to race what they make, a 3D preview while editing, and drawing a curve that becomes nodes.
+
 ## Make burnouts do something
 
 Holding gas and brake with the car stopped is mostly for show so far: the rear wheels spin, the engine revs, the tires smoke and mark the road, and the steering swings the back of the car round (`_update_burnout()` in `player_race_car.gd`, `burn()` in `skid_marks.gd`). It gives the launch nothing and costs nothing. Decided on 2026-11-03 to start this way so it would not change the race balance.

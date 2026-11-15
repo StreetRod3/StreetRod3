@@ -75,6 +75,9 @@ var _car_bump: _CarBump = _CarBump.new()
 var _fuel_used: bool = false
 var _opponent_finished: bool = false
 var _is_road: bool = false
+## A drive from the track maker: no rival, nothing riding on it, and nothing done to the car is
+## kept. Every ending goes back to the track maker.
+var _test_drive: bool = false
 var _street_start: bool = false
 var _street_wait_s: float = 0.0
 var _start_word: Label
@@ -126,8 +129,12 @@ func _ready() -> void:
 	GameState.current_scene_path = GameState.SCENE_RACE
 	GameState.update_music()
 	_is_road = GameState.race_on_track()
+	_test_drive = GameState.is_test_drive()
 	_street_start = GameState.race_from_sr2()
-	_tire_blowout_m = GameState.tire_blowout_distance_m(GameState.race_length_m())
+	_tire_blowout_m = -1.0 if _test_drive else GameState.tire_blowout_distance_m(GameState.race_length_m())
+	if _test_drive:
+		_bench_rival()
+		($RaceUI/PauseMenu/Panel/Margin/VBox/ExitBtn as Button).text = "Back to track maker"
 	_setup_race_layout()
 	_result.visible = false
 	_build_result_bubble()
@@ -137,7 +144,9 @@ func _ready() -> void:
 	var opp := GameState.selected_opponent()
 	var rival := str(opp.get("name", "Rival"))
 	var car_name := str(opp.get("car_name", ""))
-	if car_name.is_empty():
+	if _test_drive:
+		_hud_opp.text = "Test drive"
+	elif car_name.is_empty():
 		_hud_opp.text = "Opponent: %s" % rival
 	else:
 		_hud_opp.text = "Opponent: %s (%s)" % [rival, car_name]
@@ -155,6 +164,16 @@ func _ready() -> void:
 		player_pivot.set_car_body_color(GameState.car_color)
 	# Defer so the car's mesh scripts have built their meshes first.
 	call_deferred(&"_align_race_cars_to_ground")
+
+
+## Takes the rival out of a test drive: out of sight, far below the course, and still, so it
+## never bumps, finishes, or wrecks.
+func _bench_rival() -> void:
+	_opponent.visible = false
+	_opponent.collision_layer = 0
+	_opponent.collision_mask = 0
+	_opponent.global_position = Vector3(0.0, -1000.0, 0.0)
+	_opponent.process_mode = Node.PROCESS_MODE_DISABLED
 
 
 func is_race_started() -> bool:
@@ -223,6 +242,8 @@ func _align_race_cars_to_ground() -> void:
 	# Wheels sit on height 0. A road course then lifts the whole car by the track's z.
 	var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
 	for car: CharacterBody3D in [_player, _opponent]:
+		if _test_drive and car == _opponent:
+			continue
 		var pivot: Node = car.get_node_or_null("CarPivot")
 		if pivot != null and pivot.has_method(&"align_wheels_to_floor"):
 			pivot.align_wheels_to_floor(floor_mi)
@@ -268,7 +289,10 @@ func _process(delta: float) -> void:
 	_elapsed += delta
 	_hud_time.text = "Time: %.2f s" % _elapsed
 	_show_speed_and_distance()
-	_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
+	if _test_drive:
+		_hud_damage.text = "Damage: %d%%" % roundi(_player.damage_amount() * 100.0)
+	else:
+		_hud_damage.text = "Damage: %d%% · Rival: %d%%" % [roundi(_player.damage_amount() * 100.0), roundi(_opponent.damage_amount() * 100.0)]
 	if _tire_blowout_m >= 0.0 and _distance_to_finish() <= _tire_blowout_m:
 		_blow_tire()
 	if _flat_tire_s >= 0.0:
@@ -300,7 +324,7 @@ func _start_race() -> void:
 	_countdown_phase = 2
 	_phase_time = 0.0
 	_race_started = true
-	if not _fuel_used:
+	if not _fuel_used and not _test_drive:
 		_fuel_used = true
 		GameState.consume_race_fuel()
 	_refresh_traffic_lights()
@@ -404,6 +428,10 @@ func _finish_player() -> void:
 	if _race_over:
 		return
 	_race_over = true
+	if _test_drive:
+		_park_cars()
+		_end_test_drive("Finished in %.2f s." % _elapsed)
+		return
 	GameState.drift_engine_tune_after_race()
 	GameState.wear_parts_after_race()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
@@ -447,6 +475,9 @@ func _play_crunch(speed_change: float) -> void:
 func _show_engine_blown() -> void:
 	_race_over = true
 	_halt_cars()
+	if _test_drive:
+		_end_test_drive("You blew the engine!\nNothing is kept on a test drive.")
+		return
 	_end_race_ui()
 	GameState.wear_parts_from_crashes(_player.damage_amount())
 	GameState.remove_engine()
@@ -490,6 +521,9 @@ func _show_wreck() -> void:
 		return
 	_race_over = true
 	_halt_cars()
+	if _test_drive:
+		_end_test_drive("You wrecked it.\nNothing is kept on a test drive.")
+		return
 	_end_race_ui()
 	# A wrecked car can't be handed over, so pink slips are void.
 	GameState.race_pink_slips = false
@@ -935,6 +969,12 @@ func _show_speed_and_distance() -> void:
 
 
 func _on_pause_exit_pressed() -> void:
+	if _test_drive:
+		_race_over = true
+		_park_cars()
+		_end_race_ui()
+		_leave_test_drive()
+		return
 	_pause_main.visible = false
 	_pause_settings.visible = false
 	_pause_confirm.visible = true
@@ -972,6 +1012,19 @@ func _forfeit_race() -> void:
 	if lost_car:
 		text += "\n" + _took_your_car()
 	_show_bubble(text + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
+
+
+## A test drive's ending: a line, then back to the track maker. The car keeps nothing from it.
+func _end_test_drive(text: String) -> void:
+	_result_shown_ms = Time.get_ticks_msec()
+	_end_race_ui()
+	_show_bubble(text, GameState.SCENE_TRACK_MAKER)
+
+
+func _leave_test_drive() -> void:
+	get_tree().paused = false
+	GameState.current_scene_path = GameState.SCENE_TRACK_MAKER
+	get_tree().change_scene_to_file(GameState.SCENE_TRACK_MAKER)
 
 
 func _leave_race() -> void:
