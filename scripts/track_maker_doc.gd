@@ -13,7 +13,8 @@ const _Self := preload("res://scripts/track_maker_doc.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
-const _OWN_ROOT_KEYS := ["name", "style", "jumps", "nodes", "roads", "scenery"]
+const _OWN_ROOT_KEYS := ["name", "style", "jumps", "loop", "laps", "nodes", "roads", "scenery"]
+const MAX_LAPS := 99
 ## Fields in meters, written with a decimal point even when whole.
 const _METRIC_KEYS := ["x", "y", "z", "width", "left", "right", "to", "w", "d", "h"]
 ## What a new node takes from the one before it.
@@ -26,9 +27,13 @@ var jumps: bool = false
 var nodes: Array[Dictionary] = []
 ## `roads[i]` runs from `nodes[i]` to `nodes[i + 1]`: width, type, surface when set.
 var roads: Array[Dictionary] = []
-## A road from the finish back to the start, as a circuit's file may have. The race does not
-## follow it; it is kept so the file stays as it was. Empty when there is none.
+## The road from the last node back to the start. On a loop it is the lap's last road. Off a
+## loop it is kept only so a file that had one stays as it was; the race doesn't follow it.
+## Empty when there is none.
 var loop_road: Dictionary = {}
+## The course comes back round to the start, which is also the finish, and is raced `laps` times.
+var loop: bool = false
+var laps: int = 1
 var scenery: Array[Dictionary] = []
 ## Root fields the maker does not edit, kept in file order.
 var extra: Dictionary = {}
@@ -47,6 +52,8 @@ func copy() -> _Self:
 	doc.name = name
 	doc.style = style
 	doc.jumps = jumps
+	doc.loop = loop
+	doc.laps = laps
 	doc.nodes = _copy_list(nodes)
 	doc.roads = _copy_list(roads)
 	doc.loop_road = loop_road.duplicate(true)
@@ -94,7 +101,12 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 	doc.name = str(root.get("name", ""))
 	doc.style = str(parsed.style)
 	doc.jumps = bool(parsed.jumps)
-	var path_ids: Array = parsed.path_ids
+	doc.loop = bool(parsed.loop)
+	doc.laps = int(parsed.laps)
+	var path_ids: Array = parsed.path_ids.duplicate()
+	if doc.loop:
+		# A loop's path ends on the start again; the road there is the closing road.
+		path_ids.pop_back()
 	var chain: Array[Dictionary] = []
 	for id: Variant in path_ids:
 		var node: Dictionary = (raw_nodes[int(id)] as Dictionary).duplicate(true)
@@ -117,6 +129,8 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 	var used_roads := links.size()
 	if not closing.is_empty():
 		doc.loop_road = closing.duplicate(true)
+		doc.loop_road.erase("from")
+		doc.loop_road.erase("to")
 		used_roads += 1
 	var sights: Array[Dictionary] = []
 	for item: Variant in root.get("scenery", []):
@@ -157,6 +171,9 @@ func to_text() -> String:
 		root["style"] = style
 	if jumps:
 		root["jumps"] = true
+	if loop:
+		root["loop"] = true
+		root["laps"] = laps
 	var out_nodes: Array[Dictionary] = []
 	for i in nodes.size():
 		out_nodes.append(_node_for_file(i))
@@ -164,7 +181,7 @@ func to_text() -> String:
 	var out_roads: Array[Dictionary] = []
 	for i in roads.size():
 		out_roads.append(_road_for_file(roads[i], node_id(i), node_id(i + 1)))
-	if not loop_road.is_empty() and nodes.size() > 2:
+	if (loop or not loop_road.is_empty()) and nodes.size() > 2:
 		out_roads.append(_road_for_file(loop_road, node_id(nodes.size() - 1), node_id(0)))
 	root["roads"] = out_roads
 	for key: Variant in extra.keys():
@@ -183,7 +200,7 @@ func _node_for_file(i: int) -> Dictionary:
 	var role := ""
 	if i == 0:
 		role = TrackFile.NODE_START
-	elif i == nodes.size() - 1:
+	elif i == nodes.size() - 1 and not loop:
 		role = TrackFile.NODE_FINISH
 	var row := {}
 	for key: Variant in nodes[i].keys():
@@ -294,10 +311,42 @@ func set_node_field(i: int, key: String, value: Variant) -> void:
 		nodes[i][key] = value
 
 
+## Roads on the course: one between each pair of nodes, and on a loop the one back to the start.
+func road_count() -> int:
+	return roads.size() + (1 if loop and nodes.size() > 2 else 0)
+
+
+## The road leaving node `i`: on a loop the last node's is the road back to the start. Empty
+## when there is none. Changing it changes the course.
+func road_from(i: int) -> Dictionary:
+	if i >= 0 and i < roads.size():
+		return roads[i]
+	if loop and i == nodes.size() - 1 and nodes.size() > 2:
+		return loop_road
+	return {}
+
+
+## The node road `i` leads to.
+func road_end(i: int) -> int:
+	return (i + 1) % nodes.size()
+
+
+## Makes the course a loop, or not. A new loop's road back to the start copies the last road;
+## a course that stops being a loop loses that road.
+func set_loop(on: bool) -> void:
+	loop = on
+	if on:
+		if loop_road.is_empty() and not roads.is_empty():
+			loop_road = roads[roads.size() - 1].duplicate(true)
+	else:
+		loop_road = {}
+
+
 ## Sets a field of the road leaving node `i`, leaving it out when it is at its default.
 func set_road_field(i: int, key: String, value: Variant) -> void:
-	if i < 0 or i >= roads.size():
+	if i < 0 or i >= road_count():
 		return
+	var road := road_from(i)
 	var is_default := false
 	match key:
 		"width":
@@ -307,9 +356,9 @@ func set_road_field(i: int, key: String, value: Variant) -> void:
 		"surface":
 			is_default = str(value) == TrackFile.SURFACE_REGULAR
 	if is_default:
-		roads[i].erase(key)
+		road.erase(key)
 	else:
-		roads[i][key] = value
+		road[key] = value
 
 
 ## Adds a node at the finish end. The new road copies the last one, so a narrow or gravel
@@ -331,6 +380,8 @@ func append_node(point: Vector2) -> int:
 ## Splits road `road_index` at `point`. The two halves are the same kind of road, and the new
 ## node's height is between its neighbors'. Returns the new node's index.
 func insert_node(road_index: int, point: Vector2) -> int:
+	if road_index >= roads.size():
+		return _split_loop_road(point)
 	var a := road_index
 	var b := road_index + 1
 	var node := _carried_from(a)
@@ -346,6 +397,22 @@ func insert_node(road_index: int, point: Vector2) -> int:
 	if b == 1:
 		move_node(1, point)
 	return b
+
+
+## A new last node on the road back to the start, between the old last node and the start.
+func _split_loop_road(point: Vector2) -> int:
+	var last := nodes.size() - 1
+	var node := _carried_from(last)
+	node["x"] = cm(point.x)
+	node["y"] = cm(point.y)
+	var span := node_point(last).distance_to(node_point(0))
+	var t := 0.5 if span < 0.001 else clampf(node_point(last).distance_to(point) / span, 0.0, 1.0)
+	var z := lerpf(node_height(last), node_height(0), t)
+	if not is_zero_approx(z):
+		node["z"] = cm(z)
+	nodes.append(node)
+	roads.append(loop_road.duplicate(true))
+	return nodes.size() - 1
 
 
 func _carried_from(i: int) -> Dictionary:
@@ -367,12 +434,14 @@ func remove_node(i: int) -> bool:
 	return true
 
 
-## Straight-line length from the start to the finish. The game rounds the corners, so the
-## race is a little shorter.
+## Straight-line length from the start to the finish, or once round a loop. The game rounds
+## the corners, so the race is a little shorter.
 func path_length() -> float:
 	var total := 0.0
 	for i in range(1, nodes.size()):
 		total += node_point(i - 1).distance_to(node_point(i))
+	if loop and nodes.size() > 2:
+		total += node_point(nodes.size() - 1).distance_to(node_point(0))
 	return total
 
 
@@ -392,6 +461,10 @@ func check() -> Dictionary:
 		var second := node_point(1)
 		if not is_zero_approx(second.x) or second.y <= 0.0:
 			errors.append("The first road must run straight ahead (+Y) from the start. Drag node 2 to fix it.")
+	if loop and nodes.size() > 2:
+		var coming_in := node_point(0) - node_point(nodes.size() - 1)
+		if coming_in.length() > 0.01 and absf(coming_in.angle_to(Vector2(0.0, 1.0))) > deg_to_rad(20.0):
+			warnings.append("The road back to the start comes in at an angle, so the road kinks at the line. Bring the last node round behind the start (-Y) to make it straight.")
 	if not scenery.is_empty() and style == TrackFile.STYLE_CIRCUIT:
 		warnings.append("A circuit track doesn't show scenery. Pick another style to see it.")
 	return {"errors": errors, "warnings": warnings}

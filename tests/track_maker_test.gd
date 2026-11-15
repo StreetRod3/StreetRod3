@@ -13,6 +13,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_round_trips()
 	_editing()
+	_loops()
 	_test_drive_race_type()
 	print("track_maker_test: ok")
 	quit()
@@ -83,6 +84,42 @@ func _editing() -> void:
 	# Points from the map are 32-bit; the file gets them to the centimeter.
 	doc.move_node(1, Vector2(0.0, 220.63))
 	assert(doc.to_text().contains("\"y\": 220.63}") or doc.to_text().contains("\"y\": 220.63,"), doc.to_text())
+
+
+## A loop goes round to the start, which is the finish, and comes back from its file the same.
+func _loops() -> void:
+	var doc := _Doc.blank()
+	for point: Vector2 in [Vector2(-100, 260), Vector2(-160, 100), Vector2(-90, -70), Vector2(0, -60)]:
+		doc.append_node(point)
+	doc.set_loop(true)
+	doc.laps = 3
+	assert(doc.road_count() == doc.nodes.size())
+	var parsed := TrackFile.parse_text(doc.to_text())
+	assert(parsed.errors.is_empty(), str(parsed.errors))
+	assert(parsed.loop and parsed.laps == 3)
+	assert(parsed.path_ids.size() == doc.nodes.size() + 1 and parsed.path_ids[0] == parsed.path_ids[-1])
+	assert(parsed.finish_ids.size() == 1 and parsed.finish_ids[0] == doc.node_id(doc.nodes.size() - 1), "no finish type on a loop")
+	assert(doc.check().warnings.is_empty(), str(doc.check().warnings))
+	var again: _Doc = _Doc.from_text(doc.to_text()).doc
+	assert(again.loop and again.laps == 3 and again.nodes.size() == doc.nodes.size())
+	assert(again.to_text() == doc.to_text())
+	# The last node's road is the one back to the start.
+	doc.set_road_field(doc.nodes.size() - 1, "type", TrackFile.ROAD_GRAVEL)
+	assert(str(doc.loop_road.get("type", "")) == TrackFile.ROAD_GRAVEL)
+	# Splitting it adds a last node between the old last and the start.
+	var count := doc.nodes.size()
+	assert(doc.insert_node(doc.road_count() - 1, Vector2(0, -30)) == count)
+	assert(doc.node_point(count) == Vector2(0, -30) and doc.road_count() == count + 1)
+	# Coming into the start at an angle is a warning.
+	doc.move_node(count, Vector2(40, -30))
+	assert(not doc.check().warnings.is_empty())
+	# A loop needs three nodes.
+	var short := _Doc.blank()
+	short.set_loop(true)
+	assert(not short.check().errors.is_empty())
+	# Unticking drops the road back.
+	doc.set_loop(false)
+	assert(doc.loop_road.is_empty() and TrackFile.parse_text(doc.to_text()).errors.is_empty())
 
 
 func _test_drive_race_type() -> void:

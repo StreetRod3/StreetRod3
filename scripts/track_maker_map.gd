@@ -240,9 +240,9 @@ func _scenery_at(at: Vector2) -> int:
 func _road_at(at: Vector2) -> int:
 	var best := -1
 	var best_d := INF
-	for i in doc.roads.size():
+	for i in doc.road_count():
 		var a := to_screen(doc.node_point(i))
-		var b := to_screen(doc.node_point(i + 1))
+		var b := to_screen(doc.node_point(doc.road_end(i)))
 		var d := at.distance_to(Geometry2D.get_closest_point_to_segment(at, a, b))
 		var reach := maxf(_ROAD_PICK_PX, _road_width(i) * view_scale * 0.5)
 		if d <= reach and d < best_d:
@@ -253,7 +253,7 @@ func _road_at(at: Vector2) -> int:
 
 ## The point on road `i`'s middle nearest `point`.
 func _on_road(i: int, point: Vector2) -> Vector2:
-	return Geometry2D.get_closest_point_to_segment(point, doc.node_point(i), doc.node_point(i + 1))
+	return Geometry2D.get_closest_point_to_segment(point, doc.node_point(i), doc.node_point(doc.road_end(i)))
 
 
 func _scenery_point(i: int) -> Vector2:
@@ -261,7 +261,7 @@ func _scenery_point(i: int) -> Vector2:
 
 
 func _road_width(i: int) -> float:
-	return float(doc.roads[i].get("width", TrackFile.DEFAULT_WIDTH))
+	return float(doc.road_from(i).get("width", TrackFile.DEFAULT_WIDTH))
 
 
 # --- Drawing -------------------------------------------------------------------------------
@@ -317,20 +317,21 @@ static func road_color(road_type: String) -> Color:
 
 
 func _draw_roads() -> void:
-	if not doc.loop_road.is_empty() and doc.nodes.size() > 2:
+	# A road back to the start that the race doesn't follow, kept from the file.
+	if not doc.loop and not doc.loop_road.is_empty() and doc.nodes.size() > 2:
 		draw_dashed_line(to_screen(doc.node_point(doc.nodes.size() - 1)), to_screen(doc.node_point(0)), Color(_CREAM, 0.3), 1.0, 8.0)
-	for i in doc.roads.size():
+	for i in doc.road_count():
 		var a := to_screen(doc.node_point(i))
-		var b := to_screen(doc.node_point(i + 1))
+		var b := to_screen(doc.node_point(doc.road_end(i)))
 		var px := maxf(_road_width(i) * view_scale, 3.0)
-		var color := road_color(str(doc.roads[i].get("type", TrackFile.ROAD_REGULAR)))
+		var color := road_color(str(doc.road_from(i).get("type", TrackFile.ROAD_REGULAR)))
 		if i == selected_node:
 			draw_line(a, b, _SELECTED, px + 4.0)
 		draw_line(a, b, color, px)
 		draw_circle(a, px * 0.5, color)
 		draw_circle(b, px * 0.5, color)
-	for i in doc.roads.size():
-		draw_line(to_screen(doc.node_point(i)), to_screen(doc.node_point(i + 1)), Color(_CREAM, 0.35), 1.0)
+	for i in doc.road_count():
+		draw_line(to_screen(doc.node_point(i)), to_screen(doc.node_point(doc.road_end(i))), Color(_CREAM, 0.35), 1.0)
 
 
 static func scenery_color(kind: String) -> Color:
@@ -369,7 +370,7 @@ func _draw_nodes() -> void:
 	var font := get_theme_default_font()
 	var last := doc.nodes.size() - 1
 	# Nodes closer together on screen than this are drawn as small dots, so the road shows.
-	var crowded := last > 0 and doc.path_length() / float(last) * view_scale < 14.0
+	var crowded := last > 0 and doc.path_length() / float(doc.road_count()) * view_scale < 14.0
 	for i in doc.nodes.size():
 		var at := to_screen(doc.node_point(i))
 		if not Rect2(Vector2.ZERO, size).grow(20.0).has_point(at):
@@ -377,13 +378,16 @@ func _draw_nodes() -> void:
 		var color := _CREAM
 		if i == 0:
 			color = _START
-		elif i == last:
+		elif i == last and not doc.loop:
 			color = _FINISH
 		var r := 1.5 if crowded and i != 0 and i != last and i != selected_node else 5.0
 		if bool(doc.nodes[i].get("sharp", false)):
 			draw_rect(Rect2(at - Vector2(r, r), Vector2(r, r) * 2.0), color)
 		else:
 			draw_circle(at, r, color)
+		if i == 0 and doc.loop:
+			# The start is the finish too.
+			draw_arc(at, 7.0, 0.0, TAU, 20, _FINISH, 2.0)
 		if i == selected_node:
 			draw_arc(at, 9.0, 0.0, TAU, 24, _SELECTED, 2.0)
 		var z := doc.node_height(i)

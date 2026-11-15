@@ -34,6 +34,7 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
 
+## Each node's distance from the start; on a loop, then the start again at the end of the lap.
 func _distances() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	var total := 0.0
@@ -41,6 +42,8 @@ func _distances() -> PackedFloat32Array:
 		if i > 0:
 			total += doc.node_point(i - 1).distance_to(doc.node_point(i))
 		out.append(total)
+	if doc.loop and doc.nodes.size() > 2:
+		out.append(total + doc.node_point(doc.nodes.size() - 1).distance_to(doc.node_point(0)))
 	return out
 
 
@@ -130,6 +133,11 @@ func _draw() -> void:
 	var line := PackedVector2Array()
 	for i in doc.nodes.size():
 		line.append(_point(dists[i], doc.node_height(i), length))
+	if dists.size() > doc.nodes.size():
+		# Round to the start again.
+		var back := _point(dists[dists.size() - 1], doc.node_height(0), length)
+		draw_polyline(PackedVector2Array([line[line.size() - 1], back]), Color(_CREAM, 0.7), 2.0)
+		draw_arc(back, 4.0, 0.0, TAU, 16, Color(0.3, 0.9, 0.35, 1), 1.5)
 	draw_polyline(line, Color(_CREAM, 0.7), 2.0)
 	var last := doc.nodes.size() - 1
 	var crowded := (size.x - _PAD_X * 2.0) / float(last) < 10.0
@@ -139,7 +147,7 @@ func _draw() -> void:
 		var color := _CREAM
 		if i == 0:
 			color = Color(0.3, 0.9, 0.35, 1)
-		elif i == doc.nodes.size() - 1:
+		elif i == doc.nodes.size() - 1 and not doc.loop:
 			color = Color(0.95, 0.25, 0.2, 1)
 		if bool(doc.nodes[i].get("sharp", false)):
 			draw_rect(Rect2(at - Vector2(r, r), Vector2(r, r) * 2.0), color)

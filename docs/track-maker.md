@@ -12,6 +12,12 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 | Height strip | Each node's height along the course, start on the left. Drag a node up or down to set its height, in 0.1 m steps. The game rounds the grade through nodes that aren't sharp, so the real road is smoother than the strip's straight lines. |
 | Side panel | The file, the track's name, style and jumps, the tool, the selected node and the road leaving it, the scenery kind, and what the game's loader says about the course. |
 
+## Loops and laps
+
+Tick "Loop (the finish is the start)" for a track you drive laps on, and set the laps below it. The road from the last node back to the start becomes part of the course: it is drawn as a road, clicking it splits it, and selecting the last node edits it as "Road to the next node". The start gets a red ring as the finish line too. The length shown is one lap, and the height strip ends on the start again.
+
+Bring the last node round behind the start (-Y) so the road comes into the line straight; the maker warns when it comes in at an angle, because the road would kink there. Unticking Loop takes the road back to the start away again.
+
 ## Mouse and keys
 
 | Input | Road tool | Scenery tool |
@@ -35,7 +41,7 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 
 ## Rules it keeps
 
-- The course is one chain of nodes from the start to the finish. The first node is the start and the last is the finish; their `type` is written on save.
+- The course is one chain of nodes from the start to the finish. The first node is the start and the last is the finish, or on a loop the start is both; their `type` is written on save.
 - The start stays at 0, 0 and the second node stays on the +Y axis, because the race scene puts the cars at the origin facing +Y. The start can't be dragged or deleted, and node 2 only slides ahead.
 - A new node at the finish end copies the last road's width, type and surface, and the last node's height and mountain sides. A node that splits a road copies that road and takes a height between its neighbors.
 - Fields left at their defaults are left out of the file: height 0, not sharp, width 8, regular road, regular surface.
@@ -60,7 +66,7 @@ F5 or "Test drive" checks the course, writes it to `user://track_maker_test.trk`
 - There is no rival. It is moved out of the way and switched off.
 - The lights count down as in a race.
 - Nothing is kept: no fuel is burned, nothing wears, a blown engine stays in, a wreck doesn't total the car, and no tires blow.
-- Crossing the finish shows the time. A wreck or a blown engine ends the drive. Either way a click goes back to the maker.
+- Crossing the finish shows the time; on a loop of more than one lap it shows the lap ("Lap 2 of 3") while driving and the best lap at the end. A wreck or a blown engine ends the drive. Either way a click goes back to the maker.
 - The pause menu's "Back to track maker" leaves straight away.
 - The maker comes back as it was, with its undo history, view and selection.
 
@@ -77,4 +83,4 @@ A course with errors can't be test-driven; the panel lists what to fix.
 | `GameState.begin_test_drive()`, `end_test_drive()`, `RACE_TEST` | The test drive race type |
 | `race.gd`, `_test_drive` | What a test drive does differently in the race |
 
-Not built yet: rivals on made tracks, a menu entry for players, a 3D preview while editing, and drawing a curve that becomes nodes. See [todo.md](todo.md).
+Not built yet: rivals on made tracks (loops included), a menu entry for players, a 3D preview while editing, and drawing a curve that becomes nodes. See [todo.md](todo.md).

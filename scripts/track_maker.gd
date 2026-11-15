@@ -59,6 +59,9 @@ var _status_label: Label
 var _name_edit: LineEdit
 var _style_option: OptionButton
 var _jumps_check: CheckBox
+var _loop_check: CheckBox
+var _laps_spin: SpinBox
+var _laps_row: HBoxContainer
 var _length_label: Label
 var _road_tool: Button
 var _scenery_tool: Button
@@ -222,6 +225,19 @@ func _build_track_section(box: VBoxContainer) -> void:
 	_jumps_check.text = "Jumps (circuit only)"
 	_jumps_check.toggled.connect(_on_jumps_toggled)
 	box.add_child(_jumps_check)
+	_loop_check = CheckBox.new()
+	_loop_check.text = "Loop (the finish is the start)"
+	_loop_check.toggled.connect(_on_loop_toggled)
+	box.add_child(_loop_check)
+	_laps_spin = SpinBox.new()
+	_laps_spin.min_value = 1
+	_laps_spin.max_value = _Doc.MAX_LAPS
+	_laps_spin.step = 1
+	_laps_spin.rounded = true
+	_laps_spin.select_all_on_focus = true
+	_laps_spin.value_changed.connect(_on_laps_changed)
+	_laps_row = _row("Laps", _laps_spin)
+	box.add_child(_laps_row)
 	_length_label = _label("", 13, _DIM)
 	box.add_child(_length_label)
 
@@ -431,7 +447,8 @@ func _run_check() -> void:
 	_errors_label.visible = not errors.is_empty()
 	_warnings_label.text = "\n".join(warnings)
 	_warnings_label.visible = not warnings.is_empty()
-	_length_label.text = "%d nodes, about %s long (the game rounds the corners)." % [doc.nodes.size(), _meters(doc.path_length())]
+	var what := "a lap" if doc.loop else "long"
+	_length_label.text = "%d nodes, about %s %s (the game rounds the corners)." % [doc.nodes.size(), _meters(doc.path_length()), what]
 
 
 static func _meters(value: float) -> String:
@@ -449,19 +466,22 @@ func _refresh_track_fields() -> void:
 	_style_option.select(maxi(_STYLES.find(doc.style), 0))
 	_jumps_check.set_pressed_no_signal(doc.jumps)
 	_jumps_check.disabled = doc.style != TrackFile.STYLE_CIRCUIT and not doc.jumps
+	_loop_check.set_pressed_no_signal(doc.loop)
+	_laps_spin.set_value_no_signal(doc.laps)
+	_laps_row.visible = doc.loop
 
 
 func _refresh_selection_fields() -> void:
 	var i := _map.selected_node
 	var on_node := i >= 0 and i < doc.nodes.size()
 	_node_box.visible = on_node
-	_road_box.visible = on_node and i < doc.roads.size()
+	_road_box.visible = on_node and i < doc.road_count()
 	_scenery_box.visible = _map.tool == _MapView.Tool.SCENERY or _map.selected_scenery >= 0
 	if on_node:
 		var where := ""
 		if i == 0:
-			where = " (start)"
-		elif i == doc.nodes.size() - 1:
+			where = " (start and finish)" if doc.loop else " (start)"
+		elif i == doc.nodes.size() - 1 and not doc.loop:
 			where = " (finish)"
 		_node_heading.text = "Node %d of %d%s" % [i + 1, doc.nodes.size(), where]
 		var point := doc.node_point(i)
@@ -476,8 +496,8 @@ func _refresh_selection_fields() -> void:
 		_left_spin.set_value_no_signal(float(doc.nodes[i].get("left", 0.0)))
 		_right_spin.set_value_no_signal(float(doc.nodes[i].get("right", 0.0)))
 		_rail_check.set_pressed_no_signal(bool(doc.nodes[i].get("rail", false)))
-	if on_node and i < doc.roads.size():
-		var road := doc.roads[i]
+	if on_node and i < doc.road_count():
+		var road := doc.road_from(i)
 		_width_spin.set_value_no_signal(float(road.get("width", TrackFile.DEFAULT_WIDTH)))
 		_type_option.select(maxi(_ROAD_TYPES.find(TrackFile.normalize_road_type(str(road.get("type", TrackFile.ROAD_REGULAR)))), 0))
 		_surface_option.select(maxi(_SURFACES.find(str(road.get("surface", TrackFile.SURFACE_REGULAR))), 0))
@@ -537,6 +557,19 @@ func _on_jumps_toggled(on: bool) -> void:
 	_after_edit()
 
 
+func _on_loop_toggled(on: bool) -> void:
+	_begin_edit()
+	doc.set_loop(on)
+	_refresh_track_fields()
+	_after_edit()
+
+
+func _on_laps_changed(value: float) -> void:
+	_begin_edit("laps")
+	doc.laps = clampi(roundi(value), 1, _Doc.MAX_LAPS)
+	_after_edit()
+
+
 func _edit_node(value: float, key: String) -> void:
 	var i := _map.selected_node
 	if i < 0 or i >= doc.nodes.size():
@@ -563,7 +596,7 @@ func _edit_node_flag(on: bool, key: String) -> void:
 
 func _edit_road_width(value: float) -> void:
 	var i := _map.selected_node
-	if i < 0 or i >= doc.roads.size():
+	if i < 0 or i >= doc.road_count():
 		return
 	_begin_edit("road:%d:width" % i)
 	doc.set_road_field(i, "width", _Doc.cm(value))
@@ -572,7 +605,7 @@ func _edit_road_width(value: float) -> void:
 
 func _edit_road_choice(index: int, key: String, choices: Array) -> void:
 	var i := _map.selected_node
-	if i < 0 or i >= doc.roads.size():
+	if i < 0 or i >= doc.road_count():
 		return
 	_begin_edit()
 	doc.set_road_field(i, key, str(choices[index]))

@@ -103,6 +103,10 @@ var _street: bool = false
 var _style: String = TrackFile.STYLE_CIRCUIT
 ## Cars leave the road where it drops away faster than they fall. See `air_time.gd`.
 var _jumps: bool = false
+## A course that comes back round to its start, raced `_laps` times. The samples go round once and
+## end on the start again; there is no pavement behind the start or past the finish.
+var _loop: bool = false
+var _laps: int = 1
 ## Where along the path each lip is: a sharp node where the road drops away more steeply than it came up.
 var _lips: PackedFloat32Array = PackedFloat32Array()
 var _scenery: Array[Dictionary] = []
@@ -145,13 +149,32 @@ func get_road_mesh_instance() -> MeshInstance3D:
 	return _road_mi
 
 
+## How far to the finish line from `world`. On a loop, to the end of the lap: the race keeps count
+## of the laps itself (see `lap_s()`).
 func remaining_distance(world: Vector3) -> float:
 	return maxf(0.0, _race_length - closest_sample(world)["s"])
+
+
+func is_loop() -> bool:
+	return _loop
+
+
+## Times round a loop. 1 on any other course.
+func get_laps() -> int:
+	return _laps if _loop else 1
+
+
+## Where `world` is along one lap, from 0 at the start to the lap's length. It jumps back to 0 at
+## the line, so the race unwraps it to count laps.
+func lap_s(world: Vector3) -> float:
+	return float(closest_sample(world)["s"])
 
 
 func sample_at(s: float) -> Dictionary:
 	if _pts.is_empty():
 		return _empty_sample()
+	if _loop and _race_length > 0.0 and (s < 0.0 or s > _race_length):
+		s = fposmod(s, _race_length)
 	s = clampf(s, 0.0, _length)
 	var i := _index_at_distance(s)
 	var j := mini(i + 1, _pts.size() - 1)
@@ -451,7 +474,7 @@ func build_road_course() -> void:
 	if _pts.size() < 2:
 		return
 	var back_dir := -Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0]))
-	_run_in_m = _clear_run(_pts[0], back_dir, _STREET_RUN_IN_M, 0.0, -1.0, _half_ws[0])
+	_run_in_m = 0.0 if _loop else _clear_run(_pts[0], back_dir, _STREET_RUN_IN_M, 0.0, -1.0, _half_ws[0])
 	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
 		var reaches := _side_reaches()
 		var back_reach := _reach_at(_pts[0] + back_dir * _run_in_m, _yaws[0], -_run_in_m)
@@ -546,6 +569,8 @@ func _build_path() -> void:
 		return
 	_style = data.style
 	_jumps = bool(data.jumps)
+	_loop = bool(data.loop)
+	_laps = int(data.laps)
 	_street = _style != TrackFile.STYLE_CIRCUIT
 	_scenery.assign(data.scenery)
 	var path_ids: Array = data.path_ids
@@ -598,7 +623,8 @@ func _build_path() -> void:
 	_append_to(pts[n - 1])
 	_smooth_path_heights(pts, sharp)
 	_race_length = _length
-	_append_runoff()
+	if not _loop:
+		_append_runoff()
 	_fill_sides(data, path_ids)
 	_build_bins()
 
@@ -755,10 +781,18 @@ func _clear_run(from: Vector3, dir: Vector3, length: float, origin_s: float, dir
 			var d2 := dx * dx + dz * dz
 			if d2 > touch * touch:
 				continue
-			if absf(_dists[q] - along) > 1.2 * sqrt(d2) + 10.0:
+			if _along_gap(_dists[q], along) > 1.2 * sqrt(d2) + 10.0:
 				return maxf(t - 5.0, 0.0)
 		t += BAKE_STEP
 	return length
+
+
+## How far apart two places are along the course; on a loop, the shorter way round.
+func _along_gap(a: float, b: float) -> float:
+	var gap := absf(a - b)
+	if _loop and _race_length > 0.0:
+		gap = minf(gap, absf(_race_length - gap))
+	return gap
 
 
 ## How far the ground may reach out on the left (x) and right (y) of each sample.
@@ -783,6 +817,7 @@ func _side_reaches() -> Array[PackedFloat32Array]:
 ## How far the ground beside the road at `center`, `s` along the course, may reach out on the left
 ## (x) and right (y): to just past halfway to the nearest other part of the course straight out
 ## that side, or `_SIDE_REACH_MAX`. Every fourth sample is enough to find the other parts.
+## Heights make the road a little longer than the ground it crosses, hence the 2% and 2 m.
 func _reach_at(center: Vector3, yaw: float, s: float) -> Vector2:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw))
 	var left := _SIDE_REACH_MAX
@@ -794,7 +829,10 @@ func _reach_at(center: Vector3, yaw: float, s: float) -> Vector2:
 		var d2 := dx * dx + dz * dz
 		if d2 > far_sq:
 			continue
-		if absf(_dists[q] - s) <= 1.2 * sqrt(d2) + 10.0:
+		# Only road that runs nearly straight from here is this stretch. Anything farther round,
+		# even the far side of a bend, stops the ground: on the inside of a bend that is at the
+		# bend's middle, where the ground would otherwise start to fold over itself.
+		if _along_gap(_dists[q], s) <= 1.02 * sqrt(d2) + 2.0:
 			continue
 		# Where the line between the two is crossed, straight out this side.
 		var out := dx * across.x + dz * across.z

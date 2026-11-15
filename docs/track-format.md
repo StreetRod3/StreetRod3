@@ -36,6 +36,8 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
 | `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. `mountain` is Mulholland: no grass grid, hillsides and drops from each node's `left` and `right`, a guard rail, and truss bridges. `aqueduct` is a concrete channel with sloped banks, where the road's width takes in the floor and both banks. |
 | `jumps` | no | `false` | Cars can leave the road. Where it drops away faster than a car can fall, at a lip or over a crest taken fast, the car flies until it lands. Only on a `circuit` track for now. It also keeps the grass flat under the road, builds the ramps' sides down to it, paints yellow and black bands up to each lip, and leaves out the curbs. Off on every other track, so their rises and dips drive as they did. |
+| `loop` | no | `false` | The course comes back round to its start, which is also the finish line. The last node needs a road back to the start, and no node is a `finish`. The road runs round once with no pavement behind the start or past the finish, and the race counts laps by how far the car has gone round, so backing over the line doesn't count. Bring the last road into the start from straight behind (-Y), or the road kinks at the line. Only test drives use loops so far; a rival can't race one yet. |
+| `laps` | no | `1` | Times round a `loop`. The race shows the lap and, at the end of a test drive, the best lap. |
 | `scenery` | no | none | What stands on and beside a `street`, `mountain`, or `aqueduct` track. See [Scenery](#scenery). |
 | `left_out` | no | none | Things baked from Street Rod 2 but not put on the track, with where they were and why. The game does not read this. No track has one at the moment. |
 
@@ -117,7 +119,7 @@ Surface is stored on path samples for later physics and visuals. It does not cha
 
 The loader walks directed roads from the start node, taking the first unused outgoing road at each node, and stops when it reaches a finish node (after at least one hop).
 
-A closing road from finish back to start is allowed (a circuit) and is **not** followed for a single-lap point-to-point race.
+A closing road from finish back to start is allowed and is **not** followed, unless the track is a `loop`. On a loop the walk goes round to the start again and stops there, and fails unless it gets back to the start through at least two other nodes.
 
 If the walk cannot leave start, loading fails.
 

@@ -78,6 +78,14 @@ var _is_road: bool = false
 ## A drive from the track maker: no rival, nothing riding on it, and nothing done to the car is
 ## kept. Every ending goes back to the track maker.
 var _test_drive: bool = false
+## On a loop: the laps to drive, how far round the player has gone in all (backing up takes it
+## off again), the last place along the lap it was read, and each finished lap's time.
+var _laps: int = 1
+var _lap_length: float = 0.0
+var _progress: float = 0.0
+var _last_lap_s: float = 0.0
+var _lap_started_at: float = 0.0
+var _lap_times: PackedFloat32Array = PackedFloat32Array()
 var _street_start: bool = false
 var _street_wait_s: float = 0.0
 var _start_word: Label
@@ -196,6 +204,9 @@ func _setup_race_layout() -> void:
 		_set_night()
 	if _track.has_method(&"finish_basis"):
 		_finish.global_transform = _track.finish_basis()
+	if _track.has_method(&"is_loop") and _track.is_loop():
+		_laps = _track.get_laps()
+		_lap_length = _track.get_length()
 	var col := _finish.get_node_or_null("CollisionShape3D") as CollisionShape3D
 	if col != null:
 		var box := BoxShape3D.new()
@@ -365,7 +376,7 @@ func _refresh_traffic_lights() -> void:
 
 
 func _on_finish_area_body_entered(body: Node3D) -> void:
-	if _race_over or not _race_started:
+	if _race_over or not _race_started or _on_loop():
 		return
 	if body == _player:
 		if _flat_tire_s < 0.0:
@@ -375,6 +386,8 @@ func _on_finish_area_body_entered(body: Node3D) -> void:
 
 
 func _distance_to_finish() -> float:
+	if _on_loop():
+		return maxf(0.0, _lap_length * float(_laps) - _progress)
 	if _is_road and _track.has_method(&"remaining_distance"):
 		return _track.remaining_distance(_player.global_position)
 	return maxf(0.0, QUARTER_MILE_M - _player.global_position.z)
@@ -393,6 +406,11 @@ func _maybe_finish_by_progress() -> void:
 		return
 	if _track == null:
 		return
+	if _on_loop():
+		_count_laps()
+		if _distance_to_finish() <= 1.0:
+			_finish_player()
+		return
 	var p_rem: float = _track.remaining_distance(_player.global_position)
 	var o_rem := INF
 	if _opponent.has_method(&"get_path_s"):
@@ -401,6 +419,35 @@ func _maybe_finish_by_progress() -> void:
 		_opponent_finished = true
 	if p_rem <= 1.0:
 		_finish_player()
+
+
+func _on_loop() -> bool:
+	return _is_road and _lap_length > 0.0
+
+
+## Adds how far the player went round since the last frame. Across the line, the place along the
+## lap jumps between its end and 0, which is a short step forward or back, not a lap.
+func _count_laps() -> void:
+	var s: float = _track.lap_s(_player.global_position)
+	var step := s - _last_lap_s
+	if step < -_lap_length * 0.5:
+		step += _lap_length
+	elif step > _lap_length * 0.5:
+		step -= _lap_length
+	_last_lap_s = s
+	var laps_before := floori(_progress / _lap_length)
+	_progress += step
+	var laps_now := floori(_progress / _lap_length)
+	if laps_now > laps_before and laps_now > _lap_times.size():
+		_lap_times.append(_elapsed - _lap_started_at)
+		_lap_started_at = _elapsed
+
+
+## "Lap 2 of 3", or "" off a loop or on a one-lap loop.
+func _lap_text() -> String:
+	if not _on_loop() or _laps <= 1:
+		return ""
+	return "Lap %d of %d" % [clampi(floori(_progress / _lap_length) + 1, 1, _laps), _laps]
 
 
 func _update_rpm_meter() -> void:
@@ -430,7 +477,13 @@ func _finish_player() -> void:
 	_race_over = true
 	if _test_drive:
 		_park_cars()
-		_end_test_drive("Finished in %.2f s." % _elapsed)
+		var text := "Finished in %.2f s." % _elapsed
+		if _lap_times.size() > 1:
+			var best := _lap_times[0]
+			for lap: float in _lap_times:
+				best = minf(best, lap)
+			text = "%d laps in %.2f s.\nBest lap %.2f s." % [_lap_times.size(), _elapsed, best]
+		_end_test_drive(text)
 		return
 	GameState.drift_engine_tune_after_race()
 	GameState.wear_parts_after_race()
@@ -965,6 +1018,9 @@ func _on_pause_controls_pressed() -> void:
 
 func _show_speed_and_distance() -> void:
 	_hud_dist.text = "To finish: %s" % GameState.race_distance_text(_distance_to_finish())
+	var lap := _lap_text()
+	if not lap.is_empty():
+		_hud_dist.text = "%s · %s" % [lap, _hud_dist.text]
 	_hud_speed.text = "Speed: %s" % GameState.speed_text(absf(_player.get_forward_speed()) * 3.6)
 
 
