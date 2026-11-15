@@ -28,6 +28,7 @@ const _CarFile := preload("res://scripts/car_file.gd")
 const _RearMirror := preload("res://scripts/rear_mirror.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _BoxBatch := preload("res://scripts/box_batch.gd")
+const _Console := preload("res://scripts/console.gd")
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
 ## the ones out of view are still skipped.
 const _BATCH_CELL := 40.0
@@ -157,6 +158,9 @@ var _minimap: Control
 var _touch: Node
 var _ui_layer: CanvasLayer
 var _gear_popup: Control
+## The ~ prompt, while it is up. The city is paused under it.
+var _console: Control
+var _console_layer: CanvasLayer
 ## While true, `_add_box()` and the like add to `_batches` instead of making nodes.
 var _batching := false
 ## Merged scenery, keyed by cell x, cell z, and 1 for the pieces that cast shadows.
@@ -215,6 +219,16 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if _console != null:
+		return
+	if not _wrecked and not _finished and event is InputEventKey:
+		var toggle := event as InputEventKey
+		if toggle.pressed and not toggle.echo and _Console.is_toggle_key(toggle):
+			var console_vp := get_viewport()
+			if console_vp != null:
+				console_vp.set_input_as_handled()
+			_open_console()
+			return
 	if _wrecked:
 		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
 			var wreck_vp := get_viewport()
@@ -239,6 +253,51 @@ func _unhandled_input(event: InputEvent) -> void:
 	if skip_vp != null:
 		skip_vp.set_input_as_handled()
 	_finish()
+
+
+func _open_console() -> void:
+	if _console_layer == null:
+		_console_layer = CanvasLayer.new()
+		_console_layer.name = "ConsoleLayer"
+		_console_layer.layer = 20
+		_console_layer.process_mode = Node.PROCESS_MODE_ALWAYS
+		add_child(_console_layer)
+	var console: Control = _Console.new()
+	console.call("add_command", "showme", "fix the car: no damage, and every part in 100% condition", _on_showme)
+	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
+	if _roam_car != null:
+		console.call("add_command", "iddqd", "your car can't be hurt: no damage or blown engine (again to turn off)", _on_iddqd)
+	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
+	_console = console
+	_console_layer.add_child(console)
+	get_tree().paused = true
+
+
+func _on_console_closed() -> void:
+	if _console != null:
+		_console.queue_free()
+		_console = null
+	get_tree().paused = false
+
+
+## The console's `showme`. Lines stay on the prompt, the city waiting under it.
+func _on_showme() -> String:
+	if _roam_car != null:
+		_roam_car.call(&"repair")
+	var line := GameState.restore_car_parts()
+	if line.begins_with("Every part"):
+		return "Your car is fixed, and every part on it is in 100% condition."
+	return line
+
+
+func _on_tiger() -> String:
+	return GameState.fill_tank_free()
+
+
+func _on_iddqd() -> String:
+	var on := not bool(_roam_car.get(&"invincible"))
+	_roam_car.set(&"invincible", on)
+	return "Your car can't be hurt." if on else "Your car can be hurt again."
 
 
 func _process(delta: float) -> void:

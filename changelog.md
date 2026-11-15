@@ -394,3 +394,5 @@ Driving through the start of a loop on a test drive no longer crashes the car in
 ## 2026-11-15
 
 The ~ prompt also works during a race, and the race is paused while it is open. `showme` fixes the car: race damage and smoke are gone, a flat tire is whole again, and every part on the car is in 100% condition, so worn tires no longer blow later in the race. `tiger` fills the gas tank with premium gas. `iddqd` makes your car invincible, so hits do no damage and neither the engine nor a tire can blow; typing it again turns that off. `sleepytime` puts the rival to sleep at the wheel, and the car coasts on straight until it stops, so you can drive past and win. `wreckit` totals the rival's car, which wins the race as a wreck does. On a test drive there is no rival, so those two say so. Going over the edge of a mountain road still ends the race, even with `iddqd`.
+
+The ~ prompt works in the city too, while driving round it or on the drive between two places, and the city is paused while it is open. `showme` and `tiger` work there as they do in a race, and `iddqd` works while you are driving round. The city has no rival, so `sleepytime` and `wreckit` are race only.

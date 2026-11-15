@@ -118,5 +118,38 @@ func _run() -> void:
 	assert(out.text == "There is no rival on a test drive.")
 	await _close_console(race)
 
+	paused = false
+
+	# Driving round the city: showme, tiger and iddqd, with no rival commands.
+	state.set("roam_from_poi", state.get("POI_GARAGE"))
+	var packed := load(str(state.get("SCENE_CRUISE"))) as PackedScene
+	assert(change_scene_to_packed(packed) == OK)
+	await process_frame
+	await process_frame
+	var city := current_scene
+	var car := city.get("_roam_car") as Node
+	assert(car != null)
+	city.call("_unhandled_input", _backtick())
+	console = city.get("_console") as Control
+	assert(console != null)
+	assert(paused)
+	out = console.get("_output") as Label
+	car.call("take_hit", 8.0)
+	console.call("_on_submitted", "showme")
+	assert(out.text.begins_with("Your car is fixed"))
+	assert(is_zero_approx(float(car.call("damage_amount"))))
+	state.call("set_fuel", 1.0)
+	console.call("_on_submitted", "tiger")
+	assert(is_equal_approx(float(state.get("fuel")), float(state.get("DEFAULT_TANK_L"))))
+	console.call("_on_submitted", "iddqd")
+	assert(car.get("invincible"))
+	assert(not car.call("take_hit", 13.0))
+	console.call("_on_submitted", "wreckit")
+	assert(out.text.begins_with("Unknown command"))
+	root.push_input(_backtick())
+	await process_frame
+	assert(city.get("_console") == null)
+	assert(not paused)
+
 	print("race console test passed")
 	quit()
