@@ -14,6 +14,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | --- | --- | --- |
 | Grass ground (`assets/textures/grass/`) | "Grass Patchy Ground" 4585 by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
 | Road asphalt (`assets/textures/asphalt/`) | "City Street Asphalt Generic Clean 001" by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
+| Aqueduct and street shoulder concrete (`assets/textures/concrete/`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
 
 ## Fonts
 

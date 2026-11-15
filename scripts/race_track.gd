@@ -24,7 +24,6 @@ const _STREET_TERRAIN_STEP := 6.0
 ## straight, so at the bottom of a dip it would otherwise come up through the pavement.
 const _STREET_UNDER_ROAD_SINK := 1.0
 const _STREET_SHOULDER_W := 0.75
-const STREET_SHOULDER_COLOR := Color(0.36, 0.35, 0.32, 1)
 ## How far a street track's pavement runs back behind the start, so it doesn't begin under the cars.
 const _STREET_RUN_IN_M := 60.0
 ## Cell size for the nearest-sample lookup used while shaping the grass.
@@ -1253,7 +1252,7 @@ func _build_street_shoulders() -> void:
 		_add_shoulder_span(st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1])
 	st.generate_normals()
 	var mesh := st.commit()
-	mesh.surface_set_material(0, _make_mat(STREET_SHOULDER_COLOR, 0.95))
+	mesh.surface_set_material(0, _GroundMaterial.shoulder_concrete())
 	var mi := MeshInstance3D.new()
 	mi.name = "Shoulders"
 	mi.mesh = mesh

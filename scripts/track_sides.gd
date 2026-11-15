@@ -5,6 +5,8 @@ extends RefCounted
 ## grid the other tracks use. They take the place of what Street Rod 2 draws from its kind words and
 ## its strip's edges, in the same units as the road: 1800 across is 8 m.
 
+const _GroundMaterial := preload("res://scripts/ground_material.gd")
+
 ## Where the road's edge ends and a hillside or a drop begins, past the edge. Street Rod 2's verge.
 const MOUNTAIN_VERGE := 200.0 * 8.0 / 1800.0
 ## How far across a hillside or a drop reaches its full height. Street Rod 2's 600 across.
@@ -58,9 +60,15 @@ const _VERGE_GRAY := Color(0.33, 0.33, 0.32, 1)
 const _HILL_BROWN := Color(0.56, 0.3, 0.07, 1)
 const _RAIL_GRAY := Color(0.62, 0.62, 0.6, 1)
 const _TRUSS_RED := Color(0.5, 0.05, 0.04, 1)
-const _CONCRETE := Color(0.58, 0.58, 0.56, 1)
-const _CONCRETE_TOP := Color(0.5, 0.5, 0.48, 1)
-const _YELLOW_EDGE := Color(0.9, 0.78, 0.12, 1)
+## The Aqueduct's vertex colors shade its concrete texture, whose mean is 0.651 in linear light
+## (see ground_material.gd). Vertex colors are sRGB, so each is the old flat color (0.58 channel,
+## 0.5 top, 0.9/0.78/0.12 yellow) taken to linear, divided by that mean, and taken back. The yellow
+## line's red would need more than 1, so the line keeps its hue at a little under the old brightness.
+const _CONCRETE := Color(0.704, 0.704, 0.68, 1)
+const _CONCRETE_TOP := Color(0.609, 0.609, 0.585, 1)
+const _YELLOW_EDGE := Color(1.0, 0.87, 0.14, 1)
+## The ground far under the Aqueduct, untextured.
+const _UNDER_CONCRETE := Color(0.5, 0.5, 0.48, 1)
 const _MOUNTAIN_GRAY := Color(0.34, 0.34, 0.36, 1)
 const _MOUNTAIN_SNOW := Color(0.66, 0.66, 0.68, 1)
 
@@ -167,7 +175,7 @@ static func build_aqueduct(
 			var a := sections[k]
 			var b := sections[k + 1]
 			_add_side_span(st, _aqueduct_section(pts[a], yaws[a], side, reach[a]), _aqueduct_section(pts[b], yaws[b], side, reach[b]))
-	_add_mesh(track, "Channel", st, _vertex_color_material())
+	_add_mesh(track, "Channel", st, _GroundMaterial.vertex_colored_concrete())
 	var faces := PackedVector3Array()
 	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
 	for k in range(sections.size() - 1):
@@ -176,7 +184,7 @@ static func build_aqueduct(
 		for side: float in [1.0, -1.0]:
 			_add_wall_quad(faces, pts[a], yaws[a], side * top, pts[b], yaws[b], side * top)
 	_add_wall_body(track, faces)
-	_build_under(track, pts, _CONCRETE_TOP.darkened(0.2))
+	_build_under(track, pts, _UNDER_CONCRETE.darkened(0.2))
 
 
 static func _section_indices(count: int) -> PackedInt32Array:
