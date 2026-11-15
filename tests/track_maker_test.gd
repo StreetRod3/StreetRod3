@@ -80,6 +80,9 @@ func _editing() -> void:
 	var copy := doc.copy()
 	copy.nodes[1]["x"] = 0.0
 	assert(is_equal_approx(float(doc.nodes[1]["x"]), 5.0))
+	# Points from the map are 32-bit; the file gets them to the centimeter.
+	doc.move_node(1, Vector2(0.0, 220.63))
+	assert(doc.to_text().contains("\"y\": 220.63}") or doc.to_text().contains("\"y\": 220.63,"), doc.to_text())
 
 
 func _test_drive_race_type() -> void:

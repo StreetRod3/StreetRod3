@@ -12,7 +12,6 @@ signal edit_begun
 signal doc_edited
 signal edit_ended
 
-const HEIGHT_STEP := 0.1
 const _PAD_X := 44.0
 const _PAD_Y := 14.0
 const _PICK_PX := 9.0
@@ -94,7 +93,8 @@ func _gui_input(event: InputEvent) -> void:
 		if not _drag_begun:
 			_drag_begun = true
 			edit_begun.emit()
-		var z := snappedf(_height_at((event as InputEventMouseMotion).position.y), HEIGHT_STEP)
+		# To the tenth of a meter, divided rather than multiplied so 0.3 is written as 0.3.
+		var z := roundf(_height_at((event as InputEventMouseMotion).position.y) * 10.0) / 10.0
 		doc.set_node_field(_drag_index, "z", z)
 		doc_edited.emit()
 		queue_redraw()

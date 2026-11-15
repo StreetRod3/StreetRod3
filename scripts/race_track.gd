@@ -33,6 +33,11 @@ const FILLET_LEN_FRACTION := 0.4
 const FILLET_MAX_CUT := 80.0
 ## Straight pavement past the finish. The race still ends on the finish line.
 const _RUNOFF_M := 400.0
+## The ground beside a mountain or Aqueduct track reaches out this far at most (see `_FAR_M` in
+## track_sides.gd), and less where another part of the course is nearer: it stops a little past
+## halfway, so the two sides overlap rather than leave cracks where the sections meet at angles.
+const _SIDE_REACH_MAX := 300.0
+const _SIDE_OVERLAP_M := 8.0
 const CURB_W := 0.45
 const CURB_H := 0.16
 const CURB_L := 2.0
@@ -81,6 +86,9 @@ var _road_types: PackedStringArray = PackedStringArray()
 var _length: float = 0.0
 ## Distance along the path where the race ends. The mesh continues past this.
 var _race_length: float = 0.0
+## Pavement behind the start: `_STREET_RUN_IN_M`, or less where it would reach another part of
+## the course, as on a course that comes back round to where it began.
+var _run_in_m: float = _STREET_RUN_IN_M
 var _pos := Vector3.ZERO
 var _yaw: float = 0.0
 var _seg_half_w: float = ROAD_HALF_W
@@ -442,11 +450,16 @@ func build_road_course() -> void:
 	_build_path()
 	if _pts.size() < 2:
 		return
-	if _style == TrackFile.STYLE_AQUEDUCT:
-		_TrackSides.build_aqueduct(self, _pts, _yaws, _STREET_RUN_IN_M)
-	elif _style == TrackFile.STYLE_MOUNTAIN:
-		_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _STREET_RUN_IN_M)
-		_build_road_mesh()
+	var back_dir := -Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0]))
+	_run_in_m = _clear_run(_pts[0], back_dir, _STREET_RUN_IN_M, 0.0, -1.0, _half_ws[0])
+	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
+		var reaches := _side_reaches()
+		var back_reach := _reach_at(_pts[0] + back_dir * _run_in_m, _yaws[0], -_run_in_m)
+		if _style == TrackFile.STYLE_AQUEDUCT:
+			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach)
+		else:
+			_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _run_in_m, reaches, back_reach)
+			_build_road_mesh()
 	else:
 		_build_terrain()
 		_build_road_mesh()
@@ -717,9 +730,79 @@ func _append_runoff() -> void:
 	_pos = _pts[_pts.size() - 1]
 	_yaw = _yaws[_yaws.size() - 1]
 	var ahead := Vector3(sin(_yaw), 0.0, cos(_yaw))
-	var dest := _pos + ahead * _RUNOFF_M
+	var runoff := _clear_run(_pos, ahead, _RUNOFF_M, _race_length, 1.0, _seg_half_w)
+	if runoff < 1.0:
+		return
+	var dest := _pos + ahead * runoff
 	dest.y = _pos.y
 	_append_to(dest)
+
+
+## How far straight road can run from `from` along `dir`, up to `length`, before it comes onto
+## another part of the course. `origin_s` is where `from` is along the course and `direction` which way
+## the run goes along it (+1 past the finish, -1 behind the start). Road counts as another part
+## when it is much farther round the course than straight across, so the road just behind a
+## run doesn't stop it.
+func _clear_run(from: Vector3, dir: Vector3, length: float, origin_s: float, direction: float, half_w: float) -> float:
+	var t := 0.0
+	while t <= length:
+		var p := from + dir * t
+		var along := origin_s + direction * t
+		for q in range(0, _pts.size(), 2):
+			var dx := p.x - _pts[q].x
+			var dz := p.z - _pts[q].z
+			var touch := _half_ws[q] + half_w + 2.0
+			var d2 := dx * dx + dz * dz
+			if d2 > touch * touch:
+				continue
+			if absf(_dists[q] - along) > 1.2 * sqrt(d2) + 10.0:
+				return maxf(t - 5.0, 0.0)
+		t += BAKE_STEP
+	return length
+
+
+## How far the ground may reach out on the left (x) and right (y) of each sample.
+func _side_reaches() -> Array[PackedFloat32Array]:
+	var n := _pts.size()
+	var left := PackedFloat32Array()
+	var right := PackedFloat32Array()
+	left.resize(n)
+	right.resize(n)
+	var i := 0
+	while i < n:
+		var both := _reach_at(_pts[i], _yaws[i], _dists[i])
+		left[i] = both.x
+		right[i] = both.y
+		if i + 1 < n:
+			left[i + 1] = both.x
+			right[i + 1] = both.y
+		i = i + 2 if i + 2 < n or i == n - 1 else n - 1
+	return [left, right]
+
+
+## How far the ground beside the road at `center`, `s` along the course, may reach out on the left
+## (x) and right (y): to just past halfway to the nearest other part of the course straight out
+## that side, or `_SIDE_REACH_MAX`. Every fourth sample is enough to find the other parts.
+func _reach_at(center: Vector3, yaw: float, s: float) -> Vector2:
+	var across := Vector3(cos(yaw), 0.0, -sin(yaw))
+	var left := _SIDE_REACH_MAX
+	var right := _SIDE_REACH_MAX
+	var far_sq := 4.0 * _SIDE_REACH_MAX * _SIDE_REACH_MAX
+	for q in range(0, _pts.size(), 4):
+		var dx := _pts[q].x - center.x
+		var dz := _pts[q].z - center.z
+		var d2 := dx * dx + dz * dz
+		if d2 > far_sq:
+			continue
+		if absf(_dists[q] - s) <= 1.2 * sqrt(d2) + 10.0:
+			continue
+		# Where the line between the two is crossed, straight out this side.
+		var out := dx * across.x + dz * across.z
+		if out > 0.001:
+			left = minf(left, d2 / (2.0 * out))
+		elif out < -0.001:
+			right = minf(right, d2 / (-2.0 * out))
+	return Vector2(left + _SIDE_OVERLAP_M, right + _SIDE_OVERLAP_M)
 
 
 func _apply_road(road: Dictionary) -> void:
@@ -1131,7 +1214,7 @@ func _build_street_shoulders() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var yaw: float = _yaws[0]
-	var run_in := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _STREET_RUN_IN_M
+	var run_in := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _run_in_m
 	_add_shoulder_span(st, run_in, yaw, _half_ws[0], _pts[0], yaw, _half_ws[0])
 	for i in range(_pts.size() - 1):
 		_add_shoulder_span(st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1])
@@ -1163,8 +1246,8 @@ func _add_shoulder_span(st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p
 func _add_run_in(st: SurfaceTool) -> void:
 	var yaw: float = _yaws[0]
 	var side := Vector3(cos(yaw), 0.0, -sin(yaw)) * _half_ws[0]
-	var back := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _STREET_RUN_IN_M
-	var v := -_STREET_RUN_IN_M * 0.15
+	var back := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _run_in_m
+	var v := -_run_in_m * 0.15
 	_add_tri(st, back - side, back + side, _pts[0] + side, Vector2(0, v), Vector2(1, v), Vector2(1, 0))
 	_add_tri(st, back - side, _pts[0] + side, _pts[0] - side, Vector2(0, v), Vector2(1, 0), Vector2(0, 0))
 

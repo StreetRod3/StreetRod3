@@ -255,6 +255,12 @@ func _next_id() -> int:
 # --- Editing -----------------------------------------------------------------------------
 
 
+## `value` to the centimeter, as a 64-bit number. Points come from the map as 32-bit floats, which
+## would otherwise go into the file as -50.400001525878906.
+static func cm(value: float) -> float:
+	return roundf(value * 100.0) / 100.0
+
+
 func node_point(i: int) -> Vector2:
 	return Vector2(float(nodes[i].get("x", 0.0)), float(nodes[i].get("y", 0.0)))
 
@@ -270,8 +276,8 @@ func move_node(i: int, point: Vector2) -> void:
 		return
 	if i == 1:
 		point = Vector2(0.0, maxf(point.y, 1.0))
-	nodes[i]["x"] = point.x
-	nodes[i]["y"] = point.y
+	nodes[i]["x"] = cm(point.x)
+	nodes[i]["y"] = cm(point.y)
 
 
 ## Sets a node field, leaving it out of the node when it is at its default.
@@ -311,8 +317,8 @@ func set_road_field(i: int, key: String, value: Variant) -> void:
 func append_node(point: Vector2) -> int:
 	var last := nodes.size() - 1
 	var node := _carried_from(last)
-	node["x"] = point.x
-	node["y"] = point.y
+	node["x"] = cm(point.x)
+	node["y"] = cm(point.y)
 	if not is_zero_approx(node_height(last)):
 		node["z"] = node_height(last)
 	nodes.append(node)
@@ -328,13 +334,13 @@ func insert_node(road_index: int, point: Vector2) -> int:
 	var a := road_index
 	var b := road_index + 1
 	var node := _carried_from(a)
-	node["x"] = point.x
-	node["y"] = point.y
+	node["x"] = cm(point.x)
+	node["y"] = cm(point.y)
 	var span := node_point(a).distance_to(node_point(b))
 	var t := 0.5 if span < 0.001 else clampf(node_point(a).distance_to(point) / span, 0.0, 1.0)
 	var z := lerpf(node_height(a), node_height(b), t)
 	if not is_zero_approx(z):
-		node["z"] = snappedf(z, 0.01)
+		node["z"] = cm(z)
 	nodes.insert(b, node)
 	roads.insert(b, roads[a].duplicate(true))
 	if b == 1:

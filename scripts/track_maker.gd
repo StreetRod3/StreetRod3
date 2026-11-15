@@ -548,7 +548,7 @@ func _edit_node(value: float, key: String) -> void:
 		"y":
 			doc.move_node(i, Vector2(doc.node_point(i).x, value))
 		_:
-			doc.set_node_field(i, key, snappedf(value, 0.01))
+			doc.set_node_field(i, key, _Doc.cm(value))
 	_after_edit()
 
 
@@ -566,7 +566,7 @@ func _edit_road_width(value: float) -> void:
 	if i < 0 or i >= doc.roads.size():
 		return
 	_begin_edit("road:%d:width" % i)
-	doc.set_road_field(i, "width", snappedf(value, 0.01))
+	doc.set_road_field(i, "width", _Doc.cm(value))
 	_after_edit()
 
 

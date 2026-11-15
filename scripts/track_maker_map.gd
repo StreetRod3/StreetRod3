@@ -137,7 +137,8 @@ func _press(at: Vector2) -> void:
 		var hit := _scenery_at(at)
 		if hit < 0:
 			edit_begun.emit()
-			doc.scenery.append({"kind": scenery_kind, "x": _snapped(to_track(at)).x, "y": _snapped(to_track(at)).y})
+			var spot := _snapped(to_track(at))
+			doc.scenery.append({"kind": scenery_kind, "x": _Doc.cm(spot.x), "y": _Doc.cm(spot.y)})
 			hit = doc.scenery.size() - 1
 			_drag_begun = true
 			doc_edited.emit()
@@ -181,8 +182,8 @@ func _motion(at: Vector2) -> void:
 		_Drag.SCENERY:
 			_start_drag_edit()
 			var point := _snapped(to_track(at))
-			doc.scenery[_drag_index]["x"] = point.x
-			doc.scenery[_drag_index]["y"] = point.y
+			doc.scenery[_drag_index]["x"] = _Doc.cm(point.x)
+			doc.scenery[_drag_index]["y"] = _Doc.cm(point.y)
 			doc_edited.emit()
 			queue_redraw()
 
@@ -210,7 +211,7 @@ func select(node: int, sight: int) -> void:
 
 func _snapped(point: Vector2) -> Vector2:
 	if not snap:
-		return Vector2(snappedf(point.x, 0.01), snappedf(point.y, 0.01))
+		return point
 	return point.snapped(Vector2(SNAP_M, SNAP_M))
 
 
