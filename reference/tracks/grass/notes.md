@@ -1,6 +1,6 @@
 # Grass ground (`scripts/ground_material.gd`)
 
-Poliigon "Grass Patchy Ground" 4585, the 2K set, pasted 2026-11-15. No link or license file came with it.
+Poliigon "Grass Patchy Ground" 4585, the 2K set, pasted 2026-11-15. A free asset under Poliigon's royalty-free license (told 2026-11-15); no license file or link to the asset page came with it.
 
 | File | What it is |
 | --- | --- |

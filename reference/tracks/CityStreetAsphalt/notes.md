@@ -1,6 +1,6 @@
 # Road asphalt (`scripts/ground_material.gd`)
 
-Poliigon "City Street Asphalt Generic Clean 001", the 2K set (Poliigon's older naming: COL, NRM, GLOSS), pasted 2026-11-15. No link or license file came with it.
+Poliigon "City Street Asphalt Generic Clean 001", the 2K set (Poliigon's older naming: COL, NRM, GLOSS), pasted 2026-11-15. A free asset under Poliigon's royalty-free license (told 2026-11-15); no license file or link to the asset page came with it.
 
 | File | What it is |
 | --- | --- |
