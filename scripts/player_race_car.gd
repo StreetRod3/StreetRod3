@@ -748,6 +748,7 @@ func _halt_step(delta: float) -> void:
 	_dynamics.cg_velocity = planar
 	_stick_to_road()
 	_update_engine_sound(false)
+	_dynamics.sample_surfaces(_race_track(), global_transform)
 	_body_motion.ride_from_motion(delta, planar, heading_yaw)
 	_pose_body(delta)
 
@@ -764,6 +765,7 @@ func _physics_process(delta: float) -> void:
 		heading_yaw = rotation.y
 		_stick_to_road()
 		_update_engine_sound(false)
+		_dynamics.sample_surfaces(_race_track(), global_transform)
 		_body_motion.ride_from_motion(delta, _dynamics.cg_velocity, rotation.y)
 		_pose_body(delta)
 		return

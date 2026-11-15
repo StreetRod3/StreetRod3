@@ -255,6 +255,7 @@ func _physics_process(delta: float) -> void:
 		_park_speed = _RacePark.step(self, _dynamics, delta, _park_speed, _park_slot)
 		forward_speed = _park_speed
 		_stick_to_road()
+		_dynamics.sample_surfaces(_race_track(get_parent()), global_transform)
 		_body_motion.ride_from_motion(delta, _dynamics.cg_velocity, rotation.y)
 		_pose_body(delta)
 		return
