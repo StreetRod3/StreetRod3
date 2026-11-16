@@ -10,7 +10,7 @@ The ground, roads and day sky are photographed textures. Their materials are bui
 | Asphalt (Poliigon CityStreetAsphaltGenericClean001) | Race track roads and city streets; Mulholland's road darkened | `asphalt()`, `dark_asphalt()` |
 | Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The Aqueduct's floor and banks, the street drag's shoulders | `vertex_colored_concrete()`, `shoulder_concrete()` |
 | Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hillsides, and the upper part of its banks | The dirt part of `vertex_ground()` |
-| Gravel (flat color until there is a texture) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
+| Gravel (Poly Haven Rocky Trail) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
 | Day sky (Poly Haven Kloofendal 48d Partly Cloudy, Pure Sky) | The city, and every race but Street Rod 2's cruise races unless its track picks another sky | `Skies.use_day()`, `Skies.use()` |
 
 Mulholland's guard rails and far peaks keep their flat colors.
@@ -24,9 +24,9 @@ All of these are constants in `scripts/ground_material.gd`.
 | `DIRT_TINT_AMOUNT` | `0.35` | How much of the old Street Rod 2 hill brown's hue the dirt takes. `0` is the photo's own color; `1` is that brown's hue at the photo's brightness. Higher is redder. |
 | `DIRT_DARKEN` | `0.8` | Multiplies the dirt's color after the tint. `1` is as bright as the photo; lower is darker. |
 | `DIRT_OLD_COLOR` | `Color(0.56, 0.3, 0.07)` | The brown the tint leans toward: the flat color Mulholland's hills had before. Only its hue is used, not its brightness. |
-| `GROUND_SPECULAR` | `0.1` | How much the grass and dirt reflect. Godot also scales the reflection at shallow angles with it, so raising it toward the default `0.5` makes the ground shine and turns ground in the distance pale with the sky in it. |
+| `GROUND_SPECULAR` | `0.1` | How much the grass, dirt and gravel reflect. Godot also scales the reflection at shallow angles with it, so raising it toward the default `0.5` makes the ground shine and turns ground in the distance pale with the sky in it. |
 | `GRASS_TILE_M`, `ASPHALT_TILE_M`, `CONCRETE_TILE_M`, `DIRT_TILE_M`, `GRAVEL_TILE_M` | `2`, `1`, `2`, `2`, `2` | Meters of ground one tile of each texture covers. |
-| `GRAVEL_COLOR` | `Color(0.4, 0.4, 0.38)` | The gravel's color, and its tint once `_GRAVEL_TEXTURE` names a texture. |
+| `GRAVEL_TINT` | white | Multiplies the gravel's color. Lower is darker; a color tints it. |
 | `DARK_ASPHALT_TINT` | `0.3` grey | How dark Mulholland's road is, to keep Street Rod 2's black road. |
 | `SHOULDER_TINT` | `0.6` grey | Shade of the street drag's concrete shoulders. |
 

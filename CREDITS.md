@@ -15,6 +15,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | Grass ground (`assets/textures/grass/`) | "Grass Patchy Ground" 4585 by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
 | Road asphalt (`assets/textures/asphalt/`) | "City Street Asphalt Generic Clean 001" by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
 | Mulholland's dirt (`assets/textures/dirt/`) | "Soil With Weeds" (GroundDirtWeedsPatchy004) by Poliigon (https://www.poliigon.com/texture/soil-with-weeds-texture/6987) | Poliigon royalty-free license, free asset |
+| Mulholland's gravel (`assets/textures/gravel/`) | "Rocky Trail" by Amal Kumar, Poly Haven (https://polyhaven.com/a/rocky_trail) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | Aqueduct and street shoulder concrete (`assets/textures/concrete/`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
 
 ## Skies

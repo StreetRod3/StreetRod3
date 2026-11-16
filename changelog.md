@@ -413,3 +413,5 @@ Mulholland's hillsides are dirt now: Poliigon's "Soil With Weeds" at 2K instead 
 Mulholland's verge, the strip between the road and a hillside or drop, is gravel now, the same gravel as the course's gravel stretches. Both are still a flat color; a gravel texture will go on both at once.
 
 The track maker has a Sky setting, so a track can pick the photographed sky it races under. Besides the day sky there are three more ready to choose: a dusk sky from environment-textures.com and two Poliigon evening skies, one cloudy and orange and one a hazy pink and orange sunset. The hazy sunset and the cloudy evening are in, each with its own light for races under it: a low, warm sun, a dusky ambient light, and filmic tone mapping so the glow doesn't burn out. The dusk sky isn't in the game yet, so a track that picks it races under the day sky until it is. tools/prepare_hdri.gd scales a downloaded HDRI down to 4K for the game and measures where its sun is.
+
+Mulholland's gravel has a texture now, Poly Haven's "Rocky Trail": stones in tan dirt on the verge beside the road and on the course's gravel stretches.

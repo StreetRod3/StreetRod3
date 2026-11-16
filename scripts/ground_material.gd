@@ -1,16 +1,16 @@
 extends RefCounted
 
-## Textured ground: the grass under the race tracks, the city and Mulholland, Mulholland's dirt and gravel, the asphalt of their roads, and
-## the concrete of the Aqueduct and the street drag's shoulders.
-## Each is mapped from above in world space, so any ground or road mesh takes it without UVs of
-## its own, and one tile covers the same ground whatever the mesh's size. Sources and notes are
-## in reference/tracks/grass, reference/tracks/CityStreetAsphalt, reference/tracks/dirt and
-## reference/tracks/concrete.md.
+## Textured ground: grass under the race tracks, the city and Mulholland; Mulholland's dirt and
+## gravel; the asphalt of the roads; and the concrete of the Aqueduct and the street drag's
+## shoulders. Each is mapped from above in world space, so any ground or road mesh takes it without
+## UVs of its own, and one tile covers the same ground whatever the mesh's size. Sources and notes
+## are in reference/tracks/ (grass, CityStreetAsphalt, dirt, rockytrail, concrete.md), and
+## docs/ground-textures.md lists them and the settings below.
 
 ## Poliigon GrassPatchyGround 4585 at 2K.
 const GRASS_TILE_M := 2.0
-## Specular of the grass and dirt. Godot scales the grazing-angle reflection with it too, and at
-## the default 0.5 far-off ground turned pale with the sky in it.
+## Specular of the grass, dirt and gravel. Godot scales the grazing-angle reflection with it too,
+## and at the default 0.5 far-off ground turned pale with the sky in it.
 const GROUND_SPECULAR := 0.1
 ## Poliigon CityStreetAsphaltGenericClean001 at 2K. Its roughness map is the download's gloss
 ## map inverted.
@@ -33,16 +33,15 @@ const CONCRETE_TILE_M := 2.0
 const CONCRETE_LINEAR_MEAN := 0.651
 ## The street drag's shoulders: lighter than the asphalt beside them.
 const SHOULDER_TINT := Color(0.6, 0.6, 0.58, 1)
-## Gravel: Mulholland's verge and its gravel stretches. Flat for now; a texture goes in
-## `_GRAVEL_TEXTURE`, and this color then tints it.
-const GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
+## Gravel: Mulholland's verge and its gravel stretches. Poly Haven Rocky Trail at 2K, whose
+## photo covers 2 m; its ARM map holds roughness in green. `GRAVEL_TINT` multiplies its color.
+const GRAVEL_TINT := Color(1.0, 1.0, 1.0, 1)
 const GRAVEL_TILE_M := 2.0
 
 const _GRASS := "res://assets/textures/grass/Poliigon_GrassPatchyGround_4585_"
 const _ASPHALT := "res://assets/textures/asphalt/CityStreetAsphaltGenericClean001_"
 const _CONCRETE := "res://assets/textures/concrete/old-grunge-concrete.jpg"
-## Empty until there is a gravel texture.
-const _GRAVEL_TEXTURE := ""
+const _GRAVEL := "res://assets/textures/gravel/rocky_trail_"
 const _DIRT := "res://assets/textures/dirt/GroundDirtWeedsPatchy004_"
 const _VERTEX_GROUND_SHADER := preload("res://shaders/vertex_ground.gdshader")
 
@@ -115,10 +114,11 @@ static func vertex_ground() -> ShaderMaterial:
 		mat.set_shader_parameter(&"dirt_tile_m", DIRT_TILE_M)
 		mat.set_shader_parameter(&"ground_specular", GROUND_SPECULAR)
 		mat.set_shader_parameter(&"dirt_tint", dirt_tint())
-		mat.set_shader_parameter(&"gravel_color", GRAVEL_COLOR)
+		mat.set_shader_parameter(&"gravel_color", GRAVEL_TINT)
 		mat.set_shader_parameter(&"gravel_tile_m", GRAVEL_TILE_M)
-		if not _GRAVEL_TEXTURE.is_empty():
-			mat.set_shader_parameter(&"gravel_albedo", load(_GRAVEL_TEXTURE) as Texture2D)
+		mat.set_shader_parameter(&"gravel_albedo", load(_GRAVEL + "diff_2k.jpg") as Texture2D)
+		mat.set_shader_parameter(&"gravel_normal", load(_GRAVEL + "nor_gl_2k.jpg") as Texture2D)
+		mat.set_shader_parameter(&"gravel_arm", load(_GRAVEL + "arm_2k.jpg") as Texture2D)
 		_vertex_ground = mat
 	return _vertex_ground
 
@@ -126,12 +126,10 @@ static func vertex_ground() -> ShaderMaterial:
 ## Mulholland's gravel stretches. Its verge is the same gravel, in `vertex_ground()`.
 static func gravel() -> StandardMaterial3D:
 	if _gravel == null:
-		if _GRAVEL_TEXTURE.is_empty():
-			_gravel = StandardMaterial3D.new()
-		else:
-			_gravel = _make(_GRAVEL_TEXTURE, "", "", GRAVEL_TILE_M)
-		_gravel.albedo_color = GRAVEL_COLOR
-		_gravel.roughness = 0.98
+		_gravel = _make(_GRAVEL + "diff_2k.jpg", _GRAVEL + "nor_gl_2k.jpg", _GRAVEL + "arm_2k.jpg", GRAVEL_TILE_M)
+		_gravel.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		_gravel.albedo_color = GRAVEL_TINT
+		_gravel.metallic_specular = GROUND_SPECULAR
 	return _gravel
 
 
