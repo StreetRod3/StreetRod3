@@ -173,6 +173,9 @@ class Wheel:
 var config := Config.new()
 var cg_local: Vector3 = Vector3.ZERO
 var cg_velocity: Vector3 = Vector3.ZERO
+## Whether the car is on the grass beside a jump track's road rather than on the road; the car
+## sets it (race_track.gd's `car_off_road()`), and each wheel reads that ground.
+var off_road: bool = false
 var yaw: float = 0.0
 var yaw_rate: float = 0.0
 var yaw_inertia: float = 2000.0
@@ -476,7 +479,10 @@ func sample_surfaces(track: Object, body: Transform3D) -> void:
 			)
 			if bool(sample.get("gravel", false)):
 				amount = 1.0
-		if track != null and track.has_method(&"surface_height"):
+		# A wheel reads the ground the car is on, the road or the grass beside a ramp, as it does.
+		if track != null and track.has_method(&"ground_for"):
+			road_y = float(track.ground_for(world, off_road))
+		elif track != null and track.has_method(&"surface_height"):
 			road_y = float(track.surface_height(world))
 		wheel.road_y = road_y
 		wheel.road_bump = _road_bump_at(world, amount)

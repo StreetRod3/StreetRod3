@@ -54,9 +54,16 @@ const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const _RAMP_SIDE_COLOR := Color(0.42, 0.33, 0.22, 1)
 ## Road this high or less over the grass has no ramp side.
 const _RAMP_SIDE_MIN_M := 0.02
+## Which ground `_height_on()` reads: whatever is there, or a plain track's road or grass alone.
+const _ANY_GROUND := 0
+const _ROAD_ONLY := 1
+const _GRASS_ONLY := 2
 ## The collision layer of a jump track's ramp sides. A car takes it into its mask only while
-## `hits_ramp_sides()` says so.
+## `car_off_road()` says so.
 const RAMP_SIDE_LAYER := 4
+## How far a car's box may still reach over a ramp's edge and the car count as off the road. A car
+## on the grass stops with its box against the side, so it has to be more than 0.
+const _RAMP_STRADDLE_M := 0.15
 ## Yellow and black bands across the road up to each lip, so a jump shows from the car.
 const _LIP_YELLOW := Color(0.95, 0.76, 0.08, 1)
 const _LIP_BAND_LONG := 1.6
@@ -211,6 +218,21 @@ func closest_sample(world: Vector3) -> Dictionary:
 ## Height of the road under `world`, in meters. Beside the road it is the ground's: on a plain
 ## track the grass's (`_side_grass_height()`), elsewhere the road's own or its style's sides.
 func surface_height(world: Vector3) -> float:
+	return _height_on(world, _ANY_GROUND)
+
+
+## The ground at `world` for a car that `car_off_road()` found on the grass (`off_road`) or on the
+## road: the car's height, its tilt and its wheels all read it. On a jump track that keeps a car on
+## the grass beside a ramp on the grass, rather than on the ramp's top over its side, and one on a
+## ramp on the ramp until it is clear of the edge. Elsewhere it is `surface_height()`.
+func ground_for(world: Vector3, off_road: bool) -> float:
+	if not _jumps or _street or _grass_sides.size() != 4:
+		return surface_height(world)
+	return _height_on(world, _GRASS_ONLY if off_road else _ROAD_ONLY)
+
+
+## `surface_height()`, where `ground` can hold a plain track to its road or its grass alone.
+func _height_on(world: Vector3, ground: int) -> float:
 	if _pts.is_empty():
 		return 0.0
 	var i := _nearest_index(world)
@@ -234,10 +256,11 @@ func surface_height(world: Vector3) -> float:
 	if not _street and _grass_sides.size() == 4 and _grass_sides[0].size() == _pts.size():
 		var lateral := _lateral_at(i, world)
 		var ext := _sample_extents(i)
-		if lateral > ext.y:
-			return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], lateral)
-		if lateral < -ext.x:
-			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], -lateral)
+		var off := lateral > ext.y or lateral < -ext.x
+		if ground == _GRASS_ONLY or (ground == _ANY_GROUND and off):
+			if lateral >= 0.0:
+				return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], maxf(lateral, ext.y))
+			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], maxf(-lateral, ext.x))
 	return _side_ground_at(i, world, height)
 
 
@@ -272,15 +295,21 @@ func bank_push(world: Vector3) -> Vector3:
 	return across * _TrackSides.aqueduct_push(_lateral_at(i, world))
 
 
-## Whether a car at `world` runs into a jump track's ramp sides: only once its middle is off the
-## road, on the grass, so one on a ramp never catches on a side's top.
-func hits_ramp_sides(world: Vector3) -> bool:
+## Whether a car is off a jump track's road, on the grass beside it: its collision box, `half` its
+## width (x) and length (y) about its `middle` and turned to `yaw`, lies past the road's edge, all
+## but `_RAMP_STRADDLE_M`. So a car going off a ramp's side stays on the ramp until it is clear of
+## the side, and drops without landing inside it, and a car on the grass that has driven, or backed,
+## up to the side is still on the grass. Only a car off the road runs into the ramp sides, so one
+## on a ramp never catches on a side's top. False on every other track.
+func car_off_road(middle: Vector3, yaw: float, half: Vector2) -> bool:
 	if not _jumps or _street or _pts.is_empty():
 		return false
-	var i := _nearest_index(world)
-	var lateral := _lateral_at(i, world)
+	var i := _nearest_index(middle)
+	var lateral := _lateral_at(i, middle)
 	var ext := _sample_extents(i)
-	return lateral > ext.y or lateral < -ext.x
+	var turn := yaw - _yaws[i]
+	var across := half.x * absf(cos(turn)) + half.y * absf(sin(turn))
+	return lateral - across > ext.y - _RAMP_STRADDLE_M or lateral + across < -ext.x + _RAMP_STRADDLE_M
 
 
 ## True when a car at `world` has gone off an edge with nothing to stop it.
@@ -1360,10 +1389,10 @@ func _build_ramp_sides() -> void:
 	add_child(mi)
 	# A car on the grass beside a ramp is held to the grass, so the side stops it, as a barrier
 	# does, rather than lifting it onto the ramp. Only a car off the road collides with it (see
-	# `hits_ramp_sides()`): on a steep ramp a car's box comes down to the road and would catch on
+	# `car_off_road()`): on a steep ramp a car's box comes down to the road and would catch on
 	# the side's top. Cars ride 0.1 m up, so a side lower than that lets them up. The side faces
-	# out only: a car that drops off a ramp with its middle just past the edge lands half inside
-	# it, and is pushed out onto the grass rather than held.
+	# out only, so a car that drops off a ramp with its box a little inside it is pushed out onto
+	# the grass rather than held.
 	var shape := ConcavePolygonShape3D.new()
 	shape.backface_collision = false
 	shape.set_faces(mesh.get_faces())
