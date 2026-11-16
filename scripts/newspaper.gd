@@ -15,6 +15,21 @@ const _NO_ROOM_LINES: Array[String] = [
 	"You've got no room for all these cars!",
 	"Sell some cars first!",
 ]
+## Classified lines under a used car, in place of its power and top speed.
+const _CAR_LINES: Array[String] = [
+	"Runs good!",
+	"King of the roads",
+	"One owner, garage kept",
+	"Needs a little love",
+	"Real head-turner",
+	"Won't last long",
+	"Clean inside and out",
+	"Driven Sundays only",
+	"She'll surprise you",
+	"Priced to move",
+	"A real screamer",
+	"Solid as they come",
+]
 
 @onready var _cash: Label = %CashLabel
 @onready var _parts_list: VBoxContainer = %PartsList
@@ -34,6 +49,9 @@ const _NO_ROOM_LINES: Array[String] = [
 
 var _section: String = SECTION_INDEX
 var _nav := _MenuNav.new()
+## The line each car drew for this visit, so a refresh does not change the ad.
+var _car_lines: Dictionary = {}
+var _line_bag: Array[String] = []
 var _preview_car_id: String = ""
 var _preview_part_id: String = ""
 var _preview_copy: int = -1
@@ -203,6 +221,20 @@ func _make_gearbox_card(box: Dictionary, index: int) -> Control:
 	return card
 
 
+## One classified line for this visit. Cars in one paper don't share a line until
+## the bag runs out.
+func _car_line(car_id: String) -> String:
+	var saved := str(_car_lines.get(car_id, ""))
+	if not saved.is_empty():
+		return saved
+	if _line_bag.is_empty():
+		_line_bag.append_array(_CAR_LINES)
+		_line_bag.shuffle()
+	var line := str(_line_bag.pop_back())
+	_car_lines[car_id] = line
+	return line
+
+
 func _make_car_card(car: Dictionary) -> Control:
 	var car_id := str(car.get("id", ""))
 	var price := int(car.get("price", 0))
@@ -213,7 +245,9 @@ func _make_car_card(car: Dictionary) -> Control:
 	if car_id == _preview_car_id:
 		box.modulate = Color(0.96, 0.84, 0.58, 1)
 	box.add_child(_heading(str(car.get("name", "Car"))))
-	box.add_child(_body("%s   %.0f hp" % [GameState.speed_text(float(car.get("vmax", 0.0))), float(car.get("hp", 0.0))]))
+	var bits: Array[String] = [_car_line(car_id)]
+	bits.append_array(GameState.stock_part_names(car_id))
+	box.add_child(_body(", ".join(bits)))
 	var btn := _ink_button()
 	btn.text = "Buy — $%d" % price
 	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
