@@ -15,6 +15,9 @@ uniform sampler2D alpha : filter_linear_mipmap, repeat_disable;
 // Half the width of a card, in meters.
 uniform float card_half_m = 0.45;
 uniform float light_steps = 5.0;
+// Share of the scene's ambient light the leaves take: a crown shades itself, so its leaves get
+// less of the sky than open ground. The night races' flat ambient lit them like lamps at 1.
+uniform float ambient_share = 0.45;
 
 void vertex() {
 	vec2 corner = UV * 2.0 - 1.0;
@@ -29,6 +32,8 @@ void fragment() {
 	ALPHA = texture(alpha, UV).r;
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ROUGHNESS = 1.0;
+	AO = ambient_share;
+	AO_LIGHT_AFFECT = 0.0;
 }
 
 void light() {

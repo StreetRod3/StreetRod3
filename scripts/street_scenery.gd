@@ -54,6 +54,9 @@ const LEAF_CARD_HALF_M := 0.45
 const LEAF_DEPTH := 0.18
 const LEAF_COLOR := Color(0.365, 0.659, 0.176, 1)
 const LEAF_LIGHT_STEPS := 5.0
+## Share of the scene's ambient light the leaves take, as a crown shades itself; at 1 the night
+## races' flat ambient made them glow.
+const LEAF_AMBIENT := 0.45
 const _LEAF_SHADER := preload("res://shaders/tree_leaves.gdshader")
 const _LEAF_ALPHA := "res://assets/textures/leaves/leaf_alpha.png"
 
@@ -246,6 +249,7 @@ static func _leaves() -> ShaderMaterial:
 		_leaf_material.set_shader_parameter(&"alpha", load(_LEAF_ALPHA) as Texture2D)
 		_leaf_material.set_shader_parameter(&"card_half_m", LEAF_CARD_HALF_M)
 		_leaf_material.set_shader_parameter(&"light_steps", LEAF_LIGHT_STEPS)
+		_leaf_material.set_shader_parameter(&"ambient_share", LEAF_AMBIENT)
 	return _leaf_material
 
 
