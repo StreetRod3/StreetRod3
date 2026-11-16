@@ -47,6 +47,10 @@ const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const BOOKS_REGISTRY := "res://assets/books/books.registry"
+## On the garage shelf from the start, in this order. Not won from a rival and not given by the console.
+const BOOK_CREDITS := "credits"
+const BOOK_SHORTCUTS := "shortcuts"
+const SHELF_FIXTURES: Array[String] = [BOOK_CREDITS, BOOK_SHORTCUTS]
 const _CarFile := preload("res://scripts/car_file.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _Gamepad := preload("res://scripts/gamepad.gd")
@@ -1952,6 +1956,32 @@ func _valid_book_ids(ids: Array[String]) -> Array[String]:
 	return out
 
 
+## The fixture books, then the books the player owns. Fixtures stay in their order and are not owned.
+func shelf_books() -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	for book_id: String in SHELF_FIXTURES:
+		var book := book_by_id(book_id)
+		if not book.is_empty():
+			list.append(book)
+	for book: Dictionary in owned_books():
+		if SHELF_FIXTURES.has(str(book.get("id", ""))):
+			continue
+		list.append(book)
+	return list
+
+
+## Copies on the shelf, counting each fixture once even though it is not owned.
+func shelf_book_count() -> int:
+	var count := 0
+	for book_id: String in owned_book_ids:
+		if not SHELF_FIXTURES.has(book_id):
+			count += 1
+	for book_id: String in SHELF_FIXTURES:
+		if not book_by_id(book_id).is_empty():
+			count += 1
+	return count
+
+
 ## Unique books on the shelf, in catalog order. Duplicate copies do not stack bonuses.
 func owned_books() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
@@ -1965,7 +1995,7 @@ func owned_books() -> Array[Dictionary]:
 
 
 func add_book(book_id: String) -> bool:
-	if book_id.is_empty() or book_by_id(book_id).is_empty():
+	if book_id.is_empty() or SHELF_FIXTURES.has(book_id) or book_by_id(book_id).is_empty():
 		return false
 	owned_book_ids.append(book_id)
 	if has_active_car():
@@ -1982,6 +2012,8 @@ func give_book(raw_id: String) -> String:
 	var book := book_by_id(book_id)
 	if book.is_empty():
 		return "Unknown book: %s." % raw_id.strip_edges()
+	if SHELF_FIXTURES.has(book_id):
+		return "%s is already on the bookshelf." % str(book.get("title", book_id))
 	var title := str(book.get("title", book_id))
 	add_book(book_id)
 	var copies := book_count(book_id)
@@ -2076,9 +2108,15 @@ func book_effect_text(book: Dictionary) -> String:
 	var val := book_value(book)
 	if param.is_empty() or is_zero_approx(val):
 		return ""
-	var num := str(roundi(val)) if is_equal_approx(val, roundf(val)) else "%.1f" % val
-	var sign_prefix := "+" if val > 0.0 else ""
-	var stat_text := "%s%s %s" % [sign_prefix, num, param]
+	var stat_text := ""
+	if param == "spring_rate":
+		stat_text = "+%d%% stiffer" % roundi(val * 100.0)
+	elif param == "shock_rate":
+		stat_text = "+%d%% more damping" % roundi(val * 100.0)
+	else:
+		var num := str(roundi(val)) if is_equal_approx(val, roundf(val)) else "%.1f" % val
+		var sign_prefix := "+" if val > 0.0 else ""
+		stat_text = "%s%s %s" % [sign_prefix, num, param]
 	var target := ""
 	var family := str(book.get("family", "")).strip_edges()
 	var product := str(book.get("product", "")).strip_edges()
@@ -2210,9 +2248,14 @@ func opponent_weight_accel(opp: Dictionary) -> float:
 
 ## Sets a chassis's spring and shock rates and its ride height from the parts on it and
 ## what condition they are in. Lowering a car lowers its mass center too.
-func _put_on_suspension(chassis: Dictionary, springs: Dictionary, shocks: Dictionary, spring_condition: float, shock_condition: float) -> void:
-	chassis["spring_rate"] = float(springs.get("spring_rate", 1.0)) * lerpf(SPRING_WORN_RATE, 1.0, spring_condition)
-	chassis["shock_rate"] = float(shocks.get("shock_rate", 1.0)) * lerpf(SHOCK_WORN_RATE, 1.0, shock_condition)
+func _put_on_suspension(chassis: Dictionary, springs: Dictionary, shocks: Dictionary, spring_condition: float, shock_condition: float, books: bool = false) -> void:
+	var spring_rate := float(springs.get("spring_rate", 1.0))
+	var shock_rate := float(shocks.get("shock_rate", 1.0))
+	if books:
+		spring_rate += book_part_bonus(springs, "spring_rate")
+		shock_rate += book_part_bonus(shocks, "shock_rate")
+	chassis["spring_rate"] = spring_rate * lerpf(SPRING_WORN_RATE, 1.0, spring_condition)
+	chassis["shock_rate"] = shock_rate * lerpf(SHOCK_WORN_RATE, 1.0, shock_condition)
 	var lower := float(springs.get("lower_m", 0.0))
 	chassis["ride_lower"] = lower
 	chassis["cg_height"] = float(chassis.get("cg_height", 0.48)) - lower
@@ -2246,7 +2289,7 @@ func race_chassis() -> Dictionary:
 		return {}
 	var chassis: Dictionary = (spec as Dictionary).duplicate()
 	chassis["mass"] = float(chassis.get("mass", 1360.0)) + mass_delta_kg()
-	_put_on_suspension(chassis, slot_part(SLOT_SPRINGS), slot_part(SLOT_SHOCKS), mount_condition("slot:" + SLOT_SPRINGS), mount_condition("slot:" + SLOT_SHOCKS))
+	_put_on_suspension(chassis, slot_part(SLOT_SPRINGS), slot_part(SLOT_SHOCKS), mount_condition("slot:" + SLOT_SPRINGS), mount_condition("slot:" + SLOT_SHOCKS), true)
 	return chassis
 
 
@@ -2902,11 +2945,13 @@ func part_detail(part: Dictionary) -> String:
 
 func _part_stats_text(part: Dictionary) -> String:
 	if part.has("spring_rate"):
+		var spring_rate := float(part["spring_rate"]) + book_part_bonus(part, "spring_rate")
 		var lower_cm := roundi(float(part.get("lower_m", 0.0)) * 100.0)
-		var stiffer := "stock rate" if is_equal_approx(float(part["spring_rate"]), 1.0) else "%d%% stiffer" % roundi((float(part["spring_rate"]) - 1.0) * 100.0)
+		var stiffer := "stock rate" if is_equal_approx(spring_rate, 1.0) else "%d%% stiffer" % roundi((spring_rate - 1.0) * 100.0)
 		return "%s   lowers %s" % [stiffer, short_length_text(lower_cm)] if lower_cm > 0 else stiffer
 	if part.has("shock_rate"):
-		return "stock damping" if is_equal_approx(float(part["shock_rate"]), 1.0) else "%d%% more damping" % roundi((float(part["shock_rate"]) - 1.0) * 100.0)
+		var shock_rate := float(part["shock_rate"]) + book_part_bonus(part, "shock_rate")
+		return "stock damping" if is_equal_approx(shock_rate, 1.0) else "%d%% more damping" % roundi((shock_rate - 1.0) * 100.0)
 	if part.has("accel"):
 		return "%d%% more pull · %d%% top speed" % [
 			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
@@ -3357,14 +3402,25 @@ static func book_offer_chance(bet_amount: int) -> float:
 
 ## Rolls whether the rival proposes a random book instead of paying `bet_amount`.
 func roll_race_book_offer(bet_amount: int, race_type: String = "", roll: float = -1.0, pick_index: int = -1) -> Dictionary:
-	if bet_amount <= 0 or BOOKS.is_empty() or not race_can_offer_book(race_type):
+	var prizes := _prize_books()
+	if bet_amount <= 0 or prizes.is_empty() or not race_can_offer_book(race_type):
 		return {}
 	var chance := book_offer_chance(bet_amount)
 	var sampled := randf() if roll < 0.0 else roll
 	if sampled >= chance:
 		return {}
-	var index := (randi() % BOOKS.size()) if pick_index < 0 else posmod(pick_index, BOOKS.size())
-	return BOOKS[index]
+	var index := (randi() % prizes.size()) if pick_index < 0 else posmod(pick_index, prizes.size())
+	return prizes[index]
+
+
+## Books a rival may offer. The fixture books stay on the shelf and are not among them.
+func _prize_books() -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	for book: Dictionary in BOOKS:
+		if SHELF_FIXTURES.has(str(book.get("id", ""))):
+			continue
+		list.append(book)
+	return list
 
 
 func cheapest_car_price() -> int:

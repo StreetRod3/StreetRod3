@@ -71,7 +71,7 @@ func _run() -> void:
 	var bookshelf := garage.get_node_or_null("InteractBookshelf") as StaticBody3D
 	assert(bookshelf != null)
 	assert(bookshelf.get_meta(&"garage_interact") == &"bookshelf")
-	assert(_visible_book_meshes(bookshelf) == 0)
+	assert(_visible_book_meshes(bookshelf) == 2)
 
 	# Verify bookshelf sits above the desk and does not overlap neighboring props.
 	var shelf_box := _world_aabb(bookshelf)
@@ -111,8 +111,37 @@ func _run() -> void:
 	var books_list := garage.get("_books_list") as VBoxContainer
 	var books_back := garage.get("_books_back") as Button
 	assert(books_title.text == "Bookshelf")
-	assert(books_status.text == "The shelf is empty.")
-	assert(books_list.get_child_count() == 0)
+	assert(books_status.text == "")
+	var credits_logo := garage.get("_books_logo") as TextureRect
+	assert(credits_logo != null and credits_logo.texture != null)
+	assert(not credits_logo.visible)
+	assert(books_list.get_child_count() == 2)
+	assert(not books_back.visible)
+	var credits_label := (books_list.get_child(0) as HBoxContainer).get_child(0) as Label
+	assert(credits_label.text == "1.  Credits")
+	var shortcuts_label := (books_list.get_child(1) as HBoxContainer).get_child(0) as Label
+	assert(shortcuts_label.text == "2.  Shortcuts")
+	((books_list.get_child(0) as HBoxContainer).get_child(1) as Button).emit_signal("pressed")
+	assert(books_title.text == "Credits")
+	assert(books_back.visible)
+	var credits_page := books_list.get_child(0) as Label
+	assert(credits_page.text == "Street Rod 3\nTeam:\nDevelopment:\nHellmark\nkshyshieck (kgorecki)\nTesting:\nFabioPedretti\nHeart:\nVaelor")
+	assert(credits_logo.visible)
+	assert(credits_logo.get_parent().get_parent() == books_panel)
+	assert(books_panel.custom_minimum_size.x > parts_panel.custom_minimum_size.x)
+	assert(books_panel.custom_minimum_size.y > parts_panel.custom_minimum_size.y)
+	books_back.emit_signal("pressed")
+	assert(books_title.text == "Bookshelf")
+	assert(not books_back.visible)
+	assert(not credits_logo.visible)
+	assert(books_panel.custom_minimum_size == parts_panel.custom_minimum_size)
+	((books_list.get_child(1) as HBoxContainer).get_child(1) as Button).emit_signal("pressed")
+	assert(books_title.text == "Shortcuts")
+	assert(not credits_logo.visible)
+	var shortcuts_page := books_list.get_child(0) as Label
+	assert(shortcuts_page.text.contains("H — under the hood"))
+	assert(shortcuts_page.text.contains("1 — exhaust manifolds"))
+	books_back.emit_signal("pressed")
 	assert(not books_back.visible)
 
 	# Check baseline tire grip on bias-ply (3), radial (4), and racing slicks (5) before givebook.
@@ -152,15 +181,15 @@ func _run() -> void:
 	# Add hellmark-racing-slicks via console command.
 	console.call("_on_submitted", "givebook hellmark-racing-slicks")
 	assert(state.call("owns_book", "hellmark-racing-slicks"))
-	assert(_visible_book_meshes(bookshelf) == 1)
-	assert(books_list.get_child_count() == 1)
+	assert(_visible_book_meshes(bookshelf) == 3)
+	assert(books_list.get_child_count() == 3)
 
 	# Duplicate copy on the bookshelf shows up as a second physical copy, without multiplying bonuses.
 	console.call("_on_submitted", "givebook hellmark-racing-slicks")
 	assert((state.call("owned_books") as Array).size() == 1)
 	assert(int(state.call("book_count", "hellmark-racing-slicks")) == 2)
-	assert(_visible_book_meshes(bookshelf) == 2)
-	var row_label := (books_list.get_child(0) as HBoxContainer).get_child(0) as Label
+	assert(_visible_book_meshes(bookshelf) == 4)
+	var row_label := (books_list.get_child(2) as HBoxContainer).get_child(0) as Label
 	assert(row_label.text.contains("×2"))
 
 	# Close console with ` so garage shortcuts work again.
@@ -189,10 +218,10 @@ func _run() -> void:
 	dyn.free()
 	assert(is_equal_approx(float(state.call("opponent_tire_grip", {"tires": "tires"})), 5.0))
 
-	# Press 1 in BooksBoard to read the book, then Esc back to list and Esc to close.
+	# Press 3 in BooksBoard to read the slicks book. 1 is Credits and 2 is Shortcuts.
 	var key_1 := InputEventKey.new()
 	key_1.pressed = true
-	key_1.keycode = KEY_1
+	key_1.keycode = KEY_3
 	garage.call("_unhandled_input", key_1)
 	assert(books_board.visible and books_back.visible)
 	assert(books_title.text == "Hellmark's guide to racing slicks")
@@ -230,7 +259,7 @@ func _run() -> void:
 	console.call("_on_submitted", "givebook hellmark-flathead")
 	assert(state.call("owns_book", "hellmark-flathead"))
 	assert(int(state.call("book_count", "hellmark-flathead")) == 2)
-	assert(_visible_book_meshes(bookshelf) == 4)
+	assert(_visible_book_meshes(bookshelf) == 6)
 	root.push_input(backtick)
 	await process_frame
 
@@ -263,7 +292,7 @@ func _run() -> void:
 	console.call("_on_submitted", "givebook hellmark-sbc")
 	console.call("_on_submitted", "givebook hellmark-yblock")
 	console.call("_on_submitted", "givebook hellmark-windsor")
-	assert(_visible_book_meshes(bookshelf) == 7)
+	assert(_visible_book_meshes(bookshelf) == 9)
 	root.push_input(backtick)
 	await process_frame
 
