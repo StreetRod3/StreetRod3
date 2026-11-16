@@ -4,7 +4,8 @@ render_mode cull_disabled;
 // Mulholland's ground beside the road (track_sides.gd). Each vertex says how high it stands over
 // the road (UV.x), in meters: ground at the road's level is grass, and from `dirt_from_m` up it
 // turns to dirt over `dirt_over_m`, so a hill is dirt nearly from its foot and a low bank gets
-// clumps of it. The dirt's height map breaks the change up, so clumps of dirt show through the
+// clumps of it. Ground steeper than `steep_from` is dirt at any height: grass ran a foot up near-
+// vertical faces before giving way. The dirt's height map breaks the change up, so clumps of dirt show through the
 // grass rather than a brown wash. UV.y is how far out it is from the road's edge,
 // in meters:
 // gravel, the same as the course's gravel stretches (ground_material.gd's gravel()), covers it out
@@ -24,6 +25,10 @@ uniform sampler2D dirt_height : hint_default_white, filter_linear_mipmap_anisotr
 // Ground this high over the road starts to turn to dirt, and is all dirt this much higher.
 uniform float dirt_from_m = 0.15;
 uniform float dirt_over_m = 0.5;
+// Ground whose face points up less than this (the cosine of its slope) starts to turn to dirt,
+// and is all dirt by `steep_full`: 0.82 is about 35 degrees, 0.7 about 45.
+uniform float steep_from = 0.82;
+uniform float steep_full = 0.7;
 // How much the dirt's height breaks up the change from grass, and how sharp its clumps are.
 uniform float dirt_height_pull = 0.9;
 uniform float dirt_sharpness = 0.08;
@@ -62,6 +67,7 @@ uniform float dirt_min_roughness = 0.92;
 uniform vec3 dirt_tint = vec3(1.0);
 
 varying vec3 v_world;
+varying vec3 v_position;
 varying vec3 v_tri_weights;
 
 void vertex() {
@@ -75,7 +81,8 @@ void vertex() {
 	BINORMAL = normalize(BINORMAL);
 	v_tri_weights = pow(abs(mat3(MODEL_MATRIX) * NORMAL), vec3(sharpness));
 	v_tri_weights /= dot(v_tri_weights, vec3(1.0));
-	v_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz * vec3(1.0, -1.0, 1.0);
+	v_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	v_world = v_position * vec3(1.0, -1.0, 1.0);
 }
 
 vec4 triplanar(sampler2D s, float tile_m) {
@@ -118,7 +125,11 @@ void fragment() {
 	float toward_road = 1.0 - smoothstep(edge - edge_fade_m, edge + edge_fade_m, UV.y);
 	float gravel = height_blend(toward_road, triplanar(gravel_height, gravel_tile_m).r,
 		edge_height_pull, edge_sharpness);
-	float dirt_weight = clamp((UV.x - dirt_from_m) / dirt_over_m, 0.0, 1.0);
+	// The face's own slope, from how the position changes across the screen: the mesh's smoothed
+	// normals would lean the foot of a cliff toward flat and leave it grass.
+	vec3 face = normalize(cross(dFdx(v_position), dFdy(v_position)));
+	float steep = 1.0 - smoothstep(steep_full, steep_from, abs(face.y));
+	float dirt_weight = max(clamp((UV.x - dirt_from_m) / dirt_over_m, 0.0, 1.0), steep);
 	float dirt_part = height_blend(dirt_weight, triplanar(dirt_height, dirt_tile_m).r,
 		dirt_height_pull, dirt_sharpness);
 	float dirt = dirt_part * (1.0 - gravel);
