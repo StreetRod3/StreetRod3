@@ -55,9 +55,11 @@ const _MOUNTAIN_COLUMNS := 240
 const _MOUNTAIN_LOW_M := 110.0
 const _MOUNTAIN_HIGH_M := 460.0
 
+## Mulholland's ground. Alpha is how much of it is the grass texture (see
+## shaders/vertex_grass.gdshader), so green is all grass and a bank runs from grass into brown.
 const _GREEN := Color(0.11, 0.42, 0.1, 1)
-const _VERGE_GRAY := Color(0.33, 0.33, 0.32, 1)
-const _HILL_BROWN := Color(0.56, 0.3, 0.07, 1)
+const _VERGE_GRAY := Color(0.33, 0.33, 0.32, 0)
+const _HILL_BROWN := Color(0.56, 0.3, 0.07, 0)
 const _RAIL_GRAY := Color(0.62, 0.62, 0.6, 1)
 const _TRUSS_RED := Color(0.5, 0.05, 0.04, 1)
 ## The Aqueduct's vertex colors shade its concrete texture, whose mean is 0.651 in linear light
@@ -139,7 +141,7 @@ static func build_mountain(
 				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a]),
 				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b])
 			)
-	_add_mesh(track, "Sides", st, _vertex_color_material())
+	_add_mesh(track, "Sides", st, _GroundMaterial.vertex_grass())
 	var railed := rails.duplicate()
 	var right_out := _rail_flares(pts, types, railed)
 	var left_out := _hill_flares(pts, left)
@@ -149,7 +151,7 @@ static func build_mountain(
 	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections)
 	_build_rails(track, pts, yaws, half_ws, railed, right_out)
 	_build_trusses(track, pts, yaws, half_ws, types)
-	_build_under(track, pts, _GREEN.darkened(0.25))
+	_build_under(track, pts, _GREEN.darkened(0.25), _GroundMaterial.grass())
 	_build_mountains(track, pts)
 
 
@@ -544,7 +546,8 @@ static func _add_unit_boxes(parent: Node3D, node_name: String, xforms: Array[Tra
 	parent.add_child(mmi)
 
 
-static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color) -> void:
+## `ground` replaces the flat `color` when given.
+static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color, ground: Material = null) -> void:
 	var low := INF
 	var center := Vector3.ZERO
 	for p: Vector3 in pts:
@@ -556,7 +559,7 @@ static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color) -
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 1.0
-	plane.material = mat
+	plane.material = mat if ground == null else ground
 	var mi := MeshInstance3D.new()
 	mi.name = "UnderGround"
 	mi.mesh = plane

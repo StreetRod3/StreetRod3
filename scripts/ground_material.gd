@@ -1,6 +1,6 @@
 extends RefCounted
 
-## Textured ground: the grass under the race tracks and the city, the asphalt of their roads, and
+## Textured ground: the grass under the race tracks, the city and Mulholland, the asphalt of their roads, and
 ## the concrete of the Aqueduct and the street drag's shoulders.
 ## Each is mapped from above in world space, so any ground or road mesh takes it without UVs of
 ## its own, and one tile covers the same ground whatever the mesh's size. Sources and notes are
@@ -23,12 +23,14 @@ const SHOULDER_TINT := Color(0.6, 0.6, 0.58, 1)
 const _GRASS := "res://assets/textures/grass/Poliigon_GrassPatchyGround_4585_"
 const _ASPHALT := "res://assets/textures/asphalt/CityStreetAsphaltGenericClean001_"
 const _CONCRETE := "res://assets/textures/concrete/old-grunge-concrete.jpg"
+const _VERTEX_GRASS_SHADER := preload("res://shaders/vertex_grass.gdshader")
 
 static var _grass: StandardMaterial3D = null
 static var _asphalt: StandardMaterial3D = null
 static var _dark_asphalt: StandardMaterial3D = null
 static var _shoulder: StandardMaterial3D = null
 static var _vertex_concrete: StandardMaterial3D = null
+static var _vertex_grass: ShaderMaterial = null
 
 
 ## One material for every grass ground, made on first use.
@@ -71,6 +73,19 @@ static func vertex_colored_concrete() -> StandardMaterial3D:
 		_vertex_concrete.vertex_color_use_as_albedo = true
 		_vertex_concrete.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _vertex_concrete
+
+
+## Grass where a vertex's alpha is 1, its flat color where it is 0, for Mulholland's hillsides
+## (shaders/vertex_grass.gdshader). The grass is the same as `grass()`.
+static func vertex_grass() -> ShaderMaterial:
+	if _vertex_grass == null:
+		_vertex_grass = ShaderMaterial.new()
+		_vertex_grass.shader = _VERTEX_GRASS_SHADER
+		_vertex_grass.set_shader_parameter(&"grass_albedo", load(_GRASS + "BaseColor.jpg") as Texture2D)
+		_vertex_grass.set_shader_parameter(&"grass_normal", load(_GRASS + "Normal.png") as Texture2D)
+		_vertex_grass.set_shader_parameter(&"grass_roughness", load(_GRASS + "Roughness.jpg") as Texture2D)
+		_vertex_grass.set_shader_parameter(&"tile_m", GRASS_TILE_M)
+	return _vertex_grass
 
 
 ## `normal` and `roughness` may be empty for a texture without those maps.
