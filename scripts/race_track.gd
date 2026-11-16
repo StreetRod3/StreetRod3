@@ -17,6 +17,8 @@ const BAKE_STEP := 2.0
 const _TERRAIN_PAD := 400.0
 const _TERRAIN_STEP := 12.0
 const _TERRAIN_SINK := 0.08
+## How far under the grass beside the road (`_build_side_grass()`) the grid stays, at the least.
+const _UNDER_SIDE_GRASS_M := 0.3
 ## A street track's rises are short, so its grass needs more points to stay under the road.
 const _STREET_TERRAIN_PAD := 300.0
 const _STREET_TERRAIN_STEP := 6.0
@@ -38,6 +40,8 @@ const _RUNOFF_M := 400.0
 ## halfway, so the two sides overlap rather than leave cracks where the sections meet at angles.
 const _SIDE_REACH_MAX := 300.0
 const _SIDE_OVERLAP_M := 8.0
+## A plain track's grass stops at least this short of another road's pavement, past halfway.
+const _SIDE_OFF_ROAD_M := 0.5
 const CURB_W := 0.45
 const CURB_H := 0.16
 const CURB_L := 2.0
@@ -91,6 +95,9 @@ var _seg_road_type: String = "regular"
 var _bins: Dictionary = {}
 var _road_mi: MeshInstance3D
 var _built: bool = false
+## A plain track's grass beside the road, from `_side_reaches()`: how far it reaches out and the
+## other road's height, per sample. Empty on other tracks.
+var _grass_sides: Array[PackedFloat32Array] = []
 var _sign_mesh: ArrayMesh
 var _sign_textures: Dictionary = {}
 var _street: bool = false
@@ -198,7 +205,8 @@ func closest_sample(world: Vector3) -> Dictionary:
 	return _make_sample(_pts[best_i], yaw, _dists[best_i], lateral, best_i)
 
 
-## Height of the road under `world`, in meters. The grass beside it uses the same height.
+## Height of the road under `world`, in meters. Beside the road it is the ground's: on a plain
+## track the grass's (`_side_grass_height()`), elsewhere the road's own or its style's sides.
 func surface_height(world: Vector3) -> float:
 	if _pts.is_empty():
 		return 0.0
@@ -220,6 +228,13 @@ func surface_height(world: Vector3) -> float:
 		if d < best_d:
 			best_d = d
 			height = lerpf(a.y, b.y, t)
+	if not _street and _grass_sides.size() == 4 and _grass_sides[0].size() == _pts.size():
+		var lateral := _lateral_at(i, world)
+		var ext := _sample_extents(i)
+		if lateral > ext.y:
+			return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], lateral)
+		if lateral < -ext.x:
+			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], -lateral)
 	return _side_ground_at(i, world, height)
 
 
@@ -486,6 +501,8 @@ func build_road_course() -> void:
 			_build_road_mesh()
 	else:
 		_build_terrain()
+		if not _street:
+			_build_side_grass()
 		_build_road_mesh()
 		if _jumps:
 			_build_ramp_sides()
@@ -797,23 +814,27 @@ func _along_gap(a: float, b: float) -> float:
 	return gap
 
 
-## How far the ground may reach out on the left (x) and right (y) of each sample.
-func _side_reaches() -> Array[PackedFloat32Array]:
+## How far the ground may reach out on the left (0) and right (1) of each sample, and the height of
+## the road whose part of the course stops it there on the left (2) and right (3): the sample's own
+## height where none does.
+func _side_reaches(off_road: bool = false) -> Array[PackedFloat32Array]:
 	var n := _pts.size()
-	var left := PackedFloat32Array()
-	var right := PackedFloat32Array()
-	left.resize(n)
-	right.resize(n)
+	var out: Array[PackedFloat32Array] = []
+	for k in 4:
+		var list := PackedFloat32Array()
+		list.resize(n)
+		out.append(list)
 	var i := 0
 	while i < n:
-		var both := _reach_at(_pts[i], _yaws[i], _dists[i])
-		left[i] = both.x
-		right[i] = both.y
-		if i + 1 < n:
-			left[i + 1] = both.x
-			right[i + 1] = both.y
+		var both := _reach_and_far_y_at(_pts[i], _yaws[i], _dists[i], off_road)
+		for j: int in [i, i + 1]:
+			if j < n:
+				out[0][j] = both.x
+				out[1][j] = both.y
+				out[2][j] = both.z
+				out[3][j] = both.w
 		i = i + 2 if i + 2 < n or i == n - 1 else n - 1
-	return [left, right]
+	return out
 
 
 ## How far the ground beside the road at `center`, `s` along the course, may reach out on the left
@@ -821,9 +842,21 @@ func _side_reaches() -> Array[PackedFloat32Array]:
 ## that side, or `_SIDE_REACH_MAX`. Every fourth sample is enough to find the other parts.
 ## Heights make the road a little longer than the ground it crosses, hence the 2% and 2 m.
 func _reach_at(center: Vector3, yaw: float, s: float) -> Vector2:
+	var both := _reach_and_far_y_at(center, yaw, s)
+	return Vector2(both.x, both.y)
+
+
+## `_reach_at()` in x and y, and in z and w the height of the road that stops the ground on the
+## left and right, or `center`'s own where nothing does. With `off_road`, the overlap past halfway
+## never reaches the other road's pavement, which on a tight bend it can.
+func _reach_and_far_y_at(center: Vector3, yaw: float, s: float, off_road: bool = false) -> Vector4:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw))
 	var left := _SIDE_REACH_MAX
 	var right := _SIDE_REACH_MAX
+	var left_y := center.y
+	var right_y := center.y
+	var left_max := INF
+	var right_max := INF
 	var far_sq := 4.0 * _SIDE_REACH_MAX * _SIDE_REACH_MAX
 	for q in range(0, _pts.size(), 4):
 		var dx := _pts[q].x - center.x
@@ -831,18 +864,34 @@ func _reach_at(center: Vector3, yaw: float, s: float) -> Vector2:
 		var d2 := dx * dx + dz * dz
 		if d2 > far_sq:
 			continue
+		var out := dx * across.x + dz * across.z
 		# Only road that runs nearly straight from here is this stretch. Anything farther round,
 		# even the far side of a bend, stops the ground: on the inside of a bend that is at the
-		# bend's middle, where the ground would otherwise start to fold over itself.
+		# bend's middle, where the ground would otherwise start to fold over itself. Past a sharp
+		# corner, though, the road straight on from it runs off to the side, under the ground, so
+		# with `off_road` only road straight ahead or behind is this stretch.
 		if _along_gap(_dists[q], s) <= 1.02 * sqrt(d2) + 2.0:
-			continue
-		# Where the line between the two is crossed, straight out this side.
-		var out := dx * across.x + dz * across.z
+			if not off_road or absf(out) <= _half_ws[q] + _SIDE_OFF_ROAD_M:
+				continue
+		# Where the line between the two is crossed, straight out this side, is halfway; the other
+		# road's edge is twice that, less its half width.
+		var keep_off := 2.0 * d2 / (2.0 * absf(out)) - _half_ws[q] - _SIDE_OFF_ROAD_M if absf(out) > 0.001 else INF
 		if out > 0.001:
-			left = minf(left, d2 / (2.0 * out))
+			left_max = minf(left_max, keep_off)
+			if d2 / (2.0 * out) < left:
+				left = d2 / (2.0 * out)
+				left_y = _pts[q].y
 		elif out < -0.001:
-			right = minf(right, d2 / (-2.0 * out))
-	return Vector2(left + _SIDE_OVERLAP_M, right + _SIDE_OVERLAP_M)
+			right_max = minf(right_max, keep_off)
+			if d2 / (-2.0 * out) < right:
+				right = d2 / (-2.0 * out)
+				right_y = _pts[q].y
+	left += _SIDE_OVERLAP_M
+	right += _SIDE_OVERLAP_M
+	if off_road:
+		left = maxf(minf(left, left_max), left - _SIDE_OVERLAP_M)
+		right = maxf(minf(right, right_max), right - _SIDE_OVERLAP_M)
+	return Vector4(left, right, left_y, right_y)
 
 
 func _apply_road(road: Dictionary) -> void:
@@ -1029,8 +1078,9 @@ func _build_terrain() -> void:
 	var span_z := max_z - min_z + pad * 2.0
 	var cols := maxi(int(ceil(span_x / grid)), 1)
 	var rows := maxi(int(ceil(span_z / grid)), 1)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var stride := cols + 1
+	var heights := PackedFloat32Array()
+	heights.resize(stride * (rows + 1))
 	for row in rows + 1:
 		var z := origin_z + span_z * float(row) / float(rows)
 		for col in cols + 1:
@@ -1042,8 +1092,16 @@ func _build_terrain() -> void:
 				y = minf(y, -_TERRAIN_SINK)
 			if _street and _grass_dist_sq <= _half_ws[0] * _half_ws[0]:
 				y -= _STREET_UNDER_ROAD_SINK
-			st.add_vertex(Vector3(x, y, z))
-	var stride := cols + 1
+			heights[row * stride + col] = y
+	if not _street:
+		heights = _under_side_grass(heights, cols, rows)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for row in rows + 1:
+		var z := origin_z + span_z * float(row) / float(rows)
+		for col in cols + 1:
+			var x := origin_x + span_x * float(col) / float(cols)
+			st.add_vertex(Vector3(x, heights[row * stride + col], z))
 	for row in rows:
 		for col in cols:
 			var i00 := row * stride + col
@@ -1063,6 +1121,110 @@ func _build_terrain() -> void:
 	mi.name = "Terrain"
 	mi.mesh = mesh
 	add_child(mi)
+
+
+## The grid's heights lowered to the lowest of each point and its eight neighbors, and
+## `_UNDER_SIDE_GRASS_M` more. Between its points the grid runs straight for 12 m, so where the
+## road climbs, dips or passes another part of the course at another height, it came up through
+## the road; now it stays under the grass beside the road (`_build_side_grass()`), which hides it,
+## and shows only past that.
+func _under_side_grass(heights: PackedFloat32Array, cols: int, rows: int) -> PackedFloat32Array:
+	var stride := cols + 1
+	var out := PackedFloat32Array()
+	out.resize(heights.size())
+	for row in rows + 1:
+		for col in cols + 1:
+			var low := heights[row * stride + col]
+			for dr in range(maxi(row - 1, 0), mini(row + 1, rows) + 1):
+				for dc in range(maxi(col - 1, 0), mini(col + 1, cols) + 1):
+					low = minf(low, heights[dr * stride + dc])
+			out[row * stride + col] = low - _UNDER_SIDE_GRASS_M
+	return out
+
+
+## Grass beside the road of a plain track, at the height `surface_height()` holds a car to there
+## (`_side_grass_height()`). It reaches out as the mountain's ground does (`_side_reaches()`), so the
+## grid under it shows only far off. Behind the start, where there is no pavement, it runs across
+## the road's line too.
+func _build_side_grass() -> void:
+	_grass_sides = _side_reaches(true)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for side: float in [1.0, -1.0]:
+		var k := 0 if side > 0.0 else 1
+		var reach := _grass_sides[k]
+		var far_y := _grass_sides[k + 2]
+		for i in range(_pts.size() - 1):
+			var e0 := _sample_extents(i)
+			var e1 := _sample_extents(i + 1)
+			_add_side_grass_span(
+				st, side,
+				_pts[i], _yaws[i], e0.y if side > 0.0 else e0.x, reach[i], far_y[i],
+				_pts[i + 1], _yaws[i + 1], e1.y if side > 0.0 else e1.x, reach[i + 1], far_y[i + 1]
+			)
+		if _run_in_m > 0.0:
+			var back := _pts[0] - Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0])) * _run_in_m
+			back.y = _pts[0].y
+			var back_reach := _reach_and_far_y_at(back, _yaws[0], -_run_in_m, true)
+			_add_side_grass_span(
+				st, side,
+				back, _yaws[0], 0.0, back_reach.x if side > 0.0 else back_reach.y, back_reach.z if side > 0.0 else back_reach.w,
+				_pts[0], _yaws[0], 0.0, reach[0], far_y[0]
+			)
+	st.generate_normals()
+	var mesh := st.commit()
+	mesh.surface_set_material(0, _GroundMaterial.grass())
+	var mi := MeshInstance3D.new()
+	mi.name = "SideGrass"
+	mi.mesh = mesh
+	add_child(mi)
+
+
+## One stretch of `_build_side_grass()`, on the left (`side` 1) or right (-1): from the road's
+## `edge` to the halfway line, where the slope ends, and on out to `reach`, all in meters from the
+## middle of the road.
+func _add_side_grass_span(
+	st: SurfaceTool,
+	side: float,
+	p0: Vector3, yaw0: float, edge0: float, reach0: float, far_y0: float,
+	p1: Vector3, yaw1: float, edge1: float, reach1: float, far_y1: float
+) -> void:
+	var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0)) * side
+	var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1)) * side
+	var outs0: Array[float] = [edge0, maxf(reach0 - _SIDE_OVERLAP_M, edge0), maxf(reach0, edge0)]
+	var outs1: Array[float] = [edge1, maxf(reach1 - _SIDE_OVERLAP_M, edge1), maxf(reach1, edge1)]
+	for k in 2:
+		var pts0: Array[Vector3] = []
+		var pts1: Array[Vector3] = []
+		for out: float in [outs0[k], outs0[k + 1]]:
+			var y := _side_grass_height(p0.y, edge0, reach0, far_y0, out) - _TERRAIN_SINK
+			pts0.append(Vector3(p0.x, y, p0.z) + r0 * out)
+		for out: float in [outs1[k], outs1[k + 1]]:
+			var y := _side_grass_height(p1.y, edge1, reach1, far_y1, out) - _TERRAIN_SINK
+			pts1.append(Vector3(p1.x, y, p1.z) + r1 * out)
+		# The road mesh's order, the point on the driver's right first, so the grass faces up.
+		var a0 := pts0[0] if side > 0.0 else pts0[1]
+		var b0 := pts0[1] if side > 0.0 else pts0[0]
+		var a1 := pts1[0] if side > 0.0 else pts1[1]
+		var b1 := pts1[1] if side > 0.0 else pts1[0]
+		_add_tri(st, a0, b0, b1, Vector2(0, 0), Vector2(1, 0), Vector2(1, 1))
+		_add_tri(st, a0, b1, a1, Vector2(0, 0), Vector2(1, 1), Vector2(0, 1))
+
+
+## Height of the ground beside a plain track's road at `road_y`, `out` meters from the middle, with
+## the road's edge at `edge`, and on that side the ground reaching `reach` and the road that stops
+## it there at `far_y`. Flat at the road's height where nothing is near; otherwise it slopes to
+## halfway between the two roads' heights at the halfway line, where the grass from the other road
+## meets it at the same height, and stays there over the overlap. A jump track's ramps don't lift it.
+func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, out: float) -> float:
+	var base := minf(road_y, 0.0) if _jumps else road_y
+	var meet := (base + (minf(far_y, 0.0) if _jumps else far_y)) * 0.5
+	var half := maxf(reach - _SIDE_OVERLAP_M, edge)
+	if out >= half:
+		return meet
+	if out <= edge:
+		return base
+	return lerpf(base, meet, (out - edge) / (half - edge))
 
 
 ## Road height at a grass vertex. Coarser than the driving query, and local to the mesh build.
@@ -1182,6 +1344,21 @@ func _build_ramp_sides() -> void:
 	mi.name = "RampSides"
 	mi.mesh = mesh
 	add_child(mi)
+	# A car on the grass beside a ramp is held to the grass, so the side stops it, as a barrier
+	# does, rather than lifting it onto the ramp. Cars ride 0.1 m clear, so a side lower than that
+	# lets them up, and one on the ramp clears the top.
+	var shape := ConcavePolygonShape3D.new()
+	shape.backface_collision = true
+	shape.set_faces(mesh.get_faces())
+	var hit := CollisionShape3D.new()
+	hit.shape = shape
+	var body := StaticBody3D.new()
+	body.name = "RampSideWalls"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.set_meta(&"track_obstacle", true)
+	body.add_child(hit)
+	add_child(body)
 
 
 func _build_lip_bands() -> void:
