@@ -743,12 +743,14 @@ func engine_head_count(engine: Dictionary = {}) -> int:
 	return heads_on(get_equipped_engine() if engine.is_empty() else engine)
 
 
-## Where to click for under the hood, from the bounds of a car with its nose toward +Z:
-## the whole front from the cowl to the nose, down the fenders to the top of the gearbox
-## band, so that the hood is easy to hit. The garage and the drive-in both use this.
+## Where to click for under the hood, from the bounds of a car with its nose toward +Z.
+## The hood panel only: inset from the fenders, under the hood skin, and short of the
+## glass and the nose. A box around the whole front sticks out past the body and catches
+## clicks on what sits behind the car when the camera is low. The garage and the drive-in
+## both use this.
 static func hood_click_box(car: AABB) -> AABB:
-	var at := car.position + Vector3(0.0, car.size.y * 0.3, car.size.z * 0.62)
-	return AABB(at, Vector3(car.size.x, car.size.y * 0.42, car.size.z * 0.38))
+	var at := car.position + Vector3(car.size.x * 0.22, car.size.y * 0.48, car.size.z * 0.68)
+	return AABB(at, Vector3(car.size.x * 0.56, car.size.y * 0.14, car.size.z * 0.14))
 
 
 ## Heads on this engine and no other: an empty one does not mean the active car's.
