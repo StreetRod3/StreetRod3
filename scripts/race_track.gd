@@ -1346,9 +1346,11 @@ func _build_ramp_sides() -> void:
 	add_child(mi)
 	# A car on the grass beside a ramp is held to the grass, so the side stops it, as a barrier
 	# does, rather than lifting it onto the ramp. Cars ride 0.1 m clear, so a side lower than that
-	# lets them up, and one on the ramp clears the top.
+	# lets them up, and one on the ramp clears the top. The side faces out only: a car that drops
+	# off a ramp with its middle just past the edge lands half inside it, and is pushed out onto
+	# the grass rather than held there.
 	var shape := ConcavePolygonShape3D.new()
-	shape.backface_collision = true
+	shape.backface_collision = false
 	shape.set_faces(mesh.get_faces())
 	var hit := CollisionShape3D.new()
 	hit.shape = shape
