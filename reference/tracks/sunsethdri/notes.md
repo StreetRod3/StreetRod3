@@ -1,6 +1,6 @@
 # Hazy sunset sky, `sunset-pink` (`scripts/skies.gd`)
 
-Poliigon HdrSkySunset007, "Hazy Horizon Sunset, pink orange", https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537 (the source confirmed 2026-11-16). Pasted 2026-11-16. Sky only: the lower half is black.
+Poliigon HdrSkySunset007, "Hazy Horizon Sunset, pink orange", https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537 (the source confirmed 2026-11-16). A free asset under Poliigon's royalty-free license. Pasted 2026-11-16. Sky only: the lower half is black.
 
 | File | What it is |
 | --- | --- |

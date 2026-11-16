@@ -1,6 +1,6 @@
 # Cloudy evening sky, `evening-orange` (`scripts/skies.gd`)
 
-Poliigon HdrSkyEvening006, "Cloudy Horizon Evening, orange", https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522 (the source confirmed 2026-11-16). Pasted 2026-11-16. Sky only: the lower half is black.
+Poliigon HdrSkyEvening006, "Cloudy Horizon Evening, orange", https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522 (the source confirmed 2026-11-16). A free asset under Poliigon's royalty-free license. Pasted 2026-11-16. Sky only: the lower half is black.
 
 | File | What it is |
 | --- | --- |
