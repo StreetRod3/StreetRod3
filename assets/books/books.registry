@@ -44,6 +44,88 @@
       "product": "tires",
       "parameter-name": "grip",
       "value": "1"
+    },
+    {
+      "id": "hellmark-gb-race5",
+      "title": "Hellmark's guide to the 5-speed racing",
+      "description": "Close-ratio setup for the racing five-speed so the engine stays on its power through every shift.",
+      "content": "The racing five-speed is a close-ratio box, and it pays only when the steps stay even. Fill it with light oil, set the shift forks so each dog locks without grinding, and keep the throw short enough that the engine never falls off its peak between gears.\n\nCheck the end play before the first hard pass. A tight cluster puts the crank's work on the pavement instead of heating the gear oil.",
+      "product": "gb_race5",
+      "parameter-name": "hp",
+      "value": "4"
+    },
+    {
+      "id": "hellmark-gb-man5",
+      "title": "Hellmark's guide to the 5-speed manual",
+      "description": "Detent, fork, and overdrive notes so the five-speed manual wastes less of the engine's power.",
+      "content": "Fifth on the five-speed manual is an overdrive, and the four gears under it still have to pull. Set the detent springs so the stick finds each gate, and keep the shift forks from riding the dogs once the gear is home.\n\nA clean 2-3 and a fifth that is not dragging let the engine make its power instead of stirring the gearbox.",
+      "product": "gb_man5",
+      "parameter-name": "hp",
+      "value": "4"
+    },
+    {
+      "id": "hellmark-gb-man4",
+      "title": "Hellmark's guide to the 4-speed manual",
+      "description": "Linkage and clutch setup for the four-speed so the 1-2 shift does not give the power away.",
+      "content": "The four-speed earns its keep on the 1-2 shift. Set the linkage so the stick travels straight across the gate, and set the clutch free play so the disc locks the moment the pedal comes up.\n\nEqual wear on the two center gears means the box is sharing the load. A box set up that way puts more of the engine's power to the rear wheels.",
+      "product": "gb_man4",
+      "parameter-name": "hp",
+      "value": "4"
+    },
+    {
+      "id": "hellmark-gb-man3",
+      "title": "Hellmark's guide to the 3-speed manual",
+      "description": "Wide-ratio shift points and clutch care so the three-speed manual holds onto the power.",
+      "content": "Three wide gears leave no room for a missed shift. Set second so the engine is still pulling when the stick comes back, and keep the clutch from slipping on the way out of low.\n\nFresh oil and a linkage that is not bent let this box pass the power along instead of turning it into heat.",
+      "product": "gb_man3",
+      "parameter-name": "hp",
+      "value": "4"
+    },
+    {
+      "id": "hellmark-gb-auto3",
+      "title": "Hellmark's guide to the automatic 3-speed",
+      "description": "Band, fluid, and kickdown notes so the automatic three-speed stops slipping the power away.",
+      "content": "An automatic only makes horsepower by slipping less of it. Set the bands to the shop's turns, keep the fluid at the mark and not burnt, and adjust the kickdown so the box drops a gear when the throttle asks instead of hunting.\n\nA converter that locks cleanly into each gear leaves more of the engine's work at the rear wheels.",
+      "product": "gb_auto3",
+      "parameter-name": "hp",
+      "value": "4"
+    },
+    {
+      "id": "hellmark-racing-cam",
+      "title": "Hellmark's guide to the racing camshaft",
+      "description": "Degreeing, lash, and break-in so a racing camshaft's extra lift turns into power.",
+      "content": "A racing camshaft is only as strong as the way it is degreed in. Set the intake centerline on the marks, check the lash on a warm engine, and break the cam in at a steady rpm so the lifters pick up oil before the first hard pull.\n\nWith the valves opening farther and holding open longer, the same heads and carburetor move more air, and the engine makes more power upstairs.",
+      "product": "cam",
+      "parameter-name": "hp",
+      "value": "5"
+    },
+    {
+      "id": "hellmark-racing-springs",
+      "title": "Hellmark's guide to racing springs",
+      "description": "Rate, ride height, and corner balance so racing springs keep the tire planted.",
+      "content": "Racing springs keep the tire on the pavement when the car takes a set. Seat each spring square in its pocket, match the rates side to side, and check the ride height so one corner is not holding the car up alone.\n\nA stiffer rate resists dive and roll, so the contact patch stays flat through a corner instead of unloading the inside tire.",
+      "product": "springs-racing",
+      "parameter-name": "spring_rate",
+      "value": "0.2"
+    },
+    {
+      "id": "hellmark-racing-shocks",
+      "title": "Hellmark's guide to racing shocks",
+      "description": "Rebound, compression, and heat care so racing shocks control the spring.",
+      "content": "A racing shock keeps a stiff spring from bouncing the tire off the road. Set the rebound so the car settles once after a bump, and keep the compression firm enough that the nose does not dive the grip away on a hard stop.\n\nFresh fluid and sound mounts let that damping work at every corner instead of fading once the shock gets hot.",
+      "product": "shocks-racing",
+      "parameter-name": "shock_rate",
+      "value": "0.2"
+    },
+    {
+      "id": "credits",
+      "title": "Credits",
+      "content": "Street Rod 3\nTeam:\nDevelopment:\nHellmark\nkshyshieck (kgorecki)\nTesting:\nFabioPedretti\nHeart:\nVaelor"
+    },
+    {
+      "id": "shortcuts",
+      "title": "Shortcuts",
+      "content": "Driving, as the keys start. The controls page can change them.\nW or Up — gas\nS or Down — brake\nA or Left — steer left\nD or Right — steer right\nSpace — hand brake\nE — shift up\nQ — shift down (from first, stopped, this is reverse)\nC — camera\nEsc — pause\n` — console\nEnter or Esc — leave the finish\n\nMenus\nW or Up, S or Down — move\nA or Left, D or Right — a slider\nEnter — choose\nEsc — back\n\nGarage\nN — newspaper\nM — city map\nR — radio\nP — paint\nD — free roam\nG — gas station\nX — calendar\nQ — menu\nI — car stats\nT — tire machine\nW — wheels\nL — spare parts\nB — bookshelf\nH — under the hood\nA — transmission\nU — under the car\nC — cars\n` — console\nRight-drag — look around\nWheel — zoom\nCtrl+0 — reset the zoom (Cmd+0 on a Mac)\n\nCity map\n0 — garage\n1 — drive-in\n2 — gas station\n3 — Royal Rods\nEsc — hang it up\n\nCars\n1–9, and 0 for the 10th — pick one\nS or Enter — switch to it\nL — sell\nF or Esc — close\nUp or Down — the asking price\nO or Enter — offer, or take the offer\nN or Esc — never, or refuse\n\nSpare parts\n1–9, and 0 for the 10th — pick one\nS or Enter — sell\nEsc — close\n\nBookshelf\n1–9, and 0 for the 10th — open that book\nEsc — back, then close\n\nUnder the hood\nP — parts\nW — plug wires\nB — belt\nT — tune\nEsc — close the hood\nRight-drag — look around\nWheel — zoom\n\nTune\nA or Up — advance\nR or Down — retard\nEsc — done\n\nTransmission\n1 and 2 — the bellhousing bolts\nG — select a gearbox\nEsc — back to the garage\n\nUnder the car\n1 — exhaust manifolds\n2 — exhaust\n3 — muffler\n4 — left muffler\n5 — rear end\n6 — springs\n7 — shocks\nEsc — back to the garage\nRight-drag — look around\nWheel — zoom\n\nNewspaper\nU or C — used cars\nP or A — parts\nEsc — back\n\nDrive-in\nG — back to the garage\nD — town cruise\nO — opponents\nEnter — race the rival waiting there\nH — under that rival's hood\nEsc — back\n\nGas station\nP — take the nozzle, or hang it up\nF — fuel the car, or pull the nozzle back\nG — back to the garage\nD — town cruise\n\nRoyal Rods\nP — parts catalog\nEsc — close the catalog, then leave\nG — back to the garage\nD — town cruise\n\nTown cruise\nSpace or Enter — skip the drive\nC — camera\n` — console\nEsc — leave after a wreck"
     }
   ]
 }

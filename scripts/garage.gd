@@ -9,6 +9,14 @@ const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _Console := preload("res://scripts/console.gd")
 const _CarSale := preload("res://scripts/car_sale.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
+## The shelf list matches the parts window. An open book fills the screen above the status bar.
+const _BOOKS_LIST_SIZE := Vector2(580, 520)
+const _BOOKS_PAGE_SIZE := Vector2(1200, 680)
+const _BOOKS_LIST_SCROLL_H := 380.0
+const _BOOKS_PAGE_SCROLL_H := 520.0
+const _SR3_LOGO := preload("res://assets/sr3logo.png")
+const _SR3_LOGO_SIZE := Vector2(320, 155)
+const _SR3_LOGO_MARGIN := 18.0
 
 @onready var _car_pivot: Node3D = $CarPivot
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -80,6 +88,8 @@ var _parts_list: VBoxContainer
 var _parts_status: Label
 var _parts_close: Button
 var _books_board: Control
+var _books_panel: PanelContainer
+var _books_logo: TextureRect
 var _books_title: Label
 var _books_status: Label
 var _books_scroll: ScrollContainer
@@ -1851,12 +1861,27 @@ func _build_books_board() -> void:
 	root.add_child(dim)
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER)
-	panel.custom_minimum_size = Vector2(580, 520)
-	panel.offset_left = -290
-	panel.offset_top = -260
-	panel.offset_right = 290
-	panel.offset_bottom = 260
 	root.add_child(panel)
+	_books_panel = panel
+	_set_books_panel_size(false)
+	var logo_host := Control.new()
+	logo_host.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo_host.z_index = 1
+	panel.add_child(logo_host)
+	var logo := TextureRect.new()
+	logo.name = "CreditsLogo"
+	logo.texture = _SR3_LOGO
+	logo.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	logo.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	logo.offset_left = -_SR3_LOGO_MARGIN - _SR3_LOGO_SIZE.x
+	logo.offset_top = _SR3_LOGO_MARGIN
+	logo.offset_right = -_SR3_LOGO_MARGIN
+	logo.offset_bottom = _SR3_LOGO_MARGIN + _SR3_LOGO_SIZE.y
+	logo.visible = false
+	logo_host.add_child(logo)
+	_books_logo = logo
 	var margin := MarginContainer.new()
 	margin.add_theme_constant_override("margin_left", 16)
 	margin.add_theme_constant_override("margin_right", 16)
@@ -1874,7 +1899,8 @@ func _build_books_board() -> void:
 	box.add_child(_books_status)
 	_books_scroll = ScrollContainer.new()
 	_books_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_books_scroll.custom_minimum_size = Vector2(0, 380)
+	_books_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_books_scroll.custom_minimum_size = Vector2(0, _BOOKS_LIST_SCROLL_H)
 	box.add_child(_books_scroll)
 	_books_list = VBoxContainer.new()
 	_books_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1896,6 +1922,25 @@ func _build_books_board() -> void:
 	box.add_child(actions)
 	$GarageUI.add_child(root)
 	_books_board = root
+
+
+func _set_books_panel_size(page: bool) -> void:
+	if _books_panel == null:
+		return
+	var size := _BOOKS_PAGE_SIZE if page else _BOOKS_LIST_SIZE
+	_books_panel.custom_minimum_size = size
+	_books_panel.offset_left = -size.x * 0.5
+	_books_panel.offset_right = size.x * 0.5
+	_books_panel.offset_top = -size.y * 0.5
+	_books_panel.offset_bottom = size.y * 0.5
+	if _books_scroll != null:
+		var scroll_h := _BOOKS_PAGE_SCROLL_H if page else _BOOKS_LIST_SCROLL_H
+		_books_scroll.custom_minimum_size = Vector2(0, scroll_h)
+	if _books_title != null:
+		if page:
+			_books_title.add_theme_font_size_override("font_size", 26)
+		else:
+			_books_title.remove_theme_font_size_override("font_size")
 
 
 func _show_books_board() -> void:
@@ -1930,11 +1975,11 @@ func _refresh_bookshelf_meshes() -> void:
 	var shelf := get_node_or_null("InteractBookshelf") as Node3D
 	if shelf == null:
 		return
-	var owned_count := GameState.owned_book_ids.size()
+	var shown := GameState.shelf_book_count()
 	var index := 0
 	for child: Node in shelf.get_children():
 		if child is MeshInstance3D and child.name.begins_with("Book"):
-			(child as MeshInstance3D).visible = index < owned_count
+			(child as MeshInstance3D).visible = index < shown
 			index += 1
 
 
@@ -1945,38 +1990,47 @@ func _rebuild_books_board() -> void:
 	if not _open_book_id.is_empty():
 		var book := GameState.book_by_id(_open_book_id)
 		if not book.is_empty():
+			_set_books_panel_size(true)
 			_rebuild_book_pages(book)
 			_books_back.visible = true
 			_books_scroll.scroll_vertical = 0
 			return
 		_open_book_id = ""
+	_set_books_panel_size(false)
 	_books_title.text = "Bookshelf"
-	var books := GameState.owned_books()
-	if books.is_empty():
-		_books_status.text = "The shelf is empty."
+	var books := GameState.shelf_books()
+	if GameState.owned_books().is_empty():
+		_books_status.text = ""
 	else:
 		_books_status.text = "Books on the shelf improve every car you own."
-		for i: int in books.size():
-			var item: Dictionary = books[i]
-			var book_id := str(item.get("id", ""))
-			var title := str(item.get("title", "Book"))
-			var copies := GameState.book_count(book_id)
-			var heading := "%d.  %s" % [i + 1, title]
-			if copies > 1:
-				heading += "  ×%d" % copies
-			var effect := GameState.book_effect_text(item)
-			var description := str(item.get("description", ""))
-			var details: Array[String] = [heading]
-			if not effect.is_empty():
-				details.append(effect)
-			if not description.is_empty():
-				details.append(description)
-			_books_list.add_child(_action_row("\n".join(details), "Read", _on_book_read.bind(book_id)))
+	for i: int in books.size():
+		var item: Dictionary = books[i]
+		var book_id := str(item.get("id", ""))
+		var title := str(item.get("title", "Book"))
+		var copies := GameState.book_count(book_id)
+		var heading := "%d.  %s" % [i + 1, title]
+		if copies > 1 and not GameState.SHELF_FIXTURES.has(book_id):
+			heading += "  ×%d" % copies
+		var effect := GameState.book_effect_text(item)
+		var description := str(item.get("description", ""))
+		var details: Array[String] = [heading]
+		if not effect.is_empty():
+			details.append(effect)
+		if not description.is_empty():
+			details.append(description)
+		_books_list.add_child(_action_row("\n".join(details), "Read", _on_book_read.bind(book_id)))
 	_books_back.visible = false
 	_books_scroll.scroll_vertical = 0
+	_set_credits_logo(false)
+
+
+func _set_credits_logo(show_logo: bool) -> void:
+	if _books_logo != null:
+		_books_logo.visible = show_logo
 
 
 func _rebuild_book_pages(book: Dictionary) -> void:
+	_set_credits_logo(str(book.get("id", "")) == GameState.BOOK_CREDITS)
 	_books_title.text = str(book.get("title", "Book"))
 	var effect := GameState.book_effect_text(book)
 	var description := str(book.get("description", ""))
@@ -1991,6 +2045,7 @@ func _rebuild_book_pages(book: Dictionary) -> void:
 		var body_label := Label.new()
 		body_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		body_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		body_label.add_theme_font_size_override("font_size", 22)
 		body_label.text = content
 		_books_list.add_child(body_label)
 
@@ -2012,7 +2067,7 @@ func _try_books_shortcut(event: InputEvent) -> bool:
 	var index := _car_list_number_index(key.keycode)
 	if index < 0:
 		return false
-	var books := GameState.owned_books()
+	var books := GameState.shelf_books()
 	if index >= books.size():
 		return false
 	_on_book_read(str(books[index].get("id", "")))
