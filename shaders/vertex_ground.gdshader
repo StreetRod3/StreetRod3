@@ -2,12 +2,13 @@ shader_type spatial;
 render_mode cull_disabled;
 
 // Mulholland's ground beside the road (track_sides.gd). Each vertex says how much of it is grass
-// (COLOR.a) and how much is dirt (UV.x); whatever is left is gravel. So the flat ground is grass,
-// the hillsides dirt, the banks run from one into the other, and the verge is gravel, the same as
-// the course's gravel stretches (ground_material.gd's gravel()). COLOR.rgb is not used. The dirt
-// is tinted toward the old flat brown, and none of the three shines. Each texture is mapped from
-// above in world space with the same triplanar blend as a StandardMaterial3D's world triplanar
-// (see ground_material.gd).
+// (COLOR.a) and how much is dirt (UV.x), so the flat ground is grass, the hillsides dirt, and the
+// banks run from one into the other. UV.y is how far out it is from the road's edge, in meters:
+// gravel, the same as the course's gravel stretches (ground_material.gd's gravel()), covers it out
+// to a wavy line inside `verge_m`, so the verge has a ragged outside edge where the mesh is
+// straight. COLOR.rgb is not used. The dirt is tinted toward the old flat brown, and none of the
+// three shines. Each texture is mapped from above in world space with the same triplanar blend as
+// a StandardMaterial3D's world triplanar (see ground_material.gd).
 
 uniform sampler2D grass_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D grass_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -25,6 +26,14 @@ uniform sampler2D gravel_albedo : source_color, filter_linear_mipmap_anisotropic
 uniform sampler2D gravel_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D gravel_arm : hint_roughness_g, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float gravel_tile_m = 2.0;
+// The verge's width, from the road's edge (track_sides.gd's MOUNTAIN_VERGE).
+uniform float verge_m = 0.89;
+// How far its outside edge wanders in from `verge_m`, in meters, and how long its bumps are. It
+// never goes out past `verge_m`: there a hill can rise straight up, and gravel ran up its face.
+uniform float edge_wobble_m = 0.45;
+uniform float edge_wave_m = 2.5;
+// Half the width of the blend at the edge, in meters.
+uniform float edge_soft_m = 0.05;
 // Specular of the grass, dirt and gravel. Low, because Godot scales the grazing-angle reflection
 // with it too, and at 0.5 the ground far off turned pale with the sky in it.
 uniform float ground_specular = 0.1;
@@ -60,10 +69,29 @@ vec4 triplanar(sampler2D s, float tile_m) {
 	return c;
 }
 
+// A hash with no sine, so it holds up a few kilometers from the origin.
+float hash12(vec2 p) {
+	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+	p3 += dot(p3, p3.yzx + 33.33);
+	return fract((p3.x + p3.y) * p3.z);
+}
+
+float value_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
+		mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
 void fragment() {
-	float grass = clamp(COLOR.a, 0.0, 1.0);
-	float dirt = clamp(UV.x, 0.0, 1.0 - grass);
-	float gravel = 1.0 - grass - dirt;
+	// Where the gravel ends: a wavy line inside `verge_m`, its bumps set by the ground's place.
+	vec2 p = v_world.xz / edge_wave_m;
+	float wobble = 0.65 * value_noise(p) + 0.35 * value_noise(p * 2.7 + 17.0);
+	float edge = verge_m - edge_soft_m - edge_wobble_m * wobble;
+	float gravel = 1.0 - smoothstep(edge - edge_soft_m, edge + edge_soft_m, UV.y);
+	float grass = clamp(COLOR.a, 0.0, 1.0) * (1.0 - gravel);
+	float dirt = clamp(UV.x, 0.0, 1.0) * (1.0 - gravel);
 	// Sampled everywhere, not under an if: the weights change across a triangle, and a texture read
 	// in a branch that differs between neighboring pixels gets the wrong mipmap.
 	ALBEDO = gravel_color.rgb * triplanar(gravel_albedo, gravel_tile_m).rgb * gravel

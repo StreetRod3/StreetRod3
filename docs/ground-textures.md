@@ -32,6 +32,8 @@ All of these are constants in `scripts/ground_material.gd`.
 
 `DIRT_MEAN` is the dirt photo's average color in linear light, measured from the file. The tint is worked out from it, so measure it again if the dirt texture changes. The dirt is also never smoother than `dirt_min_roughness` (`0.92`) in `shaders/vertex_ground.gdshader`; the photo's own roughness looked damp.
 
+Mulholland's gravel verge has a ragged outside edge, drawn by the same shader; the mesh's edge is straight, and the walls and off-the-road checks still use the straight line. `edge_wobble_m` (`0.45`) is how far the edge wanders in from the full verge width, `edge_wave_m` (`2.5`) how long its bumps are, and `edge_soft_m` (`0.05`) how soft the line is. The edge only wanders inward: going out past the verge, gravel ran up the face of hills that rise straight from it.
+
 ## Skies
 
 A track picks its sky with its `sky` field, set under Sky in the track maker. The skies are listed in `SKIES` in `scripts/skies.gd`:

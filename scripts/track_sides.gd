@@ -56,11 +56,10 @@ const _MOUNTAIN_LOW_M := 110.0
 const _MOUNTAIN_HIGH_M := 460.0
 
 ## Mulholland's ground. Alpha is how much of it is the grass texture, and a column's "dirt" how much
-## is the dirt texture (see shaders/vertex_ground.gdshader); the rest is gravel. So green is all
-## grass, a hillside all dirt, a bank runs from one into the other, and the verge is gravel. Their
-## RGB is no longer drawn; it is the flat look they had before the textures.
+## is the dirt texture (see shaders/vertex_ground.gdshader). So green is all grass, a hillside all
+## dirt, and a bank runs from one into the other. The gravel verge is drawn over them by distance
+## from the road. Their RGB is no longer drawn; it is the flat look they had before the textures.
 const _GREEN := Color(0.11, 0.42, 0.1, 1)
-const _VERGE_GRAY := Color(0.33, 0.33, 0.32, 0)
 const _HILL_BROWN := Color(0.56, 0.3, 0.07, 0)
 const _RAIL_GRAY := Color(0.62, 0.62, 0.6, 1)
 const _TRUSS_RED := Color(0.5, 0.05, 0.04, 1)
@@ -143,7 +142,9 @@ static func build_mountain(
 				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a]),
 				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b])
 			)
-	_add_mesh(track, "Sides", st, _GroundMaterial.vertex_ground())
+	var ground := _GroundMaterial.vertex_ground()
+	ground.set_shader_parameter(&"verge_m", MOUNTAIN_VERGE)
+	_add_mesh(track, "Sides", st, ground)
 	var railed := rails.duplicate()
 	var right_out := _rail_flares(pts, types, railed)
 	var left_out := _hill_flares(pts, left)
@@ -253,15 +254,17 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 		bank = _GREEN.lerp(_HILL_BROWN, dirt)
 	var top := _far_rise(height)
 	var far_center := Vector3(center.x, far_y, center.z)
+	var hill_top := minf(slope_end + _HILL_TOP_M, limit)
+	var far := minf(slope_end + _FAR_M, limit)
+	# Every column carries the bank's grass and dirt, and how far out it is from the road's edge.
+	# The shader draws gravel out to a wavy line near `MOUNTAIN_VERGE` all along the road, flat
+	# sides too, and the bank's ground past it.
 	return [
-		# The verge is gravel all along the road, flat sides too, with a hard edge to the bank: a
-		# verge that came and went with the hills faded into the grass over a section each time.
-		_column(center + across * half, 0.0, _VERGE_GRAY),
-		_column(center + across * verge, 0.0, _VERGE_GRAY),
-		_column(center + across * verge, 0.0, bank, dirt),
-		_column(center + across * slope_end, height, bank, dirt),
-		_column(far_center + across * minf(slope_end + _HILL_TOP_M, limit), top, bank, dirt),
-		_column(far_center + across * minf(slope_end + _FAR_M, limit), top, bank if height > 0.0 else _GREEN, dirt),
+		_column(center + across * half, 0.0, bank, dirt, 0.0),
+		_column(center + across * verge, 0.0, bank, dirt, MOUNTAIN_VERGE),
+		_column(center + across * slope_end, height, bank, dirt, slope_end - half),
+		_column(far_center + across * hill_top, top, bank, dirt, hill_top - half),
+		_column(far_center + across * far, top, bank if height > 0.0 else _GREEN, dirt, far - half),
 	]
 
 
@@ -281,8 +284,9 @@ static func _aqueduct_section(center: Vector3, yaw: float, side: float, reach: f
 	]
 
 
-static func _column(point: Vector3, rise: float, color: Color, dirt: float = 0.0) -> Dictionary:
-	return {"point": point + Vector3(0.0, rise, 0.0), "color": color, "dirt": dirt}
+## `out` is how far the column is from the road's edge, in meters, for Mulholland's gravel verge.
+static func _column(point: Vector3, rise: float, color: Color, dirt: float = 0.0, out: float = 0.0) -> Dictionary:
+	return {"point": point + Vector3(0.0, rise, 0.0), "color": color, "dirt": dirt, "out": out}
 
 
 static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[Dictionary]) -> void:
@@ -306,9 +310,10 @@ static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[
 				_add_column_vertex(st, col)
 
 
-## A column's point, with its color, and its dirt in UV.x for shaders/vertex_ground.gdshader.
+## A column's point, with its color, and its dirt in UV.x and distance from the road's edge in
+## UV.y for shaders/vertex_ground.gdshader.
 static func _add_column_vertex(st: SurfaceTool, col: Dictionary) -> void:
-	st.set_uv(Vector2(float(col["dirt"]), 0.0))
+	st.set_uv(Vector2(float(col["dirt"]), float(col["out"])))
 	_add_vertex(st, col["point"], col["color"])
 
 
