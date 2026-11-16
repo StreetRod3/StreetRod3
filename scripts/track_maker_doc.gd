@@ -13,7 +13,7 @@ const _Self := preload("res://scripts/track_maker_doc.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
-const _OWN_ROOT_KEYS := ["name", "style", "jumps", "loop", "laps", "nodes", "roads", "scenery"]
+const _OWN_ROOT_KEYS := ["name", "style", "jumps", "loop", "laps", "sky", "nodes", "roads", "scenery"]
 const MAX_LAPS := 99
 ## Fields in meters, written with a decimal point even when whole.
 const _METRIC_KEYS := ["x", "y", "z", "width", "left", "right", "to", "w", "d", "h"]
@@ -34,6 +34,8 @@ var loop_road: Dictionary = {}
 ## The course comes back round to the start, which is also the finish, and is raced `laps` times.
 var loop: bool = false
 var laps: int = 1
+## The sky over the course, an id in skies.gd.
+var sky: String = "day"
 var scenery: Array[Dictionary] = []
 ## Root fields the maker does not edit, kept in file order.
 var extra: Dictionary = {}
@@ -54,6 +56,7 @@ func copy() -> _Self:
 	doc.jumps = jumps
 	doc.loop = loop
 	doc.laps = laps
+	doc.sky = sky
 	doc.nodes = _copy_list(nodes)
 	doc.roads = _copy_list(roads)
 	doc.loop_road = loop_road.duplicate(true)
@@ -103,6 +106,7 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 	doc.jumps = bool(parsed.jumps)
 	doc.loop = bool(parsed.loop)
 	doc.laps = int(parsed.laps)
+	doc.sky = str(parsed.sky)
 	var path_ids: Array = parsed.path_ids.duplicate()
 	if doc.loop:
 		# A loop's path ends on the start again; the road there is the closing road.
@@ -174,6 +178,8 @@ func to_text() -> String:
 	if loop:
 		root["loop"] = true
 		root["laps"] = laps
+	if sky != "day":
+		root["sky"] = sky
 	var out_nodes: Array[Dictionary] = []
 	for i in nodes.size():
 		out_nodes.append(_node_for_file(i))

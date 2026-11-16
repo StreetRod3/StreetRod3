@@ -235,12 +235,17 @@ func _setup_race_layout() -> void:
 		_traffic_mgr = traf
 
 
-## Every race but Street Rod 2's cruise races runs under the photographed day sky.
+## Every race but Street Rod 2's cruise races runs under a photographed sky: the track's own, set
+## in the track maker, or the day sky.
 func _set_day() -> void:
 	var world_env: WorldEnvironment = $WorldEnvironment
 	var env: Environment = world_env.environment.duplicate()
 	var sun: DirectionalLight3D = $DirectionalLight3D
-	_Skies.use_day(env, sun.global_basis)
+	var sky := _Skies.DAY
+	if _is_road and _track != null and _track.has_method(&"get_sky"):
+		sky = _track.get_sky()
+	_Skies.light(env, sky, sun)
+	_Skies.use(env, sky, sun.global_basis)
 	world_env.environment = env
 
 

@@ -94,6 +94,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	result.jumps = bool(root.get("jumps", false))
 	result.loop = bool(root.get("loop", false))
 	result.laps = maxi(int(root.get("laps", 1)), 1)
+	result.sky = str(root.get("sky", "day"))
 	if not _STYLES.has(result.style):
 		result.errors.append("Unknown track style `%s`." % result.style)
 	_parse_nodes(root, result)
@@ -128,6 +129,7 @@ static func _empty_result() -> Dictionary:
 		"jumps": false, # cars can leave the road where it drops away
 		"loop": false, # the course comes back round to the start, which is also the finish
 		"laps": 1, # times round a loop
+		"sky": "day", # a sky in skies.gd
 		"scenery": [], # what stands beside a street track: kind, x, y
 		"errors": [],
 		"warnings": [],

@@ -95,6 +95,8 @@ var _sign_mesh: ArrayMesh
 var _sign_textures: Dictionary = {}
 var _street: bool = false
 var _style: String = TrackFile.STYLE_CIRCUIT
+## The track's sky, an id in skies.gd.
+var _sky: String = "day"
 ## Cars leave the road where it drops away faster than they fall. See `air_time.gd`.
 var _jumps: bool = false
 ## A course that comes back round to its start, raced `_laps` times. The samples go round once and
@@ -127,6 +129,11 @@ func is_road_course() -> bool:
 
 func has_jumps() -> bool:
 	return _jumps
+
+
+## The sky the track asks for, an id in skies.gd.
+func get_sky() -> String:
+	return _sky
 
 
 func get_length() -> float:
@@ -562,6 +569,7 @@ func _build_path() -> void:
 			push_error("[track] %s" % error_text)
 		return
 	_style = data.style
+	_sky = data.sky
 	_jumps = bool(data.jumps)
 	_loop = bool(data.loop)
 	_laps = int(data.laps)

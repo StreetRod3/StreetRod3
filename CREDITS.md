@@ -21,6 +21,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 
 | In the game | Credit | License |
 | --- | --- | --- |
+| Hazy sunset sky (`assets/skies/sunset-pink.exr`) | HdrSkySunset007 by Poliigon (https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537) | Poliigon license; free or paid not recorded |
 | Day sky (`assets/skies/kloofendal_48d_partly_cloudy_puresky_4k.hdr`) | "Kloofendal 48d Partly Cloudy (Pure Sky)" by Greg Zaal and Jarod Guest, Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 
 ## Fonts

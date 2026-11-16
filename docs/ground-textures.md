@@ -11,7 +11,7 @@ The ground, roads and day sky are photographed textures. Their materials are bui
 | Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The Aqueduct's floor and banks, the street drag's shoulders | `vertex_colored_concrete()`, `shoulder_concrete()` |
 | Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hillsides, and the upper part of its banks | The dirt part of `vertex_ground()` |
 | Gravel (flat color until there is a texture) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
-| Day sky (Poly Haven Kloofendal 48d Partly Cloudy, Pure Sky) | Every race but Street Rod 2's cruise races, and the city | `Skies.use_day()` |
+| Day sky (Poly Haven Kloofendal 48d Partly Cloudy, Pure Sky) | The city, and every race but Street Rod 2's cruise races unless its track picks another sky | `Skies.use_day()`, `Skies.use()` |
 
 Mulholland's guard rails and far peaks keep their flat colors.
 
@@ -31,6 +31,37 @@ All of these are constants in `scripts/ground_material.gd`.
 | `SHOULDER_TINT` | `0.6` grey | Shade of the street drag's concrete shoulders. |
 
 `DIRT_MEAN` is the dirt photo's average color in linear light, measured from the file. The tint is worked out from it, so measure it again if the dirt texture changes. The dirt is also never smoother than `dirt_min_roughness` (`0.92`) in `shaders/vertex_ground.gdshader`; the photo's own roughness looked damp.
+
+## Skies
+
+A track picks its sky with its `sky` field, set under Sky in the track maker. The skies are listed in `SKIES` in `scripts/skies.gd`:
+
+| Id | Sky | File | Source |
+| --- | --- | --- | --- |
+| `day` | Day, partly cloudy | `assets/skies/kloofendal_48d_partly_cloudy_puresky_4k.hdr` | Poly Haven, https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky (CC0) |
+| `dusk` | Dusk | `assets/skies/dusk.exr`, not added yet | environment-textures.com, https://www.environment-textures.com/photos/show/id/12k-dusk-skydome-hdri-panorama (paid, one credit; a 12K HDR in the set) |
+| `evening-orange` | Cloudy evening, orange | `assets/skies/evening-orange.exr`, not added yet | Poliigon, https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522 |
+| `sunset-pink` | Hazy sunset, pink and orange | `assets/skies/sunset-pink.exr`, from `reference/tracks/sunsethdri/` | Poliigon HdrSkySunset007, https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537 |
+
+The sky is turned so the sun in the photo stands where the scene's light comes from. That needs the sun's place, `sun_u` and `sun_up`. A sky without them (`-1`) is drawn unturned, so its sun can be on the wrong side of the shadows.
+
+In races a sky can also set the light, for a sky that isn't midday. The day sky sets none of these and leaves each scene's own light. The city always has the day sky.
+
+| Key | What it does | `sunset-pink` |
+| --- | --- | --- |
+| `light_height` | The sun light's height in degrees; its heading stays. A little above a sunset sun keeps shadows from running off for hundreds of meters. | `8` |
+| `light_color`, `light_energy` | The sun light's color and strength. | warm orange, `1.1` |
+| `ambient_color`, `ambient_energy` | The light everywhere, which lights what the sun doesn't. | dusky lilac, `0.75` |
+| `tonemap`, `exposure` | `"filmic"` or `"aces"`. Races otherwise draw without tone mapping, and a low sun's glow then burns out to a white blob. ACES crushed the dark side of the sky to black. | filmic, `1.6` |
+| `sky_energy` | How bright the photo itself is drawn, to tame a glow without darkening the scene. Lower hides the dark side of the sky. | `0.55` |
+
+To add a sky, or the file for one listed above:
+
+1. Download the HDR or EXR, and keep the download and its license under `reference/` (`reference/skies/<id>/`, say) with a `notes.md`. A very large original (the 12K dusk sky, say) can stay out of Git; the notes then say where it came from.
+2. Make the game's copy and measure the sun: `godot --headless --path . --script tools/prepare_hdri.gd -- reference/skies/<id>/<file>.hdr assets/skies/<id>.exr`. It scales the panorama down to 4096 across and prints `sun_u` and `sun_up`.
+3. Put those two numbers in the sky's entry in `SKIES`. A new sky also needs an entry there, with its name for the track maker and its file. A sky that isn't midday needs the lighting keys above, worked out by looking at a race under it.
+4. Import (`godot --headless --import`), then set the new `.import` file to `compress/mode=2` and `detect_3d/compress_to=0`, leave mipmaps off, and import again.
+5. Add it to CREDITS.md.
 
 ## Adding a texture
 
