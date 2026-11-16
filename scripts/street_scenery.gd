@@ -1,7 +1,8 @@
 extends RefCounted
 
 ## What stands beside a `street` track, from the `scenery` list of its `.trk` file. Street Rod 2
-## draws these as sprites and never tests a car against them, so nothing here has collision.
+## draws these as sprites and never tests a car against them, so only the trees here have
+## collision: their trunks are solid and can be snapped (tree_grove.gd).
 
 const _TRUNK := Color(0.33, 0.2, 0.11, 1)
 const _LEAVES := Color(0.2, 0.46, 0.15, 1)
@@ -43,6 +44,7 @@ const BARK_CROWN_SHADE := 0.6
 const BARK_CROWN_FROM := 0.45
 const BARK_FOOT_SHADE := 0.3
 const _BARK_SHADER := preload("res://shaders/tree_bark.gdshader")
+const _TreeGrove := preload("res://scripts/tree_grove.gd")
 ## Crowns are leaf cards (shaders/tree_leaves.gdshader): this many per square meter of crown
 ## surface, each this many meters across from its middle, set in about a fifth of the crown's
 ## radius at most. The leaf shape and the shader come from PixelageGames' 3D pixel art vegetation
@@ -70,9 +72,9 @@ static func build(track: Node3D, items: Array[Dictionary], road_width: float) ->
 		list.assign(spots.get(kind, list))
 		list.append(Vector2(float(item["x"]), float(item["y"])))
 		spots[kind] = list
-	add_trees(root, _feet_on_track(track, _spots_of(spots, "tree")), _spots_of(spots, "tree"), "tree")
-	add_trees(root, _feet_on_track(track, _spots_of(spots, "big_tree")), _spots_of(spots, "big_tree"), "big_tree")
-	add_trees(root, _feet_on_track(track, _spots_of(spots, "bare_tree")), _spots_of(spots, "bare_tree"), "bare_tree")
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "tree")), _spots_of(spots, "tree"), "tree", track)
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "big_tree")), _spots_of(spots, "big_tree"), "big_tree", track)
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "bare_tree")), _spots_of(spots, "bare_tree"), "bare_tree", track)
 	_build_poles(track, root, _spots_of(spots, "pole"))
 	_build_paint(track, root, "Dashes", _spots_of(spots, "dash"), _DASH_WIDTH, _DASH_LENGTH, 0.0, _STRIPE)
 	_build_paint(track, root, "Finish", _spots_of(spots, "finish"), road_width, _FINISH_LENGTH, 0.0, _FINISH)
@@ -118,8 +120,10 @@ static func _flat_feet(spots: Array[Vector2]) -> Array[Vector3]:
 
 
 ## The street drag's round trees, larger ones, and sparse ones. `spots` pick each tree's
-## size, and `feet` are where they stand.
-static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2], kind: String) -> void:
+## size, and `feet` are where they stand. Each kind is a TreeGrove (tree_grove.gd): solid trunks
+## that snap in a hard enough hit. `track` is the race track they stand by, if any, so rivals
+## steer round a fallen one.
+static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2], kind: String, track: Node3D = null) -> void:
 	if feet.is_empty() or feet.size() != spots.size():
 		return
 	var height := 5.5
@@ -152,21 +156,19 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 	crown_mesh.material = _material(_LEAVES)
 	var crowns := _bare_crowns(height, crown_radius) if bare else _full_crowns(height, crown_radius)
 	var leaf_mesh := _leaf_mesh(crowns, kind.hash())
-	var trunk_xforms: Array[Transform3D] = []
-	var crown_xforms: Array[Transform3D] = []
-	var leaf_xforms: Array[Transform3D] = []
+	var plants: Array[Transform3D] = []
+	var seeds := PackedFloat32Array()
 	for i in spots.size():
 		var spot: Vector2 = spots[i]
 		var size := lerpf(0.88, 1.15, _spot_random(spot, 1.0))
 		var turn := Basis(Vector3.UP, TAU * _spot_random(spot, 2.0)).scaled(Vector3(size, size, size))
-		var plant := Transform3D(turn, feet[i])
-		trunk_xforms.append(plant * Transform3D(Basis.IDENTITY, Vector3(0.0, height * 0.5, 0.0)))
-		leaf_xforms.append(plant)
-		for crown: Transform3D in crowns:
-			crown_xforms.append(plant * crown)
-	_add_multimesh(root, "Trunks", trunk_mesh, trunk_xforms, true)
-	_add_multimesh(root, "Crowns", crown_mesh, crown_xforms, true, true)
-	_add_multimesh(root, "Leaves", leaf_mesh, leaf_xforms, false)
+		plants.append(Transform3D(turn, feet[i]))
+		seeds.append(_spot_random(spot, 5.0))
+	var grove := _TreeGrove.new()
+	grove.name = "Trees_%s" % kind
+	grove.track = track
+	root.add_child(grove)
+	grove.setup(kind, height, trunk_radius, trunk_mesh, crown_mesh, leaf_mesh, crowns, plants, seeds)
 
 
 ## Bark for a trunk of this size. The texture goes round a whole number of times so it meets
@@ -420,8 +422,7 @@ static func _add_multimesh(
 	node_name: String,
 	mesh: Mesh,
 	xforms: Array[Transform3D],
-	shadows: bool,
-	shadow_only: bool = false
+	shadows: bool
 ) -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -434,6 +435,4 @@ static func _add_multimesh(
 	mmi.multimesh = mm
 	if not shadows:
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	elif shadow_only:
-		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 	root.add_child(mmi)

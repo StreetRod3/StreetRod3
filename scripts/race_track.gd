@@ -324,6 +324,13 @@ func over_the_edge(world: Vector3) -> bool:
 	return absf(lateral) > _half_ws[i] + _TrackSides.MOUNTAIN_VERGE + _TrackSides.OVER_EDGE_PAST_VERGE
 
 
+## Something new on the road for rivals to steer round for the rest of the race, such as a fallen
+## tree (tree_grove.gd): {"s", "to", "low", "high"}, as course_scenery.gd's blocks.
+func add_block(block: Dictionary) -> void:
+	_blocks.append(block)
+	_blocks.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["s"]) < float(b["s"]))
+
+
 func set_dynamic_blocks(blocks: Array[Dictionary]) -> void:
 	_dynamic_blocks = blocks
 

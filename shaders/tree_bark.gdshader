@@ -23,23 +23,29 @@ uniform float foot_to = 0.08;
 // How far a tree's color can stray: brightness either way, and toward red or toward grey.
 uniform float tree_value_jitter = 0.18;
 uniform float tree_warmth_jitter = 0.12;
+// The part of the trunk this mesh is, from 0 at the foot to 1 at the top: a stump or the fallen
+// rest of a broken tree (tree_grove.gd) keeps the whole trunk's bark and shading.
+uniform float piece_from = 0.0;
+uniform float piece_to = 1.0;
+// A tree's bark numbers: from the MultiMesh's custom data, or set here on a tree's own pieces.
+instance uniform float tree_seed = -1.0;
 
 varying float tree_rand;
 varying float tree_rand2;
 
-float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
 void vertex() {
-	vec2 at = MODEL_MATRIX[3].xz;
-	tree_rand = hash(at);
-	tree_rand2 = hash(at + vec2(17.31, -4.7));
+	if (tree_seed >= 0.0) {
+		tree_rand = tree_seed;
+		tree_rand2 = fract(tree_seed * 7.13 + 0.31);
+	} else {
+		tree_rand = INSTANCE_CUSTOM.x;
+		tree_rand2 = INSTANCE_CUSTOM.y;
+	}
 }
 
 void fragment() {
-	float up = clamp(1.0 - UV.y * 2.0, 0.0, 1.0);
-	vec2 uv = UV * uv_scale + vec2(tree_rand, tree_rand2 * 3.0);
+	float up = mix(piece_from, piece_to, clamp(1.0 - UV.y * 2.0, 0.0, 1.0));
+	vec2 uv = vec2(UV.x, (1.0 - up) * 0.5) * uv_scale + vec2(tree_rand, tree_rand2 * 3.0);
 	vec3 bark = texture(albedo_texture, uv).rgb * tint.rgb;
 	float value = 1.0 + (tree_rand2 * 2.0 - 1.0) * tree_value_jitter;
 	float warmth = (tree_rand * 2.0 - 1.0) * tree_warmth_jitter;

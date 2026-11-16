@@ -1185,27 +1185,8 @@ func _build_streetscape(track: Dictionary) -> void:
 	leaf.vertex_color_use_as_albedo = true
 	leaf.vertex_color_is_srgb = true
 	_add_multimesh(root, shrub, leaf, bushes, false, greens)
+	# Their trunks are solid, and snap in a hard enough hit (tree_grove.gd).
 	_StreetScenery.add_flat_trees(root, trees, big_trees, bare_trees)
-	_add_tree_barriers(root, trees, 0.22, 5.5)
-	_add_tree_barriers(root, big_trees, 0.34, 7.5)
-	_add_tree_barriers(root, bare_trees, 0.18, 6.5)
-
-
-## Trunks only. A tree does not get out of the way, and a hard hit wrecks the car.
-func _add_tree_barriers(parent: Node3D, spots: Array[Vector2], radius: float, height: float) -> void:
-	for spot: Vector2 in spots:
-		var body := StaticBody3D.new()
-		body.collision_layer = 1
-		body.collision_mask = 0
-		body.set_meta(&"track_obstacle", true)
-		body.position = Vector3(spot.x, height * 0.5 - 0.15, spot.y)
-		var shape := CollisionShape3D.new()
-		var trunk := CylinderShape3D.new()
-		trunk.radius = radius
-		trunk.height = height
-		shape.shape = trunk
-		body.add_child(shape)
-		parent.add_child(body)
 
 
 func _place_bush(pile: Array[Transform3D], pos: Vector3, radius: float, lift: float) -> void:

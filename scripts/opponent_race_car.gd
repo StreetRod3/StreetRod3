@@ -919,8 +919,15 @@ func _scrape_barrier(before: Vector3, track: Node, delta: float) -> bool:
 	var hit := _WallScrape.resolve(self, before, delta)
 	if hit.is_empty():
 		return false
-	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
 	var after: Vector3 = hit["velocity"]
+	if hit.has("snapped"):
+		# Through a tree: it gave way, so the car keeps its heading.
+		take_hit(float(hit["snapped"]))
+		_dynamics.cg_velocity = after
+		velocity = after
+		_sync_motion_state()
+		return true
+	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
 	_dynamics.cg_velocity = after
 	velocity = after
 	_dynamics.yaw_rate = _WallScrape.turn_rate(track, self, _dynamics.yaw)
