@@ -32,6 +32,17 @@ const _TREE_SINK := 0.15
 const BARK_TILE_M := 1.0
 const BARK_TINT := Color(0.74, 0.61, 0.5, 1)
 const _BARK := "res://assets/textures/bark/BarkPoplar001_"
+## The bark is lit like the leaves (shaders/tree_bark.gdshader): in this many hard bands, the
+## full sun warmed by `BARK_WARM` and the part-lit bands cooled toward `BARK_COOL`. The trunk
+## darkens by `BARK_CROWN_SHADE` at the top, starting `BARK_CROWN_FROM` of the way up, and by
+## `BARK_FOOT_SHADE` at the ground.
+const BARK_LIGHT_STEPS := 3.0
+const BARK_WARM := Color(1.0, 0.8, 0.55, 1)
+const BARK_COOL := Color(0.6, 0.55, 0.9, 1)
+const BARK_CROWN_SHADE := 0.6
+const BARK_CROWN_FROM := 0.45
+const BARK_FOOT_SHADE := 0.3
+const _BARK_SHADER := preload("res://shaders/tree_bark.gdshader")
 ## Crowns are leaf cards (shaders/tree_leaves.gdshader): this many per square meter of crown
 ## surface, each this many meters across from its middle, set in about a fifth of the crown's
 ## radius at most. The leaf shape and the shader come from PixelageGames' 3D pixel art vegetation
@@ -160,19 +171,22 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 
 ## Bark for a trunk of this size. The texture goes round a whole number of times so it meets
 ## itself, and runs up the trunk at the same scale. A cylinder's side takes the top half of its
-## UVs, so V is doubled.
-static func _bark_material(radius: float, height: float) -> StandardMaterial3D:
+## UVs, so V is doubled. The bark is matte, so the roughness map isn't used.
+static func _bark_material(radius: float, height: float) -> ShaderMaterial:
 	var round_m := TAU * radius * 0.85
 	var across := maxf(1.0, roundf(round_m / BARK_TILE_M))
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = load(_BARK + "COL_1K.jpg") as Texture2D
-	mat.albedo_color = BARK_TINT
-	mat.normal_enabled = true
-	mat.normal_texture = load(_BARK + "NRM_1K.jpg") as Texture2D
-	mat.roughness_texture = load(_BARK + "ROUGH_1K.jpg") as Texture2D
-	mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
-	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	mat.uv1_scale = Vector3(across, 2.0 * height * across / round_m, 1.0)
+	var mat := ShaderMaterial.new()
+	mat.shader = _BARK_SHADER
+	mat.set_shader_parameter(&"albedo_texture", load(_BARK + "COL_1K.jpg") as Texture2D)
+	mat.set_shader_parameter(&"normal_texture", load(_BARK + "NRM_1K.jpg") as Texture2D)
+	mat.set_shader_parameter(&"uv_scale", Vector2(across, 2.0 * height * across / round_m))
+	mat.set_shader_parameter(&"tint", BARK_TINT)
+	mat.set_shader_parameter(&"light_steps", BARK_LIGHT_STEPS)
+	mat.set_shader_parameter(&"warm", BARK_WARM)
+	mat.set_shader_parameter(&"cool", BARK_COOL)
+	mat.set_shader_parameter(&"crown_shade", BARK_CROWN_SHADE)
+	mat.set_shader_parameter(&"crown_from", BARK_CROWN_FROM)
+	mat.set_shader_parameter(&"foot_shade", BARK_FOOT_SHADE)
 	return mat
 
 
