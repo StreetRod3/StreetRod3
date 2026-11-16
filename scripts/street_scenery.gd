@@ -26,6 +26,12 @@ const _FINISH_LENGTH := 5.0
 
 ## Trees sit a little into the ground, which is sunk under the road's height.
 const _TREE_SINK := 0.15
+## Poliigon BarkPoplar001 at 1K, from reference/tracks/treebark/. Its roughness map is the
+## download's gloss map inverted. One tile covers about this much bark, and `BARK_TINT`
+## multiplies its color: white is the photo's own grey.
+const BARK_TILE_M := 1.0
+const BARK_TINT := Color(1.0, 1.0, 1.0, 1)
+const _BARK := "res://assets/textures/bark/BarkPoplar001_"
 const _POLE_HEIGHT := 7.5
 
 
@@ -113,7 +119,7 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 	trunk_mesh.height = height
 	trunk_mesh.radial_segments = 6
 	trunk_mesh.rings = 1
-	trunk_mesh.material = _material(_TRUNK)
+	trunk_mesh.material = _bark_material(trunk_radius, height)
 	var crown_mesh := SphereMesh.new()
 	crown_mesh.radius = 1.0
 	crown_mesh.height = 2.0
@@ -133,6 +139,24 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 			crown_xforms.append(plant * crown)
 	_add_multimesh(root, "Trunks", trunk_mesh, trunk_xforms, true)
 	_add_multimesh(root, "Crowns", crown_mesh, crown_xforms, true)
+
+
+## Bark for a trunk of this size. The texture goes round a whole number of times so it meets
+## itself, and runs up the trunk at the same scale. A cylinder's side takes the top half of its
+## UVs, so V is doubled.
+static func _bark_material(radius: float, height: float) -> StandardMaterial3D:
+	var round_m := TAU * radius * 0.85
+	var across := maxf(1.0, roundf(round_m / BARK_TILE_M))
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = load(_BARK + "COL_1K.jpg") as Texture2D
+	mat.albedo_color = BARK_TINT
+	mat.normal_enabled = true
+	mat.normal_texture = load(_BARK + "NRM_1K.jpg") as Texture2D
+	mat.roughness_texture = load(_BARK + "ROUGH_1K.jpg") as Texture2D
+	mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	mat.uv1_scale = Vector3(across, 2.0 * height * across / round_m, 1.0)
+	return mat
 
 
 ## A wide flat crown and a smaller one off to the side, like Street Rod 2's round trees.

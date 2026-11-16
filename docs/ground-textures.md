@@ -11,6 +11,7 @@ The ground, roads and day sky are photographed textures. Their materials are bui
 | Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The Aqueduct's floor and banks, the street drag's shoulders | `vertex_colored_concrete()`, `shoulder_concrete()` |
 | Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hills: ground standing more than a few inches over the road | The dirt part of `vertex_ground()` |
 | Gravel (Poly Haven Rocky Trail) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
+| Tree bark (Poliigon BarkPoplar001, 1K) | Every tree's trunk, in the city and on street tracks | `_bark_material()` in `scripts/street_scenery.gd`, with `BARK_TILE_M` (`1`, meters of bark per tile) and `BARK_TINT` (white, the photo's own grey) |
 | Day sky (Poly Haven Kloofendal 48d Partly Cloudy, Pure Sky) | The city, and every race but Street Rod 2's cruise races unless its track picks another sky | `Skies.use_day()`, `Skies.use()` |
 
 Mulholland's guard rails and far peaks keep their flat colors.
