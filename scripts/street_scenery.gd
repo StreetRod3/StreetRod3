@@ -32,6 +32,19 @@ const _TREE_SINK := 0.15
 const BARK_TILE_M := 1.0
 const BARK_TINT := Color(0.74, 0.61, 0.5, 1)
 const _BARK := "res://assets/textures/bark/BarkPoplar001_"
+## Crowns are leaf cards (shaders/tree_leaves.gdshader): this many per square meter of crown
+## surface, each this many meters across from its middle, set in about a fifth of the crown's
+## radius at most. The leaf shape and the shader come from PixelageGames' 3D pixel art vegetation
+## demo (CREDITS.md). The plain crown shapes stay, unseen, to cast the shadows.
+const LEAF_CARDS_PER_M2 := 6.0
+const LEAF_CARD_HALF_M := 0.45
+const LEAF_DEPTH := 0.18
+const LEAF_COLOR := Color(0.365, 0.659, 0.176, 1)
+const LEAF_LIGHT_STEPS := 5.0
+const _LEAF_SHADER := preload("res://shaders/tree_leaves.gdshader")
+const _LEAF_ALPHA := "res://assets/textures/leaves/leaf_alpha.png"
+
+static var _leaf_material: ShaderMaterial = null
 const _POLE_HEIGHT := 7.5
 
 
@@ -127,18 +140,22 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 	crown_mesh.rings = 5
 	crown_mesh.material = _material(_LEAVES)
 	var crowns := _bare_crowns(height, crown_radius) if bare else _full_crowns(height, crown_radius)
+	var leaf_mesh := _leaf_mesh(crowns, kind.hash())
 	var trunk_xforms: Array[Transform3D] = []
 	var crown_xforms: Array[Transform3D] = []
+	var leaf_xforms: Array[Transform3D] = []
 	for i in spots.size():
 		var spot: Vector2 = spots[i]
 		var size := lerpf(0.88, 1.15, _spot_random(spot, 1.0))
 		var turn := Basis(Vector3.UP, TAU * _spot_random(spot, 2.0)).scaled(Vector3(size, size, size))
 		var plant := Transform3D(turn, feet[i])
 		trunk_xforms.append(plant * Transform3D(Basis.IDENTITY, Vector3(0.0, height * 0.5, 0.0)))
+		leaf_xforms.append(plant)
 		for crown: Transform3D in crowns:
 			crown_xforms.append(plant * crown)
 	_add_multimesh(root, "Trunks", trunk_mesh, trunk_xforms, true)
-	_add_multimesh(root, "Crowns", crown_mesh, crown_xforms, true)
+	_add_multimesh(root, "Crowns", crown_mesh, crown_xforms, true, true)
+	_add_multimesh(root, "Leaves", leaf_mesh, leaf_xforms, false)
 
 
 ## Bark for a trunk of this size. The texture goes round a whole number of times so it meets
@@ -157,6 +174,72 @@ static func _bark_material(radius: float, height: float) -> StandardMaterial3D:
 	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mat.uv1_scale = Vector3(across, 2.0 * height * across / round_m, 1.0)
 	return mat
+
+
+## Leaf cards over every crown of one kind of tree, in the tree's own space. Each card is four
+## vertices at one point with UVs at its corners, which the shader spreads to face the camera;
+## UV2.x turns it. Cards are spread evenly over each crown's surface, as many as its area takes,
+## and its normal is the crown's there.
+static func _leaf_mesh(crowns: Array[Transform3D], seed_value: int) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var uv2s := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var corners: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)]
+	var golden := PI * (3.0 - sqrt(5.0))
+	for crown: Transform3D in crowns:
+		var count := maxi(12, int(_ellipsoid_area(crown.basis.get_scale()) * LEAF_CARDS_PER_M2))
+		var to_normal := crown.basis.inverse().transposed()
+		for i in count:
+			var y := 1.0 - 2.0 * (float(i) + 0.5) / float(count)
+			var ring := sqrt(1.0 - y * y)
+			var dir := Vector3(cos(golden * i) * ring, y, sin(golden * i) * ring)
+			var center := crown * (dir * rng.randf_range(1.0 - LEAF_DEPTH, 1.0))
+			var normal := (to_normal * dir).normalized()
+			var turn := Vector2(rng.randf() * TAU, 0.0)
+			var base := verts.size()
+			for corner: Vector2 in corners:
+				verts.append(center)
+				normals.append(normal)
+				uvs.append(corner)
+				uv2s.append(turn)
+			indices.append_array([base, base + 2, base + 1, base, base + 3, base + 2])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(0, _leaves())
+	# The cards spread past the points the mesh is made of.
+	mesh.custom_aabb = mesh.get_aabb().grow(LEAF_CARD_HALF_M * 1.5)
+	return mesh
+
+
+static func _leaves() -> ShaderMaterial:
+	if _leaf_material == null:
+		_leaf_material = ShaderMaterial.new()
+		_leaf_material.shader = _LEAF_SHADER
+		_leaf_material.set_shader_parameter(&"color", LEAF_COLOR)
+		_leaf_material.set_shader_parameter(&"alpha", load(_LEAF_ALPHA) as Texture2D)
+		_leaf_material.set_shader_parameter(&"card_half_m", LEAF_CARD_HALF_M)
+		_leaf_material.set_shader_parameter(&"light_steps", LEAF_LIGHT_STEPS)
+	return _leaf_material
+
+
+## Surface area of an ellipsoid with these radii (Knud Thomsen's formula, within about 1%).
+static func _ellipsoid_area(radii: Vector3) -> float:
+	var p := 1.6075
+	var ab := pow(radii.x * radii.y, p)
+	var ac := pow(radii.x * radii.z, p)
+	var bc := pow(radii.y * radii.z, p)
+	return 4.0 * PI * pow((ab + ac + bc) / 3.0, 1.0 / p)
 
 
 ## A wide flat crown and a smaller one off to the side, like Street Rod 2's round trees.
@@ -323,7 +406,8 @@ static func _add_multimesh(
 	node_name: String,
 	mesh: Mesh,
 	xforms: Array[Transform3D],
-	shadows: bool
+	shadows: bool,
+	shadow_only: bool = false
 ) -> void:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -336,4 +420,6 @@ static func _add_multimesh(
 	mmi.multimesh = mm
 	if not shadows:
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	elif shadow_only:
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
 	root.add_child(mmi)

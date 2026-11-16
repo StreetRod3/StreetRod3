@@ -17,6 +17,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | Mulholland's dirt (`assets/textures/dirt/`) | "Soil With Weeds" (GroundDirtWeedsPatchy004) by Poliigon (https://www.poliigon.com/texture/soil-with-weeds-texture/6987) | Poliigon royalty-free license, free asset |
 | Mulholland's gravel (`assets/textures/gravel/`) | "Rocky Trail" by Amal Kumar, Poly Haven (https://polyhaven.com/a/rocky_trail) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | Tree bark (`assets/textures/bark/`) | "Poplar Bark" (BarkPoplar001) by Poliigon (https://www.poliigon.com/texture/poplar-bark-texture/2985) | Poliigon royalty-free license |
+| Tree leaf shape (`assets/textures/leaves/leaf_alpha.png`) and leaf shader (`shaders/tree_leaves.gdshader`, adapted) | "Godot 3D PixelArt Vegetation Demo" by PixelageGames, Eduardo Schildt (https://pixelagegames.itch.io/3d-pixelart-vegetation) | MIT License, `assets/textures/leaves/LICENSE-pixelage.txt` |
 | Aqueduct and street shoulder concrete (`assets/textures/concrete/`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
 
 ## Skies
