@@ -171,6 +171,8 @@ static func _add_rocks(root: Node3D, xforms: Array[Transform3D]) -> void:
 	_StreetScenery._add_multimesh(root, "Rocks", mesh, xforms, true)
 
 
+## Leaf cards, as the trees' crowns (street_scenery.gd), in `color`. The plain round shapes stay,
+## unseen, to cast the shadows.
 static func _add_round_bushes(root: Node3D, node_name: String, color: Color, xforms: Array) -> void:
 	if xforms.is_empty():
 		return
@@ -179,10 +181,33 @@ static func _add_round_bushes(root: Node3D, node_name: String, color: Color, xfo
 	mesh.height = 1.0
 	mesh.radial_segments = 8
 	mesh.rings = 4
-	mesh.material = _StreetScenery._material(color)
-	var typed: Array[Transform3D] = []
-	typed.assign(xforms)
-	_StreetScenery._add_multimesh(root, node_name, mesh, typed, true)
+	var shadows := MultiMesh.new()
+	shadows.transform_format = MultiMesh.TRANSFORM_3D
+	shadows.mesh = mesh
+	shadows.instance_count = xforms.size()
+	var leaves := MultiMesh.new()
+	leaves.transform_format = MultiMesh.TRANSFORM_3D
+	leaves.use_colors = true
+	leaves.mesh = _StreetScenery.bush_leaf_mesh()
+	leaves.instance_count = xforms.size()
+	# The leaf mesh is round with a radius of 1, the shadow shape with 0.5.
+	var half := Basis.from_scale(Vector3(0.5, 0.5, 0.5))
+	for i in xforms.size():
+		var xform: Transform3D = xforms[i]
+		shadows.set_instance_transform(i, xform)
+		leaves.set_instance_transform(i, Transform3D(xform.basis * half, xform.origin))
+		# The leaf shader takes instance colors as they are, so in linear light.
+		leaves.set_instance_color(i, color.srgb_to_linear())
+	var shadow_node := MultiMeshInstance3D.new()
+	shadow_node.name = node_name + "Shadows"
+	shadow_node.multimesh = shadows
+	shadow_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+	root.add_child(shadow_node)
+	var leaf_node := MultiMeshInstance3D.new()
+	leaf_node.name = node_name
+	leaf_node.multimesh = leaves
+	leaf_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(leaf_node)
 
 
 ## Street Rod 2's rocks fallen from a hillside, reaching about 2 m into the road from its edge.

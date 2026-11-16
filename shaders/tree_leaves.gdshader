@@ -19,7 +19,11 @@ uniform float light_steps = 5.0;
 // less of the sky than open ground. The night races' flat ambient lit them like lamps at 1.
 uniform float ambient_share = 0.45;
 
+// Each leaf's green: `color` times the instance color (white unless the MultiMesh sets one).
+varying vec3 tint;
+
 void vertex() {
+	tint = COLOR.rgb;
 	vec2 corner = UV * 2.0 - 1.0;
 	float turn = UV2.x;
 	vec2 spread = mat2(vec2(cos(turn), sin(turn)), vec2(-sin(turn), cos(turn))) * corner;
@@ -28,7 +32,7 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = color.rgb;
+	ALBEDO = color.rgb * tint;
 	ALPHA = texture(alpha, UV).r;
 	ALPHA_SCISSOR_THRESHOLD = 0.5;
 	ROUGHNESS = 1.0;

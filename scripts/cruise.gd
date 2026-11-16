@@ -1169,22 +1169,16 @@ func _build_streetscape(track: Dictionary) -> void:
 		lamp.set_script(_StreetLamp)
 		root.add_child(lamp)
 		lamp.call(&"setup", spec["at"], spec["toward"], lamp_multi, i)
-	var shrub := SphereMesh.new()
-	shrub.radius = 1.0
-	shrub.height = 2.0
-	shrub.radial_segments = 8
-	shrub.rings = 5
+	# Leaf cards, as the trees' crowns (street_scenery.gd), in each bush's green.
 	var bushes: Array[Transform3D] = dark_bush.duplicate()
 	bushes.append_array(mid_bush)
 	var greens: Array[Color] = []
+	# The leaf shader takes instance colors as they are, so in linear light.
 	for i in dark_bush.size():
-		greens.append(_BUSH_DARK)
+		greens.append(_BUSH_DARK.srgb_to_linear())
 	for i in mid_bush.size():
-		greens.append(_BUSH_MID)
-	var leaf := _facade_material(Color.WHITE, 0.91, 0.0)
-	leaf.vertex_color_use_as_albedo = true
-	leaf.vertex_color_is_srgb = true
-	_add_multimesh(root, shrub, leaf, bushes, false, greens)
+		greens.append(_BUSH_MID.srgb_to_linear())
+	_add_multimesh(root, _StreetScenery.bush_leaf_mesh(), _StreetScenery.bush_leaves(), bushes, false, greens)
 	# Their trunks are solid, and snap in a hard enough hit (tree_grove.gd).
 	_StreetScenery.add_flat_trees(root, trees, big_trees, bare_trees)
 

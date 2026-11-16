@@ -57,10 +57,17 @@ const LEAF_LIGHT_STEPS := 5.0
 ## Share of the scene's ambient light the leaves take, as a crown shades itself; at 1 the night
 ## races' flat ambient made them glow.
 const LEAF_AMBIENT := 0.45
+## Bushes are leaf cards too (`bush_leaf_mesh()`), smaller than a tree's: this many over one
+## bush, each this many meters across from its middle. A bush's color comes from its MultiMesh
+## instance color.
+const BUSH_CARDS := 70
+const BUSH_CARD_HALF_M := 0.2
 const _LEAF_SHADER := preload("res://shaders/tree_leaves.gdshader")
 const _LEAF_ALPHA := "res://assets/textures/leaves/leaf_alpha.png"
 
 static var _leaf_material: ShaderMaterial = null
+static var _bush_material: ShaderMaterial = null
+static var _bush_mesh: ArrayMesh = null
 const _POLE_HEIGHT := 7.5
 
 
@@ -199,7 +206,7 @@ static func _bark_material(radius: float, height: float) -> ShaderMaterial:
 ## vertices at one point with UVs at its corners, which the shader spreads to face the camera;
 ## UV2.x turns it. Cards are spread evenly over each crown's surface, as many as its area takes,
 ## and its normal is the crown's there.
-static func _leaf_mesh(crowns: Array[Transform3D], seed_value: int) -> ArrayMesh:
+static func _leaf_mesh(crowns: Array[Transform3D], seed_value: int, count_override: int = 0, mat: Material = null, card_half_m: float = LEAF_CARD_HALF_M) -> ArrayMesh:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed_value
 	var verts := PackedVector3Array()
@@ -210,7 +217,7 @@ static func _leaf_mesh(crowns: Array[Transform3D], seed_value: int) -> ArrayMesh
 	var corners: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)]
 	var golden := PI * (3.0 - sqrt(5.0))
 	for crown: Transform3D in crowns:
-		var count := maxi(12, int(_ellipsoid_area(crown.basis.get_scale()) * LEAF_CARDS_PER_M2))
+		var count := count_override if count_override > 0 else maxi(12, int(_ellipsoid_area(crown.basis.get_scale()) * LEAF_CARDS_PER_M2))
 		var to_normal := crown.basis.inverse().transposed()
 		for i in count:
 			var y := 1.0 - 2.0 * (float(i) + 0.5) / float(count)
@@ -235,10 +242,28 @@ static func _leaf_mesh(crowns: Array[Transform3D], seed_value: int) -> ArrayMesh
 	arrays[Mesh.ARRAY_INDEX] = indices
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, _leaves())
+	mesh.surface_set_material(0, mat if mat != null else _leaves())
 	# The cards spread past the points the mesh is made of.
-	mesh.custom_aabb = mesh.get_aabb().grow(LEAF_CARD_HALF_M * 1.5)
+	mesh.custom_aabb = mesh.get_aabb().grow(card_half_m * 1.5)
 	return mesh
+
+
+## One bush: leaf cards over a sphere of radius 1, for a MultiMesh to scale to each bush. Its
+## material takes the green from the instance color, so set the MultiMesh's `use_colors`. The
+## bounds allow for a bush as small as half a meter across.
+static func bush_leaf_mesh() -> ArrayMesh:
+	if _bush_mesh == null:
+		var unit: Array[Transform3D] = [Transform3D.IDENTITY]
+		_bush_mesh = _leaf_mesh(unit, 7, BUSH_CARDS, bush_leaves(), BUSH_CARD_HALF_M / 0.25)
+	return _bush_mesh
+
+
+static func bush_leaves() -> ShaderMaterial:
+	if _bush_material == null:
+		_bush_material = _leaves().duplicate() as ShaderMaterial
+		_bush_material.set_shader_parameter(&"color", Color.WHITE)
+		_bush_material.set_shader_parameter(&"card_half_m", BUSH_CARD_HALF_M)
+	return _bush_material
 
 
 static func _leaves() -> ShaderMaterial:
