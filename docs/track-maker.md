@@ -18,6 +18,10 @@ Tick "Loop (the finish is the start)" for a track you drive laps on, and set the
 
 Bring the last node round behind the start (-Y) so the road comes into the line straight; the maker warns when it comes in at an angle, because the road would kink there. Unticking Loop takes the road back to the start away again.
 
+## Sky
+
+Sky, under Laps, picks the photographed sky over the course in races and test drives. A sky whose file isn't in the game yet says "file missing: day sky" and races under the day sky until it is added. The track keeps the choice either way, so adding the file later is enough. The skies, and how to add one, are in [ground-textures.md](ground-textures.md#skies).
+
 ## Mouse and keys
 
 | Input | Road tool | Scenery tool |

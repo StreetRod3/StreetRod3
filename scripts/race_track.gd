@@ -46,7 +46,6 @@ const CURB_WHITE := Color(0.92, 0.92, 0.9, 1)
 const CHECK_BLACK := Color(0.06, 0.06, 0.07, 1)
 const CHECK_WHITE := Color(0.94, 0.94, 0.92, 1)
 const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
-const _GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
 ## The sides of a jump track's ramps, from the road's edge down to the grass.
 const _RAMP_SIDE_COLOR := Color(0.42, 0.33, 0.22, 1)
 ## Road this high or less over the grass has no ramp side.
@@ -96,6 +95,8 @@ var _sign_mesh: ArrayMesh
 var _sign_textures: Dictionary = {}
 var _street: bool = false
 var _style: String = TrackFile.STYLE_CIRCUIT
+## The track's sky, an id in skies.gd.
+var _sky: String = "day"
 ## Cars leave the road where it drops away faster than they fall. See `air_time.gd`.
 var _jumps: bool = false
 ## A course that comes back round to its start, raced `_laps` times. The samples go round once and
@@ -128,6 +129,11 @@ func is_road_course() -> bool:
 
 func has_jumps() -> bool:
 	return _jumps
+
+
+## The sky the track asks for, an id in skies.gd.
+func get_sky() -> String:
+	return _sky
 
 
 func get_length() -> float:
@@ -563,6 +569,7 @@ func _build_path() -> void:
 			push_error("[track] %s" % error_text)
 		return
 	_style = data.style
+	_sky = data.sky
 	_jumps = bool(data.jumps)
 	_loop = bool(data.loop)
 	_laps = int(data.laps)
@@ -1234,7 +1241,7 @@ func _build_gravel() -> void:
 	var mesh := st.commit()
 	if mesh == null or mesh.get_surface_count() == 0:
 		return
-	mesh.surface_set_material(0, _make_mat(_GRAVEL_COLOR, 0.98))
+	mesh.surface_set_material(0, _GroundMaterial.gravel())
 	var mi := MeshInstance3D.new()
 	mi.name = "Gravel"
 	mi.mesh = mesh

@@ -1,16 +1,30 @@
 extends RefCounted
 
-## Textured ground: the grass under the race tracks and the city, the asphalt of their roads, and
-## the concrete of the Aqueduct and the street drag's shoulders.
-## Each is mapped from above in world space, so any ground or road mesh takes it without UVs of
-## its own, and one tile covers the same ground whatever the mesh's size. Sources and notes are
-## in reference/tracks/grass, reference/tracks/CityStreetAsphalt and reference/tracks/concrete.md.
+## Textured ground: grass under the race tracks, the city and Mulholland; Mulholland's dirt and
+## gravel; the asphalt of the roads; and the concrete of the Aqueduct and the street drag's
+## shoulders. Each is mapped from above in world space, so any ground or road mesh takes it without
+## UVs of its own, and one tile covers the same ground whatever the mesh's size. Sources and notes
+## are in reference/tracks/ (grass, CityStreetAsphalt, dirt, rockytrail, concrete.md), and
+## docs/ground-textures.md lists them and the settings below.
 
 ## Poliigon GrassPatchyGround 4585 at 2K.
 const GRASS_TILE_M := 2.0
+## Specular of the grass, dirt and gravel. Godot scales the grazing-angle reflection with it too,
+## and at the default 0.5 far-off ground turned pale with the sky in it.
+const GROUND_SPECULAR := 0.1
 ## Poliigon CityStreetAsphaltGenericClean001 at 2K. Its roughness map is the download's gloss
 ## map inverted.
 const ASPHALT_TILE_M := 1.0
+## Poliigon GroundDirtWeedsPatchy004 at 2K, for Mulholland's hillsides. Its roughness map is the
+## download's gloss map inverted.
+const DIRT_TILE_M := 2.0
+## The dirt takes this much of the hue of Street Rod 2's flat brown hills, `DIRT_OLD_COLOR`, at the
+## texture's own brightness (that brown is far lighter), and is then darkened to `DIRT_DARKEN`. The
+## texture's mean is `DIRT_MEAN`, in linear light.
+const DIRT_TINT_AMOUNT := 0.35
+const DIRT_DARKEN := 0.8
+const DIRT_OLD_COLOR := Color(0.56, 0.3, 0.07, 1)
+const DIRT_MEAN := Vector3(0.1411, 0.0831, 0.0478)
 ## Mulholland's road is black in Street Rod 2, so its asphalt is darkened this much.
 const DARK_ASPHALT_TINT := Color(0.3, 0.3, 0.3, 1)
 ## A photo from magnific.com made to tile by tools/make_concrete_texture.py. It has no normal or
@@ -19,22 +33,32 @@ const CONCRETE_TILE_M := 2.0
 const CONCRETE_LINEAR_MEAN := 0.651
 ## The street drag's shoulders: lighter than the asphalt beside them.
 const SHOULDER_TINT := Color(0.6, 0.6, 0.58, 1)
+## Gravel: Mulholland's verge and its gravel stretches. Poly Haven Rocky Trail at 2K, whose
+## photo covers 2 m; its ARM map holds roughness in green. `GRAVEL_TINT` multiplies its color.
+const GRAVEL_TINT := Color(1.0, 1.0, 1.0, 1)
+const GRAVEL_TILE_M := 2.0
 
 const _GRASS := "res://assets/textures/grass/Poliigon_GrassPatchyGround_4585_"
 const _ASPHALT := "res://assets/textures/asphalt/CityStreetAsphaltGenericClean001_"
 const _CONCRETE := "res://assets/textures/concrete/old-grunge-concrete.jpg"
+const _GRAVEL := "res://assets/textures/gravel/rocky_trail_"
+const _DIRT := "res://assets/textures/dirt/GroundDirtWeedsPatchy004_"
+const _VERTEX_GROUND_SHADER := preload("res://shaders/vertex_ground.gdshader")
 
 static var _grass: StandardMaterial3D = null
 static var _asphalt: StandardMaterial3D = null
 static var _dark_asphalt: StandardMaterial3D = null
 static var _shoulder: StandardMaterial3D = null
 static var _vertex_concrete: StandardMaterial3D = null
+static var _vertex_ground: ShaderMaterial = null
+static var _gravel: StandardMaterial3D = null
 
 
 ## One material for every grass ground, made on first use.
 static func grass() -> StandardMaterial3D:
 	if _grass == null:
 		_grass = _make(_GRASS + "BaseColor.jpg", _GRASS + "Normal.png", _GRASS + "Roughness.jpg", GRASS_TILE_M)
+		_grass.metallic_specular = GROUND_SPECULAR
 	return _grass
 
 
@@ -71,6 +95,53 @@ static func vertex_colored_concrete() -> StandardMaterial3D:
 		_vertex_concrete.vertex_color_use_as_albedo = true
 		_vertex_concrete.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _vertex_concrete
+
+
+## Mulholland's ground beside the road (shaders/vertex_ground.gdshader): grass as much as a
+## vertex's alpha, dirt as much as its UV.x, and its flat color for the rest. The grass is the same
+## as `grass()`.
+static func vertex_ground() -> ShaderMaterial:
+	if _vertex_ground == null:
+		var mat := ShaderMaterial.new()
+		mat.shader = _VERTEX_GROUND_SHADER
+		mat.set_shader_parameter(&"grass_albedo", load(_GRASS + "BaseColor.jpg") as Texture2D)
+		mat.set_shader_parameter(&"grass_normal", load(_GRASS + "Normal.png") as Texture2D)
+		mat.set_shader_parameter(&"grass_roughness", load(_GRASS + "Roughness.jpg") as Texture2D)
+		mat.set_shader_parameter(&"grass_tile_m", GRASS_TILE_M)
+		mat.set_shader_parameter(&"dirt_albedo", load(_DIRT + "COL_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"dirt_normal", load(_DIRT + "NRM_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"dirt_roughness", load(_DIRT + "ROUGH_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"dirt_tile_m", DIRT_TILE_M)
+		mat.set_shader_parameter(&"dirt_height", load(_DIRT + "HEIGHT_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"ground_specular", GROUND_SPECULAR)
+		mat.set_shader_parameter(&"dirt_tint", dirt_tint())
+		mat.set_shader_parameter(&"gravel_color", GRAVEL_TINT)
+		mat.set_shader_parameter(&"gravel_tile_m", GRAVEL_TILE_M)
+		mat.set_shader_parameter(&"gravel_albedo", load(_GRAVEL + "diff_2k.jpg") as Texture2D)
+		mat.set_shader_parameter(&"gravel_normal", load(_GRAVEL + "nor_gl_2k.jpg") as Texture2D)
+		mat.set_shader_parameter(&"gravel_arm", load(_GRAVEL + "arm_2k.jpg") as Texture2D)
+		mat.set_shader_parameter(&"gravel_height", load(_GRAVEL + "disp_2k.jpg") as Texture2D)
+		_vertex_ground = mat
+	return _vertex_ground
+
+
+## Mulholland's gravel stretches. Its verge is the same gravel, in `vertex_ground()`.
+static func gravel() -> StandardMaterial3D:
+	if _gravel == null:
+		_gravel = _make(_GRAVEL + "diff_2k.jpg", _GRAVEL + "nor_gl_2k.jpg", _GRAVEL + "arm_2k.jpg", GRAVEL_TILE_M)
+		_gravel.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_GREEN
+		_gravel.albedo_color = GRAVEL_TINT
+		_gravel.metallic_specular = GROUND_SPECULAR
+	return _gravel
+
+
+## What the dirt's color is multiplied by, per channel in linear light.
+static func dirt_tint() -> Vector3:
+	var lum := Vector3(0.2126, 0.7152, 0.0722)
+	var old_c := DIRT_OLD_COLOR.srgb_to_linear()
+	var old := Vector3(old_c.r, old_c.g, old_c.b)
+	var hue := old * (DIRT_MEAN.dot(lum) / old.dot(lum))
+	return Vector3.ONE.lerp(hue / DIRT_MEAN, DIRT_TINT_AMOUNT) * DIRT_DARKEN
 
 
 ## `normal` and `roughness` may be empty for a texture without those maps.

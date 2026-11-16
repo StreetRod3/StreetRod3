@@ -55,9 +55,11 @@ const _MOUNTAIN_COLUMNS := 240
 const _MOUNTAIN_LOW_M := 110.0
 const _MOUNTAIN_HIGH_M := 460.0
 
+## Mulholland's ground: grass, dirt where it stands over the road, and the gravel verge (see
+## shaders/vertex_ground.gdshader). These colors are no longer drawn; they are the flat look it had
+## before the textures.
 const _GREEN := Color(0.11, 0.42, 0.1, 1)
-const _VERGE_GRAY := Color(0.33, 0.33, 0.32, 1)
-const _HILL_BROWN := Color(0.56, 0.3, 0.07, 1)
+const _HILL_BROWN := Color(0.56, 0.3, 0.07, 0)
 const _RAIL_GRAY := Color(0.62, 0.62, 0.6, 1)
 const _TRUSS_RED := Color(0.5, 0.05, 0.04, 1)
 ## The Aqueduct's vertex colors shade its concrete texture, whose mean is 0.651 in linear light
@@ -139,7 +141,9 @@ static func build_mountain(
 				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a]),
 				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b])
 			)
-	_add_mesh(track, "Sides", st, _vertex_color_material())
+	var ground := _GroundMaterial.vertex_ground()
+	ground.set_shader_parameter(&"verge_m", MOUNTAIN_VERGE)
+	_add_mesh(track, "Sides", st, ground)
 	var railed := rails.duplicate()
 	var right_out := _rail_flares(pts, types, railed)
 	var left_out := _hill_flares(pts, left)
@@ -149,7 +153,7 @@ static func build_mountain(
 	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections)
 	_build_rails(track, pts, yaws, half_ws, railed, right_out)
 	_build_trusses(track, pts, yaws, half_ws, types)
-	_build_under(track, pts, _GREEN.darkened(0.25))
+	_build_under(track, pts, _GREEN.darkened(0.25), _GroundMaterial.grass())
 	_build_mountains(track, pts)
 
 
@@ -235,26 +239,30 @@ static func _slow_heights_round(pts: PackedVector3Array) -> PackedFloat32Array:
 	return out
 
 
-## Columns across one side of the road, from the road's edge outward, each {point, color}. Nothing
-## goes past `reach` from the middle of the road, except the verge.
+## Columns across one side of the road, from the road's edge outward, each {point, color, dirt}.
+## Nothing goes past `reach` from the middle of the road, except the verge.
 static func _mountain_section(center: Vector3, yaw: float, side: float, half: float, height: float, far_y: float, reach: float) -> Array[Dictionary]:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
 	var verge := half + MOUNTAIN_VERGE
 	var limit := maxf(reach, verge)
 	var slope_end := minf(verge + MOUNTAIN_BANK_RUN, limit)
-	var near := _GREEN if height == 0.0 else _VERGE_GRAY
 	var bank := _GREEN
 	if height > 0.0:
 		bank = _GREEN.lerp(_HILL_BROWN, clampf(height / HILL_MIN, 0.0, 1.0))
 	var top := _far_rise(height)
 	var far_center := Vector3(center.x, far_y, center.z)
+	var hill_top := minf(slope_end + _HILL_TOP_M, limit)
+	var far := minf(slope_end + _FAR_M, limit)
+	# Every column carries how high it stands over the road and how far out it is from the road's
+	# edge. The shader makes ground a little above the road dirt, so a hill is dirt nearly from its
+	# foot and the field beside it stays grass; and it draws gravel out to a wavy line near
+	# `MOUNTAIN_VERGE` all along the road.
 	return [
-		_column(center + across * half, 0.0, near),
-		_column(center + across * verge, 0.0, near if height != 0.0 else _GREEN),
-		_column(center + across * verge, 0.0, bank),
-		_column(center + across * slope_end, height, bank),
-		_column(far_center + across * minf(slope_end + _HILL_TOP_M, limit), top, bank),
-		_column(far_center + across * minf(slope_end + _FAR_M, limit), top, bank if height > 0.0 else _GREEN),
+		_column(center + across * half, 0.0, _GREEN, 0.0),
+		_column(center + across * verge, 0.0, _GREEN, MOUNTAIN_VERGE),
+		_column(center + across * slope_end, height, bank, slope_end - half),
+		_column(far_center + across * hill_top, top, bank, hill_top - half),
+		_column(far_center + across * far, top, bank if height > 0.0 else _GREEN, far - half),
 	]
 
 
@@ -274,8 +282,10 @@ static func _aqueduct_section(center: Vector3, yaw: float, side: float, reach: f
 	]
 
 
-static func _column(point: Vector3, rise: float, color: Color) -> Dictionary:
-	return {"point": point + Vector3(0.0, rise, 0.0), "color": color}
+## `out` is how far the column is from the road's edge, in meters, for Mulholland's gravel verge.
+## Its height over the road, `rise` (none below it), decides Mulholland's dirt.
+static func _column(point: Vector3, rise: float, color: Color, out: float = 0.0) -> Dictionary:
+	return {"point": point + Vector3(0.0, rise, 0.0), "color": color, "above": maxf(rise, 0.0), "out": out}
 
 
 static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[Dictionary]) -> void:
@@ -286,25 +296,24 @@ static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[
 		var b1: Vector3 = far[c + 1]["point"]
 		if a0.is_equal_approx(a1) and b0.is_equal_approx(b1):
 			continue
-		var ca0: Color = near[c]["color"]
-		var ca1: Color = near[c + 1]["color"]
-		var cb0: Color = far[c]["color"]
-		var cb1: Color = far[c + 1]["color"]
+		var na: Dictionary = near[c]
+		var na1: Dictionary = near[c + 1]
+		var fb: Dictionary = far[c]
+		var fb1: Dictionary = far[c + 1]
 		# Facing up on either side of the road.
 		if (a1 - a0).cross(b0 - a0).y > 0.0:
-			_add_vertex(st, a0, ca0)
-			_add_vertex(st, a1, ca1)
-			_add_vertex(st, b1, cb1)
-			_add_vertex(st, a0, ca0)
-			_add_vertex(st, b1, cb1)
-			_add_vertex(st, b0, cb0)
+			for col: Dictionary in [na, na1, fb1, na, fb1, fb]:
+				_add_column_vertex(st, col)
 		else:
-			_add_vertex(st, a0, ca0)
-			_add_vertex(st, b1, cb1)
-			_add_vertex(st, a1, ca1)
-			_add_vertex(st, a0, ca0)
-			_add_vertex(st, b0, cb0)
-			_add_vertex(st, b1, cb1)
+			for col: Dictionary in [na, fb1, na1, na, fb, fb1]:
+				_add_column_vertex(st, col)
+
+
+## A column's point, with its color, its height over the road in UV.x and its distance from the
+## road's edge in UV.y, for shaders/vertex_ground.gdshader.
+static func _add_column_vertex(st: SurfaceTool, col: Dictionary) -> void:
+	st.set_uv(Vector2(float(col["above"]), float(col["out"])))
+	_add_vertex(st, col["point"], col["color"])
 
 
 static func _add_vertex(st: SurfaceTool, point: Vector3, color: Color) -> void:
@@ -544,7 +553,8 @@ static func _add_unit_boxes(parent: Node3D, node_name: String, xforms: Array[Tra
 	parent.add_child(mmi)
 
 
-static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color) -> void:
+## `ground` replaces the flat `color` when given.
+static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color, ground: Material = null) -> void:
 	var low := INF
 	var center := Vector3.ZERO
 	for p: Vector3 in pts:
@@ -556,7 +566,7 @@ static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color) -
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = 1.0
-	plane.material = mat
+	plane.material = mat if ground == null else ground
 	var mi := MeshInstance3D.new()
 	mi.name = "UnderGround"
 	mi.mesh = plane

@@ -65,3 +65,5 @@ assets/textures/**/*.jpg filter=lfs diff=lfs merge=lfs -text
 assets/textures/**/*.png filter=lfs diff=lfs merge=lfs -text
 assets/skies/*.hdr filter=lfs diff=lfs merge=lfs -text
 assets/skies/*.exr filter=lfs diff=lfs merge=lfs -text
+reference/**/*.exr filter=lfs diff=lfs merge=lfs -text
+reference/**/*.bin filter=lfs diff=lfs merge=lfs -text

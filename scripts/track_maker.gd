@@ -10,6 +10,7 @@ extends Control
 const _Doc := preload("res://scripts/track_maker_doc.gd")
 const _MapView := preload("res://scripts/track_maker_map.gd")
 const _ProfileView := preload("res://scripts/track_maker_profile.gd")
+const _Skies := preload("res://scripts/skies.gd")
 
 const USER_TRACKS_DIR := "user://tracks"
 const GAME_TRACKS_DIR := "res://assets/tracks"
@@ -62,6 +63,9 @@ var _jumps_check: CheckBox
 var _loop_check: CheckBox
 var _laps_spin: SpinBox
 var _laps_row: HBoxContainer
+var _sky_option: OptionButton
+## The sky ids in `_sky_option`'s order.
+var _sky_ids: Array[String] = []
 var _length_label: Label
 var _road_tool: Button
 var _scenery_tool: Button
@@ -238,6 +242,15 @@ func _build_track_section(box: VBoxContainer) -> void:
 	_laps_spin.value_changed.connect(_on_laps_changed)
 	_laps_row = _row("Laps", _laps_spin)
 	box.add_child(_laps_row)
+	_sky_ids = _Skies.ids()
+	_sky_option = OptionButton.new()
+	for id: String in _sky_ids:
+		var label := str(_Skies.SKIES[id]["name"])
+		if not _Skies.has_file(id):
+			label += " (file missing: day sky)"
+		_sky_option.add_item(label)
+	_sky_option.item_selected.connect(_on_sky_selected)
+	box.add_child(_row("Sky", _sky_option))
 	_length_label = _label("", 13, _DIM)
 	box.add_child(_length_label)
 
@@ -469,6 +482,7 @@ func _refresh_track_fields() -> void:
 	_loop_check.set_pressed_no_signal(doc.loop)
 	_laps_spin.set_value_no_signal(doc.laps)
 	_laps_row.visible = doc.loop
+	_sky_option.select(maxi(_sky_ids.find(doc.sky), 0))
 
 
 func _refresh_selection_fields() -> void:
@@ -561,6 +575,12 @@ func _on_loop_toggled(on: bool) -> void:
 	_begin_edit()
 	doc.set_loop(on)
 	_refresh_track_fields()
+	_after_edit()
+
+
+func _on_sky_selected(index: int) -> void:
+	_begin_edit()
+	doc.sky = _sky_ids[index]
 	_after_edit()
 
 
