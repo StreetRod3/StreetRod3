@@ -9,12 +9,22 @@ extends RefCounted
 
 ## Poliigon GrassPatchyGround 4585 at 2K.
 const GRASS_TILE_M := 2.0
+## Specular of the grass and dirt. Godot scales the grazing-angle reflection with it too, and at
+## the default 0.5 far-off ground turned pale with the sky in it.
+const GROUND_SPECULAR := 0.1
 ## Poliigon CityStreetAsphaltGenericClean001 at 2K. Its roughness map is the download's gloss
 ## map inverted.
 const ASPHALT_TILE_M := 1.0
 ## Poliigon GroundDirtWeedsPatchy004 at 2K, for Mulholland's hillsides. Its roughness map is the
 ## download's gloss map inverted.
 const DIRT_TILE_M := 2.0
+## The dirt takes this much of the hue of Street Rod 2's flat brown hills, `DIRT_OLD_COLOR`, at the
+## texture's own brightness (that brown is far lighter), and is then darkened to `DIRT_DARKEN`. The
+## texture's mean is `DIRT_MEAN`, in linear light.
+const DIRT_TINT_AMOUNT := 0.35
+const DIRT_DARKEN := 0.8
+const DIRT_OLD_COLOR := Color(0.56, 0.3, 0.07, 1)
+const DIRT_MEAN := Vector3(0.1411, 0.0831, 0.0478)
 ## Mulholland's road is black in Street Rod 2, so its asphalt is darkened this much.
 const DARK_ASPHALT_TINT := Color(0.3, 0.3, 0.3, 1)
 ## A photo from magnific.com made to tile by tools/make_concrete_texture.py. It has no normal or
@@ -42,6 +52,7 @@ static var _vertex_ground: ShaderMaterial = null
 static func grass() -> StandardMaterial3D:
 	if _grass == null:
 		_grass = _make(_GRASS + "BaseColor.jpg", _GRASS + "Normal.png", _GRASS + "Roughness.jpg", GRASS_TILE_M)
+		_grass.metallic_specular = GROUND_SPECULAR
 	return _grass
 
 
@@ -95,8 +106,19 @@ static func vertex_ground() -> ShaderMaterial:
 		mat.set_shader_parameter(&"dirt_normal", load(_DIRT + "NRM_2K.jpg") as Texture2D)
 		mat.set_shader_parameter(&"dirt_roughness", load(_DIRT + "ROUGH_2K.jpg") as Texture2D)
 		mat.set_shader_parameter(&"dirt_tile_m", DIRT_TILE_M)
+		mat.set_shader_parameter(&"ground_specular", GROUND_SPECULAR)
+		mat.set_shader_parameter(&"dirt_tint", dirt_tint())
 		_vertex_ground = mat
 	return _vertex_ground
+
+
+## What the dirt's color is multiplied by, per channel in linear light.
+static func dirt_tint() -> Vector3:
+	var lum := Vector3(0.2126, 0.7152, 0.0722)
+	var old_c := DIRT_OLD_COLOR.srgb_to_linear()
+	var old := Vector3(old_c.r, old_c.g, old_c.b)
+	var hue := old * (DIRT_MEAN.dot(lum) / old.dot(lum))
+	return Vector3.ONE.lerp(hue / DIRT_MEAN, DIRT_TINT_AMOUNT) * DIRT_DARKEN
 
 
 ## `normal` and `roughness` may be empty for a texture without those maps.

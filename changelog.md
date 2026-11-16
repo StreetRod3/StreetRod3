@@ -408,4 +408,4 @@ A car that has finished, or is coasting to a stop after a wreck or a blown engin
 
 Mulholland has the grass too. Its flat ground and the low parts of its banks use the same grass texture as the other tracks instead of a flat bright green, fading into the brown as a bank rises into a hillside; the brown hills and the grey verge are unchanged. The ground far below the course is grass as well.
 
-Mulholland's hillsides are dirt now: Poliigon's "Soil With Weeds" at 2K instead of the flat brown, with each bank running from grass at its foot into dirt as it rises. The grey verge is unchanged.
+Mulholland's hillsides are dirt now: Poliigon's "Soil With Weeds" at 2K instead of the flat brown, with each bank running from grass at its foot into dirt as it rises. The grey verge is unchanged. The dirt takes some of the old brown's red and is a little darker than the photo, so the hills still read as Street Rod 2's. The grass and dirt no longer shine: their specular is turned down, which also stops ground in the distance from going pale with the sky reflected in it.

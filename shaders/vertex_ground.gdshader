@@ -4,7 +4,8 @@ render_mode cull_disabled;
 // Mulholland's ground beside the road (track_sides.gd). Each vertex says how much of it is grass
 // (COLOR.a) and how much is dirt (UV.x); its flat COLOR.rgb shows through whatever is left. So the
 // flat ground is grass, the hillsides dirt, the banks run from one into the other, and the verge
-// keeps its flat gray. Both textures are mapped from above in world space with the same
+// keeps its flat gray. The dirt is tinted toward the old flat brown, and both are kept from
+// shining. Both textures are mapped from above in world space with the same
 // triplanar blend as a StandardMaterial3D's world triplanar (see ground_material.gd).
 
 uniform sampler2D grass_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -19,6 +20,14 @@ uniform float dirt_tile_m = 2.0;
 uniform float sharpness = 8.0;
 // Roughness of the flat-colored ground.
 uniform float flat_roughness = 0.95;
+// Specular of the grass and dirt. Low, because Godot scales the grazing-angle reflection with it
+// too, and at 0.5 the ground far off turned pale with the sky in it.
+uniform float ground_specular = 0.1;
+// The dirt is never smoother than this; its own map, about 0.78, read as damp and shiny.
+uniform float dirt_min_roughness = 0.92;
+// The dirt's color is multiplied by this, in linear light, to bring it toward Street Rod 2's brown
+// hills (ground_material.gd works it out).
+uniform vec3 dirt_tint = vec3(1.0);
 
 varying vec3 v_world;
 varying vec3 v_tri_weights;
@@ -54,10 +63,11 @@ void fragment() {
 	// in a branch that differs between neighboring pixels gets the wrong mipmap.
 	ALBEDO = COLOR.rgb * flat_part
 		+ triplanar(grass_albedo, grass_tile_m).rgb * grass
-		+ triplanar(dirt_albedo, dirt_tile_m).rgb * dirt;
+		+ clamp(triplanar(dirt_albedo, dirt_tile_m).rgb * dirt_tint, 0.0, 1.0) * dirt;
 	ROUGHNESS = flat_roughness * flat_part
 		+ triplanar(grass_roughness, grass_tile_m).r * grass
-		+ triplanar(dirt_roughness, dirt_tile_m).r * dirt;
+		+ max(triplanar(dirt_roughness, dirt_tile_m).r, dirt_min_roughness) * dirt;
+	SPECULAR = mix(0.5, ground_specular, grass + dirt);
 	NORMAL_MAP = vec3(0.5, 0.5, 1.0) * flat_part
 		+ triplanar(grass_normal, grass_tile_m).rgb * grass
 		+ triplanar(dirt_normal, dirt_tile_m).rgb * dirt;
