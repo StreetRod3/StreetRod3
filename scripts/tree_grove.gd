@@ -42,6 +42,7 @@ var _leaf_mesh: Mesh
 var _crowns: Array[Transform3D] = []
 var _plants: Array[Transform3D] = []
 var _seeds := PackedFloat32Array()
+var _greens: Array[Color] = []
 var _trunks: MultiMesh
 var _crown_shadows: MultiMesh
 var _leaves: MultiMesh
@@ -50,8 +51,9 @@ var _broken := PackedByteArray()
 var _falls: Array[Dictionary] = []
 
 
-## `plants` is where each tree stands and how it is turned and sized; `seeds` picks its bark.
-## `crowns` are the crown shapes in a tree's own space, and `crown_mesh` casts their shadows.
+## `plants` is where each tree stands and how it is turned and sized; `seeds` picks its bark and
+## `greens` its leaves' color, in linear light. `crowns` are the crown shapes in a tree's own
+## space, and `crown_mesh` casts their shadows.
 func setup(
 	tree_kind: String,
 	height: float,
@@ -61,7 +63,8 @@ func setup(
 	leaf_mesh: Mesh,
 	crowns: Array[Transform3D],
 	plants: Array[Transform3D],
-	seeds: PackedFloat32Array
+	seeds: PackedFloat32Array,
+	greens: Array[Color]
 ) -> void:
 	kind = tree_kind
 	_height = height
@@ -72,11 +75,13 @@ func setup(
 	_crowns = crowns
 	_plants = plants
 	_seeds = seeds
+	_greens = greens
 	_broken.resize(plants.size())
 	_broken.fill(0)
 	_trunks = _multimesh("Trunks", trunk_mesh, GeometryInstance3D.SHADOW_CASTING_SETTING_ON, true)
 	_crown_shadows = _multimesh("Crowns", crown_mesh, GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY, false)
 	_leaves = _multimesh("Leaves", leaf_mesh, GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, false)
+	_leaves.use_colors = true
 	_trunks.instance_count = plants.size()
 	_crown_shadows.instance_count = plants.size() * crowns.size()
 	_leaves.instance_count = plants.size()
@@ -85,6 +90,7 @@ func setup(
 		_trunks.set_instance_transform(i, plant * _trunk_center())
 		_trunks.set_instance_custom_data(i, Color(seeds[i], second_seed(seeds[i]), 0.0, 0.0))
 		_leaves.set_instance_transform(i, plant)
+		_leaves.set_instance_color(i, greens[i])
 		for c in crowns.size():
 			_crown_shadows.set_instance_transform(i * crowns.size() + c, plant * crowns[c])
 		_bodies.append(_trunk_body(i))
@@ -145,6 +151,10 @@ func _break(index: int, into: float, travel: Vector3, car: PhysicsBody3D) -> voi
 	var leaves := MeshInstance3D.new()
 	leaves.mesh = _leaf_mesh
 	leaves.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# On its own the tree has no instance color, so its green goes in a copy of the material.
+	var green := ((_leaf_mesh as ArrayMesh).surface_get_material(0) as ShaderMaterial).duplicate() as ShaderMaterial
+	green.set_shader_parameter(&"color", _greens[index].linear_to_srgb())
+	leaves.material_override = green
 	tree.add_child(leaves)
 	for crown: Transform3D in _crowns:
 		var shadow := MeshInstance3D.new()

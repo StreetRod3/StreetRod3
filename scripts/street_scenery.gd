@@ -52,7 +52,10 @@ const _TreeGrove := preload("res://scripts/tree_grove.gd")
 const LEAF_CARDS_PER_M2 := 6.0
 const LEAF_CARD_HALF_M := 0.45
 const LEAF_DEPTH := 0.18
-const LEAF_COLOR := Color(0.365, 0.659, 0.176, 1)
+## Each tree's leaves are a green between these two, picked by its spot, in the range of the
+## bushes' greens (cruise.gd, course_scenery.gd) so trees and bushes sit together.
+const LEAF_GREEN_DARK := Color(0.16, 0.35, 0.13, 1)
+const LEAF_GREEN_LIGHT := Color(0.27, 0.46, 0.17, 1)
 const LEAF_LIGHT_STEPS := 5.0
 ## Share of the scene's ambient light the leaves take, as a crown shades itself; at 1 the night
 ## races' flat ambient made them glow.
@@ -168,17 +171,19 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 	var leaf_mesh := _leaf_mesh(crowns, kind.hash())
 	var plants: Array[Transform3D] = []
 	var seeds := PackedFloat32Array()
+	var greens: Array[Color] = []
 	for i in spots.size():
 		var spot: Vector2 = spots[i]
 		var size := lerpf(0.88, 1.15, _spot_random(spot, 1.0))
 		var turn := Basis(Vector3.UP, TAU * _spot_random(spot, 2.0)).scaled(Vector3(size, size, size))
 		plants.append(Transform3D(turn, feet[i]))
 		seeds.append(_spot_random(spot, 5.0))
+		greens.append(LEAF_GREEN_DARK.lerp(LEAF_GREEN_LIGHT, _spot_random(spot, 6.0)).srgb_to_linear())
 	var grove := _TreeGrove.new()
 	grove.name = "Trees_%s" % kind
 	grove.track = track
 	root.add_child(grove)
-	grove.setup(kind, height, trunk_radius, trunk_mesh, crown_mesh, leaf_mesh, crowns, plants, seeds)
+	grove.setup(kind, height, trunk_radius, trunk_mesh, crown_mesh, leaf_mesh, crowns, plants, seeds, greens)
 
 
 ## Bark for a trunk of this size. The texture goes round a whole number of times so it meets
@@ -261,7 +266,6 @@ static func bush_leaf_mesh() -> ArrayMesh:
 static func bush_leaves() -> ShaderMaterial:
 	if _bush_material == null:
 		_bush_material = _leaves().duplicate() as ShaderMaterial
-		_bush_material.set_shader_parameter(&"color", Color.WHITE)
 		_bush_material.set_shader_parameter(&"card_half_m", BUSH_CARD_HALF_M)
 	return _bush_material
 
@@ -270,7 +274,8 @@ static func _leaves() -> ShaderMaterial:
 	if _leaf_material == null:
 		_leaf_material = ShaderMaterial.new()
 		_leaf_material.shader = _LEAF_SHADER
-		_leaf_material.set_shader_parameter(&"color", LEAF_COLOR)
+		# The green is each tree's instance color.
+		_leaf_material.set_shader_parameter(&"color", Color.WHITE)
 		_leaf_material.set_shader_parameter(&"alpha", load(_LEAF_ALPHA) as Texture2D)
 		_leaf_material.set_shader_parameter(&"card_half_m", LEAF_CARD_HALF_M)
 		_leaf_material.set_shader_parameter(&"light_steps", LEAF_LIGHT_STEPS)
