@@ -25,6 +25,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | Cloudy evening sky (`assets/skies/evening-orange.exr`) | HdrSkyEvening006 by Poliigon (https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522) | Poliigon royalty-free license, free asset |
 | Hazy sunset sky (`assets/skies/sunset-pink.exr`) | HdrSkySunset007 by Poliigon (https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537) | Poliigon royalty-free license, free asset |
 | Day sky (`assets/skies/kloofendal_48d_partly_cloudy_puresky_4k.hdr`) | "Kloofendal 48d Partly Cloudy (Pure Sky)" by Greg Zaal and Jarod Guest, Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| Night sky with stars (`assets/skies/deep-space-stars.exr`) | "Deep Space Starry Sky HDRI" by Nandu M, BlendKit (https://www.blendkit.com/asset-gallery-detail/8f312632-1756-4ddc-aac0-c4a8456a2923/) | BlendKit royalty-free license, free asset |
 
 ## Fonts
 

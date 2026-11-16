@@ -36,3 +36,6 @@ __pycache__/
 
 # Export builds
 build/
+
+# Full-size sky downloads kept out of Git; the game copy is in assets/skies/
+reference/skies/deep-space-stars/deep-space-starry-sky-18k.exr
