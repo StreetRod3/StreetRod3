@@ -208,7 +208,10 @@ func _setup_race_layout() -> void:
 	_ground.collision_layer = 0
 	_ground.collision_mask = 0
 	if GameState.race_from_sr2():
-		_set_night()
+		if _Skies.has_file(_track_sky()) and _track_sky() != _Skies.DAY:
+			_set_day()
+		else:
+			_set_night()
 	if _track.has_method(&"finish_basis"):
 		_finish.global_transform = _track.finish_basis()
 	if _track.has_method(&"is_loop") and _track.is_loop():
@@ -235,18 +238,23 @@ func _setup_race_layout() -> void:
 		_traffic_mgr = traf
 
 
-## Every race but Street Rod 2's cruise races runs under a photographed sky: the track's own, set
-## in the track maker, or the day sky.
+## Every race runs under a photographed sky, the track's own (set in the track maker) or the day
+## sky, except Street Rod 2's cruise races on a track that sets none, which get `_set_night()`.
 func _set_day() -> void:
 	var world_env: WorldEnvironment = $WorldEnvironment
 	var env: Environment = world_env.environment.duplicate()
 	var sun: DirectionalLight3D = $DirectionalLight3D
-	var sky := _Skies.DAY
-	if _is_road and _track != null and _track.has_method(&"get_sky"):
-		sky = _track.get_sky()
+	var sky := _track_sky()
 	_Skies.light(env, sky, sun)
 	_Skies.use(env, sky, sun.global_basis)
 	world_env.environment = env
+
+
+## The sky the race's track asks for, or the day sky.
+func _track_sky() -> String:
+	if _is_road and _track != null and _track.has_method(&"get_sky"):
+		return str(_track.get_sky())
+	return _Skies.DAY
 
 
 ## Street Rod 2 runs its cruise races under a black sky, with everything on the ground bright and flat.

@@ -48,10 +48,13 @@ A track picks its sky with its `sky` field, set under Sky in the track maker. Th
 | `dusk` | Dusk | `assets/skies/dusk.exr`, not added yet | environment-textures.com, https://www.environment-textures.com/photos/show/id/12k-dusk-skydome-hdri-panorama (paid, one credit; a 12K HDR in the set) |
 | `evening-orange` | Cloudy evening, orange | `assets/skies/evening-orange.exr`, from `reference/tracks/cloudyeveninghdri/` | Poliigon HdrSkyEvening006, https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522 |
 | `sunset-pink` | Hazy sunset, pink and orange | `assets/skies/sunset-pink.exr`, from `reference/tracks/sunsethdri/` | Poliigon HdrSkySunset007, https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537 |
+| `night-stars` | Night, stars | `assets/skies/deep-space-stars.exr`, from `reference/skies/deep-space-stars/` (the full-size original is kept out of Git) | BlendKit "Deep Space Starry Sky HDRI" by Nandu M, https://www.blendkit.com/asset-gallery-detail/8f312632-1756-4ddc-aac0-c4a8456a2923/ |
 
 The sky is turned so the sun in the photo stands where the scene's light comes from. That needs the sun's place, `sun_u` and `sun_up`. A sky without them (`-1`) is drawn unturned, so its sun can be on the wrong side of the shadows.
 
 In races a sky can also set the light, for a sky that isn't midday. The day sky sets none of these and leaves each scene's own light. The city always has the day sky.
+
+Street Rod 2's cruise races (the street drag, Mulholland and the Aqueduct) are at night. Their course's sky replaces the plain black night sky in `race.gd` when it names one other than `day`; the street drag's names `night-stars`, and Mulholland's and the Aqueduct's name none. `night-stars` has no moon in the photo, so it isn't turned, and its light copies that black night's: the sun light at `0.495` (the scene's `1.1` times `NIGHT_LIGHT_SCALE`) and `NIGHT_AMBIENT` at `0.85`. A track in the track maker can pick it too.
 
 | Key | What it does | `sunset-pink` | `evening-orange` |
 | --- | --- | --- | --- |

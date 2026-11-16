@@ -131,7 +131,7 @@ def main():
     lines = read_frame(sys.argv[1])
     nodes, roads = road_nodes(lines)
     items = scenery(lines)
-    out = ['{', '  "name": "Street drag",', '  "style": "street",', '  "nodes": [']
+    out = ['{', '  "name": "Street drag",', '  "style": "street",', '  "sky": "night-stars",', '  "nodes": [']
     out.append(",\n".join("    " + json.dumps(n) for n in nodes))
     out += ['  ],', '  "roads": [']
     out.append(",\n".join("    " + json.dumps(r) for r in roads))

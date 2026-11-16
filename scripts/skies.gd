@@ -59,6 +59,17 @@ const SKIES := {
 		"exposure": 1.6,
 		"sky_energy": 0.55,
 	},
+	# No sun or moon in the photo, so it isn't turned. The light is race.gd's black night sky's:
+	# the scene's 1.1 at its NIGHT_LIGHT_SCALE, and its NIGHT_AMBIENT.
+	"night-stars": {
+		"name": "Night, stars",
+		"path": "res://assets/skies/deep-space-stars.exr",
+		"sun_u": -1.0,
+		"sun_up": -1.0,
+		"light_energy": 0.495,
+		"ambient_color": Color(0.78, 0.8, 0.9),
+		"ambient_energy": 0.85,
+	},
 }
 
 static var _skies: Dictionary = {}
