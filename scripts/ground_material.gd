@@ -119,6 +119,7 @@ static func vertex_ground() -> ShaderMaterial:
 		mat.set_shader_parameter(&"gravel_albedo", load(_GRAVEL + "diff_2k.jpg") as Texture2D)
 		mat.set_shader_parameter(&"gravel_normal", load(_GRAVEL + "nor_gl_2k.jpg") as Texture2D)
 		mat.set_shader_parameter(&"gravel_arm", load(_GRAVEL + "arm_2k.jpg") as Texture2D)
+		mat.set_shader_parameter(&"gravel_height", load(_GRAVEL + "disp_2k.jpg") as Texture2D)
 		_vertex_ground = mat
 	return _vertex_ground
 

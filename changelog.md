@@ -417,3 +417,5 @@ The track maker has a Sky setting, so a track can pick the photographed sky it r
 Mulholland's gravel has a texture now, Poly Haven's "Rocky Trail": stones in tan dirt on the verge beside the road and on the course's gravel stretches. The gravel verge runs all along the road now, beside flat ground too, with a clean edge to the grass. Before, it only ran beside hills and drops and faded into the grass over a few meters wherever one began or ended, which looked like green-tinted gravel.
 
 The outside edge of Mulholland's gravel verge is ragged now instead of ruler-straight, wandering in by up to about half a meter in bumps a couple of meters long. It is only drawn that way; the road's edge, the walls and going over the side work as before.
+
+The gravel verge's edge no longer fades into the grass or dirt beside it. It breaks up into loose stones instead: across the last few inches the stones stay and the ground between them gives way, using the gravel's height map.
