@@ -407,3 +407,5 @@ The day sky is a photograph now: Poly Haven's "Kloofendal 48d Partly Cloudy (Pur
 A car that has finished, or is coasting to a stop after a wreck or a blown engine, keeps its wheels on the road. The springs kept measuring each wheel against the road height at the moment the race ended, so a car rolling on uphill drew its wheels rising off the car by however far it had climbed, a few meters on a long run-out. The road under the wheels is now looked up every frame while a car parks or coasts, for the player and the rival.
 
 Mulholland has the grass too. Its flat ground and the low parts of its banks use the same grass texture as the other tracks instead of a flat bright green, fading into the brown as a bank rises into a hillside; the brown hills and the grey verge are unchanged. The ground far below the course is grass as well.
+
+Mulholland's hillsides are dirt now: Poliigon's "Soil With Weeds" at 2K instead of the flat brown, with each bank running from grass at its foot into dirt as it rises. The grey verge is unchanged.

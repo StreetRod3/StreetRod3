@@ -1,16 +1,20 @@
 extends RefCounted
 
-## Textured ground: the grass under the race tracks, the city and Mulholland, the asphalt of their roads, and
+## Textured ground: the grass under the race tracks, the city and Mulholland, Mulholland's dirt, the asphalt of their roads, and
 ## the concrete of the Aqueduct and the street drag's shoulders.
 ## Each is mapped from above in world space, so any ground or road mesh takes it without UVs of
 ## its own, and one tile covers the same ground whatever the mesh's size. Sources and notes are
-## in reference/tracks/grass, reference/tracks/CityStreetAsphalt and reference/tracks/concrete.md.
+## in reference/tracks/grass, reference/tracks/CityStreetAsphalt, reference/tracks/dirt and
+## reference/tracks/concrete.md.
 
 ## Poliigon GrassPatchyGround 4585 at 2K.
 const GRASS_TILE_M := 2.0
 ## Poliigon CityStreetAsphaltGenericClean001 at 2K. Its roughness map is the download's gloss
 ## map inverted.
 const ASPHALT_TILE_M := 1.0
+## Poliigon GroundDirtWeedsPatchy004 at 2K, for Mulholland's hillsides. Its roughness map is the
+## download's gloss map inverted.
+const DIRT_TILE_M := 2.0
 ## Mulholland's road is black in Street Rod 2, so its asphalt is darkened this much.
 const DARK_ASPHALT_TINT := Color(0.3, 0.3, 0.3, 1)
 ## A photo from magnific.com made to tile by tools/make_concrete_texture.py. It has no normal or
@@ -23,14 +27,15 @@ const SHOULDER_TINT := Color(0.6, 0.6, 0.58, 1)
 const _GRASS := "res://assets/textures/grass/Poliigon_GrassPatchyGround_4585_"
 const _ASPHALT := "res://assets/textures/asphalt/CityStreetAsphaltGenericClean001_"
 const _CONCRETE := "res://assets/textures/concrete/old-grunge-concrete.jpg"
-const _VERTEX_GRASS_SHADER := preload("res://shaders/vertex_grass.gdshader")
+const _DIRT := "res://assets/textures/dirt/GroundDirtWeedsPatchy004_"
+const _VERTEX_GROUND_SHADER := preload("res://shaders/vertex_ground.gdshader")
 
 static var _grass: StandardMaterial3D = null
 static var _asphalt: StandardMaterial3D = null
 static var _dark_asphalt: StandardMaterial3D = null
 static var _shoulder: StandardMaterial3D = null
 static var _vertex_concrete: StandardMaterial3D = null
-static var _vertex_grass: ShaderMaterial = null
+static var _vertex_ground: ShaderMaterial = null
 
 
 ## One material for every grass ground, made on first use.
@@ -75,17 +80,23 @@ static func vertex_colored_concrete() -> StandardMaterial3D:
 	return _vertex_concrete
 
 
-## Grass where a vertex's alpha is 1, its flat color where it is 0, for Mulholland's hillsides
-## (shaders/vertex_grass.gdshader). The grass is the same as `grass()`.
-static func vertex_grass() -> ShaderMaterial:
-	if _vertex_grass == null:
-		_vertex_grass = ShaderMaterial.new()
-		_vertex_grass.shader = _VERTEX_GRASS_SHADER
-		_vertex_grass.set_shader_parameter(&"grass_albedo", load(_GRASS + "BaseColor.jpg") as Texture2D)
-		_vertex_grass.set_shader_parameter(&"grass_normal", load(_GRASS + "Normal.png") as Texture2D)
-		_vertex_grass.set_shader_parameter(&"grass_roughness", load(_GRASS + "Roughness.jpg") as Texture2D)
-		_vertex_grass.set_shader_parameter(&"tile_m", GRASS_TILE_M)
-	return _vertex_grass
+## Mulholland's ground beside the road (shaders/vertex_ground.gdshader): grass as much as a
+## vertex's alpha, dirt as much as its UV.x, and its flat color for the rest. The grass is the same
+## as `grass()`.
+static func vertex_ground() -> ShaderMaterial:
+	if _vertex_ground == null:
+		var mat := ShaderMaterial.new()
+		mat.shader = _VERTEX_GROUND_SHADER
+		mat.set_shader_parameter(&"grass_albedo", load(_GRASS + "BaseColor.jpg") as Texture2D)
+		mat.set_shader_parameter(&"grass_normal", load(_GRASS + "Normal.png") as Texture2D)
+		mat.set_shader_parameter(&"grass_roughness", load(_GRASS + "Roughness.jpg") as Texture2D)
+		mat.set_shader_parameter(&"grass_tile_m", GRASS_TILE_M)
+		mat.set_shader_parameter(&"dirt_albedo", load(_DIRT + "COL_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"dirt_normal", load(_DIRT + "NRM_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"dirt_roughness", load(_DIRT + "ROUGH_2K.jpg") as Texture2D)
+		mat.set_shader_parameter(&"dirt_tile_m", DIRT_TILE_M)
+		_vertex_ground = mat
+	return _vertex_ground
 
 
 ## `normal` and `roughness` may be empty for a texture without those maps.
