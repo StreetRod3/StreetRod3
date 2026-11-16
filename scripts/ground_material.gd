@@ -1,6 +1,6 @@
 extends RefCounted
 
-## Textured ground: the grass under the race tracks, the city and Mulholland, Mulholland's dirt, the asphalt of their roads, and
+## Textured ground: the grass under the race tracks, the city and Mulholland, Mulholland's dirt and gravel, the asphalt of their roads, and
 ## the concrete of the Aqueduct and the street drag's shoulders.
 ## Each is mapped from above in world space, so any ground or road mesh takes it without UVs of
 ## its own, and one tile covers the same ground whatever the mesh's size. Sources and notes are
@@ -33,10 +33,16 @@ const CONCRETE_TILE_M := 2.0
 const CONCRETE_LINEAR_MEAN := 0.651
 ## The street drag's shoulders: lighter than the asphalt beside them.
 const SHOULDER_TINT := Color(0.6, 0.6, 0.58, 1)
+## Gravel: Mulholland's verge and its gravel stretches. Flat for now; a texture goes in
+## `_GRAVEL_TEXTURE`, and this color then tints it.
+const GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
+const GRAVEL_TILE_M := 2.0
 
 const _GRASS := "res://assets/textures/grass/Poliigon_GrassPatchyGround_4585_"
 const _ASPHALT := "res://assets/textures/asphalt/CityStreetAsphaltGenericClean001_"
 const _CONCRETE := "res://assets/textures/concrete/old-grunge-concrete.jpg"
+## Empty until there is a gravel texture.
+const _GRAVEL_TEXTURE := ""
 const _DIRT := "res://assets/textures/dirt/GroundDirtWeedsPatchy004_"
 const _VERTEX_GROUND_SHADER := preload("res://shaders/vertex_ground.gdshader")
 
@@ -46,6 +52,7 @@ static var _dark_asphalt: StandardMaterial3D = null
 static var _shoulder: StandardMaterial3D = null
 static var _vertex_concrete: StandardMaterial3D = null
 static var _vertex_ground: ShaderMaterial = null
+static var _gravel: StandardMaterial3D = null
 
 
 ## One material for every grass ground, made on first use.
@@ -108,8 +115,24 @@ static func vertex_ground() -> ShaderMaterial:
 		mat.set_shader_parameter(&"dirt_tile_m", DIRT_TILE_M)
 		mat.set_shader_parameter(&"ground_specular", GROUND_SPECULAR)
 		mat.set_shader_parameter(&"dirt_tint", dirt_tint())
+		mat.set_shader_parameter(&"gravel_color", GRAVEL_COLOR)
+		mat.set_shader_parameter(&"gravel_tile_m", GRAVEL_TILE_M)
+		if not _GRAVEL_TEXTURE.is_empty():
+			mat.set_shader_parameter(&"gravel_albedo", load(_GRAVEL_TEXTURE) as Texture2D)
 		_vertex_ground = mat
 	return _vertex_ground
+
+
+## Mulholland's gravel stretches. Its verge is the same gravel, in `vertex_ground()`.
+static func gravel() -> StandardMaterial3D:
+	if _gravel == null:
+		if _GRAVEL_TEXTURE.is_empty():
+			_gravel = StandardMaterial3D.new()
+		else:
+			_gravel = _make(_GRAVEL_TEXTURE, "", "", GRAVEL_TILE_M)
+		_gravel.albedo_color = GRAVEL_COLOR
+		_gravel.roughness = 0.98
+	return _gravel
 
 
 ## What the dirt's color is multiplied by, per channel in linear light.

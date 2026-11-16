@@ -56,9 +56,9 @@ const _MOUNTAIN_LOW_M := 110.0
 const _MOUNTAIN_HIGH_M := 460.0
 
 ## Mulholland's ground. Alpha is how much of it is the grass texture, and a column's "dirt" how much
-## is the dirt texture (see shaders/vertex_ground.gdshader); the color shows through the rest. So
-## green is all grass, a hillside all dirt, a bank runs from one into the other, and the verge is
-## its flat gray.
+## is the dirt texture (see shaders/vertex_ground.gdshader); the rest is gravel. So green is all
+## grass, a hillside all dirt, a bank runs from one into the other, and the verge is gravel. Their
+## RGB is no longer drawn; it is the flat look they had before the textures.
 const _GREEN := Color(0.11, 0.42, 0.1, 1)
 const _VERGE_GRAY := Color(0.33, 0.33, 0.32, 0)
 const _HILL_BROWN := Color(0.56, 0.3, 0.07, 0)

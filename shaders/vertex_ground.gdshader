@@ -2,9 +2,9 @@ shader_type spatial;
 render_mode cull_disabled;
 
 // Mulholland's ground beside the road (track_sides.gd). Each vertex says how much of it is grass
-// (COLOR.a) and how much is dirt (UV.x); its flat COLOR.rgb shows through whatever is left. So the
-// flat ground is grass, the hillsides dirt, the banks run from one into the other, and the verge
-// keeps its flat gray. The dirt is tinted toward the old flat brown, and both are kept from
+// (COLOR.a) and how much is dirt (UV.x); whatever is left is gravel. So the flat ground is grass,
+// the hillsides dirt, the banks run from one into the other, and the verge is gravel, the same as
+// the course's gravel stretches (ground_material.gd's gravel()). COLOR.rgb is not used. The dirt is tinted toward the old flat brown, and both are kept from
 // shining. Both textures are mapped from above in world space with the same
 // triplanar blend as a StandardMaterial3D's world triplanar (see ground_material.gd).
 
@@ -18,8 +18,11 @@ uniform sampler2D dirt_roughness : hint_roughness_r, filter_linear_mipmap_anisot
 uniform float grass_tile_m = 2.0;
 uniform float dirt_tile_m = 2.0;
 uniform float sharpness = 8.0;
-// Roughness of the flat-colored ground.
-uniform float flat_roughness = 0.95;
+// The gravel: a color for now, which multiplies a texture once there is one.
+uniform vec4 gravel_color : source_color = vec4(0.4, 0.4, 0.38, 1.0);
+uniform sampler2D gravel_albedo : source_color, hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float gravel_tile_m = 2.0;
+uniform float gravel_roughness = 0.98;
 // Specular of the grass and dirt. Low, because Godot scales the grazing-angle reflection with it
 // too, and at 0.5 the ground far off turned pale with the sky in it.
 uniform float ground_specular = 0.1;
@@ -58,17 +61,17 @@ vec4 triplanar(sampler2D s, float tile_m) {
 void fragment() {
 	float grass = clamp(COLOR.a, 0.0, 1.0);
 	float dirt = clamp(UV.x, 0.0, 1.0 - grass);
-	float flat_part = 1.0 - grass - dirt;
+	float gravel = 1.0 - grass - dirt;
 	// Sampled everywhere, not under an if: the weights change across a triangle, and a texture read
 	// in a branch that differs between neighboring pixels gets the wrong mipmap.
-	ALBEDO = COLOR.rgb * flat_part
+	ALBEDO = gravel_color.rgb * triplanar(gravel_albedo, gravel_tile_m).rgb * gravel
 		+ triplanar(grass_albedo, grass_tile_m).rgb * grass
 		+ clamp(triplanar(dirt_albedo, dirt_tile_m).rgb * dirt_tint, 0.0, 1.0) * dirt;
-	ROUGHNESS = flat_roughness * flat_part
+	ROUGHNESS = gravel_roughness * gravel
 		+ triplanar(grass_roughness, grass_tile_m).r * grass
 		+ max(triplanar(dirt_roughness, dirt_tile_m).r, dirt_min_roughness) * dirt;
 	SPECULAR = mix(0.5, ground_specular, grass + dirt);
-	NORMAL_MAP = vec3(0.5, 0.5, 1.0) * flat_part
+	NORMAL_MAP = vec3(0.5, 0.5, 1.0) * gravel
 		+ triplanar(grass_normal, grass_tile_m).rgb * grass
 		+ triplanar(dirt_normal, dirt_tile_m).rgb * dirt;
 }
