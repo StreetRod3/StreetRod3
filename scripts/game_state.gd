@@ -3381,30 +3381,54 @@ func apply_pink_slips(player_won: bool) -> int:
 	return PINK_LOST
 
 
-func _take_opponent_car() -> bool:
-	var opp := selected_opponent()
+func _opponent_car_record(opp: Dictionary) -> Dictionary:
 	var model_id := str(opp.get("car_id", ""))
-	if listing_by_id(USED_CARS, model_id).is_empty() or owned_car_ids.size() >= MAX_OWNED_CARS:
-		return false
-	if has_active_car():
-		_sync_record_from_active()
+	if listing_by_id(USED_CARS, model_id).is_empty():
+		return {}
+	var taken: Variant = opp.get("taken_car", null)
+	if typeof(taken) == TYPE_DICTIONARY:
+		return (taken as Dictionary).duplicate(true)
 	var paint := Color(0.8, 0.1, 0.1)
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
 	# A car they took from the player comes back as it left, and any other as they built it.
-	var taken: Variant = opp.get("taken_car", null)
-	var won_id := ""
-	if typeof(taken) == TYPE_DICTIONARY:
-		won_id = _add_owned_record((taken as Dictionary).duplicate(true))
-	else:
-		var parts := opponent_hood_parts(opp)
-		parts[SLOT_SPRINGS] = str(opp.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS]))
-		parts[SLOT_SHOCKS] = str(opp.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS]))
-		won_id = _add_owned_car(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), parts)
-		car_records[won_id]["bumpers_off"] = bumper_ends(opp.get("bumpers_off", []))
+	var parts := opponent_hood_parts(opp)
+	parts[SLOT_SPRINGS] = str(opp.get("springs", STOCK_SLOT_PARTS[SLOT_SPRINGS]))
+	parts[SLOT_SHOCKS] = str(opp.get("shocks", STOCK_SLOT_PARTS[SLOT_SHOCKS]))
+	var rec := _build_car_record(model_id, paint, str(opponent_tires(opp).get("id", "")), str(opp.get("engine", "")), str(opp.get("gearbox", "")), parts)
+	rec["bumpers_off"] = bumper_ends(opp.get("bumpers_off", []))
+	return rec
+
+
+func _take_opponent_car() -> bool:
+	if owned_car_ids.size() >= MAX_OWNED_CARS:
+		return false
+	var rec := _opponent_car_record(selected_opponent())
+	if rec.is_empty():
+		return false
+	if has_active_car():
+		_sync_record_from_active()
+	var won_id := _add_owned_record(rec)
 	_replace_opponent_car(selected_opponent_id)
 	_install_car(won_id)
+	return true
+
+
+## In a pink slips race where the rival totaled their car, the player keeps whatever
+## parts were on it as spares and the rival gets a fresh car.
+func salvage_wrecked_opponent_car() -> bool:
+	if not race_pink_slips:
+		return false
+	race_pink_slips = false
+	var rec := _opponent_car_record(selected_opponent())
+	if rec.is_empty():
+		return false
+	_own_fitted_parts()
+	for mount: Array in _record_mounts(rec):
+		_owned_list(mount[0]).append(mount[1])
+	_trim_spare_conditions()
+	_replace_opponent_car(selected_opponent_id)
 	return true
 
 
@@ -3778,7 +3802,7 @@ func _mounts_price(mounts: Array) -> int:
 
 ## A new car brings its own copy of everything on it, so spares stay spares.
 ## A new car in the garage, as it came unless a tire set, engine, or gearbox is named.
-func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "", hood: Dictionary = {}) -> String:
+func _build_car_record(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "", hood: Dictionary = {}) -> Dictionary:
 	var rec := _make_car_record(model_id, paint)
 	if not tires.is_empty():
 		rec["slot_parts"][SLOT_TIRES] = tires
@@ -3789,7 +3813,11 @@ func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: 
 		_grant_swap_mounts(rec, false)
 	if not listing_by_id(GEARBOXES, gearbox).is_empty():
 		rec["gearbox_id"] = gearbox
-	return _add_owned_record(rec)
+	return rec
+
+
+func _add_owned_car(model_id: String, paint: Color, tires: String = "", engine: String = "", gearbox: String = "", hood: Dictionary = {}) -> String:
+	return _add_owned_record(_build_car_record(model_id, paint, tires, engine, gearbox, hood))
 
 
 ## Adds a car as `rec` has it. Everything on it is owned from now on.

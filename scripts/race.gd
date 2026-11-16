@@ -617,8 +617,8 @@ func _show_wreck() -> void:
 	_show_bubble("Lucky you weren't killed, 'cause the car is totaled." + _lost_bucks_line(payout), GameState.SCENE_GARAGE)
 
 
-## The rival's car is totaled, so the race is won. A wrecked car can't be handed over, so
-## pink slips are void, but the money is still paid.
+## The rival's car is totaled, so the race is won. On pink slips the player keeps whatever
+## parts were on the wreck; either way any money stake is still paid.
 func _show_rival_wreck() -> void:
 	_race_over = true
 	_result_shown_ms = Time.get_ticks_msec()
@@ -628,16 +628,17 @@ func _show_rival_wreck() -> void:
 	_player.begin_park(0.0)
 	_end_race_ui()
 	GameState.note_race_win()
-	var was_pink := GameState.race_pink_slips
-	GameState.race_pink_slips = false
 	var prefix := "%s's car is totaled!" % str(GameState.selected_opponent().get("name", "The rival"))
-	if not was_pink and _try_offer_book_instead(prefix):
+	var salvaged := GameState.salvage_wrecked_opponent_car()
+	if not salvaged and _try_offer_book_instead(prefix):
 		return
 	var payout := GameState.apply_race_stake(true)
 	var text := prefix
+	if salvaged:
+		text += "\nYou salvaged the parts from the wreck."
 	if payout > 0:
 		text += "\nYou just won %d bucks!" % payout
-	else:
+	elif not salvaged:
 		text += "\nYou just won the race!"
 	_show_bubble(text, GameState.SCENE_DRIVE_IN)
 
