@@ -246,7 +246,6 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 	var verge := half + MOUNTAIN_VERGE
 	var limit := maxf(reach, verge)
 	var slope_end := minf(verge + MOUNTAIN_BANK_RUN, limit)
-	var near := _GREEN if height == 0.0 else _VERGE_GRAY
 	var bank := _GREEN
 	var dirt := 0.0
 	if height > 0.0:
@@ -255,8 +254,10 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 	var top := _far_rise(height)
 	var far_center := Vector3(center.x, far_y, center.z)
 	return [
-		_column(center + across * half, 0.0, near),
-		_column(center + across * verge, 0.0, near if height != 0.0 else _GREEN),
+		# The verge is gravel all along the road, flat sides too, with a hard edge to the bank: a
+		# verge that came and went with the hills faded into the grass over a section each time.
+		_column(center + across * half, 0.0, _VERGE_GRAY),
+		_column(center + across * verge, 0.0, _VERGE_GRAY),
 		_column(center + across * verge, 0.0, bank, dirt),
 		_column(center + across * slope_end, height, bank, dirt),
 		_column(far_center + across * minf(slope_end + _HILL_TOP_M, limit), top, bank, dirt),
