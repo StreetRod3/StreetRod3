@@ -3,6 +3,8 @@ extends CharacterBody3D
 ## Same planar vehicle as the player. The racing line is only a driver:
 ## it picks steer, throttle, and brake. The tires still make the motion.
 
+## race_track.gd's RAMP_SIDE_LAYER: the collision layer of a jump track's ramp sides.
+const RAMP_SIDE_LAYER := 4
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
@@ -500,6 +502,9 @@ func _stick_to_road() -> void:
 		rotation.x = 0.0
 		return
 	var here: float = track.surface_height(global_position)
+	# A jump track's ramp sides stop only a car off the road (race_track.gd's `hits_ramp_sides()`).
+	if track.has_method(&"hits_ramp_sides"):
+		set_collision_mask_value(RAMP_SIDE_LAYER, bool(track.hits_ramp_sides(global_position)))
 	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
 	if track.has_method(&"has_jumps") and track.has_jumps():
 		var was_flying := _air.airborne

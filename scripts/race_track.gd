@@ -54,6 +54,9 @@ const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const _RAMP_SIDE_COLOR := Color(0.42, 0.33, 0.22, 1)
 ## Road this high or less over the grass has no ramp side.
 const _RAMP_SIDE_MIN_M := 0.02
+## The collision layer of a jump track's ramp sides. A car takes it into its mask only while
+## `hits_ramp_sides()` says so.
+const RAMP_SIDE_LAYER := 4
 ## Yellow and black bands across the road up to each lip, so a jump shows from the car.
 const _LIP_YELLOW := Color(0.95, 0.76, 0.08, 1)
 const _LIP_BAND_LONG := 1.6
@@ -267,6 +270,17 @@ func bank_push(world: Vector3) -> Vector3:
 	var i := _nearest_index(world)
 	var across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
 	return across * _TrackSides.aqueduct_push(_lateral_at(i, world))
+
+
+## Whether a car at `world` runs into a jump track's ramp sides: only once its middle is off the
+## road, on the grass, so one on a ramp never catches on a side's top.
+func hits_ramp_sides(world: Vector3) -> bool:
+	if not _jumps or _street or _pts.is_empty():
+		return false
+	var i := _nearest_index(world)
+	var lateral := _lateral_at(i, world)
+	var ext := _sample_extents(i)
+	return lateral > ext.y or lateral < -ext.x
 
 
 ## True when a car at `world` has gone off an edge with nothing to stop it.
@@ -1345,10 +1359,11 @@ func _build_ramp_sides() -> void:
 	mi.mesh = mesh
 	add_child(mi)
 	# A car on the grass beside a ramp is held to the grass, so the side stops it, as a barrier
-	# does, rather than lifting it onto the ramp. Cars ride 0.1 m clear, so a side lower than that
-	# lets them up, and one on the ramp clears the top. The side faces out only: a car that drops
-	# off a ramp with its middle just past the edge lands half inside it, and is pushed out onto
-	# the grass rather than held there.
+	# does, rather than lifting it onto the ramp. Only a car off the road collides with it (see
+	# `hits_ramp_sides()`): on a steep ramp a car's box comes down to the road and would catch on
+	# the side's top. Cars ride 0.1 m up, so a side lower than that lets them up. The side faces
+	# out only: a car that drops off a ramp with its middle just past the edge lands half inside
+	# it, and is pushed out onto the grass rather than held.
 	var shape := ConcavePolygonShape3D.new()
 	shape.backface_collision = false
 	shape.set_faces(mesh.get_faces())
@@ -1356,7 +1371,7 @@ func _build_ramp_sides() -> void:
 	hit.shape = shape
 	var body := StaticBody3D.new()
 	body.name = "RampSideWalls"
-	body.collision_layer = 1
+	body.collision_layer = 1 << (RAMP_SIDE_LAYER - 1)
 	body.collision_mask = 0
 	body.set_meta(&"track_obstacle", true)
 	body.add_child(hit)

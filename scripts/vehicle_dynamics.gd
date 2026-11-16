@@ -897,7 +897,8 @@ func _update_suspension(dt: float) -> void:
 	var damper := maxf(_shock_rate, 0.0)
 	for wheel in _wheels:
 		var origin := car.global_transform * wheel.local_position
-		origin.y += _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
+		var body_lift := _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
+		origin.y += body_lift
 		var ground_y := _raycast_ground(space, car, origin, wheel.road_y)
 		var drop := origin.y - ground_y
 		if wheel.ride_recapture:
@@ -907,7 +908,10 @@ func _update_suspension(dt: float) -> void:
 		wheel.rest_length = wheel.ride_drop + sag
 		var travel := wheel.rest_length - drop + wheel.road_bump
 		var compression := clampf(travel, 0.0, _MAX_TRAVEL_M)
-		wheel.hub_lift = wheel.road_bump + maxf(-travel, 0.0)
+		# A wheel past its full drop hangs from the body, so it lifts only as far as the body has
+		# lifted at that corner. Where the ground falls away under it, off a ramp's side say, it
+		# stays where it hangs.
+		wheel.hub_lift = wheel.road_bump + clampf(-travel, 0.0, maxf(body_lift, 0.0))
 		if not wheel.suspension_ready:
 			wheel.compression = compression
 			wheel.compression_speed = 0.0
