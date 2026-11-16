@@ -606,6 +606,31 @@ func stock_slot_parts(engine_id: String, make: String) -> Dictionary:
 	return slots
 
 
+## Names of the parts a car from the paper comes with: the engine, the gearbox, the
+## wheels, then each slot that has something in it.
+func stock_part_names(model_id: String) -> Array[String]:
+	var names: Array[String] = []
+	var engine_id := _stock_part_id(model_id, "engine")
+	var gearbox_id := _stock_part_id(model_id, "transmission")
+	if gearbox_id.is_empty():
+		gearbox_id = DEFAULT_GEARBOX_ID
+	_append_part_name(names, "engine", engine_id)
+	_append_part_name(names, "transmission", gearbox_id)
+	_append_part_name(names, "wheels", _stock_part_id(model_id, "wheels"))
+	var slots := stock_slot_parts(engine_id, car_make(model_id))
+	for slot in ALL_SLOTS:
+		_append_part_name(names, "part", str(slots.get(slot, NO_PART_ID)))
+	return names
+
+
+func _append_part_name(names: Array[String], kind: String, part_id: String) -> void:
+	if part_id.is_empty() or part_id == NO_PART_ID:
+		return
+	var name := str(listing_for(kind, part_id).get("name", ""))
+	if not name.is_empty():
+		names.append(name)
+
+
 ## The copy of `part_id` made for `family`: itself if it fits, the same entry's copy for
 ## that family, or "" if there is none.
 func part_for_family(part_id: String, family: String) -> String:
