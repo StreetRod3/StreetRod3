@@ -29,6 +29,8 @@ const _RearMirror := preload("res://scripts/rear_mirror.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _Console := preload("res://scripts/console.gd")
+const _GroundMaterial := preload("res://scripts/ground_material.gd")
+const _Skies := preload("res://scripts/skies.gd")
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
 ## the ones out of view are still skipped.
 const _BATCH_CELL := 40.0
@@ -59,7 +61,6 @@ const _CREEP_SPEED := 2.0
 const _FULL_STEER_YAW_RATE := 0.8
 const _LONGEST_RIDE_STEP_S := 1.0 / 30.0
 
-const _ROAD_COLOR := Color(0.32, 0.33, 0.35, 1)
 const _EDGE_COLOR := Color(0.86, 0.84, 0.78, 1)
 const _LANE_COLOR := Color(0.95, 0.86, 0.45, 1)
 ## Streets at least this wide, from the center to the curb, get two lanes.
@@ -69,7 +70,6 @@ const _LANE_GAP := 2.6
 ## White line sits this far inside the pavement edge. Its half-width is `_CURB_HALF`.
 const _CURB_FROM_EDGE := 0.28
 const _CURB_HALF := 0.12
-const _GROUND_COLOR := Color(0.2, 0.28, 0.18, 1)
 const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
 const _BUSH_DARK := Color(0.14, 0.32, 0.13)
 const _BUSH_MID := Color(0.24, 0.42, 0.17)
@@ -889,15 +889,6 @@ func _add_solid_world(pos: Vector3, size: Vector3) -> void:
 
 func _build_world() -> void:
 	var env := Environment.new()
-	env.background_mode = Environment.BG_SKY
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.25, 0.35, 0.55)
-	sky_mat.sky_horizon_color = Color(0.55, 0.6, 0.65)
-	sky_mat.ground_bottom_color = Color(0.15, 0.16, 0.18)
-	sky_mat.ground_horizon_color = Color(0.4, 0.42, 0.45)
-	var sky := Sky.new()
-	sky.sky_material = sky_mat
-	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.5, 0.52, 0.55)
 	env.ambient_light_energy = 0.55
@@ -911,6 +902,7 @@ func _build_world() -> void:
 	# The default 100 m draws much of the city a second time for shadows.
 	sun.directional_shadow_max_distance = 60.0
 	add_child(sun)
+	_Skies.use_day(env, sun.basis)
 
 
 func _build_city(track: Dictionary) -> void:
@@ -919,9 +911,7 @@ func _build_city(track: Dictionary) -> void:
 	var ground_box := ground.mesh as BoxMesh
 	if ground_box != null:
 		_add_solid_world(ground.position, ground_box.size)
-	var road_mat := StandardMaterial3D.new()
-	road_mat.albedo_color = _ROAD_COLOR
-	road_mat.roughness = 0.92
+	var road_mat := _GroundMaterial.asphalt().duplicate() as StandardMaterial3D
 	road_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var roads := MeshInstance3D.new()
 	var edges := MeshInstance3D.new()
@@ -979,10 +969,7 @@ func _build_ground(track: Dictionary) -> MeshInstance3D:
 	var pad := 40.0
 	var box := BoxMesh.new()
 	box.size = Vector3(max_x - min_x + pad * 2.0, 1.0, max_z - min_z + pad * 2.0)
-	var ground_mat := StandardMaterial3D.new()
-	ground_mat.albedo_color = _GROUND_COLOR
-	ground_mat.roughness = 0.95
-	box.material = ground_mat
+	box.material = _GroundMaterial.grass()
 	var ground := MeshInstance3D.new()
 	ground.mesh = box
 	ground.position = Vector3((min_x + max_x) * 0.5, -0.5, (min_z + max_z) * 0.5)

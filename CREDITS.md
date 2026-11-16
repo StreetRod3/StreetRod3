@@ -8,6 +8,20 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | --- | --- | --- |
 | 1950 Studebaker Champion body (`assets/cars/studebaker-champion-1950.glb`) | This work is based on "Studebaker - Car Model" (https://sketchfab.com/3d-models/studebaker-car-model-c7578ec0f82043e6b392fcdf9b00c743) by Allie2k (https://sketchfab.com/Allie2k) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 
+## Textures
+
+| In the game | Credit | License |
+| --- | --- | --- |
+| Grass ground (`assets/textures/grass/`) | "Grass Patchy Ground" 4585 by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
+| Road asphalt (`assets/textures/asphalt/`) | "City Street Asphalt Generic Clean 001" by Poliigon (https://www.poliigon.com) | Poliigon royalty-free license, free asset |
+| Aqueduct and street shoulder concrete (`assets/textures/concrete/`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
+
+## Skies
+
+| In the game | Credit | License |
+| --- | --- | --- |
+| Day sky (`assets/skies/kloofendal_48d_partly_cloudy_puresky_4k.hdr`) | "Kloofendal 48d Partly Cloudy (Pure Sky)" by Greg Zaal and Jarod Guest, Poly Haven (https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+
 ## Fonts
 
 | Font | License |

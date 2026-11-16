@@ -11,6 +11,7 @@ const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _MulhollandTraffic := preload("res://scripts/mulholland_traffic.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _Console := preload("res://scripts/console.gd")
+const _Skies := preload("res://scripts/skies.gd")
 
 const RESULT_SPACE_GUARD_MS := 1000
 const QUARTER_MILE_M := 402.336
@@ -147,6 +148,8 @@ func _ready() -> void:
 	if _test_drive:
 		_bench_rival()
 		($RaceUI/PauseMenu/Panel/Margin/VBox/ExitBtn as Button).text = "Back to track maker"
+	if not (_is_road and GameState.race_from_sr2()):
+		_set_day()
 	_setup_race_layout()
 	_result.visible = false
 	_build_result_bubble()
@@ -230,6 +233,15 @@ func _setup_race_layout() -> void:
 		var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
 		traf.setup(_track, _player, _opponent, floor_mi, files)
 		_traffic_mgr = traf
+
+
+## Every race but Street Rod 2's cruise races runs under the photographed day sky.
+func _set_day() -> void:
+	var world_env: WorldEnvironment = $WorldEnvironment
+	var env: Environment = world_env.environment.duplicate()
+	var sun: DirectionalLight3D = $DirectionalLight3D
+	_Skies.use_day(env, sun.global_basis)
+	world_env.environment = env
 
 
 ## Street Rod 2 runs its cruise races under a black sky, with everything on the ground bright and flat.

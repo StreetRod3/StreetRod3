@@ -5,6 +5,7 @@ extends Node3D
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CourseScenery := preload("res://scripts/course_scenery.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
+const _GroundMaterial := preload("res://scripts/ground_material.gd")
 
 @export_file("*.trk") var track_path: String = "res://assets/tracks/track1.trk"
 
@@ -23,7 +24,6 @@ const _STREET_TERRAIN_STEP := 6.0
 ## straight, so at the bottom of a dip it would otherwise come up through the pavement.
 const _STREET_UNDER_ROAD_SINK := 1.0
 const _STREET_SHOULDER_W := 0.75
-const STREET_SHOULDER_COLOR := Color(0.36, 0.35, 0.32, 1)
 ## How far a street track's pavement runs back behind the start, so it doesn't begin under the cars.
 const _STREET_RUN_IN_M := 60.0
 ## Cell size for the nearest-sample lookup used while shaping the grass.
@@ -46,11 +46,6 @@ const CURB_WHITE := Color(0.92, 0.92, 0.9, 1)
 const CHECK_BLACK := Color(0.06, 0.06, 0.07, 1)
 const CHECK_WHITE := Color(0.94, 0.94, 0.92, 1)
 const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
-const ROAD_COLOR := Color(0.18, 0.19, 0.2, 1)
-const TERRAIN_COLOR := Color(0.14, 0.16, 0.13, 1)
-const STREET_TERRAIN_COLOR := Color(0.16, 0.27, 0.11, 1)
-## Mulholland's road, black in Street Rod 2.
-const MOUNTAIN_ROAD_COLOR := Color(0.045, 0.045, 0.05, 1)
 const _GRAVEL_COLOR := Color(0.4, 0.4, 0.38, 1)
 ## The sides of a jump track's ramps, from the road's edge down to the grass.
 const _RAMP_SIDE_COLOR := Color(0.42, 0.33, 0.22, 1)
@@ -1040,7 +1035,6 @@ func _build_terrain() -> void:
 				y = minf(y, -_TERRAIN_SINK)
 			if _street and _grass_dist_sq <= _half_ws[0] * _half_ws[0]:
 				y -= _STREET_UNDER_ROAD_SINK
-			st.set_uv(Vector2(float(col), float(row)))
 			st.add_vertex(Vector3(x, y, z))
 	var stride := cols + 1
 	for row in rows:
@@ -1057,7 +1051,7 @@ func _build_terrain() -> void:
 			st.add_index(i01)
 	st.generate_normals()
 	var mesh := st.commit()
-	mesh.surface_set_material(0, _make_mat(STREET_TERRAIN_COLOR if _street else TERRAIN_COLOR, 0.95))
+	mesh.surface_set_material(0, _GroundMaterial.grass())
 	var mi := MeshInstance3D.new()
 	mi.name = "Terrain"
 	mi.mesh = mesh
@@ -1139,7 +1133,7 @@ func _build_road_mesh() -> void:
 		_add_tri(st, l0, rr1, l1, Vector2(0, v), Vector2(1, v1), Vector2(0, v1))
 	st.generate_normals()
 	var mesh := st.commit()
-	var mat := _make_mat(MOUNTAIN_ROAD_COLOR if _style == TrackFile.STYLE_MOUNTAIN else ROAD_COLOR, 0.85)
+	var mat := _GroundMaterial.dark_asphalt() if _style == TrackFile.STYLE_MOUNTAIN else _GroundMaterial.asphalt()
 	mesh.surface_set_material(0, mat)
 	_road_mi = MeshInstance3D.new()
 	_road_mi.name = "RoadMesh"
@@ -1258,7 +1252,7 @@ func _build_street_shoulders() -> void:
 		_add_shoulder_span(st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1])
 	st.generate_normals()
 	var mesh := st.commit()
-	mesh.surface_set_material(0, _make_mat(STREET_SHOULDER_COLOR, 0.95))
+	mesh.surface_set_material(0, _GroundMaterial.shoulder_concrete())
 	var mi := MeshInstance3D.new()
 	mi.name = "Shoulders"
 	mi.mesh = mesh
