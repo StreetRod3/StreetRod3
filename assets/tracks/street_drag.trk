@@ -1,6 +1,7 @@
 {
   "name": "Street drag",
   "style": "street",
+  "sky": "night-stars",
   "nodes": [
     {"id": 1, "x": 0, "y": 0.0, "type": "start"},
     {"id": 2, "x": 0, "y": 95.0},

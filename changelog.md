@@ -421,3 +421,5 @@ The outside edge of Mulholland's gravel verge is ragged now instead of ruler-str
 The gravel verge's edge no longer fades into the grass or dirt beside it. It breaks up into loose stones instead: across the last few inches the stones stay and the ground between them gives way, using the gravel's height map.
 
 Mulholland's dirt is on the hills themselves now. It used to follow the hill height beside the road, so a whole field next to a hill faded to brown over several meters wherever a hill began. Now ground standing a few inches over the road turns to dirt, breaking up in clumps, so fields stay grass and hills are dirt almost from their foot. Steep ground is dirt too, so the face of a hill or a drop is dirt right from its foot instead of grass for the first foot up.
+
+The street drag has stars overhead now: a photographed night sky (BlendKit's "Deep Space Starry Sky" by Nandu M) instead of the plain black one, lit as before. Mulholland and the Aqueduct keep the black sky. A cruise race's course can name its own sky, and the track maker lists the new one as "Night, stars", so any other track can be raced under it too.

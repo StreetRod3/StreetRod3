@@ -1,4 +1,4 @@
-# Night sky, stars (not in `SKIES` yet)
+# Night sky, stars (`night-stars` in `scripts/skies.gd`)
 
 "Deep Space Starry Sky HDRI" by Nandu M, from BlendKit: https://www.blendkit.com/asset-gallery-detail/8f312632-1756-4ddc-aac0-c4a8456a2923/ (asset base id 8f312632-1756-4ddc-aac0-c4a8456a2923, asset id 5c682094-0766-4b60-82cf-00d7ac781fbd). Uploaded 2026-08-17. Downloaded 2026-11-15 as BlendKit's free original, without an account.
 
@@ -12,7 +12,7 @@ BlendKit also offers 0.5K, 1K, 2K, 4K and 8K copies on the page.
 
 Godot can't read DWAA-compressed EXRs, so the game's copy was made in two steps. Blender re-saved the original as a ZIP-compressed half-float EXR at full size (`bpy.data.images.load`, then `save_render` with `exr_codec = "ZIP"` and `color_depth = "16"`). `tools/prepare_hdri.gd` then scaled that down. The stars survive the scaling as single bright pixels.
 
-The author describes it as a deep-space sky: a dark cosmos with faint distant stars. It has no sun, so its `sun_u` and `sun_up` stay `-1`. `prepare_hdri.gd` found its brightest patch at u 0.7328, 61 degrees up, luminance 7.4 over 98 pixels; that patch is a cluster of stars, not a sun. A race under it needs the lighting keys in `scripts/skies.gd` (moonlight or streetlights) worked out by looking at one.
+The author describes it as a deep-space sky: a dark cosmos with faint distant stars. It has no sun, so its `sun_u` and `sun_up` stay `-1`. `prepare_hdri.gd` found its brightest patch at u 0.7328, 61 degrees up, luminance 7.4 over 98 pixels; that patch is a cluster of stars, not a sun. The street drag uses it, with the same light as the black night sky of Street Rod 2's other cruise races (see docs/ground-textures.md).
 
 ## License
 
