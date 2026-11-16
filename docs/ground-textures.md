@@ -9,7 +9,7 @@ The ground, roads and day sky are photographed textures. Their materials are bui
 | Grass (Poliigon GrassPatchyGround 4585) | Ground around the race tracks and the city, Mulholland's flat ground and the foot of its banks | `GroundMaterial.grass()`, and the grass part of `vertex_ground()` |
 | Asphalt (Poliigon CityStreetAsphaltGenericClean001) | Race track roads and city streets; Mulholland's road darkened | `asphalt()`, `dark_asphalt()` |
 | Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The Aqueduct's floor and banks, the street drag's shoulders | `vertex_colored_concrete()`, `shoulder_concrete()` |
-| Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hillsides, and the upper part of its banks | The dirt part of `vertex_ground()` |
+| Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hills: ground standing more than a few inches over the road | The dirt part of `vertex_ground()` |
 | Gravel (Poly Haven Rocky Trail) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
 | Day sky (Poly Haven Kloofendal 48d Partly Cloudy, Pure Sky) | The city, and every race but Street Rod 2's cruise races unless its track picks another sky | `Skies.use_day()`, `Skies.use()` |
 
@@ -31,6 +31,8 @@ All of these are constants in `scripts/ground_material.gd`.
 | `SHOULDER_TINT` | `0.6` grey | Shade of the street drag's concrete shoulders. |
 
 `DIRT_MEAN` is the dirt photo's average color in linear light, measured from the file. The tint is worked out from it, so measure it again if the dirt texture changes. The dirt is also never smoother than `dirt_min_roughness` (`0.92`) in `shaders/vertex_ground.gdshader`; the photo's own roughness looked damp.
+
+Mulholland's dirt goes by how high the ground stands over the road, not by the hill height of the road beside it, so a field next to a hill stays grass and a hill is dirt almost from its foot. Ground starts to turn to dirt `dirt_from_m` (`0.15`) up and is all dirt `dirt_over_m` (`0.5`) higher, in `shaders/vertex_ground.gdshader`. The change is broken up by the dirt's height map, like the gravel's edge below, so it shows as clumps rather than a brown wash; `dirt_height_pull` (`0.9`) and `dirt_sharpness` (`0.08`) set how far and how crisply.
 
 Mulholland's gravel verge has a ragged outside edge, drawn by the same shader; the mesh's edge is straight, and the walls and off-the-road checks still use the straight line. `edge_wobble_m` (`0.3`) is how far the edge wanders in from the full verge width, and `edge_wave_m` (`2.5`) how long its bumps are. The edge only wanders inward: going out past the verge, gravel ran up the face of hills that rise straight from it.
 

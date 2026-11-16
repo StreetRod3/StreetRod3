@@ -1,12 +1,15 @@
 shader_type spatial;
 render_mode cull_disabled;
 
-// Mulholland's ground beside the road (track_sides.gd). Each vertex says how much of it is grass
-// (COLOR.a) and how much is dirt (UV.x), so the flat ground is grass, the hillsides dirt, and the
-// banks run from one into the other. UV.y is how far out it is from the road's edge, in meters:
+// Mulholland's ground beside the road (track_sides.gd). Each vertex says how high it stands over
+// the road (UV.x), in meters: ground at the road's level is grass, and from `dirt_from_m` up it
+// turns to dirt over `dirt_over_m`, so a hill is dirt nearly from its foot and a low bank gets
+// clumps of it. The dirt's height map breaks the change up, so clumps of dirt show through the
+// grass rather than a brown wash. UV.y is how far out it is from the road's edge,
+// in meters:
 // gravel, the same as the course's gravel stretches (ground_material.gd's gravel()), covers it out
 // to a wavy line inside `verge_m`, so the verge has a ragged outside edge where the mesh is
-// straight. COLOR.rgb is not used. The dirt is tinted toward the old flat brown, and none of the
+// straight. COLOR is not used. The dirt is tinted toward the old flat brown, and none of the
 // three shines. Each texture is mapped from above in world space with the same triplanar blend as
 // a StandardMaterial3D's world triplanar (see ground_material.gd).
 
@@ -16,6 +19,14 @@ uniform sampler2D grass_roughness : hint_roughness_r, filter_linear_mipmap_aniso
 uniform sampler2D dirt_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D dirt_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D dirt_roughness : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+// The dirt's height, stretched to 0 to 1.
+uniform sampler2D dirt_height : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+// Ground this high over the road starts to turn to dirt, and is all dirt this much higher.
+uniform float dirt_from_m = 0.15;
+uniform float dirt_over_m = 0.5;
+// How much the dirt's height breaks up the change from grass, and how sharp its clumps are.
+uniform float dirt_height_pull = 0.9;
+uniform float dirt_sharpness = 0.08;
 // Meters of ground one tile of each texture covers.
 uniform float grass_tile_m = 2.0;
 uniform float dirt_tile_m = 2.0;
@@ -91,17 +102,27 @@ float value_noise(vec2 p) {
 		mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
 }
 
+// How much of a blend `weight` (0 to 1) shows, broken up by `height`, a height map's 0 to 1: the
+// high parts show first. `pull` is how far height carries, `crisp` how soft each part's edge is;
+// a weight of 0 or 1 stays all or nothing.
+float height_blend(float weight, float height, float pull, float crisp) {
+	float s = mix(-0.5 * pull, 1.0 + 0.5 * pull, weight) + (height - 0.5) * pull;
+	return smoothstep(0.5 - crisp, 0.5 + crisp, s);
+}
+
 void fragment() {
 	// Where the gravel ends: a wavy line inside `verge_m`, its bumps set by the ground's place.
 	vec2 p = v_world.xz / edge_wave_m;
 	float wobble = 0.65 * value_noise(p) + 0.35 * value_noise(p * 2.7 + 17.0);
 	float edge = verge_m - edge_fade_m - edge_wobble_m * wobble;
 	float toward_road = 1.0 - smoothstep(edge - edge_fade_m, edge + edge_fade_m, UV.y);
-	float height = triplanar(gravel_height, gravel_tile_m).r;
-	float gravel = smoothstep(0.5 - edge_sharpness, 0.5 + edge_sharpness,
-		toward_road + (height - 0.5) * edge_height_pull);
-	float grass = clamp(COLOR.a, 0.0, 1.0) * (1.0 - gravel);
-	float dirt = clamp(UV.x, 0.0, 1.0) * (1.0 - gravel);
+	float gravel = height_blend(toward_road, triplanar(gravel_height, gravel_tile_m).r,
+		edge_height_pull, edge_sharpness);
+	float dirt_weight = clamp((UV.x - dirt_from_m) / dirt_over_m, 0.0, 1.0);
+	float dirt_part = height_blend(dirt_weight, triplanar(dirt_height, dirt_tile_m).r,
+		dirt_height_pull, dirt_sharpness);
+	float dirt = dirt_part * (1.0 - gravel);
+	float grass = (1.0 - dirt_part) * (1.0 - gravel);
 	// Sampled everywhere, not under an if: the weights change across a triangle, and a texture read
 	// in a branch that differs between neighboring pixels gets the wrong mipmap.
 	ALBEDO = gravel_color.rgb * triplanar(gravel_albedo, gravel_tile_m).rgb * gravel

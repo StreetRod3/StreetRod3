@@ -112,6 +112,7 @@ static func vertex_ground() -> ShaderMaterial:
 		mat.set_shader_parameter(&"dirt_normal", load(_DIRT + "NRM_2K.jpg") as Texture2D)
 		mat.set_shader_parameter(&"dirt_roughness", load(_DIRT + "ROUGH_2K.jpg") as Texture2D)
 		mat.set_shader_parameter(&"dirt_tile_m", DIRT_TILE_M)
+		mat.set_shader_parameter(&"dirt_height", load(_DIRT + "HEIGHT_2K.jpg") as Texture2D)
 		mat.set_shader_parameter(&"ground_specular", GROUND_SPECULAR)
 		mat.set_shader_parameter(&"dirt_tint", dirt_tint())
 		mat.set_shader_parameter(&"gravel_color", GRAVEL_TINT)
