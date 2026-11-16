@@ -33,8 +33,16 @@ const SKIES := {
 	"evening-orange": {
 		"name": "Cloudy evening, orange",
 		"path": "res://assets/skies/evening-orange.exr",
-		"sun_u": -1.0,
-		"sun_up": -1.0,
+		"sun_u": 0.4999,
+		"sun_up": 0.4,
+		"light_height": 6.0,
+		"light_color": Color(1.0, 0.58, 0.32),
+		"light_energy": 0.8,
+		"ambient_color": Color(0.42, 0.47, 0.65),
+		"ambient_energy": 0.7,
+		"tonemap": "filmic",
+		"exposure": 1.6,
+		"sky_energy": 0.8,
 	},
 	"sunset-pink": {
 		"name": "Hazy sunset, pink and orange",

@@ -40,20 +40,20 @@ A track picks its sky with its `sky` field, set under Sky in the track maker. Th
 | --- | --- | --- | --- |
 | `day` | Day, partly cloudy | `assets/skies/kloofendal_48d_partly_cloudy_puresky_4k.hdr` | Poly Haven, https://polyhaven.com/a/kloofendal_48d_partly_cloudy_puresky (CC0) |
 | `dusk` | Dusk | `assets/skies/dusk.exr`, not added yet | environment-textures.com, https://www.environment-textures.com/photos/show/id/12k-dusk-skydome-hdri-panorama (paid, one credit; a 12K HDR in the set) |
-| `evening-orange` | Cloudy evening, orange | `assets/skies/evening-orange.exr`, not added yet | Poliigon, https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522 |
+| `evening-orange` | Cloudy evening, orange | `assets/skies/evening-orange.exr`, from `reference/tracks/cloudyeveninghdri/` | Poliigon HdrSkyEvening006, https://www.poliigon.com/hdri/cloudy-horizon-evening-outdoor-sky-hdri-orange/3522 |
 | `sunset-pink` | Hazy sunset, pink and orange | `assets/skies/sunset-pink.exr`, from `reference/tracks/sunsethdri/` | Poliigon HdrSkySunset007, https://www.poliigon.com/hdri/hazy-horizon-sunset-outdoor-sky-hdri-pink-orange/3537 |
 
 The sky is turned so the sun in the photo stands where the scene's light comes from. That needs the sun's place, `sun_u` and `sun_up`. A sky without them (`-1`) is drawn unturned, so its sun can be on the wrong side of the shadows.
 
 In races a sky can also set the light, for a sky that isn't midday. The day sky sets none of these and leaves each scene's own light. The city always has the day sky.
 
-| Key | What it does | `sunset-pink` |
-| --- | --- | --- |
-| `light_height` | The sun light's height in degrees; its heading stays. A little above a sunset sun keeps shadows from running off for hundreds of meters. | `8` |
-| `light_color`, `light_energy` | The sun light's color and strength. | warm orange, `1.1` |
-| `ambient_color`, `ambient_energy` | The light everywhere, which lights what the sun doesn't. | dusky lilac, `0.75` |
-| `tonemap`, `exposure` | `"filmic"` or `"aces"`. Races otherwise draw without tone mapping, and a low sun's glow then burns out to a white blob. ACES crushed the dark side of the sky to black. | filmic, `1.6` |
-| `sky_energy` | How bright the photo itself is drawn, to tame a glow without darkening the scene. Lower hides the dark side of the sky. | `0.55` |
+| Key | What it does | `sunset-pink` | `evening-orange` |
+| --- | --- | --- | --- |
+| `light_height` | The sun light's height in degrees; its heading stays. A little above a sunset sun keeps shadows from running off for hundreds of meters. | `8` | `6` |
+| `light_color`, `light_energy` | The sun light's color and strength. | warm orange, `1.1` | orange, `0.8` |
+| `ambient_color`, `ambient_energy` | The light everywhere, which lights what the sun doesn't. | dusky lilac, `0.75` | dusky blue, `0.7` |
+| `tonemap`, `exposure` | `"filmic"` or `"aces"`. Races otherwise draw without tone mapping, and a low sun's glow then burns out to a white blob. ACES crushed the dark side of the sky to black. | filmic, `1.6` | filmic, `1.6` |
+| `sky_energy` | How bright the photo itself is drawn, to tame a glow without darkening the scene. Lower hides the dark side of the sky. | `0.55` | `0.8` |
 
 To add a sky, or the file for one listed above:
 
