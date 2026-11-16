@@ -28,9 +28,9 @@ const _FINISH_LENGTH := 5.0
 const _TREE_SINK := 0.15
 ## Poliigon BarkPoplar001 at 1K, from reference/tracks/treebark/. Its roughness map is the
 ## download's gloss map inverted. One tile covers about this much bark, and `BARK_TINT`
-## multiplies its color: white is the photo's own grey.
+## multiplies its color: white is the photo's own pale grey, and this turns it a mid brown.
 const BARK_TILE_M := 1.0
-const BARK_TINT := Color(1.0, 1.0, 1.0, 1)
+const BARK_TINT := Color(0.74, 0.61, 0.5, 1)
 const _BARK := "res://assets/textures/bark/BarkPoplar001_"
 const _POLE_HEIGHT := 7.5
 
