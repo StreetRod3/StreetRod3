@@ -26,6 +26,9 @@ var rise: float = 0.0
 ## On the step a car comes down: how hard, in m/s straight into the road. 0 on every other step.
 var impact: float = 0.0
 var _started: bool = false
+## Whether the car is on the grass beside a jump track's road rather than on the road; the car
+## sets it each step (race_track.gd's `car_off_road()`).
+var off_road: bool = false
 
 
 ## Puts the car back on the road at the next step.
@@ -39,7 +42,7 @@ func reset() -> void:
 ## One step. `travel` is the flat direction the car is moving, `speed` its flat speed in m/s.
 func step(track: Node, world: Vector3, travel: Vector3, speed: float, delta: float) -> void:
 	impact = 0.0
-	var ground: float = track.surface_height(world)
+	var ground := _ground_near(track, world)
 	if not _started or delta <= 0.0:
 		_started = true
 		height = ground
@@ -50,7 +53,7 @@ func step(track: Node, world: Vector3, travel: Vector3, speed: float, delta: flo
 		height += rise * delta
 		if height > ground:
 			return
-		var ahead: float = track.surface_height(world + travel * GRADE_SPAN_M)
+		var ahead := _ground_near(track, world + travel * GRADE_SPAN_M)
 		var grade := (ahead - ground) / GRADE_SPAN_M
 		impact = maxf(grade * speed - rise, 0.0) / sqrt(1.0 + grade * grade)
 		airborne = false
@@ -70,8 +73,16 @@ func step(track: Node, world: Vector3, travel: Vector3, speed: float, delta: flo
 
 ## How fast a car on the road at `world` is rising, by the grade it has just come up.
 func _follow_rise(track: Node, world: Vector3, travel: Vector3, speed: float, ground: float) -> float:
-	var behind: float = track.surface_height(world - travel * GRADE_SPAN_M)
+	var behind := _ground_near(track, world - travel * GRADE_SPAN_M)
 	return minf((ground - behind) / GRADE_SPAN_M, MAX_CLIMB) * speed
+
+
+## The ground at `point` for the car: beside a ramp, the grass or the ramp it is on
+## (race_track.gd's `ground_for()`), not the other.
+func _ground_near(track: Node, point: Vector3) -> float:
+	if track.has_method(&"ground_for"):
+		return float(track.ground_for(point, off_road))
+	return float(track.surface_height(point))
 
 
 ## The pitch to give a car in the air: its nose turning to the way it is flying.

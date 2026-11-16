@@ -7,6 +7,8 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SmokePuff := preload("res://scripts/smoke_puff.gd")
 
 const MARK_Y := 0.035
+## A wheel this far above the ground under it, hanging over a drop or in the air, leaves no mark.
+const OFF_GROUND_M := 1.0
 const MIN_STEP := 0.15
 const MAX_STEP := 2.4
 const USE_MARK := 0.9
@@ -79,6 +81,8 @@ func record(wheels: Array, body: Transform3D, track: Object = null) -> void:
 		var ground_y := wheel.road_y
 		if track != null and track.has_method(&"surface_height"):
 			ground_y = float(track.surface_height(world))
+		if world.y - ground_y > OFF_GROUND_M:
+			contact = 0.0
 		stamp(
 			i,
 			world,
@@ -115,6 +119,8 @@ func record_axles(
 		var long_slip := front_long if wheel.front else rear_long
 		# A tire spinning or locked is moving over the road even if the car is barely moving.
 		var contact := maxf(speed, 3.0) if absf(long_slip) > 1.0 else speed
+		if world.y - ground_y > OFF_GROUND_M:
+			contact = 0.0
 		stamp(
 			i,
 			world,

@@ -3,6 +3,8 @@ extends CharacterBody3D
 ## Same planar vehicle as the player. The racing line is only a driver:
 ## it picks steer, throttle, and brake. The tires still make the motion.
 
+## race_track.gd's RAMP_SIDE_LAYER: the collision layer of a jump track's ramp sides.
+const RAMP_SIDE_LAYER := 4
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _SkidMarks := preload("res://scripts/skid_marks.gd")
 const _ArcadeDrive := preload("res://scripts/arcade_drive.gd")
@@ -117,6 +119,12 @@ const _ROAD_PITCH_SPAN := 8.0
 ## Off a jump. In the air the car leaves its line and flies on the way it took off, and once down
 ## it drives back to the line from wherever it landed.
 var _air: _AirTime = _AirTime.new()
+## Off a jump track's road, on the grass beside a ramp (`_check_off_road()`).
+var _off_road: bool = false
+## The collision box's middle in the car's space, and half its width and length.
+var _box_middle := Vector3(0.0, 0.0, 1.9)
+var _box_half := Vector2(0.8, 1.9)
+var _box_read: bool = false
 ## Flat velocity in the air, in m/s: the way the car was going when it left the road.
 var _flight_velocity: Vector3 = Vector3.ZERO
 ## On the arcade rails: how far, in meters, the car landed from its lane. Closes as it drives back.
@@ -494,12 +502,38 @@ func _hold_still() -> void:
 	_skids.end_strips()
 
 
+## The ground at `point` for this car, on the grass or the road (race_track.gd's `ground_for()`).
+func _ground_near(track: Node, point: Vector3) -> float:
+	if track.has_method(&"ground_for"):
+		return float(track.ground_for(point, _off_road))
+	return float(track.surface_height(point))
+
+
+## Whether the car is off a jump track's road, on the grass beside it, by where its collision box
+## is (race_track.gd's `car_off_road()`). Sets what it collides with and what ground it reads.
+func _check_off_road(track: Node) -> void:
+	if not _box_read:
+		_box_read = true
+		var shape_node := get_node_or_null("CollisionShape3D") as CollisionShape3D
+		if shape_node != null and shape_node.shape is BoxShape3D:
+			_box_middle = shape_node.position
+			var size := (shape_node.shape as BoxShape3D).size
+			_box_half = Vector2(size.x, size.z) * 0.5
+	_off_road = false
+	if track.has_method(&"car_off_road"):
+		_off_road = bool(track.car_off_road(global_transform * _box_middle, rotation.y, _box_half))
+	set_collision_mask_value(RAMP_SIDE_LAYER, _off_road)
+	_air.off_road = _off_road
+	_dynamics.off_road = _off_road
+
+
 func _stick_to_road() -> void:
 	var track := _race_track(get_parent())
 	if track == null or not track.has_method(&"surface_height"):
 		rotation.x = 0.0
 		return
-	var here: float = track.surface_height(global_position)
+	_check_off_road(track)
+	var here := _ground_near(track, global_position)
 	var forward := Vector3(sin(rotation.y), 0.0, cos(rotation.y))
 	if track.has_method(&"has_jumps") and track.has_jumps():
 		var was_flying := _air.airborne
@@ -518,8 +552,8 @@ func _stick_to_road() -> void:
 		if was_flying:
 			_rejoin_line(track)
 	global_position.y = _road_base_y + here
-	var ahead: float = track.surface_height(global_position + forward * _ROAD_PITCH_SPAN)
-	var behind: float = track.surface_height(global_position - forward * _ROAD_PITCH_SPAN)
+	var ahead := _ground_near(track, global_position + forward * _ROAD_PITCH_SPAN)
+	var behind := _ground_near(track, global_position - forward * _ROAD_PITCH_SPAN)
 	rotation.x = -atan2(ahead - behind, _ROAD_PITCH_SPAN * 2.0)
 	if track.has_method(&"surface_roll"):
 		rotation.z = track.surface_roll(global_position, rotation.y)

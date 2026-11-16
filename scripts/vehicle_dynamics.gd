@@ -173,6 +173,9 @@ class Wheel:
 var config := Config.new()
 var cg_local: Vector3 = Vector3.ZERO
 var cg_velocity: Vector3 = Vector3.ZERO
+## Whether the car is on the grass beside a jump track's road rather than on the road; the car
+## sets it (race_track.gd's `car_off_road()`), and each wheel reads that ground.
+var off_road: bool = false
 var yaw: float = 0.0
 var yaw_rate: float = 0.0
 var yaw_inertia: float = 2000.0
@@ -476,7 +479,10 @@ func sample_surfaces(track: Object, body: Transform3D) -> void:
 			)
 			if bool(sample.get("gravel", false)):
 				amount = 1.0
-		if track != null and track.has_method(&"surface_height"):
+		# A wheel reads the ground the car is on, the road or the grass beside a ramp, as it does.
+		if track != null and track.has_method(&"ground_for"):
+			road_y = float(track.ground_for(world, off_road))
+		elif track != null and track.has_method(&"surface_height"):
 			road_y = float(track.surface_height(world))
 		wheel.road_y = road_y
 		wheel.road_bump = _road_bump_at(world, amount)
@@ -897,7 +903,8 @@ func _update_suspension(dt: float) -> void:
 	var damper := maxf(_shock_rate, 0.0)
 	for wheel in _wheels:
 		var origin := car.global_transform * wheel.local_position
-		origin.y += _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
+		var body_lift := _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
+		origin.y += body_lift
 		var ground_y := _raycast_ground(space, car, origin, wheel.road_y)
 		var drop := origin.y - ground_y
 		if wheel.ride_recapture:
@@ -907,7 +914,10 @@ func _update_suspension(dt: float) -> void:
 		wheel.rest_length = wheel.ride_drop + sag
 		var travel := wheel.rest_length - drop + wheel.road_bump
 		var compression := clampf(travel, 0.0, _MAX_TRAVEL_M)
-		wheel.hub_lift = wheel.road_bump + maxf(-travel, 0.0)
+		# A wheel past its full drop hangs from the body, so it lifts only as far as the body has
+		# lifted at that corner. Where the ground falls away under it, off a ramp's side say, it
+		# stays where it hangs.
+		wheel.hub_lift = wheel.road_bump + clampf(-travel, 0.0, maxf(body_lift, 0.0))
 		if not wheel.suspension_ready:
 			wheel.compression = compression
 			wheel.compression_speed = 0.0
