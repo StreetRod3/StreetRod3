@@ -31,6 +31,8 @@ const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _Console := preload("res://scripts/console.gd")
 const _GroundMaterial := preload("res://scripts/ground_material.gd")
 const _Skies := preload("res://scripts/skies.gd")
+## The sky over the city at night (GameState.night).
+const _NIGHT_SKY := "night-stars"
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
 ## the ones out of view are still skipped.
 const _BATCH_CELL := 40.0
@@ -902,7 +904,10 @@ func _build_world() -> void:
 	# The default 100 m draws much of the city a second time for shadows.
 	sun.directional_shadow_max_distance = 60.0
 	add_child(sun)
-	_Skies.use_day(env, sun.basis)
+	# The starry sky's entry in skies.gd sets the night's dimmer light and ambient.
+	var sky := _NIGHT_SKY if GameState.night else _Skies.DAY
+	_Skies.light(env, sky, sun)
+	_Skies.use(env, sky, sun.basis)
 
 
 func _build_city(track: Dictionary) -> void:
@@ -1157,7 +1162,7 @@ func _build_streetscape(track: Dictionary) -> void:
 	add_child(root)
 	var lamp_multi := MultiMesh.new()
 	lamp_multi.transform_format = MultiMesh.TRANSFORM_3D
-	lamp_multi.mesh = _StreetLamp.lamp_mesh()
+	lamp_multi.mesh = _StreetLamp.lamp_mesh(GameState.night)
 	lamp_multi.instance_count = lamps.size()
 	var lamp_draw := MultiMeshInstance3D.new()
 	lamp_draw.name = "Lamps"
@@ -1168,7 +1173,7 @@ func _build_streetscape(track: Dictionary) -> void:
 		var lamp := Node3D.new()
 		lamp.set_script(_StreetLamp)
 		root.add_child(lamp)
-		lamp.call(&"setup", spec["at"], spec["toward"], lamp_multi, i)
+		lamp.call(&"setup", spec["at"], spec["toward"], lamp_multi, i, GameState.night)
 	# Leaf cards, as the trees' crowns (street_scenery.gd), in each bush's green.
 	var bushes: Array[Transform3D] = dark_bush.duplicate()
 	bushes.append_array(mid_bush)

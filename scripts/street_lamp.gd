@@ -9,6 +9,8 @@ const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _POLE := Color(0.3, 0.31, 0.33)
 const _HEAD := Color(0.16, 0.16, 0.18)
 const _GLOW := Color(1.0, 0.86, 0.5)
+## The lens with the lamp off, by day.
+const _LENS_OFF := Color(0.72, 0.7, 0.64)
 const _REACH := 1.2
 ## Under this speed the pole bends and the car stops. At this speed or more it breaks.
 const _BEND_BELOW := 8.0
@@ -27,15 +29,16 @@ var _spent := false
 var _bits: Array[Dictionary] = []
 var _shared: MultiMesh
 var _slot := -1
+var _lit := true
 
-## Pole, base, arm, head and lens in one mesh, shared by every lamp.
-static var _mesh: ArrayMesh
+## Pole, base, arm, head and lens in one mesh, shared by every lamp, lit and off.
+static var _meshes: Dictionary[bool, ArrayMesh] = {}
 
 
-## The whole lamp, standing at the origin with its arm out along +X.
-static func lamp_mesh() -> ArrayMesh:
-	if _mesh != null:
-		return _mesh
+## The whole lamp, standing at the origin with its arm out along +X, its lens glowing if `lit`.
+static func lamp_mesh(lit: bool = true) -> ArrayMesh:
+	if _meshes.has(lit):
+		return _meshes[lit]
 	var batch := _BoxBatch.new()
 	batch.set_look(_POLE, 0.42, 0.55)
 	batch.add_post(0.08, 0.065, 4.7, 8, Transform3D.IDENTITY)
@@ -45,15 +48,20 @@ static func lamp_mesh() -> ArrayMesh:
 	batch.add_box(Vector3(_REACH, 0.055, 0.055), Transform3D(Basis.IDENTITY, Vector3(_REACH * 0.45, 4.62, 0.0)))
 	batch.set_look(_HEAD, 0.45, 0.4)
 	batch.add_box(Vector3(0.4, 0.08, 0.22), Transform3D(Basis.IDENTITY, Vector3(_REACH, 4.5, 0.0)))
-	batch.set_look(_GLOW, 0.28, 0.0, _GLOW, 1.6)
+	if lit:
+		batch.set_look(_GLOW, 0.28, 0.0, _GLOW, 1.6)
+	else:
+		batch.set_look(_LENS_OFF, 0.25, 0.0)
 	batch.add_box(Vector3(0.26, 0.035, 0.14), Transform3D(Basis.IDENTITY, Vector3(_REACH, 4.43, 0.0)))
-	_mesh = batch.commit()
-	return _mesh
+	var mesh := batch.commit()
+	_meshes[lit] = mesh
+	return mesh
 
 
 ## With `shared`, the lamp is drawn as instance `slot` of that MultiMesh, which must sit in
-## this lamp's parent, until a hit gives it its own mesh. Otherwise it draws itself.
-func setup(at: Vector3, toward: Vector3, shared: MultiMesh = null, slot: int = -1) -> void:
+## this lamp's parent, until a hit gives it its own mesh. Otherwise it draws itself. A lamp not
+## `lit`, by day, has no light, and `shared` must then hold the unlit mesh.
+func setup(at: Vector3, toward: Vector3, shared: MultiMesh = null, slot: int = -1, lit: bool = true) -> void:
 	position = at
 	var face := Vector3(toward.x, 0.0, toward.z)
 	if face.length_squared() > 0.001:
@@ -65,21 +73,23 @@ func setup(at: Vector3, toward: Vector3, shared: MultiMesh = null, slot: int = -
 	add_child(_bend)
 	_shared = shared
 	_slot = slot
+	_lit = lit
 	if _shared != null:
 		_shared.set_instance_transform(_slot, transform)
 	else:
 		_draw_own()
-	_light = OmniLight3D.new()
-	_light.position = Vector3(_REACH, 4.35, 0.0)
-	_light.light_color = _GLOW
-	_light.light_energy = 0.28
-	_light.omni_range = 8.0
-	_light.omni_attenuation = 1.6
-	_light.shadow_enabled = false
-	_light.distance_fade_enabled = true
-	_light.distance_fade_begin = 26.0
-	_light.distance_fade_length = 16.0
-	_bend.add_child(_light)
+	if _lit:
+		_light = OmniLight3D.new()
+		_light.position = Vector3(_REACH, 4.35, 0.0)
+		_light.light_color = _GLOW
+		_light.light_energy = 0.28
+		_light.omni_range = 8.0
+		_light.omni_attenuation = 1.6
+		_light.shadow_enabled = false
+		_light.distance_fade_enabled = true
+		_light.distance_fade_begin = 26.0
+		_light.distance_fade_length = 16.0
+		_bend.add_child(_light)
 	var shape := CylinderShape3D.new()
 	shape.radius = 0.42
 	shape.height = 4.4
@@ -131,7 +141,8 @@ func _lean(travel: Vector3) -> void:
 
 
 func _shatter(push: Vector3) -> void:
-	_light.visible = false
+	if _light != null:
+		_light.visible = false
 	_bend.visible = false
 	_piece(Vector3(0.14, 2.3, 0.14), _POLE, Vector3(0.0, 1.15, 0.0), push)
 	_piece(Vector3(0.12, 2.2, 0.12), _POLE, Vector3(0.0, 3.4, 0.0), push)
@@ -204,7 +215,7 @@ func _play() -> void:
 func _draw_own() -> void:
 	var lamp := MeshInstance3D.new()
 	lamp.name = "Lamp"
-	lamp.mesh = lamp_mesh()
+	lamp.mesh = lamp_mesh(_lit)
 	_bend.add_child(lamp)
 
 
