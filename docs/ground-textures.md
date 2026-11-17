@@ -1,13 +1,13 @@
 # Ground textures and sky
 
-The ground, roads and day sky are photographed textures. Their materials are built in code, in `scripts/ground_material.gd` and `scripts/skies.gd`, and Mulholland's ground uses `shaders/vertex_ground.gdshader`. Sources and licenses are in `reference/tracks/`, `reference/skies/` and [CREDITS.md](../CREDITS.md).
+The ground, roads and day sky are photographed textures. Their materials are built in code, in `scripts/ground_material.gd` and `scripts/skies.gd`. The grass and asphalt use `shaders/ground.gdshader` (and `ground_two_sided.gdshader` for the city's roads), whose body is `shaders/ground_surface.gdshaderinc`, and Mulholland's ground uses `shaders/vertex_ground.gdshader`. Sources and licenses are in `reference/tracks/`, `reference/skies/` and [CREDITS.md](../CREDITS.md).
 
 ## Where each one goes
 
 | Texture | Used on | Material |
 | --- | --- | --- |
 | Grass (Poliigon GrassPatchyGround 4585) | Ground around the race tracks and the city, Mulholland's flat ground and the foot of its banks | `GroundMaterial.grass()`, and the grass part of `vertex_ground()` |
-| Asphalt (Poliigon CityStreetAsphaltGenericClean001) | Race track roads and city streets; Mulholland's road darkened | `asphalt()`, `dark_asphalt()` |
+| Asphalt (Poliigon CityStreetAsphaltGenericClean001) | Race track roads and city streets; Mulholland's road darkened | `asphalt()`, `two_sided_asphalt()` (city), `dark_asphalt()` |
 | Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The Aqueduct's floor and banks, the street drag's shoulders | `vertex_colored_concrete()`, `shoulder_concrete()` |
 | Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hills: ground standing more than a few inches over the road | The dirt part of `vertex_ground()` |
 | Gravel (Poly Haven Rocky Trail) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
@@ -31,7 +31,16 @@ All of these are constants in `scripts/ground_material.gd`.
 | `GRASS_TILE_M`, `ASPHALT_TILE_M`, `CONCRETE_TILE_M`, `DIRT_TILE_M`, `GRAVEL_TILE_M` | `2`, `1`, `2`, `2`, `2` | Meters of ground one tile of each texture covers. |
 | `GRAVEL_TINT` | white | Multiplies the gravel's color. Lower is darker; a color tints it. |
 | `DARK_ASPHALT_TINT` | `0.3` grey | How dark Mulholland's road is, to keep Street Rod 2's black road. |
+| `GRASS_NORMAL_SCALE`, `ASPHALT_NORMAL_SCALE` | `1.8`, `1.4` | How far the normal map tilts the surface. `1` is the map as made, which looked flat. Higher is bumpier. |
+| `GRASS_AO_STRENGTH`, `ASPHALT_AO_STRENGTH` | `4`, `2.5` | The occlusion map is raised to this power. The maps are faint (the grass's averages 0.97), so `1` barely shows; higher darkens the gaps more. |
+| `GROUND_AO_LIGHT_AFFECT` | `0.5` | How much the grass's and asphalt's occlusion darkens sunlight too. At `0` it only darkens ambient light, so in full sun it hardly shows. |
+| `GRASS_MACRO_SIZE_M`, `ASPHALT_MACRO_SIZE_M` | `18`, `12` | Size in meters of the large-scale patches that keep the ground from reading as one even sheet in the distance. |
+| `GRASS_MACRO_BRIGHT`, `ASPHALT_MACRO_BRIGHT` | `0.25`, `0.2` | How much the patches brighten and darken, as a share either way. `0` turns them off. |
+| `GRASS_MACRO_TINT`, `ASPHALT_MACRO_TINT` | dry yellow, light grey | The color a second, unrelated set of patches leans toward, as a multiplier in linear light: dry grass, and worn asphalt. |
+| `GRASS_MACRO_TINT_AMOUNT`, `ASPHALT_MACRO_TINT_AMOUNT` | `0.6`, `0.5` | How far those patches lean toward their color. `0` turns them off. |
 | `SHOULDER_TINT` | `0.6` grey | Shade of the street drag's concrete shoulders. |
+
+The grass and asphalt are tiled 2 m and 1 m, so from the car most of the ground is far off, where the texture's small versions (mipmaps) average the normal map's bumps out to flat. The large-scale patches are what keep it from looking flat there. They are value noise over the ground's place in the world (`shaders/ground_common.gdshaderinc`), so they need no texture and match wherever two meshes meet. The grass part of `vertex_ground()` gets the same normal strength, occlusion and patches as `grass()`; its dirt and gravel do not have them yet.
 
 `DIRT_MEAN` is the dirt photo's average color in linear light, measured from the file. The tint is worked out from it, so measure it again if the dirt texture changes. The dirt is also never smoother than `dirt_min_roughness` (`0.92`) in `shaders/vertex_ground.gdshader`; the photo's own roughness looked damp.
 
