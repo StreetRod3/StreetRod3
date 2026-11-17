@@ -1225,7 +1225,10 @@ func _build_side_grass() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for side: float in [1.0, -1.0]:
 		var k := 0 if side > 0.0 else 1
-		var reach := _grass_sides[k]
+		var reach := _grass_sides[k].duplicate()
+		var caps := _inside_reach_caps(side)
+		for i in reach.size():
+			reach[i] = minf(reach[i], caps[i])
 		var far_y := _grass_sides[k + 2]
 		for i in range(_pts.size() - 1):
 			var e0 := _sample_extents(i)
@@ -1250,7 +1253,36 @@ func _build_side_grass() -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = "SideGrass"
 	mi.mesh = mesh
+	# It lies a little over the ground grid, and its shadow fell on the grid wherever the grid
+	# shows between strips, as a dark patch with nothing standing there to cast it.
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## How far out from the middle of the road the side grass on `side` (1 right, -1 left) may reach
+## at each sample. On the inside of a corner, strips reaching past the corner's middle cross those of
+## the next samples: the crossed triangles face down and darken the grass round them, and lying
+## on the grass they flicker against it. So there each stays at 80% of where it would cross its
+## neighbor's, and the ground grid under it shows on beyond. INF where nothing limits it.
+func _inside_reach_caps(side: float) -> PackedFloat32Array:
+	var n := _pts.size()
+	var caps := PackedFloat32Array()
+	caps.resize(n)
+	caps.fill(INF)
+	for i in n - 1:
+		var r0 := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i])) * side
+		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1])) * side
+		var mid_yaw := _yaws[i] + angle_difference(_yaws[i], _yaws[i + 1]) * 0.5
+		var fwd := Vector3(sin(mid_yaw), 0.0, cos(mid_yaw))
+		var along := Vector3(_pts[i + 1].x - _pts[i].x, 0.0, _pts[i + 1].z - _pts[i].z).dot(fwd)
+		# How fast the two samples' sideways lines close on each other, per meter out.
+		var closing := -(r1 - r0).dot(fwd)
+		if closing <= 0.0001 or along <= 0.0:
+			continue
+		var cap := 0.8 * along / closing
+		caps[i] = minf(caps[i], cap)
+		caps[i + 1] = minf(caps[i + 1], cap)
+	return caps
 
 
 ## One stretch of `_build_side_grass()`, on the left (`side` 1) or right (-1): from the road's
