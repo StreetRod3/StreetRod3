@@ -3,6 +3,7 @@ extends Node3D
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _PlaceDeparture := preload("res://scripts/place_departure.gd")
 const _RoyalRodsSign := preload("res://scripts/royal_rods_sign.gd")
+const _PartPreview := preload("res://scripts/part_preview.gd")
 const _KING_POSTER := preload("res://assets/locations/city/theking-poster.jpg")
 const _KING_SCENE_POSTER := preload("res://assets/locations/city/king-scene-poster.jpg")
 const _WALL_POSTERS: Array[Texture2D] = [
@@ -13,6 +14,11 @@ const _WALL_POSTERS: Array[Texture2D] = [
 	preload("res://assets/locations/city/poster5.jpg"),
 ]
 
+const _SORT_PRICE := "price"
+const _SORT_NAME := "name"
+## Shop left visible around the parts window. Wide enough for a finger.
+const _CATALOG_EDGE := 72.0
+const _BOTTOM_BAR := 52.0
 const _CREAM := Color(0.78, 0.72, 0.59)
 const _WOOD := Color(0.37, 0.22, 0.13)
 const _BURGUNDY := Color(0.44, 0.07, 0.08)
@@ -30,9 +36,12 @@ const _STOCK_BOTTOM := {
 
 var _nav := _MenuNav.new()
 var _catalog: PanelContainer
+var _catalog_margin: Control
 var _catalog_list: VBoxContainer
 var _catalog_title: Label
 var _catalog_scroll: ScrollContainer
+var _sort_by := _SORT_PRICE
+var _sort_group: ButtonGroup
 var _cash: Label
 var _status: Label
 var _hint: Label
@@ -46,6 +55,15 @@ var _poster_shade: ColorRect
 var _active_poster: Sprite3D
 var _poster_tween: Tween
 var _poster_closing := false
+var _part_row_styles: Dictionary = {}
+var _preview_mount: Node3D
+var _preview_camera: Camera3D
+var _preview_subject: Node3D
+var _preview_caption: Label
+var _preview_frame: SubViewportContainer
+var _buy_button: Button
+var _selected_kind := ""
+var _selected_id := ""
 
 
 func _ready() -> void:
@@ -58,8 +76,10 @@ func _ready() -> void:
 	_build_ui()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	_hint.text = _hint_at(GameState.pointer_position(get_viewport()), get_viewport().gui_get_hovered_control())
+	if _preview_subject != null and _catalog.visible:
+		_preview_mount.rotate_y(delta * 0.35)
 
 
 func _hint_at(screen_pos: Vector2, hovered: Control) -> String:
@@ -496,13 +516,21 @@ func _build_ui() -> void:
 	_back.pressed.connect(_leave.bind(true))
 	_town.pressed.connect(_leave.bind(false))
 
+	_catalog_margin = Control.new()
+	_catalog_margin.name = "CatalogMargin"
+	_catalog_margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_catalog_margin.offset_bottom = -_BOTTOM_BAR
+	_catalog_margin.mouse_filter = Control.MOUSE_FILTER_STOP
+	_catalog_margin.visible = false
+	_catalog_margin.gui_input.connect(_on_catalog_margin_input)
+	_ui.add_child(_catalog_margin)
 	_catalog = PanelContainer.new()
 	_catalog.name = "Catalog"
-	_catalog.set_anchors_preset(Control.PRESET_LEFT_WIDE)
-	_catalog.offset_left = 18
-	_catalog.offset_right = 468
-	_catalog.offset_top = 18
-	_catalog.offset_bottom = -68
+	_catalog.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_catalog.offset_left = _CATALOG_EDGE
+	_catalog.offset_right = -_CATALOG_EDGE
+	_catalog.offset_top = _CATALOG_EDGE
+	_catalog.offset_bottom = -(_BOTTOM_BAR + _CATALOG_EDGE)
 	var catalog_style := StyleBoxFlat.new()
 	catalog_style.bg_color = Color(0.13, 0.1, 0.08, 0.98)
 	catalog_style.border_color = Color(0.69, 0.53, 0.3)
@@ -513,8 +541,16 @@ func _build_ui() -> void:
 	for edge: StringName in [&"margin_left", &"margin_right", &"margin_top", &"margin_bottom"]:
 		margin.add_theme_constant_override(edge, 12)
 	_catalog.add_child(margin)
+	var split := HBoxContainer.new()
+	split.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	split.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	split.add_theme_constant_override(&"separation", 14)
+	margin.add_child(split)
 	var column := VBoxContainer.new()
-	margin.add_child(column)
+	column.size_flags_horizontal = Control.SIZE_FILL
+	column.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	column.custom_minimum_size = Vector2(1040, 0)
+	split.add_child(column)
 	_catalog_title = Label.new()
 	_catalog_title.add_theme_font_size_override(&"font_size", 22)
 	column.add_child(_catalog_title)
@@ -522,12 +558,25 @@ func _build_ui() -> void:
 	note.text = "New, 100% condition. Bought parts go to your spares."
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	column.add_child(note)
+	var sorts := HBoxContainer.new()
+	sorts.alignment = BoxContainer.ALIGNMENT_CENTER
+	sorts.add_theme_constant_override(&"separation", 8)
+	var sort_label := Label.new()
+	sort_label.text = "Sort"
+	sort_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sorts.add_child(sort_label)
+	_sort_group = ButtonGroup.new()
+	_sort_group.allow_unpress = false
+	sorts.add_child(_sort_button("By price", _SORT_PRICE))
+	sorts.add_child(_sort_button("By name", _SORT_NAME))
+	column.add_child(sorts)
 	_catalog_scroll = ScrollContainer.new()
 	_catalog_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_catalog_scroll.follow_focus = true
 	column.add_child(_catalog_scroll)
 	_catalog_list = VBoxContainer.new()
 	_catalog_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_catalog_list.add_theme_constant_override(&"separation", 18)
 	_catalog_scroll.add_child(_catalog_list)
 	_status = Label.new()
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -537,6 +586,7 @@ func _build_ui() -> void:
 	close.set_meta(&"status_hint", "Close the catalog (Esc)")
 	close.pressed.connect(_close_catalog)
 	column.add_child(close)
+	split.add_child(_build_part_preview())
 	for group: Array in [
 		["ENGINES", "engine", GameState.ENGINES],
 		["TRANSMISSIONS", "transmission", GameState.GEARBOXES],
@@ -548,17 +598,216 @@ func _build_ui() -> void:
 		heading.add_theme_font_size_override(&"font_size", 19)
 		_catalog_list.add_child(heading)
 		for part: Dictionary in group[2]:
+			var kind := str(group[1])
+			var filter := str(part.get("slot", "")) if kind == "part" else kind
+			var row := PanelContainer.new()
+			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			row.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			row.set_meta(&"catalog_filter", filter)
+			row.set_meta(&"part_id", str(part["id"]))
+			row.set_meta(&"sort_price", int(part.get("price", 0)))
+			row.set_meta(&"sort_name", _item_label(part))
+			row.set_meta(&"row_hovered", false)
+			row.set_meta(&"row_pressed", false)
+			var part_column := VBoxContainer.new()
+			part_column.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			part_column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			part_column.add_theme_constant_override(&"separation", 2)
+			row.add_child(part_column)
 			var button := Button.new()
 			button.text = "%s  —  $%d" % [_item_label(part), int(part.get("price", 0))]
 			button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			button.set_meta(&"catalog_filter", str(part.get("slot", "")) if group[1] == "part" else str(group[1]))
+			button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			button.set_meta(&"catalog_filter", filter)
 			button.set_meta(&"part_id", str(part["id"]))
-			button.set_meta(&"status_hint", "Buy %s" % _item_label(part))
-			button.pressed.connect(_buy.bind(str(group[1]), str(part["id"])))
-			_catalog_list.add_child(button)
+			button.set_meta(&"status_hint", "Look at %s" % _item_label(part))
+			button.pressed.connect(_select_part.bind(kind, str(part["id"])))
+			part_column.add_child(button)
+			var detail := Label.new()
+			detail.text = GameState.listing_detail(kind, part)
+			detail.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			detail.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			detail.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			detail.add_theme_color_override(&"font_color", Color(0.86, 0.78, 0.62))
+			detail.add_theme_font_size_override(&"font_size", 15)
+			detail.set_meta(&"status_hint", button.get_meta(&"status_hint"))
+			detail.gui_input.connect(_buy_from_detail.bind(button, detail))
+			part_column.add_child(detail)
+			_catalog_list.add_child(row)
+			_ensure_part_row_styles(button)
+			_flatten_part_button(button)
+			_refresh_part_row(row, button)
+			row.mouse_entered.connect(_part_row_hover.bind(row, button, true))
+			row.mouse_exited.connect(_part_row_hover.bind(row, button, false))
+			row.gui_input.connect(_buy_from_detail.bind(button, row))
+			button.focus_entered.connect(_part_row_focus.bind(row, button))
+			button.focus_exited.connect(_part_row_focus.bind(row, button))
+			button.button_down.connect(_part_row_press.bind(row, button, true))
+			button.button_up.connect(_part_row_press.bind(row, button, false))
+	_sort_catalog()
 	_catalog.visible = false
 	_build_poster_viewer()
 	_nav.setup([_back, _town])
+
+
+func _build_part_preview() -> Control:
+	var panel := PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var plate := StyleBoxFlat.new()
+	plate.bg_color = Color(0.62, 0.56, 0.46)
+	plate.set_content_margin_all(12)
+	panel.add_theme_stylebox_override(&"panel", plate)
+	var preview_column := VBoxContainer.new()
+	preview_column.add_theme_constant_override(&"separation", 10)
+	panel.add_child(preview_column)
+	_preview_caption = Label.new()
+	_preview_caption.text = "Select a part"
+	_preview_caption.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_preview_caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_preview_caption.add_theme_font_size_override(&"font_size", 20)
+	_preview_caption.add_theme_color_override(&"font_color", Color(0.1, 0.08, 0.06))
+	preview_column.add_child(_preview_caption)
+	_preview_frame = SubViewportContainer.new()
+	_preview_frame.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_preview_frame.stretch = true
+	preview_column.add_child(_preview_frame)
+	var viewport := SubViewport.new()
+	viewport.own_world_3d = true
+	viewport.handle_input_locally = false
+	viewport.size = Vector2i(640, 720)
+	viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
+	_preview_frame.add_child(viewport)
+	var world := Node3D.new()
+	viewport.add_child(world)
+	var environment := Environment.new()
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.62, 0.56, 0.46)
+	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	environment.ambient_light_color = Color(0.9, 0.86, 0.78)
+	environment.ambient_light_energy = 0.65
+	var env := WorldEnvironment.new()
+	env.environment = environment
+	world.add_child(env)
+	var key := DirectionalLight3D.new()
+	key.rotation_degrees = Vector3(-42, -35, 0)
+	key.light_energy = 1.15
+	key.shadow_enabled = true
+	world.add_child(key)
+	var fill := DirectionalLight3D.new()
+	fill.rotation_degrees = Vector3(-28, 150, 0)
+	fill.light_energy = 0.35
+	world.add_child(fill)
+	var floor_mesh := BoxMesh.new()
+	floor_mesh.size = Vector3(16, 0.08, 16)
+	var floor_mat := StandardMaterial3D.new()
+	floor_mat.albedo_color = Color(0.38, 0.34, 0.28)
+	floor_mat.roughness = 0.92
+	var floor := MeshInstance3D.new()
+	floor.mesh = floor_mesh
+	floor.material_override = floor_mat
+	floor.position.y = -0.04
+	world.add_child(floor)
+	_preview_camera = Camera3D.new()
+	_preview_camera.fov = 40.0
+	_preview_camera.current = true
+	world.add_child(_preview_camera)
+	_preview_mount = Node3D.new()
+	world.add_child(_preview_mount)
+	_preview_camera.look_at_from_position(Vector3(0.9, 0.45, 1.3), Vector3(0.0, 0.3, 0.0))
+	_buy_button = Button.new()
+	_buy_button.text = "Buy"
+	_buy_button.disabled = true
+	_buy_button.custom_minimum_size = Vector2(0, 44)
+	_buy_button.set_meta(&"status_hint", "Buy the part on show")
+	_buy_button.pressed.connect(_buy_selected)
+	preview_column.add_child(_buy_button)
+	return panel
+
+
+func _select_part(kind: String, id: String) -> void:
+	if kind == _selected_kind and id == _selected_id and _preview_subject != null:
+		return
+	_selected_kind = kind
+	_selected_id = id
+	var part := GameState.listing_for(kind, id)
+	var label := _item_label(part)
+	_preview_caption.text = label
+	_buy_button.text = "Buy — $%d" % int(part.get("price", 0))
+	_buy_button.disabled = part.is_empty()
+	_buy_button.set_meta(&"status_hint", "Buy %s" % label)
+	_clear_part_preview()
+	var subject := _PartPreview.build(part, kind) if not part.is_empty() else null
+	if subject == null:
+		_preview_frame.visible = false
+		return
+	_preview_subject = subject
+	_preview_mount.add_child(subject)
+	_preview_mount.rotation = Vector3.ZERO
+	_preview_frame.visible = true
+	_frame_part_camera()
+
+
+func _clear_part_preview() -> void:
+	if _preview_subject == null:
+		return
+	_preview_mount.remove_child(_preview_subject)
+	_preview_subject.free()
+	_preview_subject = null
+
+
+func _frame_part_camera() -> void:
+	if _preview_subject == null:
+		return
+	_preview_subject.force_update_transform()
+	var bounds := _local_mesh_bounds(_preview_subject)
+	if bounds.size == Vector3.ZERO:
+		_preview_camera.look_at_from_position(Vector3(0.9, 0.45, 1.3), Vector3(0.0, 0.3, 0.0))
+		return
+	var scale := _preview_subject.scale
+	var center := bounds.get_center()
+	_preview_subject.position = Vector3(-center.x * scale.x, -bounds.position.y * scale.y, -center.z * scale.z)
+	var height := bounds.size.y * absf(scale.y)
+	var focus := Vector3(0.0, height * 0.5, 0.0)
+	var extent := maxf(bounds.size.x * absf(scale.x), maxf(height, bounds.size.z * absf(scale.z)))
+	var dist := extent * 0.72 / tan(deg_to_rad(_preview_camera.fov * 0.5))
+	var eye := focus + Vector3(0.85, 0.62, 0.9).normalized() * dist
+	_preview_camera.look_at_from_position(eye, focus)
+
+
+func _local_mesh_bounds(node: Node3D) -> AABB:
+	var bounds := AABB()
+	var started := false
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh != null:
+		bounds = (node as MeshInstance3D).mesh.get_aabb()
+		started = true
+	for child: Node in node.get_children():
+		if not child is Node3D:
+			continue
+		var child_node := child as Node3D
+		var child_bounds := _local_mesh_bounds(child_node)
+		if child_bounds.size == Vector3.ZERO:
+			continue
+		child_bounds = _transformed_aabb(child_node.transform, child_bounds)
+		if not started:
+			bounds = child_bounds
+			started = true
+		else:
+			bounds = bounds.merge(child_bounds)
+	return bounds
+
+
+func _transformed_aabb(xf: Transform3D, box: AABB) -> AABB:
+	var out := AABB(xf * box.get_endpoint(0), Vector3.ZERO)
+	for i: int in range(1, 8):
+		out = out.expand(xf * box.get_endpoint(i))
+	return out
+
+
+func _buy_selected() -> void:
+	if _selected_id.is_empty():
+		return
+	_buy(_selected_kind, _selected_id)
 
 
 func _build_poster_viewer() -> void:
@@ -672,6 +921,76 @@ func _finish_close_poster() -> void:
 	_nav.setup([_back, _town])
 
 
+func _sort_button(text: String, mode: String) -> Button:
+	var button := Button.new()
+	button.text = text
+	button.toggle_mode = true
+	button.button_group = _sort_group
+	button.button_pressed = mode == _SORT_PRICE
+	button.set_meta(&"status_hint", "Sort by %s" % mode)
+	button.toggled.connect(_on_sort_toggled.bind(mode))
+	return button
+
+
+func _on_sort_toggled(on: bool, mode: String) -> void:
+	if on:
+		_set_catalog_sort(mode)
+
+
+## Price or name, within each heading. Engines stay with engines.
+func _set_catalog_sort(mode: String) -> void:
+	if mode == _sort_by:
+		return
+	_sort_by = mode
+	_sort_catalog()
+	if not _catalog.visible:
+		return
+	var keep := get_viewport().gui_get_focus_owner()
+	var buttons := _nav.collect_buttons(_catalog)
+	_nav.setup(buttons)
+	var keep_index := buttons.find(keep)
+	if keep_index >= 0:
+		_nav.select(keep_index)
+	_catalog_scroll.scroll_vertical = 0
+
+
+func _sort_catalog() -> void:
+	var index := 0
+	var count := _catalog_list.get_child_count()
+	while index < count:
+		if _catalog_list.get_child(index) is PanelContainer:
+			index += 1
+			continue
+		var start := index + 1
+		var end := start
+		while end < count and _catalog_list.get_child(end) is PanelContainer:
+			end += 1
+		var rows: Array[Node] = []
+		for i in range(start, end):
+			rows.append(_catalog_list.get_child(i))
+		rows.sort_custom(_catalog_row_before)
+		for i in rows.size():
+			_catalog_list.move_child(rows[i], start + i)
+		index = end
+
+
+func _catalog_row_before(a: Node, b: Node) -> bool:
+	var name_a := str(a.get_meta(&"sort_name"))
+	var name_b := str(b.get_meta(&"sort_name"))
+	if _sort_by == _SORT_NAME:
+		var by_name := name_a.nocasecmp_to(name_b)
+		if by_name != 0:
+			return by_name < 0
+	var price_a := int(a.get_meta(&"sort_price"))
+	var price_b := int(b.get_meta(&"sort_price"))
+	if price_a != price_b:
+		return price_a < price_b
+	var then_name := name_a.nocasecmp_to(name_b)
+	if then_name != 0:
+		return then_name < 0
+	return str(a.get_meta(&"part_id", "")) < str(b.get_meta(&"part_id", ""))
+
+
 func _open_catalog(filter: String = "") -> void:
 	if _catalog.visible:
 		return
@@ -680,6 +999,7 @@ func _open_catalog(filter: String = "") -> void:
 		if row is Control:
 			(row as Control).visible = filter.is_empty() or str(row.get_meta(&"catalog_filter", "")) == filter
 	_catalog_scroll.scroll_vertical = 0
+	_catalog_margin.visible = true
 	_catalog.visible = true
 	_status.text = "Choose an item to buy."
 	var buttons := _nav.collect_buttons(_catalog)
@@ -688,7 +1008,88 @@ func _open_catalog(filter: String = "") -> void:
 
 func _close_catalog() -> void:
 	_catalog.visible = false
+	_catalog_margin.visible = false
 	_nav.setup([_back, _town])
+
+
+## A tap on the shop around the parts window puts the list away.
+func _on_catalog_margin_input(event: InputEvent) -> void:
+	var pressed := false
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		pressed = click.pressed and click.button_index == MOUSE_BUTTON_LEFT
+	elif event is InputEventScreenTouch:
+		pressed = (event as InputEventScreenTouch).pressed
+	if not pressed:
+		return
+	_catalog_margin.accept_event()
+	_close_catalog()
+
+
+func _ensure_part_row_styles(sample: Button) -> void:
+	if not _part_row_styles.is_empty():
+		return
+	var focus := sample.get_theme_stylebox(&"focus") as StyleBoxFlat
+	for fill: StringName in [&"normal", &"hover", &"pressed"]:
+		_part_row_styles["%s:false" % fill] = _part_row_box(sample, fill, focus, false)
+		_part_row_styles["%s:true" % fill] = _part_row_box(sample, fill, focus, true)
+
+
+func _part_row_box(sample: Button, fill: StringName, focus: StyleBoxFlat, focused: bool) -> StyleBoxFlat:
+	var box := (sample.get_theme_stylebox(fill) as StyleBoxFlat).duplicate() as StyleBoxFlat
+	box.content_margin_left = 20
+	box.content_margin_right = 20
+	box.content_margin_top = 18
+	box.content_margin_bottom = 18
+	box.expand_margin_left = focus.expand_margin_left
+	box.expand_margin_top = focus.expand_margin_top
+	box.expand_margin_right = focus.expand_margin_right
+	box.expand_margin_bottom = focus.expand_margin_bottom
+	if focused:
+		box.border_color = focus.border_color
+		box.set_border_width_all(focus.border_width_left)
+	return box
+
+
+func _flatten_part_button(button: Button) -> void:
+	var empty := StyleBoxEmpty.new()
+	for state_name: StringName in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
+		button.add_theme_stylebox_override(state_name, empty)
+
+
+func _refresh_part_row(row: PanelContainer, button: Button) -> void:
+	var fill := "normal"
+	if bool(row.get_meta(&"row_pressed")):
+		fill = "pressed"
+	elif bool(row.get_meta(&"row_hovered")):
+		fill = "hover"
+	row.add_theme_stylebox_override(&"panel", _part_row_styles["%s:%s" % [fill, button.has_focus()]])
+
+
+func _part_row_hover(row: PanelContainer, button: Button, inside: bool) -> void:
+	row.set_meta(&"row_hovered", inside)
+	if inside:
+		button.grab_focus()
+	_refresh_part_row(row, button)
+
+
+func _part_row_focus(row: PanelContainer, button: Button) -> void:
+	_refresh_part_row(row, button)
+
+
+func _part_row_press(row: PanelContainer, button: Button, down: bool) -> void:
+	row.set_meta(&"row_pressed", down)
+	_refresh_part_row(row, button)
+
+
+func _buy_from_detail(event: InputEvent, button: Button, detail: Control) -> void:
+	if not event is InputEventMouseButton:
+		return
+	var click := event as InputEventMouseButton
+	if not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	detail.accept_event()
+	button.pressed.emit()
 
 
 func _buy(kind: String, id: String) -> void:

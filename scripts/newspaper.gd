@@ -196,7 +196,7 @@ func _make_part_card(part: Dictionary, index: int) -> Control:
 	var equipped := GameState.is_part_equipped(part_id)
 	var box := _card()
 	box.add_child(_heading(str(part.get("name", "Part"))))
-	box.add_child(_body(_with_wear(GameState.part_detail(part), "part", part_id, index)))
+	box.add_child(_body(_with_wear(GameState.listing_detail("part", part), "part", part_id, index)))
 	if owned > 0:
 		box.add_child(_body("You have %d%s" % [owned, " · on this car" if equipped else ""]))
 	box.add_child(_buy_button("part", part_id, index))
@@ -206,16 +206,12 @@ func _make_part_card(part: Dictionary, index: int) -> Control:
 
 func _make_gearbox_card(box: Dictionary, index: int) -> Control:
 	var gearbox_id := str(box.get("id", ""))
-	var gears: Variant = box.get("ratios", [])
-	var gear_count := 0
-	if typeof(gears) == TYPE_ARRAY:
-		gear_count = gears.size()
-	var kind := "automatic" if bool(box.get("automatic", false)) else "manual"
-	var top_pct := int(round(float(box.get("top_speed", 1.0)) * 100.0))
 	var card := _card()
 	card.add_child(_heading(str(box.get("name", "Gearbox"))))
-	card.add_child(_body(_with_wear("%s · %d gears · %s · top speed %d%%" % [GameState.fits_text(box), gear_count, kind, top_pct], "transmission", gearbox_id, index)))
-	card.add_child(_body("Ratios  %s" % GameState.gearbox_ratio_text(box)))
+	var lines := GameState.listing_detail("transmission", box).split("\n")
+	card.add_child(_body(_with_wear(lines[0], "transmission", gearbox_id, index)))
+	for i in range(1, lines.size()):
+		card.add_child(_body(lines[i]))
 	card.add_child(_buy_button("transmission", gearbox_id, index))
 	_watch_part(card, gearbox_id, "transmission", index)
 	return card
@@ -508,14 +504,14 @@ func _body(text: String) -> Label:
 
 func _make_engine_card(engine: Dictionary, index: int) -> Control:
 	var engine_id := str(engine.get("id", ""))
-	var card := _make_copy_card(engine, _with_wear("%s · %.0f hp" % [GameState.fits_text(engine), float(engine.get("hp", 0.0))], "engine", engine_id, index), "engine", index)
+	var card := _make_copy_card(engine, _with_wear(GameState.listing_detail("engine", engine), "engine", engine_id, index), "engine", index)
 	_watch_part(card, engine_id, "engine", index)
 	return card
 
 
 func _make_wheel_card(wheel: Dictionary, index: int) -> Control:
 	var wheel_id := str(wheel.get("id", ""))
-	var card := _make_copy_card(wheel, _with_wear(GameState.wheel_detail(wheel) + ", no tires", "wheels", wheel_id, index), "wheels", index)
+	var card := _make_copy_card(wheel, _with_wear(GameState.listing_detail("wheels", wheel), "wheels", wheel_id, index), "wheels", index)
 	_watch_part(card, wheel_id, "wheels", index)
 	return card
 

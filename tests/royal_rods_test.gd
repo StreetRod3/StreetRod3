@@ -1,6 +1,82 @@
 extends SceneTree
 
 
+func _row_button(row: Node) -> Button:
+	for child: Node in row.get_children():
+		if child is Button:
+			return child as Button
+		var nested := _row_button(child)
+		if nested != null:
+			return nested
+	return null
+
+
+func _find_button(node: Node, text: String) -> Button:
+	if node is Button and (node as Button).text == text:
+		return node as Button
+	for child: Node in node.get_children():
+		var found := _find_button(child, text)
+		if found != null:
+			return found
+	return null
+
+
+func _section_part_ids(list: Node, heading: String) -> Array[String]:
+	var ids: Array[String] = []
+	var in_section := false
+	for row: Node in list.get_children():
+		if row is Label:
+			in_section = (row as Label).text == heading
+			continue
+		if not in_section:
+			continue
+		var button := _row_button(row)
+		if button != null:
+			ids.append(str(button.get_meta("part_id")))
+	return ids
+
+
+func _same_ids(a: Array[String], b: Array[String]) -> bool:
+	if a.size() != b.size():
+		return false
+	for part_id: String in a:
+		if not b.has(part_id):
+			return false
+	return true
+
+
+func _ids_sorted_by_price(state: Node, kind: String, ids: Array[String]) -> bool:
+	var previous := -1
+	for part_id: String in ids:
+		var item: Dictionary = state.call("listing_for", kind, part_id)
+		var price := int(item.get("price", 0))
+		if price < previous:
+			return false
+		previous = price
+	return true
+
+
+func _ids_sorted_by_name(store: Node, state: Node, kind: String, ids: Array[String]) -> bool:
+	var previous := ""
+	for part_id: String in ids:
+		var item: Dictionary = state.call("listing_for", kind, part_id)
+		var label := str(store.call("_item_label", item))
+		if not previous.is_empty() and previous.nocasecmp_to(label) > 0:
+			return false
+		previous = label
+	return true
+
+
+func _row_detail(row: Node) -> String:
+	for child: Node in row.get_children():
+		if child is Label:
+			return (child as Label).text
+		var nested := _row_detail(child)
+		if not nested.is_empty():
+			return nested
+	return ""
+
+
 func _initialize() -> void:
 	call_deferred("_run")
 
@@ -158,13 +234,19 @@ func _run() -> void:
 	click.position = folder_screen
 	store.call("_unhandled_input", click)
 	assert(catalog.visible)
+	assert(catalog.anchor_right == 1.0 and catalog.offset_left >= 64.0 and catalog.offset_right <= -64.0)
 	assert(store.get("_catalog_list").get_child_count() > 4)
 	assert(store.call("_hint_at", folder_screen, null) == "")
+	var found_buy := false
 	for row: Node in store.get("_catalog_list").get_children():
-		if row is Button:
-			assert(str(store.call("_hint_at", Vector2.ZERO, row)).begins_with("Buy "))
+		var button := _row_button(row)
+		if button != null:
+			assert(str(store.call("_hint_at", Vector2.ZERO, button)).begins_with("Look at "))
+			found_buy = true
 			break
-	store.call("_close_catalog")
+	assert(found_buy)
+	click.position = Vector2(2, 2)
+	store.get_node("UI/CatalogMargin").gui_input.emit(click)
 	assert(not catalog.visible)
 	click.position = Vector2.ZERO
 	store.call("_unhandled_input", click)
@@ -267,10 +349,16 @@ func _run() -> void:
 		store.call("_unhandled_input", click)
 		assert(catalog.visible)
 		var visible_ids: Array[String] = []
+		var listing_kind := "part"
+		if kind == "engine" or kind == "transmission" or kind == "wheels":
+			listing_kind = kind
 		for row: Node in store.get("_catalog_list").get_children():
-			if row is Button and (row as Button).visible:
-				assert(row.get_meta("catalog_filter") == kind)
-				visible_ids.append(str(row.get_meta("part_id")))
+			var row_button := _row_button(row)
+			if row_button != null and (row as Control).visible:
+				assert(row_button.get_meta("catalog_filter") == kind)
+				visible_ids.append(str(row_button.get_meta("part_id")))
+				var listed: Dictionary = state.listing_for(listing_kind, str(row_button.get_meta("part_id")))
+				assert(_row_detail(row) == state.listing_detail(listing_kind, listed))
 		assert(visible_ids.size() == displayed[kind].size())
 		for item: Dictionary in displayed[kind]:
 			assert(visible_ids.has(str(item["id"])))
@@ -279,9 +367,17 @@ func _run() -> void:
 			var id := str(displayed[kind][0]["id"])
 			var before: int = state.free_spare_count("part", id)
 			for row: Node in store.get("_catalog_list").get_children():
-				if row is Button and (row as Button).visible and str(row.get_meta("part_id")) == id:
-					(row as Button).pressed.emit()
+				var buy_button := _row_button(row)
+				if buy_button != null and (row as Control).visible and str(buy_button.get_meta("part_id")) == id:
+					buy_button.pressed.emit()
 					break
+			assert(state.free_spare_count("part", id) == before)
+			var purchase := store.get("_buy_button") as Button
+			assert(purchase != null and not purchase.disabled)
+			assert(str(purchase.text).contains("$"))
+			assert(store.get("_preview_subject") != null)
+			assert(str((store.get("_preview_caption") as Label).text) != "Select a part")
+			purchase.pressed.emit()
 			assert(state.free_spare_count("part", id) == before + 1)
 			assert((store.get("_status") as Label).text.contains("Bought"))
 		store.call("_close_catalog")
@@ -289,9 +385,15 @@ func _run() -> void:
 	var full_catalog_ids: Dictionary = {}
 	for row: Node in store.get("_catalog_list").get_children():
 		assert((row as Control).visible)
-		if row is Button:
-			var id := str(row.get_meta("part_id"))
-			full_catalog_ids[id] = int(full_catalog_ids.get(id, 0)) + 1
+		var catalog_button := _row_button(row)
+		if catalog_button != null:
+			var catalog_id := str(catalog_button.get_meta("part_id"))
+			full_catalog_ids[catalog_id] = int(full_catalog_ids.get(catalog_id, 0)) + 1
+			var filter := str(catalog_button.get_meta("catalog_filter"))
+			var catalog_kind := "part"
+			if filter == "engine" or filter == "transmission" or filter == "wheels":
+				catalog_kind = filter
+			assert(_row_detail(row) == state.listing_detail(catalog_kind, state.listing_for(catalog_kind, catalog_id)))
 	for items: Array in [state.ENGINES, state.GEARBOXES, state.WHEELS, state.PARTS]:
 		for item: Dictionary in items:
 			var id := str(item["id"])
@@ -301,6 +403,52 @@ func _run() -> void:
 				full_catalog_ids.erase(id)
 	assert(full_catalog_ids.is_empty())
 	assert(not store.has_node("Shelf_mounts"))
+	var marked := false
+	for row: Node in store.get("_catalog_list").get_children():
+		if not row is PanelContainer:
+			continue
+		var panel := row as PanelContainer
+		var name_button := _row_button(panel)
+		panel.mouse_entered.emit()
+		var hot := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(hot.bg_color.r > 0.2 and hot.border_width_left > 0)
+		assert(name_button.has_focus())
+		panel.mouse_exited.emit()
+		var idle := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(idle.bg_color.r < 0.15)
+		name_button.release_focus()
+		var blurred := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(blurred.border_width_left == 0)
+		marked = true
+		break
+	assert(marked)
+	var by_price := _find_button(catalog, "By price")
+	var by_name := _find_button(catalog, "By name")
+	assert(by_price.button_pressed and not by_name.button_pressed)
+	var list: Node = store.get("_catalog_list")
+	var engines_by_price := _section_part_ids(list, "ENGINES")
+	var transmissions_by_price := _section_part_ids(list, "TRANSMISSIONS")
+	var wheels_by_price := _section_part_ids(list, "WHEELS")
+	var parts_by_price := _section_part_ids(list, "PARTS")
+	assert(_ids_sorted_by_price(state, "engine", engines_by_price))
+	assert(_ids_sorted_by_price(state, "transmission", transmissions_by_price))
+	assert(_ids_sorted_by_price(state, "wheels", wheels_by_price))
+	assert(_ids_sorted_by_price(state, "part", parts_by_price))
+	by_name.button_pressed = true
+	assert(by_name.button_pressed and not by_price.button_pressed)
+	var engines_by_name := _section_part_ids(list, "ENGINES")
+	assert(_same_ids(engines_by_name, engines_by_price))
+	assert(_same_ids(_section_part_ids(list, "TRANSMISSIONS"), transmissions_by_price))
+	assert(_same_ids(_section_part_ids(list, "WHEELS"), wheels_by_price))
+	assert(_same_ids(_section_part_ids(list, "PARTS"), parts_by_price))
+	assert(_ids_sorted_by_name(store, state, "engine", engines_by_name))
+	assert(_ids_sorted_by_name(store, state, "transmission", _section_part_ids(list, "TRANSMISSIONS")))
+	assert(_ids_sorted_by_name(store, state, "wheels", _section_part_ids(list, "WHEELS")))
+	assert(_ids_sorted_by_name(store, state, "part", _section_part_ids(list, "PARTS")))
+	by_price.button_pressed = true
+	assert(by_price.button_pressed and not by_name.button_pressed)
+	assert(_section_part_ids(list, "ENGINES") == engines_by_price)
+	assert(_section_part_ids(list, "TRANSMISSIONS") == transmissions_by_price)
 	store.call("_close_catalog")
 
 	state.roll_newspaper_wear()
