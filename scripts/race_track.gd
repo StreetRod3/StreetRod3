@@ -656,10 +656,29 @@ func _build_path() -> void:
 		sharp.append(1 if bool(node.get("sharp", false)) else 0)
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
+	# Heights follow the nodes themselves, not the corner a loop adds below.
+	var nodes: Array[Vector3] = pts.duplicate()
+	# A loop comes back into its start already on the start straight: when the start node is a
+	# corner, the last road turns onto the straight round a corner set back behind the line, so
+	# the lap ends where it began, heading the same way, and the car still starts on the straight.
+	var set_back_cut := 0.0
+	var set_back := false
+	if _loop and n >= 4:
+		set_back_cut = _fillet_cut(pts[n - 2], pts[0], pts[1])
+		if set_back_cut >= 0.05:
+			var out_dir := Vector3(pts[1].x - pts[0].x, 0.0, pts[1].z - pts[0].z).normalized()
+			pts.insert(n - 1, pts[0] - out_dir * set_back_cut)
+			roads.append(roads[n - 2])
+			n += 1
+			set_back = true
 	var cuts: PackedFloat32Array = PackedFloat32Array()
 	cuts.resize(n)
 	for i in range(1, n - 1):
 		cuts[i] = _fillet_cut(pts[i - 1], pts[i], pts[i + 1])
+	if set_back:
+		# The set-back corner's curve runs all the way to the start.
+		var in_span := Vector3(pts[n - 2].x - pts[n - 3].x, 0.0, pts[n - 2].z - pts[n - 3].z).length()
+		cuts[n - 2] = minf(set_back_cut, in_span * FILLET_LEN_FRACTION)
 	_apply_road(roads[0])
 	_pos = pts[0]
 	_yaw = atan2(pts[1].x - pts[0].x, pts[1].z - pts[0].z)
@@ -690,7 +709,11 @@ func _build_path() -> void:
 		_append_bezier(p0, pts[i], p2, roads[i - 1], roads[i])
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
-	_smooth_path_heights(pts, sharp)
+	if _loop:
+		# Exactly where the lap began, heading the same way.
+		_pts[_pts.size() - 1] = _pts[0]
+		_yaws[_yaws.size() - 1] = _yaws[0]
+	_smooth_path_heights(nodes, sharp)
 	_race_length = _length
 	if not _loop:
 		_append_runoff()
@@ -1202,7 +1225,10 @@ func _build_side_grass() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for side: float in [1.0, -1.0]:
 		var k := 0 if side > 0.0 else 1
-		var reach := _grass_sides[k]
+		var reach := _grass_sides[k].duplicate()
+		var caps := _inside_reach_caps(side)
+		for i in reach.size():
+			reach[i] = minf(reach[i], caps[i])
 		var far_y := _grass_sides[k + 2]
 		for i in range(_pts.size() - 1):
 			var e0 := _sample_extents(i)
@@ -1227,7 +1253,36 @@ func _build_side_grass() -> void:
 	var mi := MeshInstance3D.new()
 	mi.name = "SideGrass"
 	mi.mesh = mesh
+	# It lies a little over the ground grid, and its shadow fell on the grid wherever the grid
+	# shows between strips, as a dark patch with nothing standing there to cast it.
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## How far out from the middle of the road the side grass on `side` (1 right, -1 left) may reach
+## at each sample. On the inside of a corner, strips reaching past the corner's middle cross those of
+## the next samples: the crossed triangles face down and darken the grass round them, and lying
+## on the grass they flicker against it. So there each stays at 80% of where it would cross its
+## neighbor's, and the ground grid under it shows on beyond. INF where nothing limits it.
+func _inside_reach_caps(side: float) -> PackedFloat32Array:
+	var n := _pts.size()
+	var caps := PackedFloat32Array()
+	caps.resize(n)
+	caps.fill(INF)
+	for i in n - 1:
+		var r0 := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i])) * side
+		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1])) * side
+		var mid_yaw := _yaws[i] + angle_difference(_yaws[i], _yaws[i + 1]) * 0.5
+		var fwd := Vector3(sin(mid_yaw), 0.0, cos(mid_yaw))
+		var along := Vector3(_pts[i + 1].x - _pts[i].x, 0.0, _pts[i + 1].z - _pts[i].z).dot(fwd)
+		# How fast the two samples' sideways lines close on each other, per meter out.
+		var closing := -(r1 - r0).dot(fwd)
+		if closing <= 0.0001 or along <= 0.0:
+			continue
+		var cap := 0.8 * along / closing
+		caps[i] = minf(caps[i], cap)
+		caps[i + 1] = minf(caps[i + 1], cap)
+	return caps
 
 
 ## One stretch of `_build_side_grass()`, on the left (`side` 1) or right (-1): from the road's
@@ -1552,22 +1607,14 @@ func _sample_extents(i: int) -> Vector2:
 	return TrackFile.driveable_extents(hw * 2.0, _sample_type(i))
 
 
+## Red and white curb stones along both road edges. Each edge is one strip of stones that meet end
+## to end: boxes at every sample overlapped on curves, where samples come closer than a stone's
+## length, and the overlapping red and white tops flickered. Where the road's width steps, a row of
+## stones runs across the step and each edge strip breaks there.
 func _build_curbs() -> void:
 	var red_xforms: Array[Transform3D] = []
 	var white_xforms: Array[Transform3D] = []
 	var stone_i := 0
-	var stride := maxi(1, int(round(CURB_L / BAKE_STEP)))
-	var i := 0
-	while i < _pts.size():
-		var yaw: float = _yaws[i]
-		var basis := Basis(Vector3.UP, yaw)
-		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-		var ext := _sample_extents(i)
-		var pos := _pts[i]
-		_add_curb_stone(red_xforms, white_xforms, stone_i, basis, pos - right * ext.x)
-		_add_curb_stone(red_xforms, white_xforms, stone_i + 1, basis, pos + right * ext.y)
-		stone_i += 1
-		i += stride
 	for j in range(1, _pts.size()):
 		var prev := _sample_extents(j - 1)
 		var cur := _sample_extents(j)
@@ -1577,6 +1624,116 @@ func _build_curbs() -> void:
 			stone_i = _add_perp_curbs(red_xforms, white_xforms, stone_i, j, true, prev.y, cur.y)
 	_add_box_multimesh(self, "CurbRed", Vector3(CURB_W, CURB_H, CURB_L), CURB_RED, red_xforms)
 	_add_box_multimesh(self, "CurbWhite", Vector3(CURB_W, CURB_H, CURB_L), CURB_WHITE, white_xforms)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var stones := 0
+	for side: float in [-1.0, 1.0]:
+		var start := 0
+		for j in range(1, _pts.size() + 1):
+			if j < _pts.size() and absf(_edge_extent(j - 1, side) - _edge_extent(j, side)) <= 0.35:
+				continue
+			var closed := _loop and start == 0 and j == _pts.size()
+			# Opposite colors face each other across the road, as the stones always have.
+			stones += _add_curb_run(st, side, start, j - 1, closed, 0 if side < 0.0 else 1)
+			start = j
+	if stones == 0:
+		return
+	var mat := _make_mat(Color.WHITE)
+	mat.vertex_color_use_as_albedo = true
+	mat.vertex_color_is_srgb = true
+	var mesh := st.commit()
+	mesh.surface_set_material(0, mat)
+	var mi := MeshInstance3D.new()
+	mi.name = "Curbs"
+	mi.mesh = mesh
+	add_child(mi)
+
+
+## How far out the road edge on `side` (-1 left, 1 right) is at sample `i`.
+func _edge_extent(i: int, side: float) -> float:
+	var ext := _sample_extents(i)
+	return ext.y if side > 0.0 else ext.x
+
+
+## One strip of curb stones along the edge on `side` from sample `a` to `b`, the stones as near
+## CURB_L long as fit evenly; `closed` runs round a whole loop, with an even count so the colors
+## alternate across the line too. On the inside of a corner tighter than the road is wide the edge
+## doubles back on itself; those points are left out. Returns the stones added.
+func _add_curb_run(st: SurfaceTool, side: float, a: int, b: int, closed: bool, color_from: int) -> int:
+	var edge := PackedVector3Array()
+	for i in range(a, b + 1):
+		var yaw: float = _yaws[i]
+		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
+		var p := _pts[i] + right * side * _edge_extent(i, side)
+		if not edge.is_empty():
+			var step := p - edge[edge.size() - 1]
+			if step.dot(Vector3(sin(yaw), 0.0, cos(yaw))) < 0.01:
+				continue
+		edge.append(p)
+	if closed and edge.size() > 2:
+		edge[edge.size() - 1] = edge[0]
+	if edge.size() < 2:
+		return 0
+	var cum := PackedFloat32Array([0.0])
+	for i in range(1, edge.size()):
+		cum.append(cum[i - 1] + edge[i].distance_to(edge[i - 1]))
+	var total := cum[cum.size() - 1]
+	if total < 0.3:
+		return 0
+	var count := maxi(1, roundi(total / CURB_L))
+	if closed and count % 2 == 1:
+		count += 1
+	var ends := PackedVector3Array()
+	var seg := 0
+	for k in count + 1:
+		var s := total * float(k) / float(count)
+		while seg < cum.size() - 2 and cum[seg + 1] < s:
+			seg += 1
+		var span := cum[seg + 1] - cum[seg]
+		var t := clampf((s - cum[seg]) / span, 0.0, 1.0) if span > 0.0001 else 0.0
+		ends.append(edge[seg].lerp(edge[seg + 1], t))
+	if closed:
+		ends[count] = ends[0]
+	# Across each stone end, square to the edge there, so neighbors share their end face.
+	var across := PackedVector3Array()
+	for k in count + 1:
+		var before := ends[k - 1] if k > 0 else (ends[count - 1] if closed else ends[0])
+		var after := ends[k + 1] if k < count else (ends[1] if closed else ends[count])
+		var dir := after - before
+		dir.y = 0.0
+		across.append(Vector3(dir.z, 0.0, -dir.x).normalized() * (CURB_W * 0.5))
+	var up := Vector3(0.0, CURB_H, 0.0)
+	for k in count:
+		var color := CURB_RED if (color_from + k) % 2 == 0 else CURB_WHITE
+		var l0 := ends[k] - across[k]
+		var r0 := ends[k] + across[k]
+		var l1 := ends[k + 1] - across[k + 1]
+		var r1 := ends[k + 1] + across[k + 1]
+		var along := ends[k + 1] - ends[k]
+		var right := Vector3(along.z, 0.0, -along.x).normalized()
+		_curb_quad(st, l0 + up, r0 + up, r1 + up, l1 + up, Vector3.UP, color)
+		_curb_quad(st, r0, r1, r1 + up, r0 + up, right, color)
+		_curb_quad(st, l0, l1, l1 + up, l0 + up, -right, color)
+		if not closed and k == 0:
+			_curb_quad(st, l0, r0, r0 + up, l0 + up, -along.normalized(), color)
+		if not closed and k == count - 1:
+			_curb_quad(st, l1, r1, r1 + up, l1 + up, along.normalized(), color)
+	return count
+
+
+## A flat four-cornered face, turned to face `normal`.
+func _curb_quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3, normal: Vector3, color: Color) -> void:
+	var tris: Array[PackedVector3Array] = [PackedVector3Array([a, b, c]), PackedVector3Array([a, c, d])]
+	for tri in tris:
+		# Godot's front faces wind clockwise seen from the front.
+		if (tri[1] - tri[0]).cross(tri[2] - tri[0]).dot(normal) > 0.0:
+			var swap := tri[1]
+			tri[1] = tri[2]
+			tri[2] = swap
+		for v in tri:
+			st.set_color(color)
+			st.set_normal(normal)
+			st.add_vertex(v)
 
 
 func _add_curb_stone(
@@ -1937,23 +2094,32 @@ func _build_finish_line() -> void:
 	root.name = "FinishLineVisual"
 	root.transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	add_child(root)
-	_add_checkered_strip(root)
+	_add_checkered_strip(root, float(sample["left_ext"]), float(sample["right_ext"]))
 	_add_finish_gantry(root)
 
 
-func _add_checkered_strip(parent: Node3D) -> void:
-	const COLS := 24
+## The checkered line across the road, 30 m at most and no wider than the road, so on a narrow
+## road it stops at the edges rather than running out through the curbs onto the grass.
+func _add_checkered_strip(parent: Node3D, left_ext: float, right_ext: float) -> void:
+	const MAX_COLS := 24
 	const ROWS := 2
 	const SQUARE := 1.25
-	var width := COLS * SQUARE
+	var road_w := left_ext + right_ext
+	var cols := MAX_COLS
+	var width := MAX_COLS * SQUARE
 	var origin_x := -width * 0.5
+	if road_w < width:
+		cols = maxi(2, roundi(road_w / SQUARE))
+		width = road_w
+		origin_x = -left_ext
+	var square_w := width / float(cols)
 	var origin_z := -ROWS * SQUARE * 0.5
 	var black_xforms: Array[Transform3D] = []
 	var white_xforms: Array[Transform3D] = []
 	for row in ROWS:
-		for col in COLS:
+		for col in cols:
 			var pos := Vector3(
-				origin_x + (col + 0.5) * SQUARE,
+				origin_x + (col + 0.5) * square_w,
 				0.02,
 				origin_z + (row + 0.5) * SQUARE
 			)
@@ -1962,8 +2128,8 @@ func _add_checkered_strip(parent: Node3D) -> void:
 				black_xforms.append(xform)
 			else:
 				white_xforms.append(xform)
-	_add_box_multimesh(parent, "CheckBlack", Vector3(SQUARE, 0.03, SQUARE), CHECK_BLACK, black_xforms)
-	_add_box_multimesh(parent, "CheckWhite", Vector3(SQUARE, 0.03, SQUARE), CHECK_WHITE, white_xforms)
+	_add_box_multimesh(parent, "CheckBlack", Vector3(square_w, 0.03, SQUARE), CHECK_BLACK, black_xforms)
+	_add_box_multimesh(parent, "CheckWhite", Vector3(square_w, 0.03, SQUARE), CHECK_WHITE, white_xforms)
 
 
 func _add_finish_gantry(parent: Node3D) -> void:

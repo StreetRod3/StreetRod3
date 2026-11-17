@@ -111,9 +111,28 @@ func _loops() -> void:
 	var count := doc.nodes.size()
 	assert(doc.insert_node(doc.road_count() - 1, Vector2(0, -30)) == count)
 	assert(doc.node_point(count) == Vector2(0, -30) and doc.road_count() == count + 1)
-	# Coming into the start at an angle is a warning.
+	# Coming into the start at an angle is fine: the race turns it onto the start straight behind
+	# the line, so the lap's two ends meet in one place heading the same way.
 	doc.move_node(count, Vector2(40, -30))
-	assert(not doc.check().warnings.is_empty())
+	assert(doc.check().warnings.is_empty(), str(doc.check().warnings))
+	var trk := OS.get_temp_dir().path_join("track_maker_test_loop.trk")
+	var out := FileAccess.open(trk, FileAccess.WRITE)
+	out.store_string(doc.to_text())
+	out.close()
+	var track: Node3D = load("res://scripts/race_track.gd").new()
+	track.set(&"track_path", trk)
+	track.call(&"_build_path")
+	DirAccess.remove_absolute(trk)
+	var pts: PackedVector3Array = track.get(&"_pts")
+	var yaws: PackedFloat32Array = track.get(&"_yaws")
+	assert(pts.size() > 10)
+	assert(pts[0].is_zero_approx() and is_zero_approx(yaws[0]), "the cars still start at 0, 0 facing +Y")
+	assert(pts[-1] == pts[0] and yaws[-1] == yaws[0], "the lap ends where it began")
+	# Two samples back, the road already runs straight up the start straight.
+	assert(absf(pts[-3].x) < 0.01 and absf(yaws[-3]) < 0.01, str(pts[-3], " ", yaws[-3]))
+	for k in range(1, pts.size()):
+		assert(absf(angle_difference(yaws[k - 1], yaws[k])) < deg_to_rad(20.0), "no kink at sample %d" % k)
+	track.free()
 	# A loop needs three nodes.
 	var short := _Doc.blank()
 	short.set_loop(true)

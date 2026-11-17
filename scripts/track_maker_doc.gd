@@ -467,10 +467,6 @@ func check() -> Dictionary:
 		var second := node_point(1)
 		if not is_zero_approx(second.x) or second.y <= 0.0:
 			errors.append("The first road must run straight ahead (+Y) from the start. Drag node 2 to fix it.")
-	if loop and nodes.size() > 2:
-		var coming_in := node_point(0) - node_point(nodes.size() - 1)
-		if coming_in.length() > 0.01 and absf(coming_in.angle_to(Vector2(0.0, 1.0))) > deg_to_rad(20.0):
-			warnings.append("The road back to the start comes in at an angle, so the road kinks at the line. Bring the last node round behind the start (-Y) to make it straight.")
 	if not scenery.is_empty() and style == TrackFile.STYLE_CIRCUIT:
 		warnings.append("A circuit track doesn't show scenery. Pick another style to see it.")
 	return {"errors": errors, "warnings": warnings}
