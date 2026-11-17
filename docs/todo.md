@@ -51,7 +51,7 @@ The torq wheel's spokes (`tools/make_wheels.py`) have square front edges, where 
 
 ## Engines for every make and era
 
-Engines come in families now (`families` in `parts.register`), and the Ford flathead and the Chevy inline six (216 and 235, the Styleline's stock engine) are drawn for their era. The flathead's numbers (150 hp, $600) sit well below the Chevy small-blocks on purpose: it lines up against period Chevys like the six, not against the 265 and up. Still to come:
+Engines come in families now (`families` in `parts.register`), and the Ford flathead and the Chevy Stovebolt (216 and 235, the Styleline's stock engine) are drawn for their era. The flathead's numbers (150 hp, $600) sit well below the Chevy small-blocks on purpose: it lines up against period Chevys like the Stovebolt, not against the 265 and up. Still to come:
 
 - **More period Chevys** to match the flathead, each a family with its own stock heads, intake, camshaft, distributor and manifolds, and speed parts like the flathead's finned heads and three two-barrel intake.
 - **Real Ford Y-block and small-block.** The 292 and the 302 are stand-ins drawn with the Chevy models, and their speed parts are Ford copies of the Chevy ones with the same stats and looks.
