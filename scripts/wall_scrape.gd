@@ -16,11 +16,14 @@ const _ARCADE_MIN_MPS := 3.0
 
 
 ## What touching a barrier does this step: {"into", "velocity"}, or {} with no barrier touched.
-## `before` is the velocity going into the move.
+## `before` is the velocity going into the move. When the hardest thing touched is a tree's trunk
+## and the hit snaps it (tree_grove.gd), the car goes on its way slower instead, and the answer
+## also has "snapped": the change of speed to charge as damage.
 static func resolve(car: CharacterBody3D, before: Vector3, delta: float) -> Dictionary:
 	var touched := false
 	var into := 0.0
 	var normal := Vector3.ZERO
+	var tree: Node = null
 	for i in car.get_slide_collision_count():
 		var col := car.get_slide_collision(i)
 		var collider := col.get_collider()
@@ -35,9 +38,16 @@ static func resolve(car: CharacterBody3D, before: Vector3, delta: float) -> Dict
 		if here > into or normal == Vector3.ZERO:
 			into = maxf(here, 0.0)
 			normal = flat
+			tree = collider as Node if (collider as Node).has_meta(&"tree_index") else null
 	if not touched:
 		return {}
 	var planar := Vector3(before.x, 0.0, before.z)
+	if tree != null and tree.get_parent() != null and tree.get_parent().has_method(&"try_break"):
+		var cost := float(tree.get_parent().call(&"try_break", int(tree.get_meta(&"tree_index")), into, planar, car))
+		if cost >= 0.0:
+			var speed := planar.length()
+			var on := planar * (maxf(speed - cost, 0.0) / speed) if speed > 0.01 else Vector3.ZERO
+			return {"into": 0.0, "velocity": on, "snapped": cost}
 	var along := planar + normal * into
 	var speed := maxf(along.length() - into * _FRICTION - _RUB_DRAG * delta, 0.0)
 	var after := along.normalized() * speed + normal * into * BOUNCE

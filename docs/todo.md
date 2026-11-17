@@ -6,6 +6,10 @@ Ideas that are wanted but not built yet. Bugs go in [bugs.md](bugs.md). Remove a
 
 The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened from the main menu's ~ prompt, with a solo test drive. Wanted later: rivals on made tracks (how a rival drives a course it has never seen is the hard part), a way in for players and somewhere to race what they make, a 3D preview while editing, and drawing a curve that becomes nodes.
 
+- scenery available on all track types.
+- jumps available on all track types.
+- Correct how track connects to origin point on loop tracks
+
 ## Make burnouts do something
 
 Holding gas and brake with the car stopped is mostly for show so far: the rear wheels spin, the engine revs, the tires smoke and mark the road, and the steering swings the back of the car round (`_update_burnout()` in `player_race_car.gd`, `burn()` in `skid_marks.gd`). It gives the launch nothing and costs nothing. Decided on 2026-11-03 to start this way so it would not change the race balance.
@@ -61,5 +65,6 @@ Engines come in families now (`families` in `parts.register`), and the Ford flat
 Measured on 2026-11-14 on branch city-performance, free roam from the garage with the Corvette 1960 under xvfb with Vulkan on lavapipe and a fixed random seed, so the counts are good but the frame rate is not. Before: about 8,400 draw calls, 2.2 million triangles, 9,800 MeshInstance3D nodes and 12,900 nodes. After: about 830 draw calls, 1.6 million triangles, 930 MeshInstance3D nodes and 4,200 nodes. Done there: the scenery buildings merged into one mesh per 40 m square with their look on the vertices (`box_batch.gd`), the street lamps drawn as one MultiMesh until one is hit, the bushes split into 40 m squares with one MultiMesh each, materials shared between the places' boxes, traffic not drawn past 150 m, and the sun's shadows capped at 60 m. Left, in order of likely gain:
 
 - **Lighter car models.** Traffic is 24 cars (`_COUNT` in `cruise_traffic.gd`). The SR1 bodies are 0.8 to 1.1 million triangles each (`sr1-c56` 1.03M, the 1932 coupe 819k, the Fairlane 752k) and the Styleline 387k, where the Corvette and F100 are 12k to 19k. Each wheel is 70k and each tire 43k, about 450k a car for the four corners. LODs are already generated on import. With traffic hidden the frame drops from 1.6 to 1.0 million triangles. Decimate those models, or give traffic a lighter wheel.
+- **Reduce Tire polycount**
 - **Street lamps off by day.** All 447 OmniLight3Ds in `street_lamp.gd` are on in daylight, with distance fade from 26 m. There is no night in free roam yet, so turning them off changes the look and was left alone.
 - **The places.** The garage, drive-in, gas station and Royal Rods are still built of separate boxes, now with shared materials. They are few, and the garage doors move, so they were not merged.

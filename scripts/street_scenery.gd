@@ -1,7 +1,8 @@
 extends RefCounted
 
 ## What stands beside a `street` track, from the `scenery` list of its `.trk` file. Street Rod 2
-## draws these as sprites and never tests a car against them, so nothing here has collision.
+## draws these as sprites and never tests a car against them, so only the trees here have
+## collision: their trunks are solid and can be snapped (tree_grove.gd).
 
 const _TRUNK := Color(0.33, 0.2, 0.11, 1)
 const _LEAVES := Color(0.2, 0.46, 0.15, 1)
@@ -26,6 +27,50 @@ const _FINISH_LENGTH := 5.0
 
 ## Trees sit a little into the ground, which is sunk under the road's height.
 const _TREE_SINK := 0.15
+## Poliigon BarkPoplar001 at 1K, from reference/tracks/treebark/. Its roughness map is the
+## download's gloss map inverted. One tile covers about this much bark, and `BARK_TINT`
+## multiplies its color: white is the photo's own pale grey, and this turns it a mid brown.
+const BARK_TILE_M := 1.0
+const BARK_TINT := Color(0.74, 0.61, 0.5, 1)
+const _BARK := "res://assets/textures/bark/BarkPoplar001_"
+## The bark is lit like the leaves (shaders/tree_bark.gdshader): in this many hard bands, the
+## full sun warmed by `BARK_WARM` and the part-lit bands cooled toward `BARK_COOL`. The trunk
+## darkens by `BARK_CROWN_SHADE` at the top, starting `BARK_CROWN_FROM` of the way up, and by
+## `BARK_FOOT_SHADE` at the ground.
+const BARK_LIGHT_STEPS := 3.0
+const BARK_WARM := Color(1.0, 0.8, 0.55, 1)
+const BARK_COOL := Color(0.6, 0.55, 0.9, 1)
+const BARK_CROWN_SHADE := 0.6
+const BARK_CROWN_FROM := 0.45
+const BARK_FOOT_SHADE := 0.3
+const _BARK_SHADER := preload("res://shaders/tree_bark.gdshader")
+const _TreeGrove := preload("res://scripts/tree_grove.gd")
+## Crowns are leaf cards (shaders/tree_leaves.gdshader): this many per square meter of crown
+## surface, each this many meters across from its middle, set in about a fifth of the crown's
+## radius at most. The leaf shape and the shader come from PixelageGames' 3D pixel art vegetation
+## demo (CREDITS.md). The plain crown shapes stay, unseen, to cast the shadows.
+const LEAF_CARDS_PER_M2 := 6.0
+const LEAF_CARD_HALF_M := 0.45
+const LEAF_DEPTH := 0.18
+## Each tree's leaves are a green between these two, picked by its spot, in the range of the
+## bushes' greens (cruise.gd, course_scenery.gd) so trees and bushes sit together.
+const LEAF_GREEN_DARK := Color(0.16, 0.35, 0.13, 1)
+const LEAF_GREEN_LIGHT := Color(0.27, 0.46, 0.17, 1)
+const LEAF_LIGHT_STEPS := 5.0
+## Share of the scene's ambient light the leaves take, as a crown shades itself; at 1 the night
+## races' flat ambient made them glow.
+const LEAF_AMBIENT := 0.45
+## Bushes are leaf cards too (`bush_leaf_mesh()`), smaller than a tree's: this many over one
+## bush, each this many meters across from its middle. A bush's color comes from its MultiMesh
+## instance color.
+const BUSH_CARDS := 70
+const BUSH_CARD_HALF_M := 0.2
+const _LEAF_SHADER := preload("res://shaders/tree_leaves.gdshader")
+const _LEAF_ALPHA := "res://assets/textures/leaves/leaf_alpha.png"
+
+static var _leaf_material: ShaderMaterial = null
+static var _bush_material: ShaderMaterial = null
+static var _bush_mesh: ArrayMesh = null
 const _POLE_HEIGHT := 7.5
 
 
@@ -40,9 +85,9 @@ static func build(track: Node3D, items: Array[Dictionary], road_width: float) ->
 		list.assign(spots.get(kind, list))
 		list.append(Vector2(float(item["x"]), float(item["y"])))
 		spots[kind] = list
-	add_trees(root, _feet_on_track(track, _spots_of(spots, "tree")), _spots_of(spots, "tree"), "tree")
-	add_trees(root, _feet_on_track(track, _spots_of(spots, "big_tree")), _spots_of(spots, "big_tree"), "big_tree")
-	add_trees(root, _feet_on_track(track, _spots_of(spots, "bare_tree")), _spots_of(spots, "bare_tree"), "bare_tree")
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "tree")), _spots_of(spots, "tree"), "tree", track)
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "big_tree")), _spots_of(spots, "big_tree"), "big_tree", track)
+	add_trees(root, _feet_on_track(track, _spots_of(spots, "bare_tree")), _spots_of(spots, "bare_tree"), "bare_tree", track)
 	_build_poles(track, root, _spots_of(spots, "pole"))
 	_build_paint(track, root, "Dashes", _spots_of(spots, "dash"), _DASH_WIDTH, _DASH_LENGTH, 0.0, _STRIPE)
 	_build_paint(track, root, "Finish", _spots_of(spots, "finish"), road_width, _FINISH_LENGTH, 0.0, _FINISH)
@@ -88,8 +133,10 @@ static func _flat_feet(spots: Array[Vector2]) -> Array[Vector3]:
 
 
 ## The street drag's round trees, larger ones, and sparse ones. `spots` pick each tree's
-## size, and `feet` are where they stand.
-static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2], kind: String) -> void:
+## size, and `feet` are where they stand. Each kind is a TreeGrove (tree_grove.gd): solid trunks
+## that snap in a hard enough hit. `track` is the race track they stand by, if any, so rivals
+## steer round a fallen one.
+static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2], kind: String, track: Node3D = null) -> void:
 	if feet.is_empty() or feet.size() != spots.size():
 		return
 	var height := 5.5
@@ -113,7 +160,7 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 	trunk_mesh.height = height
 	trunk_mesh.radial_segments = 6
 	trunk_mesh.rings = 1
-	trunk_mesh.material = _material(_TRUNK)
+	trunk_mesh.material = _bark_material(trunk_radius, height)
 	var crown_mesh := SphereMesh.new()
 	crown_mesh.radius = 1.0
 	crown_mesh.height = 2.0
@@ -121,18 +168,128 @@ static func add_trees(root: Node3D, feet: Array[Vector3], spots: Array[Vector2],
 	crown_mesh.rings = 5
 	crown_mesh.material = _material(_LEAVES)
 	var crowns := _bare_crowns(height, crown_radius) if bare else _full_crowns(height, crown_radius)
-	var trunk_xforms: Array[Transform3D] = []
-	var crown_xforms: Array[Transform3D] = []
+	var leaf_mesh := _leaf_mesh(crowns, kind.hash())
+	var plants: Array[Transform3D] = []
+	var seeds := PackedFloat32Array()
+	var greens: Array[Color] = []
 	for i in spots.size():
 		var spot: Vector2 = spots[i]
 		var size := lerpf(0.88, 1.15, _spot_random(spot, 1.0))
 		var turn := Basis(Vector3.UP, TAU * _spot_random(spot, 2.0)).scaled(Vector3(size, size, size))
-		var plant := Transform3D(turn, feet[i])
-		trunk_xforms.append(plant * Transform3D(Basis.IDENTITY, Vector3(0.0, height * 0.5, 0.0)))
-		for crown: Transform3D in crowns:
-			crown_xforms.append(plant * crown)
-	_add_multimesh(root, "Trunks", trunk_mesh, trunk_xforms, true)
-	_add_multimesh(root, "Crowns", crown_mesh, crown_xforms, true)
+		plants.append(Transform3D(turn, feet[i]))
+		seeds.append(_spot_random(spot, 5.0))
+		greens.append(LEAF_GREEN_DARK.lerp(LEAF_GREEN_LIGHT, _spot_random(spot, 6.0)).srgb_to_linear())
+	var grove := _TreeGrove.new()
+	grove.name = "Trees_%s" % kind
+	grove.track = track
+	root.add_child(grove)
+	grove.setup(kind, height, trunk_radius, trunk_mesh, crown_mesh, leaf_mesh, crowns, plants, seeds, greens)
+
+
+## Bark for a trunk of this size. The texture goes round a whole number of times so it meets
+## itself, and runs up the trunk at the same scale. A cylinder's side takes the top half of its
+## UVs, so V is doubled. The bark is matte, so the roughness map isn't used.
+static func _bark_material(radius: float, height: float) -> ShaderMaterial:
+	var round_m := TAU * radius * 0.85
+	var across := maxf(1.0, roundf(round_m / BARK_TILE_M))
+	var mat := ShaderMaterial.new()
+	mat.shader = _BARK_SHADER
+	mat.set_shader_parameter(&"albedo_texture", load(_BARK + "COL_1K.jpg") as Texture2D)
+	mat.set_shader_parameter(&"normal_texture", load(_BARK + "NRM_1K.jpg") as Texture2D)
+	mat.set_shader_parameter(&"uv_scale", Vector2(across, 2.0 * height * across / round_m))
+	mat.set_shader_parameter(&"tint", BARK_TINT)
+	mat.set_shader_parameter(&"light_steps", BARK_LIGHT_STEPS)
+	mat.set_shader_parameter(&"warm", BARK_WARM)
+	mat.set_shader_parameter(&"cool", BARK_COOL)
+	mat.set_shader_parameter(&"crown_shade", BARK_CROWN_SHADE)
+	mat.set_shader_parameter(&"crown_from", BARK_CROWN_FROM)
+	mat.set_shader_parameter(&"foot_shade", BARK_FOOT_SHADE)
+	return mat
+
+
+## Leaf cards over every crown of one kind of tree, in the tree's own space. Each card is four
+## vertices at one point with UVs at its corners, which the shader spreads to face the camera;
+## UV2.x turns it. Cards are spread evenly over each crown's surface, as many as its area takes,
+## and its normal is the crown's there.
+static func _leaf_mesh(crowns: Array[Transform3D], seed_value: int, count_override: int = 0, mat: Material = null, card_half_m: float = LEAF_CARD_HALF_M) -> ArrayMesh:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var uv2s := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var corners: Array[Vector2] = [Vector2(0.0, 0.0), Vector2(1.0, 0.0), Vector2(1.0, 1.0), Vector2(0.0, 1.0)]
+	var golden := PI * (3.0 - sqrt(5.0))
+	for crown: Transform3D in crowns:
+		var count := count_override if count_override > 0 else maxi(12, int(_ellipsoid_area(crown.basis.get_scale()) * LEAF_CARDS_PER_M2))
+		var to_normal := crown.basis.inverse().transposed()
+		for i in count:
+			var y := 1.0 - 2.0 * (float(i) + 0.5) / float(count)
+			var ring := sqrt(1.0 - y * y)
+			var dir := Vector3(cos(golden * i) * ring, y, sin(golden * i) * ring)
+			var center := crown * (dir * rng.randf_range(1.0 - LEAF_DEPTH, 1.0))
+			var normal := (to_normal * dir).normalized()
+			var turn := Vector2(rng.randf() * TAU, 0.0)
+			var base := verts.size()
+			for corner: Vector2 in corners:
+				verts.append(center)
+				normals.append(normal)
+				uvs.append(corner)
+				uv2s.append(turn)
+			indices.append_array([base, base + 2, base + 1, base, base + 3, base + 2])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_TEX_UV2] = uv2s
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(0, mat if mat != null else _leaves())
+	# The cards spread past the points the mesh is made of.
+	mesh.custom_aabb = mesh.get_aabb().grow(card_half_m * 1.5)
+	return mesh
+
+
+## One bush: leaf cards over a sphere of radius 1, for a MultiMesh to scale to each bush. Its
+## material takes the green from the instance color, so set the MultiMesh's `use_colors`. The
+## bounds allow for a bush as small as half a meter across.
+static func bush_leaf_mesh() -> ArrayMesh:
+	if _bush_mesh == null:
+		var unit: Array[Transform3D] = [Transform3D.IDENTITY]
+		_bush_mesh = _leaf_mesh(unit, 7, BUSH_CARDS, bush_leaves(), BUSH_CARD_HALF_M / 0.25)
+	return _bush_mesh
+
+
+static func bush_leaves() -> ShaderMaterial:
+	if _bush_material == null:
+		_bush_material = _leaves().duplicate() as ShaderMaterial
+		_bush_material.set_shader_parameter(&"card_half_m", BUSH_CARD_HALF_M)
+	return _bush_material
+
+
+static func _leaves() -> ShaderMaterial:
+	if _leaf_material == null:
+		_leaf_material = ShaderMaterial.new()
+		_leaf_material.shader = _LEAF_SHADER
+		# The green is each tree's instance color.
+		_leaf_material.set_shader_parameter(&"color", Color.WHITE)
+		_leaf_material.set_shader_parameter(&"alpha", load(_LEAF_ALPHA) as Texture2D)
+		_leaf_material.set_shader_parameter(&"card_half_m", LEAF_CARD_HALF_M)
+		_leaf_material.set_shader_parameter(&"light_steps", LEAF_LIGHT_STEPS)
+		_leaf_material.set_shader_parameter(&"ambient_share", LEAF_AMBIENT)
+	return _leaf_material
+
+
+## Surface area of an ellipsoid with these radii (Knud Thomsen's formula, within about 1%).
+static func _ellipsoid_area(radii: Vector3) -> float:
+	var p := 1.6075
+	var ab := pow(radii.x * radii.y, p)
+	var ac := pow(radii.x * radii.z, p)
+	var bc := pow(radii.y * radii.z, p)
+	return 4.0 * PI * pow((ab + ac + bc) / 3.0, 1.0 / p)
 
 
 ## A wide flat crown and a smaller one off to the side, like Street Rod 2's round trees.

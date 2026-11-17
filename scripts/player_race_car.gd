@@ -1283,9 +1283,19 @@ func _scrape_barrier(before: Vector3, delta: float) -> bool:
 	var hit := _WallScrape.resolve(self, before, delta)
 	if hit.is_empty():
 		return false
+	var after: Vector3 = hit["velocity"]
+	if hit.has("snapped"):
+		# Through a tree: it gave way, so the car keeps its heading.
+		take_hit(float(hit["snapped"]))
+		if GameState.arcade_drive:
+			_arcade.apply_planar_velocity(self, after, _car_center)
+		else:
+			_dynamics.cg_velocity = after
+			velocity = after
+			_sync_motion_state()
+		return true
 	take_hit(_damage.barrier_hit(float(hit["into"]) * (1.0 + _WallScrape.BOUNCE)))
 	_rumble.pulse(RUMBLE_SCRAPE, RUMBLE_SCRAPE)
-	var after: Vector3 = hit["velocity"]
 	if GameState.arcade_drive:
 		_arcade.apply_planar_velocity(self, after, _car_center)
 		_arcade.swing_by(_WallScrape.arcade_swing(_race_track(), self, _arcade.heading_yaw, after))
