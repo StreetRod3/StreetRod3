@@ -348,6 +348,10 @@ func _run() -> void:
 		assert(store.call("_hint_at", click.position, null) == "Browse %s" % str(store.call("_filter_name", kind)).to_lower())
 		store.call("_unhandled_input", click)
 		assert(catalog.visible)
+		assert(store.get("_preview_subject") == null)
+		assert(str((store.get("_preview_caption") as Label).text) == "Select a part")
+		assert((store.get("_buy_button") as Button).disabled)
+		assert(str(store.get("_selected_id")) == "")
 		var visible_ids: Array[String] = []
 		var listing_kind := "part"
 		if kind == "engine" or kind == "transmission" or kind == "wheels":
@@ -382,6 +386,10 @@ func _run() -> void:
 			assert((store.get("_status") as Label).text.contains("Bought"))
 		store.call("_close_catalog")
 	store.call("_open_catalog")
+	assert(store.get("_preview_subject") == null)
+	assert(str((store.get("_preview_caption") as Label).text) == "Select a part")
+	assert((store.get("_buy_button") as Button).disabled)
+	assert(str(store.get("_selected_id")) == "")
 	var full_catalog_ids: Dictionary = {}
 	for row: Node in store.get("_catalog_list").get_children():
 		assert((row as Control).visible)
@@ -419,6 +427,43 @@ func _run() -> void:
 		name_button.release_focus()
 		var blurred := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
 		assert(blurred.border_width_left == 0)
+		name_button.pressed.emit()
+		var picked := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(picked.border_width_left > 0)
+		assert(picked.bg_color != hot.bg_color)
+		assert(picked.bg_color != blurred.bg_color)
+		panel.mouse_exited.emit()
+		name_button.release_focus()
+		var stayed := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(stayed.bg_color == picked.bg_color)
+		assert(stayed.border_width_left > 0)
+		panel.mouse_entered.emit()
+		var picked_hot := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(picked_hot.bg_color != hot.bg_color)
+		assert(picked_hot.bg_color != stayed.bg_color)
+		panel.mouse_exited.emit()
+		name_button.release_focus()
+		var neighbor: PanelContainer = null
+		for other: Node in store.get("_catalog_list").get_children():
+			if other is PanelContainer and other != panel:
+				neighbor = other as PanelContainer
+				break
+		assert(neighbor != null)
+		var resting := neighbor.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(resting.border_width_left == 0)
+		assert(resting.bg_color != stayed.bg_color)
+		neighbor.mouse_entered.emit()
+		var neighbor_hot := neighbor.get_theme_stylebox(&"panel") as StyleBoxFlat
+		var still_picked := panel.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(neighbor_hot.bg_color == hot.bg_color)
+		assert(still_picked.bg_color == stayed.bg_color)
+		neighbor.mouse_exited.emit()
+		_row_button(neighbor).release_focus()
+		_row_button(neighbor).pressed.emit()
+		assert((panel.get_theme_stylebox(&"panel") as StyleBoxFlat).border_width_left == 0)
+		var moved := neighbor.get_theme_stylebox(&"panel") as StyleBoxFlat
+		assert(moved.bg_color == stayed.bg_color)
+		assert(moved.border_width_left > 0)
 		marked = true
 		break
 	assert(marked)
