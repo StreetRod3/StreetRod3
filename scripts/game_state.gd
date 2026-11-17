@@ -304,6 +304,9 @@ var arcade_drive: bool = true
 var imperial_units: bool = false
 ## Go straight to the place picked instead of watching the car drive there through town.
 var skip_cruise: bool = false
+## Whether it is night, read when the city loads: night has the starry sky and the street lamps
+## lit, day the day sky with them off. Nothing keeps time yet, so it is always day.
+var night: bool = false
 ## What each control on a wheel or shifter is bound to, by action in controller.gd. Persisted in settings.
 var controller_bindings: Dictionary = {}
 ## How much of the steering's lock a turn of a real wheel gives. Most wheels turn far past the
