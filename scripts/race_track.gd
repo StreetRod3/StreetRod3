@@ -656,10 +656,29 @@ func _build_path() -> void:
 		sharp.append(1 if bool(node.get("sharp", false)) else 0)
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
+	# Heights follow the nodes themselves, not the corner a loop adds below.
+	var nodes: Array[Vector3] = pts.duplicate()
+	# A loop comes back into its start already on the start straight: when the start node is a
+	# corner, the last road turns onto the straight round a corner set back behind the line, so
+	# the lap ends where it began, heading the same way, and the car still starts on the straight.
+	var set_back_cut := 0.0
+	var set_back := false
+	if _loop and n >= 4:
+		set_back_cut = _fillet_cut(pts[n - 2], pts[0], pts[1])
+		if set_back_cut >= 0.05:
+			var out_dir := Vector3(pts[1].x - pts[0].x, 0.0, pts[1].z - pts[0].z).normalized()
+			pts.insert(n - 1, pts[0] - out_dir * set_back_cut)
+			roads.append(roads[n - 2])
+			n += 1
+			set_back = true
 	var cuts: PackedFloat32Array = PackedFloat32Array()
 	cuts.resize(n)
 	for i in range(1, n - 1):
 		cuts[i] = _fillet_cut(pts[i - 1], pts[i], pts[i + 1])
+	if set_back:
+		# The set-back corner's curve runs all the way to the start.
+		var in_span := Vector3(pts[n - 2].x - pts[n - 3].x, 0.0, pts[n - 2].z - pts[n - 3].z).length()
+		cuts[n - 2] = minf(set_back_cut, in_span * FILLET_LEN_FRACTION)
 	_apply_road(roads[0])
 	_pos = pts[0]
 	_yaw = atan2(pts[1].x - pts[0].x, pts[1].z - pts[0].z)
@@ -690,7 +709,11 @@ func _build_path() -> void:
 		_append_bezier(p0, pts[i], p2, roads[i - 1], roads[i])
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
-	_smooth_path_heights(pts, sharp)
+	if _loop:
+		# Exactly where the lap began, heading the same way.
+		_pts[_pts.size() - 1] = _pts[0]
+		_yaws[_yaws.size() - 1] = _yaws[0]
+	_smooth_path_heights(nodes, sharp)
 	_race_length = _length
 	if not _loop:
 		_append_runoff()

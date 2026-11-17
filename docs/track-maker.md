@@ -16,7 +16,7 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 
 Tick "Loop (the finish is the start)" for a track you drive laps on, and set the laps below it. The road from the last node back to the start becomes part of the course: it is drawn as a road, clicking it splits it, and selecting the last node edits it as "Road to the next node". The start gets a red ring as the finish line too. The length shown is one lap, and the height strip ends on the start again.
 
-Bring the last node round behind the start (-Y) so the road comes into the line straight; the maker warns when it comes in at an angle, because the road would kink there. Unticking Loop takes the road back to the start away again.
+The road back to the start can come in at any angle. The race rounds that corner off behind the line, so the road is already on the start straight when it crosses it. Unticking Loop takes the road back to the start away again.
 
 ## Sky
 
