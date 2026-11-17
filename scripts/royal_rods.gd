@@ -604,6 +604,7 @@ func _build_ui() -> void:
 			row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			row.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 			row.set_meta(&"catalog_filter", filter)
+			row.set_meta(&"part_kind", kind)
 			row.set_meta(&"part_id", str(part["id"]))
 			row.set_meta(&"sort_price", int(part.get("price", 0)))
 			row.set_meta(&"sort_name", _item_label(part))
@@ -730,6 +731,7 @@ func _select_part(kind: String, id: String) -> void:
 		return
 	_selected_kind = kind
 	_selected_id = id
+	_refresh_part_rows()
 	var part := GameState.listing_for(kind, id)
 	var label := _item_label(part)
 	_preview_caption.text = label
@@ -754,6 +756,20 @@ func _clear_part_preview() -> void:
 	_preview_mount.remove_child(_preview_subject)
 	_preview_subject.free()
 	_preview_subject = null
+
+
+## Each opening of the list starts with nothing on show.
+func _reset_part_preview() -> void:
+	_clear_part_preview()
+	_preview_mount.rotation = Vector3.ZERO
+	_preview_frame.visible = true
+	_preview_caption.text = "Select a part"
+	_buy_button.text = "Buy"
+	_buy_button.disabled = true
+	_buy_button.set_meta(&"status_hint", "Buy the part on show")
+	_selected_kind = ""
+	_selected_id = ""
+	_refresh_part_rows()
 
 
 func _frame_part_camera() -> void:
@@ -994,6 +1010,7 @@ func _catalog_row_before(a: Node, b: Node) -> bool:
 func _open_catalog(filter: String = "") -> void:
 	if _catalog.visible:
 		return
+	_reset_part_preview()
 	_catalog_title.text = "THE KING'S ROYAL RODS  —  " + _filter_name(filter).to_upper()
 	for row: Node in _catalog_list.get_children():
 		if row is Control:
@@ -1033,6 +1050,13 @@ func _ensure_part_row_styles(sample: Button) -> void:
 	for fill: StringName in [&"normal", &"hover", &"pressed"]:
 		_part_row_styles["%s:false" % fill] = _part_row_box(sample, fill, focus, false)
 		_part_row_styles["%s:true" % fill] = _part_row_box(sample, fill, focus, true)
+	# A pick stays warm, with a gold edge, so it does not look like the grey hover.
+	var selected := _selected_part_row_box(sample, focus, false)
+	var selected_hover := _selected_part_row_box(sample, focus, true)
+	_part_row_styles["selected:false"] = selected
+	_part_row_styles["selected:true"] = selected
+	_part_row_styles["selected_hover:false"] = selected_hover
+	_part_row_styles["selected_hover:true"] = selected_hover
 
 
 func _part_row_box(sample: Button, fill: StringName, focus: StyleBoxFlat, focused: bool) -> StyleBoxFlat:
@@ -1051,18 +1075,54 @@ func _part_row_box(sample: Button, fill: StringName, focus: StyleBoxFlat, focuse
 	return box
 
 
+## Warm paper with a gold edge. Hover stays the theme's grey, so a pick reads apart from it.
+func _selected_part_row_box(sample: Button, focus: StyleBoxFlat, hovered: bool) -> StyleBoxFlat:
+	var box := _part_row_box(sample, &"normal", focus, false)
+	box.bg_color = Color(0.58, 0.40, 0.18) if hovered else Color(0.44, 0.30, 0.14)
+	box.border_color = Color(0.95, 0.78, 0.38)
+	box.set_border_width_all(maxi(focus.border_width_left, 2))
+	return box
+
+
 func _flatten_part_button(button: Button) -> void:
 	var empty := StyleBoxEmpty.new()
 	for state_name: StringName in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
 		button.add_theme_stylebox_override(state_name, empty)
 
 
+func _part_row_button(row: PanelContainer) -> Button:
+	var column := row.get_child(0)
+	if column == null or column.get_child_count() == 0:
+		return null
+	return column.get_child(0) as Button
+
+
+func _row_is_selected(row: PanelContainer) -> bool:
+	return not _selected_id.is_empty() and str(row.get_meta(&"part_kind", "")) == _selected_kind and str(row.get_meta(&"part_id", "")) == _selected_id
+
+
+func _refresh_part_rows() -> void:
+	for child: Node in _catalog_list.get_children():
+		if not child is PanelContainer:
+			continue
+		var row := child as PanelContainer
+		var button := _part_row_button(row)
+		if button == null:
+			continue
+		_refresh_part_row(row, button)
+
+
 func _refresh_part_row(row: PanelContainer, button: Button) -> void:
+	var selected := _row_is_selected(row)
 	var fill := "normal"
 	if bool(row.get_meta(&"row_pressed")):
 		fill = "pressed"
+	elif bool(row.get_meta(&"row_hovered")) and selected:
+		fill = "selected_hover"
 	elif bool(row.get_meta(&"row_hovered")):
 		fill = "hover"
+	elif selected:
+		fill = "selected"
 	row.add_theme_stylebox_override(&"panel", _part_row_styles["%s:%s" % [fill, button.has_focus()]])
 
 
