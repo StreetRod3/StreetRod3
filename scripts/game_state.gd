@@ -2937,6 +2937,26 @@ func fits_text(item: Dictionary) -> String:
 	return str(item.get("make", ""))
 
 
+## The description under a name in the newspaper and at Royal Rods, without wear.
+## A transmission adds its ratios on a second line.
+func listing_detail(kind: String, item: Dictionary) -> String:
+	match kind:
+		"engine":
+			return "%s · %.0f hp" % [fits_text(item), float(item.get("hp", 0.0))]
+		"transmission":
+			var ratios: Variant = item.get("ratios", [])
+			var gear_count := 0
+			if typeof(ratios) == TYPE_ARRAY:
+				gear_count = (ratios as Array).size()
+			var shift := "automatic" if bool(item.get("automatic", false)) else "manual"
+			var top_pct := int(round(float(item.get("top_speed", 1.0)) * 100.0))
+			return "%s · %d gears · %s · top speed %d%%\nRatios  %s" % [fits_text(item), gear_count, shift, top_pct, gearbox_ratio_text(item)]
+		"wheels":
+			return wheel_detail(item) + ", no tires"
+		_:
+			return part_detail(item)
+
+
 ## One line on what a part does, for ads and lists, ending with whom it fits.
 func part_detail(part: Dictionary) -> String:
 	var fits := fits_text(part)
