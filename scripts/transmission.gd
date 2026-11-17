@@ -760,7 +760,7 @@ func _build_engine() -> void:
 	var family := GameState.engine_family(GameState.get_equipped_engine())
 	if family == _EngineAssembly.SB_FAMILY:
 		rear_x = _EngineAssembly.fh(Vector3(_EngineAssembly.SB_BLOCK_BACK, 0.0, 0.0)).x
-	elif family == _EngineAssembly.SIX_FAMILY:
+	elif family == _EngineAssembly.STOVEBOLT_FAMILY:
 		rear_x = _EngineAssembly.fh(Vector3(13.6, 0.0, 0.0)).x
 	engine.position = Vector3(-rear_x * ENGINE_SCALE, DRIVELINE_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0)
 

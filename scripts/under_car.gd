@@ -42,7 +42,7 @@ const _SB_OUTLETS := {
 	"shorty": Vector3(6.6, 11.4, -6.43),
 	"long-tube": Vector3(13.6, 10.4, -11.21),
 }
-## The Chevy six, from tools/make_235.py in inches from its block's middle: where each
+## The Stovebolt, from tools/make_235.py in inches from its block's middle: where each
 ## exhaust outlet's flange takes a head pipe (the stock manifold's one under the
 ## carburetor, the split headers' two), the manifold's run along the head for its hot
 ## spot, and the back of the flywheel housing. Its exhaust is all on its left.
@@ -810,13 +810,13 @@ func _is_flathead(engine: Dictionary = {}) -> bool:
 	return GameState.engine_family(engine) == _EngineAssembly.FH_FAMILY
 
 
-## Whether `engine` (the fitted one when empty) is the Chevy six.
+## Whether `engine` (the fitted one when empty) is the Stovebolt.
 func _is_six(engine: Dictionary = {}) -> bool:
 	if engine.is_empty():
 		if not GameState.has_engine():
 			return false
 		engine = GameState.get_equipped_engine()
-	return GameState.engine_family(engine) == _EngineAssembly.SIX_FAMILY
+	return GameState.engine_family(engine) == _EngineAssembly.STOVEBOLT_FAMILY
 
 
 ## Whether `engine` (the fitted one when empty) is the Chevy small-block.
@@ -1093,7 +1093,7 @@ func build_preview(part: Dictionary) -> Node3D:
 	var slot := str(part.get("slot", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
-			if GameState.engine_family(part) == _EngineAssembly.SIX_FAMILY:
+			if GameState.engine_family(part) == _EngineAssembly.STOVEBOLT_FAMILY:
 				_build_six_manifold(rig, part)
 				return rig
 			var model := _family_model(part)
@@ -1147,7 +1147,7 @@ func _rebuild_rig(slot: String) -> Node3D:
 	var style := str(part.get("style", ""))
 	match slot:
 		GameState.SLOT_MANIFOLD:
-			if GameState.engine_family(part) == _EngineAssembly.SIX_FAMILY:
+			if GameState.engine_family(part) == _EngineAssembly.STOVEBOLT_FAMILY:
 				_build_six_manifold(rig, part)
 				return rig
 			var model := _family_model(part)

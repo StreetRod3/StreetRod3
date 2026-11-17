@@ -196,14 +196,14 @@ const _SB_NODES_FRONT: Array[String] = ["belt", "alternator", "upper_pulley", "f
 const _SB_NODES_BALANCER: Array[String] = ["harmonic_balancer", "crank_pulley", "crank_bolt"]
 const _SB_NODES_EXHAUST: Array[String] = ["exhaust"]
 
-## The Chevy six (216 and 235), laid out as tools/make_235.py builds its model: inches
+## The Chevy Stovebolt (216 and 235), laid out as tools/make_235.py builds its model: inches
 ## from the block's middle, +X back, +Y right, +Z up from the crank's height; the crank
 ## sits `SIX_CRANK_Y` toward the manifold side, and `six()` turns a point into engine
 ## units with the crank on the axis. The model carries the stock parts: the head with its
 ## stamped cover, plugs and thermostat housing, the intake, the one-barrel, the oil-bath
 ## cleaner, the distributor, the coil and wires, and the exhaust manifold; the headers,
 ## the finned cover and the two-carb intake are models of their own.
-const SIX_FAMILY := "chevy-six"
+const STOVEBOLT_FAMILY := "chevy-stovebolt"
 const SIX_CRANK_Y := -0.5
 const SIX_BORES_X: Array[float] = [-9.6, -5.76, -1.92, 1.92, 5.76, 9.6]
 const SIX_DECK := 9.9
@@ -325,9 +325,9 @@ static func six(p: Vector3) -> Vector3:
 	return fh(Vector3(p.x, p.y - SIX_CRANK_Y, p.z))
 
 
-## Whether the engine on view is the Chevy six.
+## Whether the engine on view is the Stovebolt.
 func is_six() -> bool:
-	return GameState.engine_family(_view_engine()) == SIX_FAMILY
+	return GameState.engine_family(_view_engine()) == STOVEBOLT_FAMILY
 
 
 ## Whether the engine on view is the Chevy small-block, drawn from its own model.

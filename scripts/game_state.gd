@@ -564,15 +564,15 @@ func part_fit_trouble(part: Dictionary) -> String:
 	return ""
 
 
-## The Chevy six's exhaust is all on its left: its stock manifold has the one outlet, so
+## The Stovebolt's exhaust is all on its left: its stock manifold has the one outlet, so
 ## a dual exhaust needs the split headers' two. Why `part` cannot go on for that, or "".
 func _six_exhaust_trouble(part: Dictionary) -> String:
-	if not has_engine() or engine_family(get_equipped_engine()) != "chevy-six":
+	if not has_engine() or engine_family(get_equipped_engine()) != "chevy-stovebolt":
 		return ""
 	var kind := str(part.get("slot", ""))
 	if kind == SLOT_EXHAUST and bool(part.get("dual", false)) \
 			and str(slot_part(SLOT_MANIFOLD).get("style", "")) != "split":
-		return "The six's manifold has one outlet. A dual exhaust needs the split headers."
+		return "The Stovebolt's manifold has one outlet. A dual exhaust needs the split headers."
 	if kind == SLOT_MANIFOLD and str(part.get("style", "")) != "split" \
 			and bool(slot_part(SLOT_EXHAUST).get("dual", false)):
 		return "That manifold has one outlet. Put a single exhaust on first."
