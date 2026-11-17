@@ -14,9 +14,21 @@ render_mode cull_disabled;
 // three shines. Each texture is mapped from above in world space with the same triplanar blend as
 // a StandardMaterial3D's world triplanar (see ground_material.gd).
 
+#include "res://shaders/ground_common.gdshaderinc"
+
 uniform sampler2D grass_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D grass_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D grass_roughness : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
+// The grass's occlusion, normal strength and large-scale patches, the same as ground.gdshader's
+// for `grass()` (ground_material.gd sets both from the same constants).
+uniform sampler2D grass_ao : hint_default_white, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float grass_ao_strength = 1.0;
+uniform float grass_ao_light_affect = 0.0;
+uniform float grass_normal_scale = 1.0;
+uniform float macro_size_m = 25.0;
+uniform float macro_bright = 0.0;
+uniform vec3 macro_tint = vec3(1.0);
+uniform float macro_tint_amount = 0.0;
 uniform sampler2D dirt_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D dirt_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D dirt_roughness : hint_roughness_r, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -94,21 +106,6 @@ vec4 triplanar(sampler2D s, float tile_m) {
 	return c;
 }
 
-// A hash with no sine, so it holds up a few kilometers from the origin.
-float hash12(vec2 p) {
-	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-	p3 += dot(p3, p3.yzx + 33.33);
-	return fract((p3.x + p3.y) * p3.z);
-}
-
-float value_noise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	vec2 u = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x),
-		mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);
-}
-
 // How much of a blend `weight` (0 to 1) shows, broken up by `height`, a height map's 0 to 1: the
 // high parts show first. `pull` is how far height carries, `crisp` how soft each part's edge is;
 // a weight of 0 or 1 stays all or nothing.
@@ -136,8 +133,10 @@ void fragment() {
 	float grass = (1.0 - dirt_part) * (1.0 - gravel);
 	// Sampled everywhere, not under an if: the weights change across a triangle, and a texture read
 	// in a branch that differs between neighboring pixels gets the wrong mipmap.
+	vec3 grass_color = ground_macro(triplanar(grass_albedo, grass_tile_m).rgb, v_position.xz,
+		macro_size_m, macro_bright, macro_tint, macro_tint_amount);
 	ALBEDO = gravel_color.rgb * triplanar(gravel_albedo, gravel_tile_m).rgb * gravel
-		+ triplanar(grass_albedo, grass_tile_m).rgb * grass
+		+ grass_color * grass
 		+ clamp(triplanar(dirt_albedo, dirt_tile_m).rgb * dirt_tint, 0.0, 1.0) * dirt;
 	ROUGHNESS = triplanar(gravel_arm, gravel_tile_m).g * gravel
 		+ triplanar(grass_roughness, grass_tile_m).r * grass
@@ -146,4 +145,8 @@ void fragment() {
 	NORMAL_MAP = triplanar(gravel_normal, gravel_tile_m).rgb * gravel
 		+ triplanar(grass_normal, grass_tile_m).rgb * grass
 		+ triplanar(dirt_normal, dirt_tile_m).rgb * dirt;
+	// One depth for the blend, so the grass's own strength goes as much as there is grass.
+	NORMAL_MAP_DEPTH = mix(1.0, grass_normal_scale, grass);
+	AO = mix(1.0, pow(triplanar(grass_ao, grass_tile_m).r, grass_ao_strength), grass);
+	AO_LIGHT_AFFECT = grass_ao_light_affect * grass;
 }

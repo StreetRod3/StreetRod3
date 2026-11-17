@@ -916,8 +916,7 @@ func _build_city(track: Dictionary) -> void:
 	var ground_box := ground.mesh as BoxMesh
 	if ground_box != null:
 		_add_solid_world(ground.position, ground_box.size)
-	var road_mat := _GroundMaterial.asphalt().duplicate() as StandardMaterial3D
-	road_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var road_mat := _GroundMaterial.two_sided_asphalt()
 	var roads := MeshInstance3D.new()
 	var edges := MeshInstance3D.new()
 	var lanes := MeshInstance3D.new()
