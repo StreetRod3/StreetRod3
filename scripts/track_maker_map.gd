@@ -398,6 +398,9 @@ func _draw_nodes() -> void:
 		if not is_zero_approx(bank) and labeled:
 			var edge := "L" if bank > 0.0 else "R"
 			draw_string(font, at + Vector2(9, 9), "%s up %d°" % [edge, roundi(absf(bank))], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))
+		if doc.style == TrackFile.STYLE_AQUEDUCT and labeled and (doc.nodes[i].has("left") or doc.nodes[i].has("right")):
+			var sides := "sides L %.1f R %.1f m" % [doc.aqueduct_side_at(i, "left"), doc.aqueduct_side_at(i, "right")]
+			draw_string(font, at + Vector2(9, 25), sides, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))
 	# Which way the race starts.
 	var start := to_screen(doc.node_point(0))
 	draw_colored_polygon(PackedVector2Array([start + Vector2(0, -22), start + Vector2(-7, -10), start + Vector2(7, -10)]), _START)

@@ -22,6 +22,12 @@ The road back to the start can come in at any angle. The race rounds that corner
 
 Bank, under Sharp in the selected node's fields, leans the road across at that node, up to 45° either way, on any style. Above 0 the left edge is up, for a bend to the right; below 0 the right edge is up. The line under it says which edge is up and whether that leans into the node's bend or out of it (off-camber). The bank holds all round the node's corner and eases to the next node's over the straight between, so give a straight's middle node a bank of 0 if the straight should be flat. Tick "Auto bank" under the track's style to bank every corner by how tight it is instead (up to 30°, for 108 km/h); the Bank fields then show what each corner gets and can't be edited, and unticking it brings back the banks they had. How the game builds and drives a banked road is in [track-format.md](track-format.md#banking).
 
+## Aqueduct sides
+
+On an Aqueduct track, Left side and Right side, under Bank, set how high each side of the channel stands at the node, from Street Rod 2's 1.5 m up to 8 m. The floor stays flat and as wide. A higher side curves up from the floor into a wider bowl, about 6 m across for a 5 m side, and a car can ride up it round a corner as on a banked one. Raise the outside of a corner: the left for a bend to the right. The sides hold all round the node's corner and ease to the next node's over the straight between, as a bank does, and the map shows a node's sides once either is set. How they are built and driven is in [track-format.md](track-format.md#raised-aqueduct-sides).
+
+The same fields are a Mulholland track's hillsides and drops, so changing the style carries the heights over: a hillside becomes a side as high (up to 8 m), and a drop leaves Street Rod 2's side.
+
 ## Sky
 
 Sky, under Laps, picks the photographed sky over the course in races and test drives. A sky whose file isn't in the game yet says "file missing: day sky" and races under the day sky until it is added. The track keeps the choice either way, so adding the file later is enough. The skies, and how to add one, are in [ground-textures.md](ground-textures.md#skies).

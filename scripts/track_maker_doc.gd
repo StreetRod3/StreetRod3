@@ -10,6 +10,7 @@ extends RefCounted
 ## stays there and the second node stays on the +Y axis.
 
 const _Self := preload("res://scripts/track_maker_doc.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
@@ -346,6 +347,11 @@ func bank_note(i: int) -> String:
 	if (bank > 0.0) == (turn > 0.0):
 		return "%s: leans into this %s bend." % [edge, bend]
 	return "%s: leans out of this %s bend (off-camber)." % [edge, bend]
+
+
+## How high the Aqueduct's side on `key` ("left" or "right") stands at node `i`, in meters.
+func aqueduct_side_at(i: int, key: String) -> float:
+	return _TrackSides.aqueduct_side(float(nodes[i].get(key, 0.0)))
 
 
 ## Moves node `i`, held to where the race scene needs the start: the start stays at 0, 0

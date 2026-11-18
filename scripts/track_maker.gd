@@ -11,6 +11,7 @@ const _Doc := preload("res://scripts/track_maker_doc.gd")
 const _MapView := preload("res://scripts/track_maker_map.gd")
 const _ProfileView := preload("res://scripts/track_maker_profile.gd")
 const _Skies := preload("res://scripts/skies.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
 
 const USER_TRACKS_DIR := "user://tracks"
 const GAME_TRACKS_DIR := "res://assets/tracks"
@@ -83,6 +84,9 @@ var _mountain_box: VBoxContainer
 var _left_spin: SpinBox
 var _right_spin: SpinBox
 var _rail_check: CheckBox
+var _aqueduct_box: VBoxContainer
+var _side_left_spin: SpinBox
+var _side_right_spin: SpinBox
 var _road_box: VBoxContainer
 var _width_spin: SpinBox
 var _type_option: OptionButton
@@ -316,6 +320,15 @@ func _build_node_section(box: VBoxContainer) -> void:
 	_rail_check.text = "Guard rail on the right to the next node"
 	_rail_check.toggled.connect(_edit_node_flag.bind("rail"))
 	_mountain_box.add_child(_rail_check)
+	_aqueduct_box = VBoxContainer.new()
+	_node_box.add_child(_aqueduct_box)
+	var stock := snappedf(_TrackSides.AQUEDUCT_BANK_HIGH, 0.1)
+	_side_left_spin = _spin(stock, _TrackSides.AQUEDUCT_SIDE_MAX, 0.1, " m", _edit_aqueduct_side.bind("left"))
+	_aqueduct_box.add_child(_row("Left side", _side_left_spin))
+	_side_right_spin = _spin(stock, _TrackSides.AQUEDUCT_SIDE_MAX, 0.1, " m", _edit_aqueduct_side.bind("right"))
+	_aqueduct_box.add_child(_row("Right side", _side_right_spin))
+	var side_note := _label("%.1f m is Street Rod 2's side. Higher, it curves up from the floor into a wider bowl that a car can ride round a corner." % stock, 13, _DIM)
+	_aqueduct_box.add_child(side_note)
 	_node_box.add_child(_button("Delete node", _delete_selected))
 
 
@@ -527,6 +540,9 @@ func _refresh_selection_fields() -> void:
 		_left_spin.set_value_no_signal(float(doc.nodes[i].get("left", 0.0)))
 		_right_spin.set_value_no_signal(float(doc.nodes[i].get("right", 0.0)))
 		_rail_check.set_pressed_no_signal(bool(doc.nodes[i].get("rail", false)))
+		_aqueduct_box.visible = doc.style == TrackFile.STYLE_AQUEDUCT
+		_side_left_spin.set_value_no_signal(doc.aqueduct_side_at(i, "left"))
+		_side_right_spin.set_value_no_signal(doc.aqueduct_side_at(i, "right"))
 	if on_node and i < doc.road_count():
 		var road := doc.road_from(i)
 		_width_spin.set_value_no_signal(float(road.get("width", TrackFile.DEFAULT_WIDTH)))
@@ -625,6 +641,16 @@ func _edit_node(value: float, key: String) -> void:
 			doc.move_node(i, Vector2(doc.node_point(i).x, value))
 		_:
 			doc.set_node_field(i, key, _Doc.cm(value))
+	_after_edit()
+
+
+## An Aqueduct side's height. Street Rod 2's, or near it, is left out of the file.
+func _edit_aqueduct_side(value: float, key: String) -> void:
+	var i := _map.selected_node
+	if i < 0 or i >= doc.nodes.size():
+		return
+	_begin_edit("node:%d:%s" % [i, key])
+	doc.set_node_field(i, key, 0.0 if value < _TrackSides.AQUEDUCT_BANK_HIGH + 0.05 else _Doc.cm(value))
 	_after_edit()
 
 

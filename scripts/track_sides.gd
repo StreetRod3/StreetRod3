@@ -28,6 +28,11 @@ const AQUEDUCT_BANK_HIGH := 340.0 * 8.0 / 1800.0
 const AQUEDUCT_PUSH_MPS := 0.8
 const AQUEDUCT_PUSH_HIGH_MPS := 2.1
 const AQUEDUCT_HIGH_AT := AQUEDUCT_FLOOR_HALF + 180.0 * 8.0 / 1800.0
+## A made track can stand an Aqueduct side higher than Street Rod 2's, up to this. A raised side
+## curves up from the floor like a bowl and runs this much farther out for each meter higher, which
+## keeps its top at about 58°.
+const AQUEDUCT_SIDE_MAX := 8.0
+const AQUEDUCT_BOWL_RUN_PER_M := 1.25
 
 ## How far the ground beside the road reaches, unless another part of the course is nearer.
 const _FAR_M := 280.0
@@ -38,6 +43,8 @@ const _HILL_TOP_RISE := 1.25
 const _SECTION_STEP := 2
 ## Two sections' far points closer than this across are one point.
 const _MEET_M := 0.01
+## On a track with a raised Aqueduct side, each side's columns from the floor to its top.
+const _BOWL_COLUMNS := 8
 ## About 150 m each way, with the track's sample every 2 m.
 const _SLOW_SAMPLES := 75
 const _WALL_H := 2.5
@@ -98,20 +105,51 @@ static func _far_rise(side: float) -> float:
 	return side * _HILL_TOP_RISE if side > 0.0 else side
 
 
-static func aqueduct_height(lateral: float) -> float:
+## How high an Aqueduct side stands for a node's `left` or `right`: Street Rod 2's side for 0, or
+## anything lower, and no higher than `AQUEDUCT_SIDE_MAX`.
+static func aqueduct_side(value: float) -> float:
+	return clampf(value, AQUEDUCT_BANK_HIGH, AQUEDUCT_SIDE_MAX)
+
+
+## How far out past the floor an Aqueduct side `high` tall reaches its top.
+static func aqueduct_run(high: float) -> float:
+	return AQUEDUCT_BANK_RUN + maxf(high - AQUEDUCT_BANK_HIGH, 0.0) * AQUEDUCT_BOWL_RUN_PER_M
+
+
+## How much of a side `high` tall curves like a bowl, rather than sloping straight as Street Rod 2's
+## does: none at its height, all of it at twice that, so a side eases from one to the other.
+static func aqueduct_curve(high: float) -> float:
+	return clampf((high - AQUEDUCT_BANK_HIGH) / AQUEDUCT_BANK_HIGH, 0.0, 1.0)
+
+
+## The channel's height at `lateral` over its floor, with that side `high` tall.
+static func aqueduct_height(lateral: float, high: float = AQUEDUCT_BANK_HIGH) -> float:
 	var out := absf(lateral) - AQUEDUCT_FLOOR_HALF
 	if out <= 0.0:
 		return 0.0
-	return minf(out / AQUEDUCT_BANK_RUN, 1.0) * AQUEDUCT_BANK_HIGH
+	var t := minf(out / aqueduct_run(high), 1.0)
+	return lerpf(t, t * t, aqueduct_curve(high)) * high
 
 
-## Across the road, what a bank does to a car at `lateral`. Toward the floor, in m/s.
-static func aqueduct_push(lateral: float) -> float:
+## How steeply a side `high` tall rises at `lateral`, a meter farther out. 0 on the floor and past
+## the top.
+static func aqueduct_rise(lateral: float, high: float) -> float:
+	var out := absf(lateral) - AQUEDUCT_FLOOR_HALF
+	var run := aqueduct_run(high)
+	if out <= 0.0 or out >= run:
+		return 0.0
+	return lerpf(1.0, 2.0 * out / run, aqueduct_curve(high)) * high / run
+
+
+## Across the road, what a bank does to a car at `lateral`, with that side `high` tall. Toward the
+## floor, in m/s. A raised side pushes less the more it curves, and not at all once it is a bowl: a
+## car rides up it as on a banked corner instead (race_track.gd's `bank_slope()`).
+static func aqueduct_push(lateral: float, high: float = AQUEDUCT_BANK_HIGH) -> float:
 	var over := absf(lateral)
 	if over <= AQUEDUCT_FLOOR_HALF:
 		return 0.0
 	var push := AQUEDUCT_PUSH_HIGH_MPS if over >= AQUEDUCT_HIGH_AT else AQUEDUCT_PUSH_MPS
-	return -signf(lateral) * push
+	return -signf(lateral) * push * (1.0 - aqueduct_curve(high))
 
 
 static func build_mountain(
@@ -173,7 +211,8 @@ static func build_aqueduct(
 	run_in_m: float,
 	reaches: Array[PackedFloat32Array],
 	back_reach: Vector2,
-	lifts: Array = []
+	lifts: Array = [],
+	highs: Array = []
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
@@ -182,20 +221,27 @@ static func build_aqueduct(
 	steps.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
 	var banked := not lifts.is_empty()
+	var raised := not highs.is_empty()
 	var up := _side_lifts(lifts, pts.size())
+	var tall := _side_highs(highs, pts.size())
 	for side: float in [1.0, -1.0]:
 		var reach: PackedFloat32Array = reaches[0] if side > 0.0 else reaches[1]
+		var high: PackedFloat32Array = tall[0] if side > 0.0 else tall[1]
 		var back_side := back_reach.x if side > 0.0 else back_reach.y
 		var start_tilt := Vector2(up[0][0], up[1][0])
-		_add_side_span(st, _aqueduct_section(back, yaws[0], side, back_side, start_tilt, banked), _aqueduct_section(pts[0], yaws[0], side, reach[0], start_tilt, banked))
+		_add_side_span(
+			st,
+			_aqueduct_section(back, yaws[0], side, back_side, start_tilt, banked, high[0], raised),
+			_aqueduct_section(pts[0], yaws[0], side, reach[0], start_tilt, banked, high[0], raised)
+		)
 		for k in range(sections.size() - 1):
 			var a := sections[k]
 			var b := sections[k + 1]
 			var meet := _inside_meet(pts, yaws, a, b, side)
 			_add_side_span(
 				st,
-				_aqueduct_section(pts[a], yaws[a], side, minf(reach[a], meet), Vector2(up[0][a], up[1][a]), banked),
-				_aqueduct_section(pts[b], yaws[b], side, minf(reach[b], meet), Vector2(up[0][b], up[1][b]), banked),
+				_aqueduct_section(pts[a], yaws[a], side, minf(reach[a], meet), Vector2(up[0][a], up[1][a]), banked, high[a], raised),
+				_aqueduct_section(pts[b], yaws[b], side, minf(reach[b], meet), Vector2(up[0][b], up[1][b]), banked, high[b], raised),
 				steps
 			)
 	_add_mesh(track, "Channel", st, _GroundMaterial.vertex_colored_concrete())
@@ -208,13 +254,16 @@ static func build_aqueduct(
 		step_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		track.add_child(step_mi)
 	var faces := PackedVector3Array()
-	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
 	for k in range(sections.size() - 1):
 		var a := sections[k]
 		var b := sections[k + 1]
 		for side: float in [1.0, -1.0]:
-			var raise := up[0] if side > 0.0 else up[1]
-			_add_wall_quad(faces, pts[a], yaws[a], side * top, pts[b], yaws[b], side * top, raise[a], raise[b])
+			var s := 0 if side > 0.0 else 1
+			var top_a := AQUEDUCT_FLOOR_HALF + aqueduct_run(tall[s][a])
+			var top_b := AQUEDUCT_FLOOR_HALF + aqueduct_run(tall[s][b])
+			var raise_a := _aqueduct_top_raise(Vector2(up[0][a], up[1][a]), side, tall[s][a])
+			var raise_b := _aqueduct_top_raise(Vector2(up[0][b], up[1][b]), side, tall[s][b])
+			_add_wall_quad(faces, pts[a], yaws[a], side * top_a, pts[b], yaws[b], side * top_b, raise_a, raise_b)
 	_add_wall_body(track, faces)
 	_build_under(track, pts, _UNDER_CONCRETE.darkened(0.2))
 
@@ -248,6 +297,37 @@ static func _side_lifts(lifts: Array, count: int) -> Array[PackedFloat32Array]:
 	none.resize(count)
 	none.fill(0.0)
 	return [none, none]
+
+
+## The left (0) and right (1) side heights of a raised Aqueduct, or all Street Rod 2's when `highs`
+## is empty.
+static func _side_highs(highs: Array, count: int) -> Array[PackedFloat32Array]:
+	if highs.size() == 2:
+		return [highs[0] as PackedFloat32Array, highs[1] as PackedFloat32Array]
+	var stock := PackedFloat32Array()
+	stock.resize(count)
+	stock.fill(AQUEDUCT_BANK_HIGH)
+	return [stock, stock]
+
+
+## How far the Aqueduct's tilt lifts it at `lateral` across, from its left side's top `tilt.x` and
+## its right's `tilt.y`, which stand where Street Rod 2's tops do. Past there it runs on as straight,
+## for a raised side's wider bowl.
+static func _aqueduct_tilt(tilt: Vector2, lateral: float) -> float:
+	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
+	var middle := (tilt.x + tilt.y) * 0.5
+	var edge := tilt.x if lateral > 0.0 else tilt.y
+	return middle + (edge - middle) * absf(lateral) / top
+
+
+## How far the top of the side on `side` stands over Street Rod 2's top: the tilt there, and how
+## much higher the side is.
+static func _aqueduct_top_raise(tilt: Vector2, side: float, high: float) -> float:
+	var stock_top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
+	var edge := tilt.x if side > 0.0 else tilt.y
+	var middle := (tilt.x + tilt.y) * 0.5
+	var run_on := aqueduct_run(high) - AQUEDUCT_BANK_RUN
+	return edge + (edge - middle) * run_on / stock_top + (high - AQUEDUCT_BANK_HIGH)
 
 
 ## How much of a raised edge's height the ground keeps `out` meters past it, falling 1 m in 2 as
@@ -337,26 +417,37 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 
 ## A banked channel tilts as one, its left side's top `tilt.x` over the middle's height and its
 ## right's `tilt.y`; past a raised top the concrete falls back as the ground beside a banked street
-## does. `banked` adds the column where it comes down, on every section so they all match.
-static func _aqueduct_section(center: Vector3, yaw: float, side: float, reach: float, tilt: Vector2 = Vector2.ZERO, banked: bool = false) -> Array[Dictionary]:
+## does. The side is `high` tall. `banked` adds the column where the top comes down, and `raised`
+## the columns up a bowl, on every section so they all match.
+static func _aqueduct_section(
+	center: Vector3, yaw: float, side: float, reach: float, tilt: Vector2 = Vector2.ZERO, banked: bool = false,
+	high: float = AQUEDUCT_BANK_HIGH, raised: bool = false
+) -> Array[Dictionary]:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
-	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
+	var run := aqueduct_run(high)
+	var top := AQUEDUCT_FLOOR_HALF + run
 	const EDGE_LINE := 0.22
 	var limit := maxf(reach, top + EDGE_LINE)
 	# Across the channel the tilt runs straight from one top to the other.
 	var middle := (tilt.x + tilt.y) * 0.5
-	var edge := tilt.x if side > 0.0 else tilt.y
-	var floor_up := lerpf(middle, edge, AQUEDUCT_FLOOR_HALF / top)
+	var edge := _aqueduct_top_raise(tilt, side, high)
+	var floor_up := lerpf(middle, tilt.x if side > 0.0 else tilt.y, AQUEDUCT_FLOOR_HALF / (AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN))
 	var line_up := edge * _bank_keep(edge, EDGE_LINE)
 	var columns: Array[Dictionary] = [
 		_column(center, middle, _CONCRETE),
 		_column(center + across * AQUEDUCT_FLOOR_HALF, floor_up, _CONCRETE),
+	]
+	if raised:
+		for c in range(1, _BOWL_COLUMNS):
+			var out := AQUEDUCT_FLOOR_HALF + run * float(c) / float(_BOWL_COLUMNS)
+			columns.append(_column(center + across * out, _aqueduct_tilt(tilt, side * out) + aqueduct_height(out, high), _CONCRETE))
+	columns.append_array([
 		_column(center + across * top, AQUEDUCT_BANK_HIGH + edge, _CONCRETE),
 		_column(center + across * top, AQUEDUCT_BANK_HIGH + edge, _YELLOW_EDGE),
 		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH + line_up, _YELLOW_EDGE),
 		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH + line_up, _CONCRETE_TOP),
-	]
-	if banked:
+	])
+	if banked or raised:
 		var foot := minf(top + maxf(edge / _BANK_FALL, EDGE_LINE + 0.05), limit)
 		columns.append(_column(center + across * foot, AQUEDUCT_BANK_HIGH, _CONCRETE_TOP))
 	columns.append(_column(center + across * minf(top + _FAR_M, limit), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP))

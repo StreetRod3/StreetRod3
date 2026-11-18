@@ -126,10 +126,12 @@ var _laps: int = 1
 var _lips: PackedFloat32Array = PackedFloat32Array()
 var _scenery: Array[Dictionary] = []
 ## Each sample's hillside (up) or drop (down) on the driver's left and right, and whether the right
-## has a guard rail. Only Mulholland has these.
+## has a guard rail, on Mulholland. On the Aqueduct the sides' heights (`_TrackSides.aqueduct_side()`),
+## and `_raised` when any stands higher than Street Rod 2's.
 var _left_sides: PackedFloat32Array = PackedFloat32Array()
 var _right_sides: PackedFloat32Array = PackedFloat32Array()
 var _rails: PackedByteArray = PackedByteArray()
+var _raised: bool = false
 ## The road's height with its rises and dips averaged out, which ground far from it follows.
 var _far_ys: PackedFloat32Array = PackedFloat32Array()
 ## Each sample's bank: how much the road rises a meter across toward its `lateral` side (the
@@ -287,20 +289,45 @@ func _height_on(world: Vector3, ground: int) -> float:
 ## Mulholland's hillsides and drops rise or fall from there, and a street's or the Aqueduct's ground
 ## falls back from a raised edge at `_BANK_EMBANK_SLOPE`.
 func _banked_ground(i: int, lateral: float, road_y: float, bank: float, half_w: float) -> float:
-	var shape := _TrackSides.aqueduct_height(lateral) if _style == TrackFile.STYLE_AQUEDUCT else 0.0
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		return _aqueduct_ground(i, lateral, road_y, bank, half_w)
 	if absf(lateral) <= half_w:
-		return road_y + _lift_for(bank, half_w, lateral) + shape
+		return road_y + _lift_for(bank, half_w, lateral)
 	var edge_lift := _lift_for(bank, half_w, signf(lateral) * half_w)
 	if _style == TrackFile.STYLE_MOUNTAIN:
 		var side := _left_sides[i] if lateral > 0.0 else _right_sides[i]
 		return _TrackSides.mountain_ground(lateral, _half_ws[i], side, road_y + edge_lift, _far_ys[i])
-	return road_y + edge_lift * _embank_keep(edge_lift, absf(lateral) - half_w) + shape
+	return road_y + edge_lift * _embank_keep(edge_lift, absf(lateral) - half_w)
+
+
+## The Aqueduct's concrete `lateral` across from sample `i`, where its floor's middle is at `road_y`
+## and it tilts by `bank` about Street Rod 2's tops, `half_w` out. A raised side's wider bowl goes
+## on tilting the same way. Past the top of a side that stands higher, by the tilt or its own
+## height, the concrete falls back to the flat top as beside a banked street.
+func _aqueduct_ground(i: int, lateral: float, road_y: float, bank: float, half_w: float) -> float:
+	var high := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+	var top := _TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.aqueduct_run(high)
+	var shape := _TrackSides.aqueduct_height(lateral, high)
+	if absf(lateral) <= top:
+		return road_y + _lift_for(bank, half_w, lateral) + shape
+	var raise := _lift_for(bank, half_w, signf(lateral) * top) + high - _TrackSides.AQUEDUCT_BANK_HIGH
+	return road_y + raise * _embank_keep(raise, absf(lateral) - top) + _TrackSides.AQUEDUCT_BANK_HIGH
+
+
+## On the Aqueduct the road is the whole channel, out to the tops of its sides, whatever width the
+## file gives it: Street Rod 2's own is 11.73 m, which is where its tops are, and a raised side
+## reaches farther. As `driveable_extents()`: `x` the side at `lateral` below 0, `y` above.
+func _channel_extents(i: int) -> Vector2:
+	return Vector2(
+		_TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.aqueduct_run(_right_sides[i]),
+		_TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.aqueduct_run(_left_sides[i])
+	)
 
 
 ## The ground's height at `world`, at sample `i`, with `road_y` the road's beside it.
 func _side_ground_at(i: int, world: Vector3, road_y: float) -> float:
 	if _style == TrackFile.STYLE_AQUEDUCT:
-		return road_y + _TrackSides.aqueduct_height(_lateral_at(i, world))
+		return _aqueduct_ground(i, _lateral_at(i, world), road_y, 0.0, _bank_half(i))
 	if _style != TrackFile.STYLE_MOUNTAIN:
 		return road_y
 	var lateral := _lateral_at(i, world)
@@ -335,8 +362,18 @@ func _rise_on_own_ground(world: Vector3, across: Vector3) -> float:
 ## How steeply the ground rises across a car at `world` heading `yaw`: the rise a meter toward the
 ## car's +X, on a banked road or the ground beside it. 0 on a track with no bank, so the driving
 ## models keep their flat ground. On Mulholland and the Aqueduct only the road's own bank counts:
-## their hillsides are walls, and the Aqueduct's sides push a car back with `bank_push()`.
+## their hillsides are walls, and the Aqueduct's sides push a car back with `bank_push()`. A raised
+## Aqueduct side counts too, as much as it curves (`_TrackSides.aqueduct_curve()`), and pushes back
+## that much less, so a car rides up a bowl as up a banked corner.
 func bank_slope(world: Vector3, yaw: float) -> float:
+	if _raised:
+		var i := _nearest_index(world)
+		var road_across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+		var lateral := _lateral_at(i, world)
+		var high := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+		var side := signf(lateral) * _TrackSides.aqueduct_rise(lateral, high) * _TrackSides.aqueduct_curve(high)
+		var bank := _banks[i] if _banked else 0.0
+		return (bank + side) * road_across.dot(Vector3(cos(yaw), 0.0, -sin(yaw)))
 	if not _banked:
 		return 0.0
 	if _style == TrackFile.STYLE_MOUNTAIN or _style == TrackFile.STYLE_AQUEDUCT:
@@ -355,7 +392,8 @@ func bank_push(world: Vector3) -> Vector3:
 		return Vector3.ZERO
 	var i := _nearest_index(world)
 	var across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
-	return across * _TrackSides.aqueduct_push(_lateral_at(i, world))
+	var lateral := _lateral_at(i, world)
+	return across * _TrackSides.aqueduct_push(lateral, _left_sides[i] if lateral > 0.0 else _right_sides[i])
 
 
 ## Whether a car is off a jump track's road, on the grass beside it: its collision box, `half` its
@@ -609,7 +647,8 @@ func build_road_course() -> void:
 		var back_reach := _reach_at(_pts[0] + back_dir * _run_in_m, _yaws[0], -_run_in_m)
 		var lifts := _edge_lifts()
 		if _style == TrackFile.STYLE_AQUEDUCT:
-			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach, lifts if _banked else [])
+			var highs: Array = [_left_sides, _right_sides] if _raised else []
+			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach, lifts if _banked else [], highs)
 		else:
 			_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _run_in_m, reaches, back_reach, lifts if _banked else [])
 			_build_road_mesh()
@@ -665,6 +704,8 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 	if index >= 0 and index < _banks.size():
 		bank = _banks[index]
 	var extents := TrackFile.driveable_extents(hw * 2.0, rtype)
+	if _style == TrackFile.STYLE_AQUEDUCT and index >= 0 and index < _left_sides.size():
+		extents = _channel_extents(index)
 	return {
 		"position": pos,
 		"forward": forward,
@@ -718,12 +759,16 @@ func _build_path() -> void:
 	var pts: Array[Vector3] = []
 	var sharp := PackedByteArray()
 	var bank_degs := PackedFloat32Array()
+	var lefts := PackedFloat32Array()
+	var rights := PackedFloat32Array()
 	var roads: Array[Dictionary] = []
 	for i in n:
 		var node: Dictionary = data.nodes[int(path_ids[i])]
 		pts.append(TrackFile.world_position(node))
 		sharp.append(1 if bool(node.get("sharp", false)) else 0)
 		bank_degs.append(float(node.get("bank", 0.0)))
+		lefts.append(_TrackSides.aqueduct_side(float(node.get("left", 0.0))))
+		rights.append(_TrackSides.aqueduct_side(float(node.get("right", 0.0))))
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
 	if bool(data.get("auto_bank", false)):
@@ -742,6 +787,8 @@ func _build_path() -> void:
 			pts.insert(n - 1, pts[0] - out_dir * set_back_cut)
 			# The corner is the start's, so it banks as the start does.
 			bank_degs.insert(n - 1, bank_degs[n - 1])
+			lefts.insert(n - 1, lefts[n - 1])
+			rights.insert(n - 1, rights[n - 1])
 			roads.append(roads[n - 2])
 			n += 1
 			set_back = true
@@ -802,6 +849,8 @@ func _build_path() -> void:
 		_append_runoff()
 	_fill_banks(curve_from, curve_to, bank_degs)
 	_fill_sides(data, path_ids)
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		_fill_aqueduct_sides(curve_from, curve_to, lefts, rights)
 	_build_bins()
 
 
@@ -835,17 +884,45 @@ func _fill_banks(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, d
 			_banked = true
 	if not _banked:
 		return
-	var last := mini(degs.size(), curve_from.size()) - 1
+	var per_sample := _round_corners(curve_from, curve_to, degs)
+	for i in _pts.size():
+		_banks[i] = tan(deg_to_rad(per_sample[i]))
+
+
+## Each sample's value from its nodes' `values`, as a bank goes: a node's holds all round its
+## corner, from where the curve begins to where it ends, and eases to the next node's over the
+## straight between. Past the finish it holds.
+func _round_corners(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, values: PackedFloat32Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(_pts.size())
+	var last := mini(values.size(), curve_from.size()) - 1
 	var k := 0
 	for i in _pts.size():
 		var s := _dists[i]
 		while k < last and curve_from[k + 1] <= s:
 			k += 1
-		var deg := degs[k]
+		var value := values[k]
 		if s > curve_to[k] and k < last:
 			var t := smoothstep(curve_to[k], curve_from[k + 1], s)
-			deg = lerpf(degs[k], degs[k + 1], t)
-		_banks[i] = tan(deg_to_rad(deg))
+			value = lerpf(values[k], values[k + 1], t)
+		out[i] = value
+	return out
+
+
+## The Aqueduct's side heights, from its nodes' `left` and `right` (`_TrackSides.aqueduct_side()`).
+## They go as a bank does, so a corner's raised side stands all the way round it.
+func _fill_aqueduct_sides(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, lefts: PackedFloat32Array, rights: PackedFloat32Array) -> void:
+	_raised = false
+	for high: float in lefts + rights:
+		# Held in 32 bits, Street Rod 2's height comes back a hair over itself.
+		if high > _TrackSides.AQUEDUCT_BANK_HIGH + 0.01:
+			_raised = true
+	if not _raised:
+		_left_sides.fill(_TrackSides.AQUEDUCT_BANK_HIGH)
+		_right_sides.fill(_TrackSides.AQUEDUCT_BANK_HIGH)
+		return
+	_left_sides = _round_corners(curve_from, curve_to, lefts)
+	_right_sides = _round_corners(curve_from, curve_to, rights)
 
 
 ## How far the road at sample `i` stands over its middle's height, `lateral` meters from the middle
