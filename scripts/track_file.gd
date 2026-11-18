@@ -26,6 +26,18 @@ const SURFACE_WET := "wet"
 const SURFACE_ICY := "icy"
 
 const DEFAULT_WIDTH := 8.0
+## The steepest a node may bank the road, in degrees either way.
+const BANK_MAX_DEG := 45.0
+## With `auto_bank`, each corner leans so a car at this speed, 108 km/h, needs no grip to take it,
+## up to `AUTO_BANK_MAX_DEG`.
+const AUTO_BANK_MPS := 30.0
+const AUTO_BANK_MAX_DEG := 30.0
+const _GRAVITY := 9.81
+## How the race rounds a corner, as race_track.gd's `_fillet_cut()` does: the curve starts this
+## share of the way along each road, no more than 80 m out, and a turn under ~3.5° stays sharp.
+const _CORNER_SHARE := 0.4
+const _CORNER_MAX_CUT := 80.0
+const _CORNER_MIN_TURN := 0.06
 
 const STYLE_CIRCUIT := "circuit"
 const STYLE_STREET := "street"
@@ -92,6 +104,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	result.name = str(root.get("name", ""))
 	result.style = str(root.get("style", STYLE_CIRCUIT))
 	result.jumps = bool(root.get("jumps", false))
+	result.auto_bank = bool(root.get("auto_bank", false))
 	result.loop = bool(root.get("loop", false))
 	result.laps = maxi(int(root.get("laps", 1)), 1)
 	result.sky = str(root.get("sky", "day"))
@@ -127,6 +140,7 @@ static func _empty_result() -> Dictionary:
 		"buildings": [], # scenery boxes: x, y, w, d, h, sign
 		"style": STYLE_CIRCUIT,
 		"jumps": false, # cars can leave the road where it drops away
+		"auto_bank": false, # every corner banks by how tight it is, over the nodes' own banks
 		"loop": false, # the course comes back round to the start, which is also the finish
 		"laps": 1, # times round a loop
 		"sky": "day", # a sky in skies.gd
@@ -171,6 +185,7 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 			"right": float(node.get("right", 0.0)),
 			"rail": bool(node.get("rail", false)),
 			"sharp": bool(node.get("sharp", false)),
+			"bank": _node_bank(node, id, result),
 		}
 		result.nodes[id] = parsed
 		result.node_order.append(id)
@@ -192,6 +207,42 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 		# A loop finishes on its start, so it has no finish node.
 		if not result.loop:
 			result.warnings.append("No finish node; using last node %d." % last_id)
+
+
+## How far the road leans across at a node, in degrees: above 0 the driver's left edge is
+## higher, for a bend to the right. Missing or not a number is flat; past `BANK_MAX_DEG` is held to it.
+static func _node_bank(node: Dictionary, id: int, result: Dictionary) -> float:
+	if not node.has("bank"):
+		return 0.0
+	var raw: Variant = node["bank"]
+	if typeof(raw) != TYPE_FLOAT and typeof(raw) != TYPE_INT:
+		result.warnings.append("Node %d has a non-numeric `bank`; using 0." % id)
+		return 0.0
+	var bank := float(raw)
+	if absf(bank) > BANK_MAX_DEG:
+		result.warnings.append("Node %d banks %s degrees; held to %d." % [id, str(bank), int(BANK_MAX_DEG)])
+		bank = clampf(bank, -BANK_MAX_DEG, BANK_MAX_DEG)
+	return bank
+
+
+## The bank `auto_bank` gives the corner at `corner`, coming from `before` and going on to `after`
+## (planar x, y), in degrees: into the turn, as steep as a car at `AUTO_BANK_MPS` needs to go round
+## the curve the race makes there with no grip, up to `AUTO_BANK_MAX_DEG`. 0 on a straight.
+static func auto_bank_deg(before: Vector2, corner: Vector2, after: Vector2) -> float:
+	var into := corner - before
+	var out := after - corner
+	if into.length() < 0.05 or out.length() < 0.05:
+		return 0.0
+	var turn := acos(clampf(into.normalized().dot(out.normalized()), -1.0, 1.0))
+	if turn < _CORNER_MIN_TURN:
+		return 0.0
+	var cut := minf(_CORNER_MAX_CUT, minf(into.length(), out.length()) * _CORNER_SHARE)
+	# The circle that meets both roads `cut` from the corner.
+	var radius := cut / tan(turn * 0.5)
+	var lean := minf(rad_to_deg(atan(AUTO_BANK_MPS * AUTO_BANK_MPS / (_GRAVITY * maxf(radius, 0.1)))), AUTO_BANK_MAX_DEG)
+	# The map's +Y is ahead and -X the driver's right, so a right turn crosses positive, and leaning
+	# into it lifts the left edge: a bank above 0.
+	return lean * signf(into.cross(out))
 
 
 ## Missing `z`, or a value that is not a number, is ground level.

@@ -10,10 +10,11 @@ extends RefCounted
 ## stays there and the second node stays on the +Y axis.
 
 const _Self := preload("res://scripts/track_maker_doc.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
-const _OWN_ROOT_KEYS := ["name", "style", "jumps", "loop", "laps", "sky", "nodes", "roads", "scenery"]
+const _OWN_ROOT_KEYS := ["name", "style", "jumps", "auto_bank", "loop", "laps", "sky", "nodes", "roads", "scenery"]
 const MAX_LAPS := 99
 ## Fields in meters, written with a decimal point even when whole.
 const _METRIC_KEYS := ["x", "y", "z", "width", "left", "right", "to", "w", "d", "h"]
@@ -23,7 +24,10 @@ const _CARRIED_NODE_KEYS := ["left", "right", "rail"]
 var name: String = DEFAULT_NAME
 var style: String = TrackFile.STYLE_CIRCUIT
 var jumps: bool = false
-## In race order. Each holds its file fields: id, x, y, and z, sharp, left, right, rail when set.
+## Every corner banks by how tight it is (TrackFile.auto_bank_deg()). The nodes' own banks are
+## kept, unused, so unticking it brings them back.
+var auto_bank: bool = false
+## In race order. Each holds its file fields: id, x, y, and z, sharp, bank, left, right, rail when set.
 var nodes: Array[Dictionary] = []
 ## `roads[i]` runs from `nodes[i]` to `nodes[i + 1]`: width, type, surface when set.
 var roads: Array[Dictionary] = []
@@ -54,6 +58,7 @@ func copy() -> _Self:
 	doc.name = name
 	doc.style = style
 	doc.jumps = jumps
+	doc.auto_bank = auto_bank
 	doc.loop = loop
 	doc.laps = laps
 	doc.sky = sky
@@ -104,6 +109,7 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 	doc.name = str(root.get("name", ""))
 	doc.style = str(parsed.style)
 	doc.jumps = bool(parsed.jumps)
+	doc.auto_bank = bool(parsed.auto_bank)
 	doc.loop = bool(parsed.loop)
 	doc.laps = int(parsed.laps)
 	doc.sky = str(parsed.sky)
@@ -175,6 +181,8 @@ func to_text() -> String:
 		root["style"] = style
 	if jumps:
 		root["jumps"] = true
+	if auto_bank:
+		root["auto_bank"] = true
 	if loop:
 		root["loop"] = true
 		root["laps"] = laps
@@ -290,6 +298,60 @@ func node_point(i: int) -> Vector2:
 
 func node_height(i: int) -> float:
 	return float(nodes[i].get("z", 0.0))
+
+
+## How the course turns at node `i`, as the sine of the angle: above 0 to the driver's right,
+## below 0 to the left, 0 on a straight and at the ends of a course that isn't a loop.
+func turn_at(i: int) -> float:
+	var last := nodes.size() - 1
+	var before := i - 1
+	var after := i + 1
+	if loop and last >= 2:
+		before = posmod(i - 1, last + 1)
+		after = posmod(i + 1, last + 1)
+	if before < 0 or after > last:
+		return 0.0
+	var into := node_point(i) - node_point(before)
+	var out := node_point(after) - node_point(i)
+	if into.is_zero_approx() or out.is_zero_approx():
+		return 0.0
+	# The map's +Y is ahead and -X the driver's right, so a right turn crosses positive.
+	return into.normalized().cross(out.normalized())
+
+
+## Node `i`'s bank in degrees: its own, or with `auto_bank` what its corner gives.
+func bank_at(i: int) -> float:
+	if not auto_bank:
+		return float(nodes[i].get("bank", 0.0))
+	var last := nodes.size() - 1
+	var before := i - 1
+	var after := i + 1
+	if loop and last >= 2:
+		before = posmod(i - 1, last + 1)
+		after = posmod(i + 1, last + 1)
+	if before < 0 or after > last:
+		return 0.0
+	return TrackFile.auto_bank_deg(node_point(before), node_point(i), node_point(after))
+
+
+## What node `i`'s bank does, for the panel: which edge is up and whether that leans into the bend.
+func bank_note(i: int) -> String:
+	var bank := bank_at(i)
+	if is_zero_approx(bank):
+		return "Flat across."
+	var edge := "Left edge up" if bank > 0.0 else "Right edge up"
+	var turn := turn_at(i)
+	if absf(turn) < 0.02:
+		return "%s, on a straight." % edge
+	var bend := "right-hand" if turn > 0.0 else "left-hand"
+	if (bank > 0.0) == (turn > 0.0):
+		return "%s: leans into this %s bend." % [edge, bend]
+	return "%s: leans out of this %s bend (off-camber)." % [edge, bend]
+
+
+## How high the Aqueduct's side on `key` ("left" or "right") stands at node `i`, in meters.
+func aqueduct_side_at(i: int, key: String) -> float:
+	return _TrackSides.aqueduct_side(float(nodes[i].get(key, 0.0)))
 
 
 ## Moves node `i`, held to where the race scene needs the start: the start stays at 0, 0

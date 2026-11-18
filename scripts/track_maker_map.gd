@@ -390,9 +390,17 @@ func _draw_nodes() -> void:
 			draw_arc(at, 7.0, 0.0, TAU, 20, _FINISH, 2.0)
 		if i == selected_node:
 			draw_arc(at, 9.0, 0.0, TAU, 24, _SELECTED, 2.0)
+		var labeled := (view_scale >= 0.4 and not crowded) or i == selected_node
 		var z := doc.node_height(i)
-		if not is_zero_approx(z) and ((view_scale >= 0.4 and not crowded) or i == selected_node):
+		if not is_zero_approx(z) and labeled:
 			draw_string(font, at + Vector2(9, -7), "%+.1f m" % z, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))
+		var bank := doc.bank_at(i)
+		if not is_zero_approx(bank) and labeled:
+			var edge := "L" if bank > 0.0 else "R"
+			draw_string(font, at + Vector2(9, 9), "%s up %d°" % [edge, roundi(absf(bank))], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))
+		if doc.style == TrackFile.STYLE_AQUEDUCT and labeled and (doc.nodes[i].has("left") or doc.nodes[i].has("right")):
+			var sides := "sides L %.1f R %.1f m" % [doc.aqueduct_side_at(i, "left"), doc.aqueduct_side_at(i, "right")]
+			draw_string(font, at + Vector2(9, 25), sides, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))
 	# Which way the race starts.
 	var start := to_screen(doc.node_point(0))
 	draw_colored_polygon(PackedVector2Array([start + Vector2(0, -22), start + Vector2(-7, -10), start + Vector2(7, -10)]), _START)

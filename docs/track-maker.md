@@ -8,7 +8,7 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 
 | Part | What it does |
 | --- | --- |
-| Map | The course from above, as the driver sees it: ahead from the start (+Y) is up and the driver's right (-X) is on the right. Roads are drawn at their width and colored by type. The start is green with an arrow, the finish red, sharp nodes are squares, and heights show beside the nodes. |
+| Map | The course from above, as the driver sees it: ahead from the start (+Y) is up and the driver's right (-X) is on the right. Roads are drawn at their width and colored by type. The start is green with an arrow, the finish red, sharp nodes are squares, and heights and banks show beside the nodes ("L up 25°" is a bank with the left edge up). |
 | Height strip | Each node's height along the course, start on the left. Drag a node up or down to set its height, in 0.1 m steps. The game rounds the grade through nodes that aren't sharp, so the real road is smoother than the strip's straight lines. |
 | Side panel | The file, the track's name, style and jumps, the tool, the selected node and the road leaving it, the scenery kind, and what the game's loader says about the course. |
 
@@ -17,6 +17,16 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 Tick "Loop (the finish is the start)" for a track you drive laps on, and set the laps below it. The road from the last node back to the start becomes part of the course: it is drawn as a road, clicking it splits it, and selecting the last node edits it as "Road to the next node". The start gets a red ring as the finish line too. The length shown is one lap, and the height strip ends on the start again.
 
 The road back to the start can come in at any angle. The race rounds that corner off behind the line, so the road is already on the start straight when it crosses it. Unticking Loop takes the road back to the start away again.
+
+## Banking
+
+Bank, under Sharp in the selected node's fields, leans the road across at that node, up to 45° either way, on any style. Above 0 the left edge is up, for a bend to the right; below 0 the right edge is up. The line under it says which edge is up and whether that leans into the node's bend or out of it (off-camber). The bank holds all round the node's corner and eases to the next node's over the straight between, so give a straight's middle node a bank of 0 if the straight should be flat. Tick "Auto bank" under the track's style to bank every corner by how tight it is instead (up to 30°, for 108 km/h); the Bank fields then show what each corner gets and can't be edited, and unticking it brings back the banks they had. How the game builds and drives a banked road is in [track-format.md](track-format.md#banking).
+
+## Aqueduct sides
+
+On an Aqueduct track, Left side and Right side, under Bank, set how high each side of the channel stands at the node, from Street Rod 2's 1.5 m up to 8 m. The floor stays flat and as wide. A higher side curves up from the floor into a wider bowl, about 6 m across for a 5 m side, and a car can ride up it round a corner as on a banked one. Raise the outside of a corner: the left for a bend to the right. The sides hold all round the node's corner and ease to the next node's over the straight between, as a bank does, and the map shows a node's sides once either is set. How they are built and driven is in [track-format.md](track-format.md#raised-aqueduct-sides).
+
+The same fields are a Mulholland track's hillsides and drops, so changing the style carries the heights over: a hillside becomes a side as high (up to 8 m), and a drop leaves Street Rod 2's side.
 
 ## Sky
 
