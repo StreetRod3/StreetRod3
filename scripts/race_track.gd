@@ -711,6 +711,8 @@ func _build_path() -> void:
 		bank_degs.append(float(node.get("bank", 0.0)))
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
+	if bool(data.get("auto_bank", false)):
+		_auto_banks(pts, bank_degs)
 	# Heights follow the nodes themselves, not the corner a loop adds below.
 	var nodes: Array[Vector3] = pts.duplicate()
 	# A loop comes back into its start already on the start straight: when the start node is a
@@ -786,6 +788,24 @@ func _build_path() -> void:
 	_fill_banks(curve_from, curve_to, bank_degs)
 	_fill_sides(data, path_ids)
 	_build_bins()
+
+
+## With `auto_bank`, each node's bank from how tight its corner is (TrackFile.auto_bank_deg()), in
+## place of its own. A loop's start, at both ends of `pts`, turns from the last node to the second.
+func _auto_banks(pts: Array[Vector3], degs: PackedFloat32Array) -> void:
+	var n := pts.size()
+	for i in n:
+		var before := i - 1
+		var after := i + 1
+		if _loop and (i == 0 or i == n - 1):
+			before = n - 2
+			after = 1
+		if before < 0 or after >= n:
+			degs[i] = 0.0
+			continue
+		degs[i] = TrackFile.auto_bank_deg(
+			Vector2(pts[before].x, pts[before].z), Vector2(pts[i].x, pts[i].z), Vector2(pts[after].x, pts[after].z)
+		)
 
 
 ## Each sample's bank from its nodes'. A node's bank holds all round its corner, from where the

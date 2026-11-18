@@ -13,7 +13,7 @@ const _Self := preload("res://scripts/track_maker_doc.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
-const _OWN_ROOT_KEYS := ["name", "style", "jumps", "loop", "laps", "sky", "nodes", "roads", "scenery"]
+const _OWN_ROOT_KEYS := ["name", "style", "jumps", "auto_bank", "loop", "laps", "sky", "nodes", "roads", "scenery"]
 const MAX_LAPS := 99
 ## Fields in meters, written with a decimal point even when whole.
 const _METRIC_KEYS := ["x", "y", "z", "width", "left", "right", "to", "w", "d", "h"]
@@ -23,6 +23,9 @@ const _CARRIED_NODE_KEYS := ["left", "right", "rail"]
 var name: String = DEFAULT_NAME
 var style: String = TrackFile.STYLE_CIRCUIT
 var jumps: bool = false
+## Every corner banks by how tight it is (TrackFile.auto_bank_deg()). The nodes' own banks are
+## kept, unused, so unticking it brings them back.
+var auto_bank: bool = false
 ## In race order. Each holds its file fields: id, x, y, and z, sharp, bank, left, right, rail when set.
 var nodes: Array[Dictionary] = []
 ## `roads[i]` runs from `nodes[i]` to `nodes[i + 1]`: width, type, surface when set.
@@ -54,6 +57,7 @@ func copy() -> _Self:
 	doc.name = name
 	doc.style = style
 	doc.jumps = jumps
+	doc.auto_bank = auto_bank
 	doc.loop = loop
 	doc.laps = laps
 	doc.sky = sky
@@ -104,6 +108,7 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 	doc.name = str(root.get("name", ""))
 	doc.style = str(parsed.style)
 	doc.jumps = bool(parsed.jumps)
+	doc.auto_bank = bool(parsed.auto_bank)
 	doc.loop = bool(parsed.loop)
 	doc.laps = int(parsed.laps)
 	doc.sky = str(parsed.sky)
@@ -175,6 +180,8 @@ func to_text() -> String:
 		root["style"] = style
 	if jumps:
 		root["jumps"] = true
+	if auto_bank:
+		root["auto_bank"] = true
 	if loop:
 		root["loop"] = true
 		root["laps"] = laps
@@ -311,9 +318,24 @@ func turn_at(i: int) -> float:
 	return into.normalized().cross(out.normalized())
 
 
+## Node `i`'s bank in degrees: its own, or with `auto_bank` what its corner gives.
+func bank_at(i: int) -> float:
+	if not auto_bank:
+		return float(nodes[i].get("bank", 0.0))
+	var last := nodes.size() - 1
+	var before := i - 1
+	var after := i + 1
+	if loop and last >= 2:
+		before = posmod(i - 1, last + 1)
+		after = posmod(i + 1, last + 1)
+	if before < 0 or after > last:
+		return 0.0
+	return TrackFile.auto_bank_deg(node_point(before), node_point(i), node_point(after))
+
+
 ## What node `i`'s bank does, for the panel: which edge is up and whether that leans into the bend.
 func bank_note(i: int) -> String:
-	var bank := float(nodes[i].get("bank", 0.0))
+	var bank := bank_at(i)
 	if is_zero_approx(bank):
 		return "Flat across."
 	var edge := "Left edge up" if bank > 0.0 else "Right edge up"

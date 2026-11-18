@@ -394,7 +394,7 @@ func _draw_nodes() -> void:
 		var z := doc.node_height(i)
 		if not is_zero_approx(z) and labeled:
 			draw_string(font, at + Vector2(9, -7), "%+.1f m" % z, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))
-		var bank := float(doc.nodes[i].get("bank", 0.0))
+		var bank := doc.bank_at(i)
 		if not is_zero_approx(bank) and labeled:
 			var edge := "L" if bank > 0.0 else "R"
 			draw_string(font, at + Vector2(9, 9), "%s up %d°" % [edge, roundi(absf(bank))], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(_CREAM, 0.8))

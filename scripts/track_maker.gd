@@ -60,6 +60,7 @@ var _status_label: Label
 var _name_edit: LineEdit
 var _style_option: OptionButton
 var _jumps_check: CheckBox
+var _auto_bank_check: CheckBox
 var _loop_check: CheckBox
 var _laps_spin: SpinBox
 var _laps_row: HBoxContainer
@@ -231,6 +232,10 @@ func _build_track_section(box: VBoxContainer) -> void:
 	_jumps_check.text = "Jumps (circuit only)"
 	_jumps_check.toggled.connect(_on_jumps_toggled)
 	box.add_child(_jumps_check)
+	_auto_bank_check = CheckBox.new()
+	_auto_bank_check.text = "Auto bank (each corner by how tight it is)"
+	_auto_bank_check.toggled.connect(_on_auto_bank_toggled)
+	box.add_child(_auto_bank_check)
 	_loop_check = CheckBox.new()
 	_loop_check.text = "Loop (the finish is the start)"
 	_loop_check.toggled.connect(_on_loop_toggled)
@@ -486,6 +491,7 @@ func _refresh_track_fields() -> void:
 	_style_option.select(maxi(_STYLES.find(doc.style), 0))
 	_jumps_check.set_pressed_no_signal(doc.jumps)
 	_jumps_check.disabled = doc.style != TrackFile.STYLE_CIRCUIT and not doc.jumps
+	_auto_bank_check.set_pressed_no_signal(doc.auto_bank)
 	_loop_check.set_pressed_no_signal(doc.loop)
 	_laps_spin.set_value_no_signal(doc.laps)
 	_laps_row.visible = doc.loop
@@ -513,7 +519,9 @@ func _refresh_selection_fields() -> void:
 		_y_spin.editable = i > 0
 		_z_spin.set_value_no_signal(doc.node_height(i))
 		_sharp_check.set_pressed_no_signal(bool(doc.nodes[i].get("sharp", false)))
-		_bank_spin.set_value_no_signal(float(doc.nodes[i].get("bank", 0.0)))
+		_bank_spin.set_value_no_signal(doc.bank_at(i))
+		# Auto bank sets it from the corner.
+		_bank_spin.editable = not doc.auto_bank
 		_bank_label.text = doc.bank_note(i)
 		_mountain_box.visible = doc.style == TrackFile.STYLE_MOUNTAIN
 		_left_spin.set_value_no_signal(float(doc.nodes[i].get("left", 0.0)))
@@ -577,6 +585,12 @@ func _on_style_selected(index: int) -> void:
 func _on_jumps_toggled(on: bool) -> void:
 	_begin_edit()
 	doc.jumps = on
+	_after_edit()
+
+
+func _on_auto_bank_toggled(on: bool) -> void:
+	_begin_edit()
+	doc.auto_bank = on
 	_after_edit()
 
 

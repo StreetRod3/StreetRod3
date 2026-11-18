@@ -225,6 +225,32 @@ func _banking() -> void:
 		assert(absf(felt - rise) < 0.01, "%s feels %s" % [style, felt])
 		other.free()
 	doc.style = TrackFile.STYLE_CIRCUIT
+	# Auto bank leans every corner into its turn by how tight it is, over the nodes' own banks,
+	# and the race builds the same.
+	doc.auto_bank = true
+	assert(is_equal_approx(doc.bank_at(1), TrackFile.AUTO_BANK_MAX_DEG), str(doc.bank_at(1)))
+	assert(doc.bank_at(3) > 0.0, "node 4 turns right too, where node 3's own bank was against it")
+	assert(is_zero_approx(doc.bank_at(0)), "the start is on a straight")
+	assert(doc.bank_note(3).contains("into this"), doc.bank_note(3))
+	var auto_text := doc.to_text()
+	assert(auto_text.contains("\"auto_bank\": true"))
+	assert(_Doc.from_text(auto_text).doc.auto_bank)
+	var gentle := TrackFile.auto_bank_deg(Vector2(0, 0), Vector2(0, 200), Vector2(-70, 400))
+	assert(gentle > 5.0 and gentle < 20.0, str(gentle))
+	assert(TrackFile.auto_bank_deg(Vector2(0, 0), Vector2(0, 200), Vector2(70, 400)) < 0.0, "a left bend leans left")
+	var auto_trk := OS.get_temp_dir().path_join("track_maker_test_auto_bank.trk")
+	var auto_file := FileAccess.open(auto_trk, FileAccess.WRITE)
+	auto_file.store_string(auto_text)
+	auto_file.close()
+	var auto_track: Node3D = load("res://scripts/race_track.gd").new()
+	auto_track.set(&"track_path", auto_trk)
+	auto_track.call(&"_build_path")
+	DirAccess.remove_absolute(auto_trk)
+	var auto_corner: Dictionary = auto_track.call(&"closest_sample", Vector3(0.0, 0.0, 200.0))
+	assert(is_equal_approx(float(auto_corner["bank"]), tan(deg_to_rad(TrackFile.AUTO_BANK_MAX_DEG))), str(auto_corner["bank"]))
+	auto_track.free()
+	doc.auto_bank = false
+	assert(is_equal_approx(doc.bank_at(2), -10.0), "unticking brings the node's own bank back")
 	# On the bank the tires hold more turning toward its low side, and the pull fades out at a stop.
 	assert(_RoadBank.load(rise, -10.0) > 1.0 and _RoadBank.load(rise, 10.0) < 1.0)
 	assert(is_equal_approx(_RoadBank.load(0.0, 10.0), 1.0))
