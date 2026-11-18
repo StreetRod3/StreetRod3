@@ -442,6 +442,8 @@ func _apply_body_paint(car_body: MeshInstance3D) -> void:
 		#car_body.connect(&"stl_loaded", Callable(self, "_on_car_body_stl_loaded").bind(car_body))
 
 func set_car_body_color(new_color: Color) -> void:
+	if not _body_paintable():
+		return
 	var color := new_color
 	color.a = 1.0
 	var named_body := find_child("body", true, false)
@@ -525,6 +527,14 @@ func _cove() -> Dictionary:
 
 func _has_cove() -> bool:
 	return not _cove().is_empty()
+
+
+## A car file can set model.paintable to false, and then its own colors stay.
+func _body_paintable() -> bool:
+	var model: Variant = _active_spec().get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return true
+	return bool((model as Dictionary).get("paintable", true))
 
 
 func _is_dash_gauge(node: Node) -> bool:

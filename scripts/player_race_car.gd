@@ -145,6 +145,8 @@ var _damage: _CarDamage = _CarDamage.new()
 ## The race console's `iddqd`: hits do no harm and the engine can't be blown. Its tires
 ## can't blow either; the race sees to that.
 var invincible := false
+## The hardest hit since the cruise last read it, in m/s. Zero when the last one did no harm.
+var reported_hit: float = 0.0
 var _arcade_active: bool = false
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _cam_rest := Transform3D.IDENTITY
@@ -152,6 +154,8 @@ var _chase_cam: _ChaseCamera = _ChaseCamera.new()
 var _parking := false
 ## Out of the race where it is, with nobody driving: wrecked, engine blown, or on a flat.
 var _halting := false
+## Pulled over. The car slides to a stop and the controls wait until the ticket is done.
+var _cited := false
 var _park_speed := 0.0
 var _park_slot := 0.0
 ## Body height on flat ground. Track height is added on top of this.
@@ -312,7 +316,7 @@ func get_forward_speed() -> float:
 
 
 func planar_velocity() -> Vector3:
-	if _halting:
+	if _halting or _cited:
 		return Vector3(velocity.x, 0.0, velocity.z)
 	if GameState.arcade_drive:
 		return _arcade.planar_velocity()
@@ -343,6 +347,7 @@ func apply_car_bump(offset: Vector3, new_velocity: Vector3, yaw_kick: float) -> 
 func take_hit(speed_change: float) -> bool:
 	if invincible or not _damage.take_hit(speed_change):
 		return false
+	reported_hit = maxf(reported_hit, speed_change)
 	var jolt := clampf(speed_change / _CarDamage.TOTAL_MPS, 0.3, 1.0)
 	_rumble.pulse(jolt * 0.6, jolt)
 	_chase_cam.jolt(speed_change)
@@ -729,6 +734,25 @@ func begin_park(slot: float) -> void:
 	_skids.end_strips()
 
 
+## Holds the car for a ticket. Driving comes back from end_cite().
+func cite() -> void:
+	if _cited or _parking or _halting:
+		return
+	_cited = true
+	_release_mouse_drive()
+	_burnout = 0.0
+	_clutch_rpm = 0.0
+	_clutch_kicks = false
+	_skids.end_strips()
+
+
+func end_cite() -> void:
+	if not _cited:
+		return
+	_cited = false
+	_resume_mouse_drive()
+
+
 ## Takes the controls away from a car whose race is over and lets it slide to a stop where it
 ## is, as a wreck or a car that lost its engine or a tire would. A car that finished parks instead.
 func halt() -> void:
@@ -764,6 +788,9 @@ func _halt_step(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
 	_poll_camera()
+	if _cited:
+		_halt_step(delta)
+		return
 	if _halting:
 		_halt_step(delta)
 		return
