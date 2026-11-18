@@ -316,7 +316,20 @@ func surface_roll(world: Vector3, yaw: float) -> float:
 	if _style != TrackFile.STYLE_AQUEDUCT and _style != TrackFile.STYLE_MOUNTAIN and not _banked:
 		return 0.0
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
+	if _jumps and _banked:
+		return atan(_rise_on_own_ground(world, across))
 	return atan2(surface_height(world + across) - surface_height(world - across), 1.6)
+
+
+## On a jump track, how much the ground rises a meter toward `across` (flat, either way of
+## `world`), on the ground a car at `world` is on: the road, or the grass beside it, never both. A car
+## beside a ramp's side would otherwise read the drop as a lean, and the bank's pull with it.
+func _rise_on_own_ground(world: Vector3, across: Vector3) -> float:
+	var i := _nearest_index(world)
+	var lateral := _lateral_at(i, world)
+	var ext := _sample_extents(i)
+	var ground := _GRASS_ONLY if lateral > ext.y or lateral < -ext.x else _ROAD_ONLY
+	return (_height_on(world + across, ground) - _height_on(world - across, ground)) / (2.0 * across.length())
 
 
 ## How steeply the ground rises across a car at `world` heading `yaw`: the rise a meter toward the
@@ -331,6 +344,8 @@ func bank_slope(world: Vector3, yaw: float) -> float:
 		var road_across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
 		return _banks[i] * road_across.dot(Vector3(cos(yaw), 0.0, -sin(yaw)))
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
+	if _jumps:
+		return _rise_on_own_ground(world, across)
 	return (surface_height(world + across) - surface_height(world - across)) / 1.6
 
 
@@ -1486,9 +1501,9 @@ func _add_side_grass_span(
 ## it there at `far_y`. Flat at the road's height where nothing is near; otherwise it slopes to
 ## halfway between the two roads' heights at the halfway line, where the grass from the other road
 ## meets it at the same height, and stays there over the overlap. A jump track's ramps don't lift it.
-## Beside a banked road's raised edge, `lift` over `road_y`, the grass starts at the edge and falls
+## Beside a banked road's raised edge, `lift` over `road_y`, the grass starts that much up and falls
 ## at `_BANK_EMBANK_SLOPE`, and by the halfway line at the latest, to where it would lie. On a jump
-## track it doesn't: there the ramp's side comes down to it.
+## track it starts from the flat grass there, and a ramp's side comes down to it.
 func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, out: float, lift: float = 0.0) -> float:
 	var base := minf(road_y, 0.0) if _jumps else road_y
 	var meet := (base + (minf(far_y, 0.0) if _jumps else far_y)) * 0.5
@@ -1505,9 +1520,10 @@ func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, 
 
 
 ## How far out from a banked road's raised edge, `lift` up, its grass comes back down, with the
-## halfway line at `half`. 0 where there is no slope: no lift, or a jump track.
+## halfway line at `half`. 0 where there is no lift. On a jump track too: the bank's rise has a slope
+## beside it, and only a ramp's own height over the grass is a wall.
 func _embank_run(lift: float, edge: float, half: float) -> float:
-	if lift <= 0.0 or _jumps:
+	if lift <= 0.0:
 		return 0.0
 	return minf(lift / _BANK_EMBANK_SLOPE, maxf(half - edge, 0.5))
 
@@ -1603,7 +1619,6 @@ func _build_road_mesh() -> void:
 func _build_ramp_sides() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var foot := -_TERRAIN_SINK
 	var walls := 0
 	for i in range(_pts.size() - 1):
 		var e0 := _sample_extents(i)
@@ -1612,13 +1627,19 @@ func _build_ramp_sides() -> void:
 		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1]))
 		for side: float in [-1.0, 1.0]:
 			# A banked road's raised edge has a side even where the road is at the grass.
-			var top0 := _road_point(i, side * (e0.y if side > 0.0 else e0.x))
-			var top1 := _road_point(i + 1, side * (e1.y if side > 0.0 else e1.x))
-			if top0.y <= _RAMP_SIDE_MIN_M and top1.y <= _RAMP_SIDE_MIN_M:
+			# Down to the grass, which beside a banked road's raised edge starts as high as the bank
+			# lifts it (`_side_grass_height()`): only the road's own height over the grass is a wall.
+			var lat0 := side * (e0.y if side > 0.0 else e0.x)
+			var lat1 := side * (e1.y if side > 0.0 else e1.x)
+			var top0 := _road_point(i, lat0)
+			var top1 := _road_point(i + 1, lat1)
+			var lift0 := _bank_lift(i, lat0)
+			var lift1 := _bank_lift(i + 1, lat1)
+			if top0.y - lift0 <= _RAMP_SIDE_MIN_M and top1.y - lift1 <= _RAMP_SIDE_MIN_M:
 				continue
 			walls += 1
-			var foot0 := Vector3(top0.x, foot, top0.z)
-			var foot1 := Vector3(top1.x, foot, top1.z)
+			var foot0 := Vector3(top0.x, lift0 - _TERRAIN_SINK, top0.z)
+			var foot1 := Vector3(top1.x, lift1 - _TERRAIN_SINK, top1.z)
 			var out := (r0 + r1).normalized() * side
 			_add_wall_tri(st, top0, foot0, top1, out)
 			_add_wall_tri(st, top1, foot0, foot1, out)

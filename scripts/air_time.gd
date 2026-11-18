@@ -91,6 +91,12 @@ func flight_pitch(pitch: float, speed: float, delta: float) -> float:
 	return lerp_angle(pitch, wanted, 1.0 - exp(-PITCH_RATE * delta))
 
 
+## The lean to give a car in the air: off a banked ramp it eases from the lean it took off with to
+## the ground's under it (`ground_roll`), so it comes down square to where it lands.
+func flight_roll(roll: float, ground_roll: float, delta: float) -> float:
+	return lerp_angle(roll, ground_roll, 1.0 - exp(-PITCH_RATE * delta))
+
+
 ## How hard a landing `impact` hits the car, as a change of speed for `car_damage.gd`.
 static func landing_harm(impact: float) -> float:
 	return maxf(impact - LANDING_SOAK_MPS, 0.0) * LANDING_HARM_SHARE

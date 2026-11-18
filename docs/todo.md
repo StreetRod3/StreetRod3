@@ -4,7 +4,7 @@ Ideas that are wanted but not built yet. Bugs go in [bugs.md](bugs.md). Remove a
 
 ## Track maker for players
 
-The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened from the main menu's ~ prompt, with a solo test drive. Wanted later: rivals on made tracks (how a rival drives a course it has never seen is the hard part), a way in for players and somewhere to race what they make, a 3D preview while editing, and drawing a curve that becomes nodes.
+The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened from the main menu's ~ prompt, with a solo test drive. Wanted later: rivals on made tracks (how a rival drives a course it has never seen is the hard part), and once they do, rivals that take banked corners as the player does, faster than flat ones, a way in for players and somewhere to race what they make, a 3D preview while editing, and drawing a curve that becomes nodes.
 
 - scenery available on all track types.
 - jumps available on all track types.

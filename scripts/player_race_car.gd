@@ -1240,6 +1240,8 @@ func _stick_to_road() -> void:
 		if _air.airborne:
 			global_position.y = _road_base_y + here
 			rotation.x = _air.flight_pitch(rotation.x, speed, delta)
+			if track.has_method(&"surface_roll"):
+				rotation.z = _air.flight_roll(rotation.z, track.surface_roll(global_position, rotation.y), delta)
 			return
 		if _air.impact > LANDING_FELT_MPS:
 			_land(_air.impact)
