@@ -8,7 +8,7 @@ The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened f
 
 - scenery available on all track types.
 - jumps available on all track types.
-- Correct how track connects to origin point on loop tracks
+- Track banking
 
 ## Make burnouts do something
 
