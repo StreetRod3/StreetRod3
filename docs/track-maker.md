@@ -8,7 +8,7 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 
 | Part | What it does |
 | --- | --- |
-| Map | The course from above, as the driver sees it: ahead from the start (+Y) is up and the driver's right (-X) is on the right. Roads are drawn at their width and colored by type. The start is green with an arrow, the finish red, sharp nodes are squares, and heights show beside the nodes. |
+| Map | The course from above, as the driver sees it: ahead from the start (+Y) is up and the driver's right (-X) is on the right. Roads are drawn at their width and colored by type. The start is green with an arrow, the finish red, sharp nodes are squares, and heights and banks show beside the nodes ("L up 25°" is a bank with the left edge up). |
 | Height strip | Each node's height along the course, start on the left. Drag a node up or down to set its height, in 0.1 m steps. The game rounds the grade through nodes that aren't sharp, so the real road is smoother than the strip's straight lines. |
 | Side panel | The file, the track's name, style and jumps, the tool, the selected node and the road leaving it, the scenery kind, and what the game's loader says about the course. |
 
@@ -17,6 +17,10 @@ It reads and writes `.trk` files, described in [track-format.md](track-format.md
 Tick "Loop (the finish is the start)" for a track you drive laps on, and set the laps below it. The road from the last node back to the start becomes part of the course: it is drawn as a road, clicking it splits it, and selecting the last node edits it as "Road to the next node". The start gets a red ring as the finish line too. The length shown is one lap, and the height strip ends on the start again.
 
 The road back to the start can come in at any angle. The race rounds that corner off behind the line, so the road is already on the start straight when it crosses it. Unticking Loop takes the road back to the start away again.
+
+## Banking
+
+Bank, under Sharp in the selected node's fields, leans the road across at that node, up to 45° either way, on a circuit track. Above 0 the left edge is up, for a bend to the right; below 0 the right edge is up. The line under it says which edge is up and whether that leans into the node's bend or out of it (off-camber). The bank holds all round the node's corner and eases to the next node's over the straight between, so give a straight's middle node a bank of 0 if the straight should be flat. On other styles the maker warns that the road won't bank. How the game builds and drives a banked road is in [track-format.md](track-format.md#banking).
 
 ## Sky
 

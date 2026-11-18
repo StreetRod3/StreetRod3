@@ -5,6 +5,7 @@ extends SceneTree
 
 const _Doc := preload("res://scripts/track_maker_doc.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
+const _RoadBank := preload("res://scripts/road_bank.gd")
 
 
 func _initialize() -> void:
@@ -15,6 +16,7 @@ func _run() -> void:
 	_round_trips()
 	_editing()
 	_loops()
+	_banking()
 	_test_drive_race_type()
 	print("track_maker_test: ok")
 	quit()
@@ -148,6 +150,65 @@ func _loops() -> void:
 	# Unticking drops the road back.
 	doc.set_loop(false)
 	assert(doc.loop_road.is_empty() and TrackFile.parse_text(doc.to_text()).errors.is_empty())
+
+
+## A node's bank is read, held to its limit, written back, explained in the panel, and built into
+## the road a car drives on.
+func _banking() -> void:
+	var doc := _Doc.blank()
+	for point: Vector2 in [Vector2(-200, 200), Vector2(-200, -150), Vector2(0, -150)]:
+		doc.append_node(point)
+	doc.set_loop(true)
+	# Node 2 turns right, toward -X: its left edge up leans into the bend.
+	doc.set_node_field(1, "bank", 25.0)
+	doc.set_node_field(2, "bank", -10.0)
+	assert(doc.bank_note(1).contains("into this right-hand bend"), doc.bank_note(1))
+	assert(doc.bank_note(2).contains("off-camber"), doc.bank_note(2))
+	assert(doc.bank_note(0) == "Flat across.")
+	assert(doc.check().warnings.is_empty(), str(doc.check().warnings))
+	var text := doc.to_text()
+	var parsed := TrackFile.parse_text(text)
+	assert(parsed.errors.is_empty(), str(parsed.errors))
+	assert(is_equal_approx(float(parsed.nodes[doc.node_id(1)]["bank"]), 25.0))
+	assert(is_equal_approx(float(parsed.nodes[doc.node_id(0)]["bank"]), 0.0))
+	assert(_Doc.from_text(text).doc.to_text() == text)
+	var steep := TrackFile.parse_text(text.replace("\"bank\": 25", "\"bank\": 60"))
+	assert(is_equal_approx(float(steep.nodes[doc.node_id(1)]["bank"]), TrackFile.BANK_MAX_DEG))
+	assert(not steep.warnings.is_empty())
+	# Only a circuit banks; the maker says so.
+	doc.style = TrackFile.STYLE_STREET
+	assert(doc.check().warnings.size() == 1, str(doc.check().warnings))
+	doc.style = TrackFile.STYLE_CIRCUIT
+	# The road: the low edge at the node's height, the other edge up, and the start flat.
+	var trk := OS.get_temp_dir().path_join("track_maker_test_bank.trk")
+	var out := FileAccess.open(trk, FileAccess.WRITE)
+	out.store_string(text)
+	out.close()
+	var track: Node3D = load("res://scripts/race_track.gd").new()
+	track.set(&"track_path", trk)
+	track.call(&"_build_path")
+	DirAccess.remove_absolute(trk)
+	var corner: Dictionary = track.call(&"closest_sample", Vector3(0.0, 0.0, 200.0))
+	var middle: Vector3 = corner["position"]
+	var right: Vector3 = corner["right"]
+	var rise := tan(deg_to_rad(25.0))
+	assert(is_equal_approx(float(corner["bank"]), rise), str(corner["bank"]))
+	var half := TrackFile.DEFAULT_WIDTH * 0.5
+	var low: float = track.call(&"surface_height", middle - right * (half - 0.5))
+	var high: float = track.call(&"surface_height", middle + right * (half - 0.5))
+	assert(absf(low - 0.5 * rise) < 0.05, str(low))
+	assert(absf(high - (2.0 * half - 0.5) * rise) < 0.05, str(high))
+	var slope: float = track.call(&"bank_slope", middle, float(corner["yaw"]))
+	assert(absf(slope - rise) < 0.01, str(slope))
+	# The bank eases in from the start line, so a meter on it has hardly begun.
+	assert(absf(float(track.call(&"surface_height", Vector3(2.0, 0.0, 1.0)))) < 0.01, "the start is flat")
+	assert(absf(float(track.call(&"bank_slope", Vector3(0.0, 0.0, 1.0), 0.0))) < 0.001)
+	track.free()
+	# On the bank the tires hold more turning toward its low side, and the pull fades out at a stop.
+	assert(_RoadBank.load(rise, -10.0) > 1.0 and _RoadBank.load(rise, 10.0) < 1.0)
+	assert(is_equal_approx(_RoadBank.load(0.0, 10.0), 1.0))
+	assert(is_equal_approx(_RoadBank.pull(rise, 30.0), -_RoadBank.GRAVITY * rise))
+	assert(is_zero_approx(_RoadBank.pull(rise, 0.0)))
 
 
 func _test_drive_race_type() -> void:

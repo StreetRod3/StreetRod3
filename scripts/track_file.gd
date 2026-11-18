@@ -26,6 +26,8 @@ const SURFACE_WET := "wet"
 const SURFACE_ICY := "icy"
 
 const DEFAULT_WIDTH := 8.0
+## The steepest a node may bank the road, in degrees either way.
+const BANK_MAX_DEG := 45.0
 
 const STYLE_CIRCUIT := "circuit"
 const STYLE_STREET := "street"
@@ -171,6 +173,7 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 			"right": float(node.get("right", 0.0)),
 			"rail": bool(node.get("rail", false)),
 			"sharp": bool(node.get("sharp", false)),
+			"bank": _node_bank(node, id, result),
 		}
 		result.nodes[id] = parsed
 		result.node_order.append(id)
@@ -192,6 +195,22 @@ static func _parse_nodes(root: Dictionary, result: Dictionary) -> void:
 		# A loop finishes on its start, so it has no finish node.
 		if not result.loop:
 			result.warnings.append("No finish node; using last node %d." % last_id)
+
+
+## How far the road leans across at a node, in degrees: above 0 the driver's left edge is
+## higher, for a bend to the right. Missing or not a number is flat; past `BANK_MAX_DEG` is held to it.
+static func _node_bank(node: Dictionary, id: int, result: Dictionary) -> float:
+	if not node.has("bank"):
+		return 0.0
+	var raw: Variant = node["bank"]
+	if typeof(raw) != TYPE_FLOAT and typeof(raw) != TYPE_INT:
+		result.warnings.append("Node %d has a non-numeric `bank`; using 0." % id)
+		return 0.0
+	var bank := float(raw)
+	if absf(bank) > BANK_MAX_DEG:
+		result.warnings.append("Node %d banks %s degrees; held to %d." % [id, str(bank), int(BANK_MAX_DEG)])
+		bank = clampf(bank, -BANK_MAX_DEG, BANK_MAX_DEG)
+	return bank
 
 
 ## Missing `z`, or a value that is not a number, is ground level.

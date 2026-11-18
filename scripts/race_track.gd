@@ -68,6 +68,8 @@ const _RAMP_STRADDLE_M := 0.15
 const _LIP_YELLOW := Color(0.95, 0.76, 0.08, 1)
 const _LIP_BAND_LONG := 1.6
 const _LIP_BAND_ACROSS := 1.0
+## The grass beside a banked road's raised edge falls this much a meter out, back to the road's foot.
+const _BANK_EMBANK_SLOPE := 0.5
 ## A rival holds to this over gravel: Street Rod 2's 59 mph.
 const GRAVEL_RIVAL_MPS := 59.0 * 0.44704
 ## A car this close to the middle of a flat rock on the road has hit it.
@@ -130,6 +132,11 @@ var _right_sides: PackedFloat32Array = PackedFloat32Array()
 var _rails: PackedByteArray = PackedByteArray()
 ## The road's height with its rises and dips averaged out, which ground far from it follows.
 var _far_ys: PackedFloat32Array = PackedFloat32Array()
+## Each sample's bank: how much the road rises a meter across toward its `lateral` side (the
+## driver's left), below 0 falling. The edge at the bottom stays at the road's height. All 0 but
+## on a circuit track whose nodes bank it (`_banked`).
+var _banks: PackedFloat32Array = PackedFloat32Array()
+var _banked: bool = false
 ## Where each node falls along the path.
 var _node_s: PackedFloat32Array = PackedFloat32Array()
 ## What a rival steers around, from the start: {s, to, low, high}, sorted by s.
@@ -237,6 +244,8 @@ func _height_on(world: Vector3, ground: int) -> float:
 		return 0.0
 	var i := _nearest_index(world)
 	var height := _pts[i].y
+	var bank := _banks[i] if _banked else 0.0
+	var half_w := _half_ws[i]
 	var best_d := INF
 	for j: int in [i - 1, i]:
 		if j < 0 or j + 1 >= _pts.size():
@@ -253,14 +262,19 @@ func _height_on(world: Vector3, ground: int) -> float:
 		if d < best_d:
 			best_d = d
 			height = lerpf(a.y, b.y, t)
+			if _banked:
+				bank = lerpf(_banks[j], _banks[j + 1], t)
+				half_w = lerpf(_half_ws[j], _half_ws[j + 1], t)
 	if not _street and _grass_sides.size() == 4 and _grass_sides[0].size() == _pts.size():
 		var lateral := _lateral_at(i, world)
 		var ext := _sample_extents(i)
 		var off := lateral > ext.y or lateral < -ext.x
 		if ground == _GRASS_ONLY or (ground == _ANY_GROUND and off):
 			if lateral >= 0.0:
-				return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], maxf(lateral, ext.y))
-			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], maxf(-lateral, ext.x))
+				return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], maxf(lateral, ext.y), _lift_for(bank, half_w, ext.y))
+			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], maxf(-lateral, ext.x), _lift_for(bank, half_w, -ext.x))
+	if _banked:
+		height += _lift_for(bank, half_w, _lateral_at(i, world))
 	return _side_ground_at(i, world, height)
 
 
@@ -280,10 +294,20 @@ func _lateral_at(i: int, world: Vector3) -> float:
 
 ## How far a car at `world` leans across the road, by the height either side of it, in radians.
 func surface_roll(world: Vector3, yaw: float) -> float:
-	if _style != TrackFile.STYLE_AQUEDUCT and _style != TrackFile.STYLE_MOUNTAIN:
+	if _style != TrackFile.STYLE_AQUEDUCT and _style != TrackFile.STYLE_MOUNTAIN and not _banked:
 		return 0.0
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
 	return atan2(surface_height(world + across) - surface_height(world - across), 1.6)
+
+
+## How steeply the ground rises across a car at `world` heading `yaw`: the rise a meter toward the
+## car's +X, on a banked circuit's road or the grass beside it. 0 on any other track, so the
+## driving models leave their own flat and sloped ground (the Aqueduct pushes with `bank_push()`).
+func bank_slope(world: Vector3, yaw: float) -> float:
+	if not _banked:
+		return 0.0
+	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
+	return (surface_height(world + across) - surface_height(world - across)) / 1.6
 
 
 ## What the Aqueduct's banks do to a car at `world`: sideways, toward the floor, in m/s.
@@ -593,10 +617,13 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 	var hw := ROAD_HALF_W
 	var surface := TrackFile.SURFACE_REGULAR
 	var rtype := TrackFile.ROAD_REGULAR
+	var bank := 0.0
 	if index >= 0 and index < _half_ws.size():
 		hw = _half_ws[index]
 		surface = _surfaces[index]
 		rtype = _road_types[index]
+	if index >= 0 and index < _banks.size():
+		bank = _banks[index]
 	var extents := TrackFile.driveable_extents(hw * 2.0, rtype)
 	return {
 		"position": pos,
@@ -613,6 +640,7 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 		"gravel": rtype == TrackFile.ROAD_GRAVEL,
 		"obstacle_left": TrackFile.obstacle_left(rtype),
 		"obstacle_right": TrackFile.obstacle_right(rtype),
+		"bank": bank,
 	}
 
 
@@ -649,11 +677,13 @@ func _build_path() -> void:
 	var n := path_ids.size()
 	var pts: Array[Vector3] = []
 	var sharp := PackedByteArray()
+	var bank_degs := PackedFloat32Array()
 	var roads: Array[Dictionary] = []
 	for i in n:
 		var node: Dictionary = data.nodes[int(path_ids[i])]
 		pts.append(TrackFile.world_position(node))
 		sharp.append(1 if bool(node.get("sharp", false)) else 0)
+		bank_degs.append(float(node.get("bank", 0.0)))
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
 	# Heights follow the nodes themselves, not the corner a loop adds below.
@@ -668,6 +698,8 @@ func _build_path() -> void:
 		if set_back_cut >= 0.05:
 			var out_dir := Vector3(pts[1].x - pts[0].x, 0.0, pts[1].z - pts[0].z).normalized()
 			pts.insert(n - 1, pts[0] - out_dir * set_back_cut)
+			# The corner is the start's, so it banks as the start does.
+			bank_degs.insert(n - 1, bank_degs[n - 1])
 			roads.append(roads[n - 2])
 			n += 1
 			set_back = true
@@ -683,6 +715,9 @@ func _build_path() -> void:
 	_pos = pts[0]
 	_yaw = atan2(pts[1].x - pts[0].x, pts[1].z - pts[0].z)
 	_push_sample()
+	# Where each point's corner begins and ends along the path; a point with no corner is both.
+	var curve_from := PackedFloat32Array([0.0])
+	var curve_to := PackedFloat32Array([0.0])
 	for i in range(1, n - 1):
 		var in_dir := (pts[i] - pts[i - 1])
 		in_dir.y = 0.0
@@ -696,6 +731,8 @@ func _build_path() -> void:
 		_apply_road(roads[i - 1])
 		if cut < 0.05:
 			_append_to(pts[i])
+			curve_from.append(_length)
+			curve_to.append(_length)
 			continue
 		var p0 := pts[i] - in_dir * cut
 		var p2 := pts[i] + out_dir * cut
@@ -706,9 +743,13 @@ func _build_path() -> void:
 		if out_span > 0.0001:
 			p2.y = lerpf(pts[i].y, pts[i + 1].y, cut / out_span)
 		_append_to(p0)
+		curve_from.append(_length)
 		_append_bezier(p0, pts[i], p2, roads[i - 1], roads[i])
+		curve_to.append(_length)
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
+	curve_from.append(_length)
+	curve_to.append(_length)
 	if _loop:
 		# Exactly where the lap began, heading the same way.
 		_pts[_pts.size() - 1] = _pts[0]
@@ -717,8 +758,54 @@ func _build_path() -> void:
 	_race_length = _length
 	if not _loop:
 		_append_runoff()
+	_fill_banks(curve_from, curve_to, bank_degs)
 	_fill_sides(data, path_ids)
 	_build_bins()
+
+
+## Each sample's bank from its nodes'. A node's bank holds all round its corner, from where the
+## curve begins to where it ends, and eases to the next node's over the straight between, so a
+## car turns in on a road already banked. Past the finish it holds. Only a circuit track banks.
+func _fill_banks(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, degs: PackedFloat32Array) -> void:
+	_banks.resize(_pts.size())
+	_banks.fill(0.0)
+	_banked = false
+	if _style != TrackFile.STYLE_CIRCUIT:
+		return
+	for deg: float in degs:
+		if not is_zero_approx(deg):
+			_banked = true
+	if not _banked:
+		return
+	var last := mini(degs.size(), curve_from.size()) - 1
+	var k := 0
+	for i in _pts.size():
+		var s := _dists[i]
+		while k < last and curve_from[k + 1] <= s:
+			k += 1
+		var deg := degs[k]
+		if s > curve_to[k] and k < last:
+			var t := smoothstep(curve_to[k], curve_from[k + 1], s)
+			deg = lerpf(degs[k], degs[k + 1], t)
+		_banks[i] = tan(deg_to_rad(deg))
+
+
+## How far the road at sample `i` stands over its middle's height, `lateral` meters from the middle
+## (above 0 toward the driver's left). The low edge of a banked road is at the road's height.
+func _bank_lift(i: int, lateral: float) -> float:
+	if not _banked or i < 0 or i >= _banks.size():
+		return 0.0
+	return _lift_for(_banks[i], _half_ws[i], lateral)
+
+
+static func _lift_for(bank: float, half_w: float, lateral: float) -> float:
+	return lateral * bank + half_w * absf(bank)
+
+
+## The point on the road at sample `i`, `lateral` meters across from its middle.
+func _road_point(i: int, lateral: float) -> Vector3:
+	var right := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+	return _pts[i] + right * lateral + Vector3.UP * _bank_lift(i, lateral)
 
 
 ## Each sample's side heights, running straight from node to node. Past the last node they hold.
@@ -1233,10 +1320,13 @@ func _build_side_grass() -> void:
 		for i in range(_pts.size() - 1):
 			var e0 := _sample_extents(i)
 			var e1 := _sample_extents(i + 1)
+			var edge0 := e0.y if side > 0.0 else e0.x
+			var edge1 := e1.y if side > 0.0 else e1.x
 			_add_side_grass_span(
 				st, side,
-				_pts[i], _yaws[i], e0.y if side > 0.0 else e0.x, reach[i], far_y[i],
-				_pts[i + 1], _yaws[i + 1], e1.y if side > 0.0 else e1.x, reach[i + 1], far_y[i + 1]
+				_pts[i], _yaws[i], edge0, reach[i], far_y[i],
+				_pts[i + 1], _yaws[i + 1], edge1, reach[i + 1], far_y[i + 1],
+				_bank_lift(i, side * edge0), _bank_lift(i + 1, side * edge1)
 			)
 		if _run_in_m > 0.0:
 			var back := _pts[0] - Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0])) * _run_in_m
@@ -1292,20 +1382,26 @@ func _add_side_grass_span(
 	st: SurfaceTool,
 	side: float,
 	p0: Vector3, yaw0: float, edge0: float, reach0: float, far_y0: float,
-	p1: Vector3, yaw1: float, edge1: float, reach1: float, far_y1: float
+	p1: Vector3, yaw1: float, edge1: float, reach1: float, far_y1: float,
+	lift0: float = 0.0, lift1: float = 0.0
 ) -> void:
 	var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0)) * side
 	var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1)) * side
 	var outs0: Array[float] = [edge0, maxf(reach0 - _SIDE_OVERLAP_M, edge0), maxf(reach0, edge0)]
 	var outs1: Array[float] = [edge1, maxf(reach1 - _SIDE_OVERLAP_M, edge1), maxf(reach1, edge1)]
-	for k in 2:
+	if _banked:
+		# Where the bank's grass comes back down to the ground. Both ends need it, so a stretch
+		# with no lift at one end has a narrow strip there.
+		outs0.insert(1, minf(edge0 + maxf(_embank_run(lift0, edge0, outs0[1]), 0.05), outs0[1]))
+		outs1.insert(1, minf(edge1 + maxf(_embank_run(lift1, edge1, outs1[1]), 0.05), outs1[1]))
+	for k in outs0.size() - 1:
 		var pts0: Array[Vector3] = []
 		var pts1: Array[Vector3] = []
 		for out: float in [outs0[k], outs0[k + 1]]:
-			var y := _side_grass_height(p0.y, edge0, reach0, far_y0, out) - _TERRAIN_SINK
+			var y := _side_grass_height(p0.y, edge0, reach0, far_y0, out, lift0) - _TERRAIN_SINK
 			pts0.append(Vector3(p0.x, y, p0.z) + r0 * out)
 		for out: float in [outs1[k], outs1[k + 1]]:
-			var y := _side_grass_height(p1.y, edge1, reach1, far_y1, out) - _TERRAIN_SINK
+			var y := _side_grass_height(p1.y, edge1, reach1, far_y1, out, lift1) - _TERRAIN_SINK
 			pts1.append(Vector3(p1.x, y, p1.z) + r1 * out)
 		# The road mesh's order, the point on the driver's right first, so the grass faces up.
 		var a0 := pts0[0] if side > 0.0 else pts0[1]
@@ -1321,15 +1417,30 @@ func _add_side_grass_span(
 ## it there at `far_y`. Flat at the road's height where nothing is near; otherwise it slopes to
 ## halfway between the two roads' heights at the halfway line, where the grass from the other road
 ## meets it at the same height, and stays there over the overlap. A jump track's ramps don't lift it.
-func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, out: float) -> float:
+## Beside a banked road's raised edge, `lift` over `road_y`, the grass starts at the edge and falls
+## at `_BANK_EMBANK_SLOPE`, and by the halfway line at the latest, to where it would lie. On a jump
+## track it doesn't: there the ramp's side comes down to it.
+func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, out: float, lift: float = 0.0) -> float:
 	var base := minf(road_y, 0.0) if _jumps else road_y
 	var meet := (base + (minf(far_y, 0.0) if _jumps else far_y)) * 0.5
 	var half := maxf(reach - _SIDE_OVERLAP_M, edge)
+	var bank_up := 0.0
+	var run := _embank_run(lift, edge, half)
+	if run > 0.0:
+		bank_up = lift * clampf(1.0 - (out - edge) / run, 0.0, 1.0)
 	if out >= half:
-		return meet
+		return meet + bank_up
 	if out <= edge:
-		return base
-	return lerpf(base, meet, (out - edge) / (half - edge))
+		return base + bank_up
+	return lerpf(base, meet, (out - edge) / (half - edge)) + bank_up
+
+
+## How far out from a banked road's raised edge, `lift` up, its grass comes back down, with the
+## halfway line at `half`. 0 where there is no slope: no lift, or a jump track.
+func _embank_run(lift: float, edge: float, half: float) -> float:
+	if lift <= 0.0 or _jumps:
+		return 0.0
+	return minf(lift / _BANK_EMBANK_SLOPE, maxf(half - edge, 0.5))
 
 
 ## Road height at a grass vertex. Coarser than the driving query, and local to the mesh build.
@@ -1397,10 +1508,10 @@ func _build_road_mesh() -> void:
 		var e1 := TrackFile.driveable_extents(hw1 * 2.0, t1)
 		var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0))
 		var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1))
-		var l0 := _pts[i] - r0 * e0.x
-		var rr0 := _pts[i] + r0 * e0.y
-		var l1 := _pts[i + 1] - r1 * e1.x
-		var rr1 := _pts[i + 1] + r1 * e1.y
+		var l0 := _pts[i] - r0 * e0.x + Vector3.UP * _bank_lift(i, -e0.x)
+		var rr0 := _pts[i] + r0 * e0.y + Vector3.UP * _bank_lift(i, e0.y)
+		var l1 := _pts[i + 1] - r1 * e1.x + Vector3.UP * _bank_lift(i + 1, -e1.x)
+		var rr1 := _pts[i + 1] + r1 * e1.y + Vector3.UP * _bank_lift(i + 1, e1.y)
 		var v := _dists[i] * 0.15
 		var v1 := _dists[i + 1] * 0.15
 		_add_tri(st, l0, rr0, rr1, Vector2(0, v), Vector2(1, v), Vector2(1, v1))
@@ -1426,16 +1537,17 @@ func _build_ramp_sides() -> void:
 	var foot := -_TERRAIN_SINK
 	var walls := 0
 	for i in range(_pts.size() - 1):
-		if _pts[i].y <= _RAMP_SIDE_MIN_M and _pts[i + 1].y <= _RAMP_SIDE_MIN_M:
-			continue
-		walls += 1
 		var e0 := _sample_extents(i)
 		var e1 := _sample_extents(i + 1)
 		var r0 := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
 		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1]))
 		for side: float in [-1.0, 1.0]:
-			var top0 := _pts[i] + r0 * side * (e0.y if side > 0.0 else e0.x)
-			var top1 := _pts[i + 1] + r1 * side * (e1.y if side > 0.0 else e1.x)
+			# A banked road's raised edge has a side even where the road is at the grass.
+			var top0 := _road_point(i, side * (e0.y if side > 0.0 else e0.x))
+			var top1 := _road_point(i + 1, side * (e1.y if side > 0.0 else e1.x))
+			if top0.y <= _RAMP_SIDE_MIN_M and top1.y <= _RAMP_SIDE_MIN_M:
+				continue
+			walls += 1
 			var foot0 := Vector3(top0.x, foot, top0.z)
 			var foot1 := Vector3(top1.x, foot, top1.z)
 			var out := (r0 + r1).normalized() * side
@@ -1479,15 +1591,17 @@ func _build_lip_bands() -> void:
 		var foot_p: Vector3 = foot["position"]
 		var yaw: float = top["yaw"]
 		var grade := atan2(top_p.y - foot_p.y, Vector2(top_p.x - foot_p.x, top_p.z - foot_p.z).length())
-		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -grade)
+		var lip_i := _index_at_distance(lip_s)
+		var bank := _banks[lip_i] if _banked else 0.0
+		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, atan(bank)) * Basis(Vector3.RIGHT, -grade)
 		var middle := (top_p + foot_p) * 0.5 + Vector3.UP * 0.02
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-		var ext := _sample_extents(_index_at_distance(lip_s))
+		var ext := _sample_extents(lip_i)
 		var count := int(floor((ext.x + ext.y) / _LIP_BAND_ACROSS))
 		var from := -ext.x + ((ext.x + ext.y) - count * _LIP_BAND_ACROSS) * 0.5
 		for k in count:
 			var across := from + (float(k) + 0.5) * _LIP_BAND_ACROSS
-			var xform := Transform3D(basis, middle + right * across)
+			var xform := Transform3D(basis, middle + right * across + Vector3.UP * _bank_lift(lip_i, across))
 			if k % 2 == 0:
 				yellow_xforms.append(xform)
 			else:
@@ -1665,6 +1779,7 @@ func _add_curb_run(st: SurfaceTool, side: float, a: int, b: int, closed: bool, c
 		var yaw: float = _yaws[i]
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
 		var p := _pts[i] + right * side * _edge_extent(i, side)
+		p.y += _bank_lift(i, side * _edge_extent(i, side))
 		if not edge.is_empty():
 			var step := p - edge[edge.size() - 1]
 			if step.dot(Vector3(sin(yaw), 0.0, cos(yaw))) < 0.01:
@@ -1771,7 +1886,7 @@ func _add_perp_curbs(
 	var step := span / float(count)
 	for k in count:
 		var lat := a + (k + 0.5) * step
-		_add_curb_stone(red_xforms, white_xforms, stone_i, basis, _pts[index] + along * lat)
+		_add_curb_stone(red_xforms, white_xforms, stone_i, basis, _road_point(index, side * lat))
 		stone_i += 1
 	return stone_i
 
@@ -1800,12 +1915,12 @@ func _build_obstacles() -> void:
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
 		if TrackFile.obstacle_left(rtype):
 			_place_edge_barrier(
-				body, body_xforms, stripe_xforms, _pts[i], basis, -right,
+				body, body_xforms, stripe_xforms, _pts[i] + Vector3.UP * _bank_lift(i, -(ext.x + BARRIER_W * 0.5)), basis, -right,
 				ext.x, BARRIER_L, BARRIER_H, BARRIER_W
 			)
 		if TrackFile.obstacle_right(rtype):
 			_place_edge_barrier(
-				body, body_xforms, stripe_xforms, _pts[i], basis, right,
+				body, body_xforms, stripe_xforms, _pts[i] + Vector3.UP * _bank_lift(i, ext.y + BARRIER_W * 0.5), basis, right,
 				ext.y, BARRIER_L, BARRIER_H, BARRIER_W
 			)
 		i += stride
@@ -1854,16 +1969,14 @@ func _build_narrow_signs() -> void:
 		var right_ext := float(sample["right_ext"])
 		var left_n := TrackFile.narrows_left(cur_t)
 		var right_n := TrackFile.narrows_right(cur_t)
-		_add_narrow_sign(
-			root, "NarrowSignL%d" % sign_i,
-			pos - right_v * (left_ext + OUTSET),
-			yaw + TOE, left_n, right_n
-		)
-		_add_narrow_sign(
-			root, "NarrowSignR%d" % sign_i,
-			pos + right_v * (right_ext + OUTSET),
-			yaw - TOE, left_n, right_n
-		)
+		var at_l := pos - right_v * (left_ext + OUTSET)
+		var at_r := pos + right_v * (right_ext + OUTSET)
+		# Beside a banked road, on the grass where it stands.
+		if _banked:
+			at_l.y = surface_height(at_l)
+			at_r.y = surface_height(at_r)
+		_add_narrow_sign(root, "NarrowSignL%d" % sign_i, at_l, yaw + TOE, left_n, right_n)
+		_add_narrow_sign(root, "NarrowSignR%d" % sign_i, at_r, yaw - TOE, left_n, right_n)
 		sign_i += 1
 
 
@@ -2061,8 +2174,7 @@ func _place_perp_barriers(
 	barrier_w: float
 ) -> void:
 	var yaw: float = _yaws[index]
-	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-	var along := right if on_right else -right
+	var side := 1.0 if on_right else -1.0
 	var basis := Basis(Vector3.UP, yaw + PI * 0.5)
 	var a := minf(ext_a, ext_b)
 	var b := maxf(ext_a, ext_b)
@@ -2071,7 +2183,7 @@ func _place_perp_barriers(
 	var step := span / float(count)
 	for k in count:
 		var lat := a + (k + 0.5) * step
-		var pos := _pts[index] + along * lat + Vector3(0.0, barrier_h * 0.5, 0.0)
+		var pos := _road_point(index, side * lat) + Vector3(0.0, barrier_h * 0.5, 0.0)
 		var xf := Transform3D(basis, pos)
 		body_xforms.append(xf)
 		stripe_xforms.append(Transform3D(basis, pos + Vector3(0.0, 0.18, 0.0)))
@@ -2080,7 +2192,7 @@ func _place_perp_barriers(
 	box.size = Vector3(barrier_w, barrier_h, span)
 	hit.shape = box
 	var mid := (a + b) * 0.5
-	hit.transform = Transform3D(basis, _pts[index] + along * mid + Vector3(0.0, barrier_h * 0.5, 0.0))
+	hit.transform = Transform3D(basis, _road_point(index, side * mid) + Vector3(0.0, barrier_h * 0.5, 0.0))
 	body.add_child(hit)
 
 
@@ -2094,8 +2206,23 @@ func _build_finish_line() -> void:
 	root.name = "FinishLineVisual"
 	root.transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	add_child(root)
-	_add_checkered_strip(root, float(sample["left_ext"]), float(sample["right_ext"]))
-	_add_finish_gantry(root)
+	var left_ext := float(sample["left_ext"])
+	var right_ext := float(sample["right_ext"])
+	var bank := float(sample["bank"])
+	if is_zero_approx(bank):
+		_add_checkered_strip(root, left_ext, right_ext)
+		_add_finish_gantry(root)
+		return
+	# On a banked road the line leans with the road, and the gantry stands as much higher as the
+	# road's raised edge, so the banner still clears a car there.
+	var lean := atan(bank)
+	var line := Node3D.new()
+	line.name = "BankedLine"
+	line.transform = Transform3D(Basis(Vector3.BACK, lean), Vector3.UP * _lift_for(bank, float(sample["half_width"]), 0.0))
+	root.add_child(line)
+	_add_checkered_strip(line, left_ext / cos(lean), right_ext / cos(lean))
+	var high := maxf(_lift_for(bank, float(sample["half_width"]), -left_ext), _lift_for(bank, float(sample["half_width"]), right_ext))
+	_add_finish_gantry(root, high)
 
 
 ## The checkered line across the road, 30 m at most and no wider than the road, so on a narrow
@@ -2132,21 +2259,22 @@ func _add_checkered_strip(parent: Node3D, left_ext: float, right_ext: float) -> 
 	_add_box_multimesh(parent, "CheckWhite", Vector3(square_w, 0.03, SQUARE), CHECK_WHITE, white_xforms)
 
 
-func _add_finish_gantry(parent: Node3D) -> void:
-	const POST_H := 4.4
+## `rise` stands it that much taller, for a banked road's raised edge.
+func _add_finish_gantry(parent: Node3D, rise: float = 0.0) -> void:
 	const POST_W := 0.22
 	const BANNER_W := 38.6
 	const BANNER_H := 0.9
+	var post_h := 4.4 + rise
 	var post_x := BANNER_W * 0.5
 	var post_mat := _make_mat(POST_COLOR, 0.45)
-	_add_box(parent, "PostL", Vector3(POST_W, POST_H, POST_W), post_mat, Vector3(-post_x, POST_H * 0.5, 0.0))
-	_add_box(parent, "PostR", Vector3(POST_W, POST_H, POST_W), post_mat, Vector3(post_x, POST_H * 0.5, 0.0))
-	_add_box(parent, "Crossbar", Vector3(BANNER_W, POST_W, POST_W), post_mat, Vector3(0.0, POST_H, 0.0))
+	_add_box(parent, "PostL", Vector3(POST_W, post_h, POST_W), post_mat, Vector3(-post_x, post_h * 0.5, 0.0))
+	_add_box(parent, "PostR", Vector3(POST_W, post_h, POST_W), post_mat, Vector3(post_x, post_h * 0.5, 0.0))
+	_add_box(parent, "Crossbar", Vector3(BANNER_W, POST_W, POST_W), post_mat, Vector3(0.0, post_h, 0.0))
 	const BCOLS := 16
 	const BROWS := 2
 	var cell_w := BANNER_W / float(BCOLS)
 	var cell_h := BANNER_H / float(BROWS)
-	var banner_y := POST_H - POST_W - BANNER_H * 0.5 - 0.04
+	var banner_y := post_h - POST_W - BANNER_H * 0.5 - 0.04
 	var black_xforms: Array[Transform3D] = []
 	var white_xforms: Array[Transform3D] = []
 	for row in BROWS:

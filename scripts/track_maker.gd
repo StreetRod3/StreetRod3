@@ -76,6 +76,8 @@ var _x_spin: SpinBox
 var _y_spin: SpinBox
 var _z_spin: SpinBox
 var _sharp_check: CheckBox
+var _bank_spin: SpinBox
+var _bank_label: Label
 var _mountain_box: VBoxContainer
 var _left_spin: SpinBox
 var _right_spin: SpinBox
@@ -294,6 +296,11 @@ func _build_node_section(box: VBoxContainer) -> void:
 	_sharp_check.text = "Sharp (the grade changes here at once)"
 	_sharp_check.toggled.connect(_edit_node_flag.bind("sharp"))
 	_node_box.add_child(_sharp_check)
+	_bank_spin = _spin(-TrackFile.BANK_MAX_DEG, TrackFile.BANK_MAX_DEG, 1.0, "°", _edit_node.bind("bank"))
+	_bank_spin.custom_arrow_step = 1.0
+	_node_box.add_child(_row("Bank", _bank_spin))
+	_bank_label = _label("", 13, _DIM)
+	_node_box.add_child(_bank_label)
 	_mountain_box = VBoxContainer.new()
 	_node_box.add_child(_mountain_box)
 	_left_spin = _spin(-100.0, 100.0, 0.1, " m", _edit_node.bind("left"))
@@ -506,6 +513,8 @@ func _refresh_selection_fields() -> void:
 		_y_spin.editable = i > 0
 		_z_spin.set_value_no_signal(doc.node_height(i))
 		_sharp_check.set_pressed_no_signal(bool(doc.nodes[i].get("sharp", false)))
+		_bank_spin.set_value_no_signal(float(doc.nodes[i].get("bank", 0.0)))
+		_bank_label.text = doc.bank_note(i)
 		_mountain_box.visible = doc.style == TrackFile.STYLE_MOUNTAIN
 		_left_spin.set_value_no_signal(float(doc.nodes[i].get("left", 0.0)))
 		_right_spin.set_value_no_signal(float(doc.nodes[i].get("right", 0.0)))

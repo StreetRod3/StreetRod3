@@ -60,6 +60,7 @@ Unknown root fields are ignored. A race course can leave `pois` out.
 | `left`, `right` | no | `0` | On a `mountain` track, the full height of a hillside (above 0) or drop (below 0) on the driver's left or right, in meters. It runs straight from node to node. |
 | `rail` | no | `false` | On a `mountain` track, a guard rail on the driver's right from this node to the next. |
 | `sharp` | no | `false` | The road's grade changes here at once, instead of rounding through the node. Two sharp nodes together make a straight ramp. A sharp node where the road then falls away more steeply than it came up is a lip. |
+| `bank` | no | `0` | On a `circuit` track, how far the road leans across at this node, in degrees, up to 45 either way. Above 0 the driver's left edge is higher, which leans into a bend to the right; below 0 the right edge is higher. See [Banking](#banking). |
 
 ### Node types
 
@@ -123,6 +124,18 @@ The loader walks directed roads from the start node, taking the first unused out
 A closing road from finish back to start is allowed and is **not** followed, unless the track is a `loop`. On a loop the walk goes round to the start again and stops there, and fails unless it gets back to the start through at least two other nodes.
 
 If the walk cannot leave start, loading fails.
+
+## Banking
+
+A node's `bank` tilts the road across, on a `circuit` track only; other styles ignore it. The road's low edge stays at the node's height and the other edge rises, so a 14 m road banked 25° is 6.5 m higher on its outside.
+
+| Where | What the bank does |
+| --- | --- |
+| Round a corner | The node's bank holds all the way round its curve, from where the curve begins to where it ends. |
+| Between nodes | It eases from one node's bank to the next over the straight between their curves, so a car turns in on a road already banked. Past the finish it holds. |
+| Beside the raised edge | The grass starts at the edge and falls 1 m for every 2 m out back to the ground, or by the halfway line to the next part of the course. On a `jumps` track it doesn't: a wall comes down to the grass, as at a ramp. |
+| Curbs, barriers, signs, lip bands | They sit on the banked road. The finish line leans with it, and its gantry stands as much higher as the raised edge. |
+| Cars | They lean with the road. Both driving models feel it: the bank pulls a car toward its low side, which takes it round on its own at the bank's own speed, and turning toward the low side presses the tires harder, so they hold more. With both, a banked corner can be taken much faster than a flat one, as on a real banked track. The sums are in `scripts/road_bank.gd`. |
 
 ## Points of interest
 

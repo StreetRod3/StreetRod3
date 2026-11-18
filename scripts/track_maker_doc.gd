@@ -23,7 +23,7 @@ const _CARRIED_NODE_KEYS := ["left", "right", "rail"]
 var name: String = DEFAULT_NAME
 var style: String = TrackFile.STYLE_CIRCUIT
 var jumps: bool = false
-## In race order. Each holds its file fields: id, x, y, and z, sharp, left, right, rail when set.
+## In race order. Each holds its file fields: id, x, y, and z, sharp, bank, left, right, rail when set.
 var nodes: Array[Dictionary] = []
 ## `roads[i]` runs from `nodes[i]` to `nodes[i + 1]`: width, type, surface when set.
 var roads: Array[Dictionary] = []
@@ -292,6 +292,40 @@ func node_height(i: int) -> float:
 	return float(nodes[i].get("z", 0.0))
 
 
+## How the course turns at node `i`, as the sine of the angle: above 0 to the driver's right,
+## below 0 to the left, 0 on a straight and at the ends of a course that isn't a loop.
+func turn_at(i: int) -> float:
+	var last := nodes.size() - 1
+	var before := i - 1
+	var after := i + 1
+	if loop and last >= 2:
+		before = posmod(i - 1, last + 1)
+		after = posmod(i + 1, last + 1)
+	if before < 0 or after > last:
+		return 0.0
+	var into := node_point(i) - node_point(before)
+	var out := node_point(after) - node_point(i)
+	if into.is_zero_approx() or out.is_zero_approx():
+		return 0.0
+	# The map's +Y is ahead and -X the driver's right, so a right turn crosses positive.
+	return into.normalized().cross(out.normalized())
+
+
+## What node `i`'s bank does, for the panel: which edge is up and whether that leans into the bend.
+func bank_note(i: int) -> String:
+	var bank := float(nodes[i].get("bank", 0.0))
+	if is_zero_approx(bank):
+		return "Flat across."
+	var edge := "Left edge up" if bank > 0.0 else "Right edge up"
+	var turn := turn_at(i)
+	if absf(turn) < 0.02:
+		return "%s, on a straight." % edge
+	var bend := "right-hand" if turn > 0.0 else "left-hand"
+	if (bank > 0.0) == (turn > 0.0):
+		return "%s: leans into this %s bend." % [edge, bend]
+	return "%s: leans out of this %s bend (off-camber)." % [edge, bend]
+
+
 ## Moves node `i`, held to where the race scene needs the start: the start stays at 0, 0
 ## and the second node on the +Y axis ahead of it.
 func move_node(i: int, point: Vector2) -> void:
@@ -469,4 +503,9 @@ func check() -> Dictionary:
 			errors.append("The first road must run straight ahead (+Y) from the start. Drag node 2 to fix it.")
 	if not scenery.is_empty() and style == TrackFile.STYLE_CIRCUIT:
 		warnings.append("A circuit track doesn't show scenery. Pick another style to see it.")
+	if style != TrackFile.STYLE_CIRCUIT:
+		for node: Dictionary in nodes:
+			if not is_zero_approx(float(node.get("bank", 0.0))):
+				warnings.append("Only a circuit track banks its road. Pick circuit to see it.")
+				break
 	return {"errors": errors, "warnings": warnings}
