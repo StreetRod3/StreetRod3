@@ -4,7 +4,9 @@ extends Node3D
 ## The automatic drive follows the route and plans its speed for the corners. The car rides
 ## on its own springs and shocks: the body leans and dives over wheels that roll and steer,
 ## and the camera hangs back. Free roam uses the same city and the race car's own driving.
-## Other cars drive the streets in a lane and turn off at random.
+## Other cars drive the streets in a lane and turn off at random. In a free roam, police
+## drive with the heat: two cars with none, five when it is full. A cop sees 150 m, a
+## crash calls them in from anywhere, and hitting a cop fills the heat.
 
 const CITY_MAP := "res://assets/maps/city.trk"
 const _KING_CAR_TEXTURE := preload("res://assets/locations/city/king.png")
@@ -31,6 +33,8 @@ const _BoxBatch := preload("res://scripts/box_batch.gd")
 const _Console := preload("res://scripts/console.gd")
 const _GroundMaterial := preload("res://scripts/ground_material.gd")
 const _Skies := preload("res://scripts/skies.gd")
+const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
+const _Ticket := preload("res://scripts/speeding_ticket.gd")
 ## The sky over the city at night (GameState.night).
 const _NIGHT_SKY := "night-stars"
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
@@ -146,6 +150,7 @@ var _roam_home := ""
 var _roam_home_clear := false
 var _roam_done := false
 var _wrecked := false
+var _towed := false
 var _roam_doors_shut := false
 ## Each place's front apron: id, origin, facing, right, half_width, depth.
 var _roam_places: Array[Dictionary] = []
@@ -154,7 +159,15 @@ var _aprons: Array[Dictionary] = []
 var _hud_speed: Label
 var _hud_gear: Label
 var _hud_damage: Label
+var _hud_heat: Label
 var _hud_hint: Label
+var _ticket_bubble: Control
+var _cite_hint: Label
+## 1 is the cop's line, waiting for a key. 2 is the paper ticket.
+var _cite_phase := 0
+var _cite_fine := 0
+var _cite_speed := 0.0
+var _cite_crash := false
 var _rpm_meter: Control
 var _minimap: Control
 var _touch: Node
@@ -220,10 +233,32 @@ func _ready() -> void:
 	_start_traffic(track, _car.global_position)
 
 
+func _input(event: InputEvent) -> void:
+	if _cite_phase == 0 or _console != null or not _cite_press(event):
+		return
+	var vp := get_viewport()
+	if vp != null:
+		vp.set_input_as_handled()
+	if _cite_phase == 1:
+		_show_paper()
+	else:
+		_dismiss_paper()
+
+
+func _cite_press(event: InputEvent) -> bool:
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		return key.pressed and not key.echo
+	if event is InputEventJoypadButton:
+		var button := event as InputEventJoypadButton
+		return button.pressed and not button.is_echo()
+	return false
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _console != null:
 		return
-	if not _wrecked and not _finished and event is InputEventKey:
+	if not _wrecked and not _towed and not _finished and event is InputEventKey:
 		var toggle := event as InputEventKey
 		if toggle.pressed and not toggle.echo and _Console.is_toggle_key(toggle):
 			var console_vp := get_viewport()
@@ -231,12 +266,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				console_vp.set_input_as_handled()
 			_open_console()
 			return
-	if _wrecked:
+	if _wrecked or _towed:
 		if event.is_action_pressed(&"ui_accept") or event.is_action_pressed(&"ui_cancel"):
 			var wreck_vp := get_viewport()
 			if wreck_vp != null:
 				wreck_vp.set_input_as_handled()
-			_leave_after_wreck()
+			if _wrecked:
+				_leave_after_wreck()
+			else:
+				_leave_after_tow()
 		return
 	if _roaming or _finished or not event is InputEventKey:
 		return
@@ -313,6 +351,10 @@ func _process(delta: float) -> void:
 			_roam_doors_shut = true
 			_close_garage_doors()
 		if _check_roam_wreck():
+			return
+		if not _towed and not _roam_done:
+			_poll_police()
+		if _towed or _roam_done:
 			return
 		_check_roam_arrival()
 		return
@@ -461,12 +503,12 @@ func _start_roam(from_poi: String) -> void:
 	if _touch != null and _roam_car != null:
 		_roam_car.set(&"_touch", _touch)
 	if _roam_car != null:
-		_start_traffic(track, _roam_car.global_position)
+		_start_traffic(track, _roam_car.global_position, true)
 	if GameState.engine_runs():
 		GameState.set_music_dimmed(true)
 
 
-func _start_traffic(track: Dictionary, avoid: Vector3) -> void:
+func _start_traffic(track: Dictionary, avoid: Vector3, with_police := false) -> void:
 	var files: Array[String] = []
 	for car: Dictionary in GameState.USED_CARS:
 		var path := str(car.get("car_file", ""))
@@ -477,7 +519,7 @@ func _start_traffic(track: Dictionary, avoid: Vector3) -> void:
 	var traffic := _CruiseTraffic.new()
 	traffic.name = "Traffic"
 	add_child(traffic)
-	traffic.setup(track, avoid, _floor, files)
+	traffic.setup(track, avoid, _floor, files, with_police)
 
 
 ## The apron in front of a place. Local -Z of the building faces the street.
@@ -711,7 +753,7 @@ func _build_hud(track: Dictionary) -> void:
 	panel.offset_left = -332.0
 	panel.offset_top = 12.0
 	panel.offset_right = -12.0
-	panel.offset_bottom = 300.0
+	panel.offset_bottom = 348.0
 	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
 	layer.add_child(panel)
 	var margin := MarginContainer.new()
@@ -731,6 +773,8 @@ func _build_hud(track: Dictionary) -> void:
 	_hud_gear.name = "GearLabel"
 	_hud_damage = _hud_line("Damage: 0%")
 	_hud_damage.name = "DamageLabel"
+	_hud_heat = _hud_line("Heat: 0%")
+	_hud_heat.name = "HeatLabel"
 	_hud_hint = _hud_line(_drive_hint())
 	_hud_hint.name = "HintLabel"
 	_hud_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -738,6 +782,7 @@ func _build_hud(track: Dictionary) -> void:
 	box.add_child(_hud_speed)
 	box.add_child(_hud_gear)
 	box.add_child(_hud_damage)
+	box.add_child(_hud_heat)
 	box.add_child(_hud_hint)
 	var meter := Control.new()
 	meter.name = "RpmMeter"
@@ -810,6 +855,14 @@ func _update_hud() -> void:
 		_hud_speed.text = "Speed: %s" % GameState.speed_text(speed * 3.6)
 		_hud_gear.text = "Gear: %s" % str(_roam_car.call(&"get_gear_label"))
 		_hud_damage.text = "Damage: %d%%" % roundi(float(_roam_car.call(&"damage_amount")) * 100.0)
+		var traffic := get_node_or_null("Traffic")
+		if _hud_heat != null and traffic != null and traffic.has_method(&"heat_text"):
+			_hud_heat.text = str(traffic.call(&"heat_text"))
+			var hot := traffic.has_method(&"heat_amount") and float(traffic.call(&"heat_amount")) > 0.0
+			if hot:
+				_hud_heat.add_theme_color_override(&"font_color", Color(0.86, 0.24, 0.16))
+			else:
+				_hud_heat.remove_theme_color_override(&"font_color")
 		if _rpm_meter != null and _rpm_meter.has_method(&"set_reading"):
 			var in_cockpit := _roam_car.has_method(&"is_cockpit_camera") and bool(_roam_car.call(&"is_cockpit_camera"))
 			_rpm_meter.visible = GameState.hud_shows(_DrivingHud.RPM) and not in_cockpit
@@ -845,12 +898,146 @@ func _check_roam_wreck() -> bool:
 	GameState.wreck_active_car()
 	_fade = 1.0
 	_paint_fade()
+	_screen_message("Lucky you weren't killed, 'cause the car is totaled.", "WreckLabel")
+	return true
+
+
+func _poll_police() -> void:
+	var traffic := get_node_or_null("Traffic")
+	if traffic == null or _roam_car == null:
+		return
+	var harm := float(_roam_car.get("reported_hit"))
+	if harm > 0.0:
+		_roam_car.set("reported_hit", 0.0)
+		if traffic.has_method(&"note_player_harm"):
+			traffic.call(&"note_player_harm", harm, _roam_center())
+	if _cite_phase > 0 or not traffic.has_method(&"take_stop"):
+		return
+	var stop: Dictionary = traffic.call(&"take_stop", GameState.money)
+	if stop.is_empty():
+		return
+	GameState.money -= int(stop["paid"])
+	if traffic.has_method(&"halt_police"):
+		traffic.call(&"halt_police", true)
+	if bool(stop["broke"]):
+		_begin_tow()
+		return
+	_cite_fine = int(stop["amount"])
+	_cite_speed = float(stop["speed"])
+	_cite_crash = bool(stop["crash"])
+	_cite_phase = 1
+	if _roam_car.has_method(&"cite"):
+		_roam_car.call(&"cite")
+	var cop: Node3D = null
+	if traffic.has_method(&"nearest_cop"):
+		cop = traffic.call(&"nearest_cop")
+	_show_ticket(cop)
+
+
+## The cop's line. It stays until a key, which opens the paper.
+func _show_ticket(cop: Node3D) -> void:
+	if _ticket_bubble != null:
+		_ticket_bubble.queue_free()
+	var bubble := _SpeechBubble.instantiate() as Control
+	bubble.name = "TicketBubble"
+	var line := "You crossed the line pal, it'll be %d bucks of fine" % _cite_fine
+	bubble.call(&"set_line", line, Vector2(760, 56), 26)
+	var cam := get_viewport().get_camera_3d()
+	var anchor: Node3D = cop
+	if cop != null:
+		var roof := cop.get_node_or_null("RoofLight") as Node3D
+		if roof != null:
+			anchor = roof
+	if cam != null and anchor != null:
+		bubble.call(&"follow_node", cam, anchor, Vector3(0.0, 0.55, 0.0))
+	else:
+		bubble.call(&"show_centered")
+	_ensure_ui_layer().add_child(bubble)
+	bubble.call(&"place")
+	_ticket_bubble = bubble
+	_show_cite_hint()
+
+
+func _show_paper() -> void:
+	_cite_phase = 2
+	if _ticket_bubble != null:
+		_ticket_bubble.queue_free()
+		_ticket_bubble = null
+	var paper := _Ticket.new() as Control
+	paper.name = "SpeedingTicket"
+	var limit := 11.0
+	var traffic := get_node_or_null("Traffic")
+	if traffic != null and traffic.has_method(&"pace_limit"):
+		limit = float(traffic.call(&"pace_limit"))
+	paper.call(&"fill", GameState.driver_name, _cite_fine, _cite_speed, limit, _cite_crash)
+	_ensure_ui_layer().add_child(paper)
+	_show_cite_hint()
+
+
+func _dismiss_paper() -> void:
+	_cite_phase = 0
+	var paper := get_node_or_null("CruiseUI/SpeedingTicket")
+	if paper != null:
+		paper.queue_free()
+	if _cite_hint != null:
+		_cite_hint.queue_free()
+		_cite_hint = null
+	var traffic := get_node_or_null("Traffic")
+	if traffic != null and traffic.has_method(&"halt_police"):
+		traffic.call(&"halt_police", false)
+	if _roam_car != null and _roam_car.has_method(&"end_cite"):
+		_roam_car.call(&"end_cite")
+
+
+func _show_cite_hint() -> void:
+	if _cite_hint != null:
+		return
+	var label := Label.new()
+	label.name = "CiteHint"
+	label.text = "Press any key"
+	label.anchor_left = 0.5
+	label.anchor_right = 0.5
+	label.anchor_top = 1.0
+	label.anchor_bottom = 1.0
+	label.offset_left = -140.0
+	label.offset_right = 140.0
+	label.offset_top = -48.0
+	label.offset_bottom = -16.0
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78))
+	label.add_theme_font_size_override(&"font_size", 18)
+	_ensure_ui_layer().add_child(label)
+	_cite_hint = label
+
+
+func _begin_tow() -> void:
+	_towed = true
+	_roam_done = true
+	if _roam_car != null:
+		_roam_car.call(&"stop_mouse_driving")
+		_roam_car.set_physics_process(false)
+		var engine := _roam_car.get_node_or_null("EngineSound") as AudioStreamPlayer
+		if engine != null:
+			engine.stop()
+	GameState.set_music_dimmed(false)
+	_screen_message("You can't pay the fine. The car goes back to the garage.", "TowLabel")
+
+
+func _leave_after_tow() -> void:
+	GameState.drive_into_garage = true
+	GameState.current_scene_path = GameState.SCENE_GARAGE
+	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+
+
+func _screen_message(text: String, node_name: String) -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 30
+	layer.name = node_name + "Layer"
 	add_child(layer)
 	var label := Label.new()
-	label.name = "WreckLabel"
-	label.text = "Lucky you weren't killed, 'cause the car is totaled."
+	label.name = node_name
+	label.text = text
 	label.set_anchors_preset(Control.PRESET_FULL_RECT)
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -858,7 +1045,6 @@ func _check_roam_wreck() -> bool:
 	label.add_theme_color_override(&"font_color", Color(0.95, 0.9, 0.78))
 	label.add_theme_font_size_override(&"font_size", 28)
 	layer.add_child(label)
-	return true
 
 
 func _leave_after_wreck() -> void:
@@ -1811,10 +1997,38 @@ func _build_blocks(track: Dictionary) -> void:
 	_batching = true
 	for raw: Dictionary in track.get("buildings", []):
 		var block: Dictionary = raw
-		_build_city_building(block, index, glass, lit, frame, doors, signs)
+		if str(block.get("sign", "")) == "POLICE":
+			_build_police_station(block)
+		else:
+			_build_city_building(block, index, glass, lit, frame, doors, signs)
 		index += 1
 	_batching = false
 	_flush_batches()
+
+
+## The lot faces the street to its north. One car waits on the apron.
+func _build_police_station(block: Dictionary) -> void:
+	var wide := float(block["w"])
+	var deep := float(block["d"])
+	var tall := float(block["h"])
+	var stone := Color(0.62, 0.64, 0.66)
+	var root := Node3D.new()
+	root.name = "PoliceStation"
+	root.position = Vector3(float(block["x"]), 0.0, float(block["y"]))
+	add_child(root)
+	_add_solid(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), true)
+	_add_box(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), stone, 0.88)
+	_add_box(root, Vector3(wide + 0.3, 0.35, deep + 0.3), Vector3(0.0, tall + 0.16, 0.0), stone.darkened(0.28), 0.9)
+	var blue := Color(0.12, 0.22, 0.55)
+	_add_box(root, Vector3(wide, 0.7, 0.16), Vector3(0.0, tall - 0.55, deep * 0.5 + 0.02), blue, 0.45)
+	_add_facade_label(root, "POLICE", Vector3(0.0, tall - 0.55, deep * 0.5 + 0.16), 2, 64, 0.012, Color(0.95, 0.93, 0.86), blue.darkened(0.4))
+	_add_box(root, Vector3(4.2, 3.1, 0.12), Vector3(-3.4, 1.7, deep * 0.5 + 0.04), Color(0.2, 0.24, 0.3), 0.55)
+	_add_box(root, Vector3(3.6, 2.2, 0.08), Vector3(3.2, 1.7, deep * 0.5 + 0.04), Color(0.55, 0.7, 0.82), 0.12, 0.05)
+	_add_box(root, Vector3(1.4, 1.4, 0.08), Vector3(0.0, 1.15, deep * 0.5 + 0.06), Color(0.16, 0.18, 0.22), 0.5)
+	var lamp := Color(0.25, 0.45, 1.0)
+	_add_box(root, Vector3(0.35, 0.35, 0.35), Vector3(0.0, tall + 1.15, 0.0), lamp, 0.3, 0.0, lamp, 1.4)
+	_add_box(root, Vector3(0.12, 0.85, 0.12), Vector3(0.0, tall + 0.58, 0.0), Color(0.15, 0.16, 0.18), 0.4)
+	_add_apron(root, Vector3(wide + 2.0, 0.06, 8.0), Vector3(0.0, 0.03, deep * 0.5 + 4.0), Color(0.45, 0.45, 0.43), 0.94)
 
 
 ## A scenery box dressed as a building. One entrance on the nearest street, two on some lots.

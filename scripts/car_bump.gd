@@ -15,8 +15,14 @@ const YAW_INERTIA_PER_KG := 1.67
 ## The fastest a hit can set a car turning, in rad/s.
 const YAW_KICK_MAX := 1.6
 
+## True after `resolve` when the two cars' boxes overlapped, including a shove
+## that did not change either car's speed. Cleared when they are apart.
+var touched := false
+
+
 ## Returns how much each car's speed changed in m/s, (a, b). Zero when they are not touching.
 func resolve(a: CharacterBody3D, b: CharacterBody3D) -> Vector2:
+	touched = false
 	if a == null or b == null:
 		return Vector2.ZERO
 	if not a.has_method(&"planar_velocity") or not a.has_method(&"apply_car_bump"):
@@ -66,6 +72,7 @@ func resolve(a: CharacterBody3D, b: CharacterBody3D) -> Vector2:
 		return Vector2.ZERO
 	a.apply_car_bump(offset_a, new_a, kick_a)
 	b.apply_car_bump(offset_b, new_b, kick_b)
+	touched = true
 	return Vector2(change_a, change_b)
 
 

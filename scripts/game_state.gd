@@ -3255,6 +3255,14 @@ func car_has_cove() -> bool:
 	return typeof(model) == TYPE_DICTIONARY and (model as Dictionary).has("cove")
 
 
+## False when the active car's colors are fixed in the model, as on the police Fairlane.
+func car_body_paintable() -> bool:
+	var model: Variant = car_spec.get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return true
+	return bool((model as Dictionary).get("paintable", true))
+
+
 ## The bumpers a car file's `spec` has, by end: {"node", "mass"}.
 static func spec_bumpers(spec: Dictionary) -> Dictionary:
 	var bumpers: Variant = spec.get("bumpers", {})

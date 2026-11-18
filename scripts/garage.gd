@@ -1570,6 +1570,9 @@ func _black_fade_rect() -> ColorRect:
 
 
 func _show_spray_picker() -> void:
+	if not GameState.car_body_paintable():
+		_say("That paint's baked on.")
+		return
 	# Hide other garage overlays so clicks go to the picker.
 	_clock_menu.visible = false
 	_stats_panel.visible = false
