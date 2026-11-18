@@ -175,9 +175,9 @@ func _banking() -> void:
 	var steep := TrackFile.parse_text(text.replace("\"bank\": 25", "\"bank\": 60"))
 	assert(is_equal_approx(float(steep.nodes[doc.node_id(1)]["bank"]), TrackFile.BANK_MAX_DEG))
 	assert(not steep.warnings.is_empty())
-	# Only a circuit banks; the maker says so.
+	# Every style banks.
 	doc.style = TrackFile.STYLE_STREET
-	assert(doc.check().warnings.size() == 1, str(doc.check().warnings))
+	assert(doc.check().warnings.is_empty(), str(doc.check().warnings))
 	doc.style = TrackFile.STYLE_CIRCUIT
 	# The road: the low edge at the node's height, the other edge up, and the start flat.
 	var trk := OS.get_temp_dir().path_join("track_maker_test_bank.trk")
@@ -204,6 +204,27 @@ func _banking() -> void:
 	assert(absf(float(track.call(&"surface_height", Vector3(2.0, 0.0, 1.0)))) < 0.01, "the start is flat")
 	assert(absf(float(track.call(&"bank_slope", Vector3(0.0, 0.0, 1.0), 0.0))) < 0.001)
 	track.free()
+	# Every style banks the road the same, and the slope a car feels goes with it.
+	for style: String in [TrackFile.STYLE_STREET, TrackFile.STYLE_MOUNTAIN, TrackFile.STYLE_AQUEDUCT]:
+		doc.style = style
+		var styled := OS.get_temp_dir().path_join("track_maker_test_bank_%s.trk" % style)
+		var file := FileAccess.open(styled, FileAccess.WRITE)
+		file.store_string(doc.to_text())
+		file.close()
+		var other: Node3D = load("res://scripts/race_track.gd").new()
+		other.set(&"track_path", styled)
+		other.call(&"_build_path")
+		DirAccess.remove_absolute(styled)
+		var at: Dictionary = other.call(&"closest_sample", Vector3(0.0, 0.0, 200.0))
+		var mid: Vector3 = at["position"]
+		var across: Vector3 = at["right"]
+		assert(is_equal_approx(float(at["bank"]), rise), "%s: %s" % [style, at["bank"]])
+		var tilt := float(other.call(&"surface_height", mid + across) - other.call(&"surface_height", mid - across)) * 0.5
+		assert(absf(tilt - rise) < 0.01, "%s tilts %s" % [style, tilt])
+		var felt: float = other.call(&"bank_slope", mid, float(at["yaw"]))
+		assert(absf(felt - rise) < 0.01, "%s feels %s" % [style, felt])
+		other.free()
+	doc.style = TrackFile.STYLE_CIRCUIT
 	# On the bank the tires hold more turning toward its low side, and the pull fades out at a stop.
 	assert(_RoadBank.load(rise, -10.0) > 1.0 and _RoadBank.load(rise, 10.0) < 1.0)
 	assert(is_equal_approx(_RoadBank.load(0.0, 10.0), 1.0))

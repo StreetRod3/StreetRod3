@@ -503,9 +503,4 @@ func check() -> Dictionary:
 			errors.append("The first road must run straight ahead (+Y) from the start. Drag node 2 to fix it.")
 	if not scenery.is_empty() and style == TrackFile.STYLE_CIRCUIT:
 		warnings.append("A circuit track doesn't show scenery. Pick another style to see it.")
-	if style != TrackFile.STYLE_CIRCUIT:
-		for node: Dictionary in nodes:
-			if not is_zero_approx(float(node.get("bank", 0.0))):
-				warnings.append("Only a circuit track banks its road. Pick circuit to see it.")
-				break
 	return {"errors": errors, "warnings": warnings}

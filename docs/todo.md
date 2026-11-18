@@ -8,7 +8,6 @@ The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened f
 
 - scenery available on all track types.
 - jumps available on all track types.
-- Banking on the street, mountain and Aqueduct styles. Only a circuit banks so far.
 
 ## Make burnouts do something
 

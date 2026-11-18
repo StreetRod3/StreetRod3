@@ -134,7 +134,7 @@ var _rails: PackedByteArray = PackedByteArray()
 var _far_ys: PackedFloat32Array = PackedFloat32Array()
 ## Each sample's bank: how much the road rises a meter across toward its `lateral` side (the
 ## driver's left), below 0 falling. The edge at the bottom stays at the road's height. All 0 but
-## on a circuit track whose nodes bank it (`_banked`).
+## on a track whose nodes bank it (`_banked`).
 var _banks: PackedFloat32Array = PackedFloat32Array()
 var _banked: bool = false
 ## Where each node falls along the path.
@@ -245,7 +245,7 @@ func _height_on(world: Vector3, ground: int) -> float:
 	var i := _nearest_index(world)
 	var height := _pts[i].y
 	var bank := _banks[i] if _banked else 0.0
-	var half_w := _half_ws[i]
+	var half_w := _bank_half(i)
 	var best_d := INF
 	for j: int in [i - 1, i]:
 		if j < 0 or j + 1 >= _pts.size():
@@ -264,7 +264,7 @@ func _height_on(world: Vector3, ground: int) -> float:
 			height = lerpf(a.y, b.y, t)
 			if _banked:
 				bank = lerpf(_banks[j], _banks[j + 1], t)
-				half_w = lerpf(_half_ws[j], _half_ws[j + 1], t)
+				half_w = lerpf(_bank_half(j), _bank_half(j + 1), t)
 	if not _street and _grass_sides.size() == 4 and _grass_sides[0].size() == _pts.size():
 		var lateral := _lateral_at(i, world)
 		var ext := _sample_extents(i)
@@ -273,9 +273,28 @@ func _height_on(world: Vector3, ground: int) -> float:
 			if lateral >= 0.0:
 				return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], maxf(lateral, ext.y), _lift_for(bank, half_w, ext.y))
 			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], maxf(-lateral, ext.x), _lift_for(bank, half_w, -ext.x))
-	if _banked:
-		height += _lift_for(bank, half_w, _lateral_at(i, world))
-	return _side_ground_at(i, world, height)
+	if not _banked:
+		return _side_ground_at(i, world, height)
+	var lateral := _lateral_at(i, world)
+	if _style == TrackFile.STYLE_CIRCUIT:
+		return height + _lift_for(bank, half_w, lateral)
+	return _banked_ground(i, lateral, height, bank, half_w)
+
+
+## The ground of a banked street, mountain or Aqueduct track `lateral` across from sample `i`, where
+## the road's own height is `road_y` and it banks by `bank` over `half_w` each side. On the road, or
+## the Aqueduct's whole channel, the bank tilts it. Past that the ground starts at the edge's height:
+## Mulholland's hillsides and drops rise or fall from there, and a street's or the Aqueduct's ground
+## falls back from a raised edge at `_BANK_EMBANK_SLOPE`.
+func _banked_ground(i: int, lateral: float, road_y: float, bank: float, half_w: float) -> float:
+	var shape := _TrackSides.aqueduct_height(lateral) if _style == TrackFile.STYLE_AQUEDUCT else 0.0
+	if absf(lateral) <= half_w:
+		return road_y + _lift_for(bank, half_w, lateral) + shape
+	var edge_lift := _lift_for(bank, half_w, signf(lateral) * half_w)
+	if _style == TrackFile.STYLE_MOUNTAIN:
+		var side := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+		return _TrackSides.mountain_ground(lateral, _half_ws[i], side, road_y + edge_lift, _far_ys[i])
+	return road_y + edge_lift * _embank_keep(edge_lift, absf(lateral) - half_w) + shape
 
 
 ## The ground's height at `world`, at sample `i`, with `road_y` the road's beside it.
@@ -301,11 +320,16 @@ func surface_roll(world: Vector3, yaw: float) -> float:
 
 
 ## How steeply the ground rises across a car at `world` heading `yaw`: the rise a meter toward the
-## car's +X, on a banked circuit's road or the grass beside it. 0 on any other track, so the
-## driving models leave their own flat and sloped ground (the Aqueduct pushes with `bank_push()`).
+## car's +X, on a banked road or the ground beside it. 0 on a track with no bank, so the driving
+## models keep their flat ground. On Mulholland and the Aqueduct only the road's own bank counts:
+## their hillsides are walls, and the Aqueduct's sides push a car back with `bank_push()`.
 func bank_slope(world: Vector3, yaw: float) -> float:
 	if not _banked:
 		return 0.0
+	if _style == TrackFile.STYLE_MOUNTAIN or _style == TrackFile.STYLE_AQUEDUCT:
+		var i := _nearest_index(world)
+		var road_across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+		return _banks[i] * road_across.dot(Vector3(cos(yaw), 0.0, -sin(yaw)))
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
 	return (surface_height(world + across) - surface_height(world - across)) / 1.6
 
@@ -568,10 +592,11 @@ func build_road_course() -> void:
 	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
 		var reaches := _side_reaches()
 		var back_reach := _reach_at(_pts[0] + back_dir * _run_in_m, _yaws[0], -_run_in_m)
+		var lifts := _edge_lifts()
 		if _style == TrackFile.STYLE_AQUEDUCT:
-			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach)
+			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach, lifts if _banked else [])
 		else:
-			_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _run_in_m, reaches, back_reach)
+			_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _run_in_m, reaches, back_reach, lifts if _banked else [])
 			_build_road_mesh()
 	else:
 		_build_terrain()
@@ -765,13 +790,11 @@ func _build_path() -> void:
 
 ## Each sample's bank from its nodes'. A node's bank holds all round its corner, from where the
 ## curve begins to where it ends, and eases to the next node's over the straight between, so a
-## car turns in on a road already banked. Past the finish it holds. Only a circuit track banks.
+## car turns in on a road already banked. Past the finish it holds.
 func _fill_banks(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, degs: PackedFloat32Array) -> void:
 	_banks.resize(_pts.size())
 	_banks.fill(0.0)
 	_banked = false
-	if _style != TrackFile.STYLE_CIRCUIT:
-		return
 	for deg: float in degs:
 		if not is_zero_approx(deg):
 			_banked = true
@@ -795,7 +818,33 @@ func _fill_banks(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, d
 func _bank_lift(i: int, lateral: float) -> float:
 	if not _banked or i < 0 or i >= _banks.size():
 		return 0.0
-	return _lift_for(_banks[i], _half_ws[i], lateral)
+	return _lift_for(_banks[i], _bank_half(i), lateral)
+
+
+## How far out from the middle the bank tilts the road at sample `i`: its half width, or on the
+## Aqueduct the whole channel's out to the tops of its sides.
+func _bank_half(i: int) -> float:
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		return _TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.AQUEDUCT_BANK_RUN
+	return _half_ws[i]
+
+
+## How far each sample's tilted edge stands over the road's height, on its left (0, `lateral` above
+## 0) and its right (1). Mulholland's and the Aqueduct's sides start from there.
+func _edge_lifts() -> Array[PackedFloat32Array]:
+	var lifts: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array()]
+	for i in _pts.size():
+		lifts[0].append(_bank_lift(i, _bank_half(i)))
+		lifts[1].append(_bank_lift(i, -_bank_half(i)))
+	return lifts
+
+
+## How much of a raised edge's height the ground beside it keeps, `out` meters past the edge, as it
+## falls back at `_BANK_EMBANK_SLOPE`. A street or Aqueduct track's; a circuit's stops at halfway too.
+static func _embank_keep(lift: float, out: float) -> float:
+	if lift <= 0.0:
+		return 0.0
+	return clampf(1.0 - out * _BANK_EMBANK_SLOPE / lift, 0.0, 1.0)
 
 
 static func _lift_for(bank: float, half_w: float, lateral: float) -> float:
@@ -1634,8 +1683,12 @@ func _build_gravel() -> void:
 		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1])) * _half_ws[i + 1]
 		var a := _pts[i] + lift
 		var b := _pts[i + 1] + lift
-		_add_tri(st, a - r0, a + r0, b + r1, Vector2.ZERO, Vector2.RIGHT, Vector2.ONE)
-		_add_tri(st, a - r0, b + r1, b - r1, Vector2.ZERO, Vector2.ONE, Vector2.UP)
+		var a_l := a - r0 + Vector3.UP * _bank_lift(i, -_half_ws[i])
+		var a_r := a + r0 + Vector3.UP * _bank_lift(i, _half_ws[i])
+		var b_l := b - r1 + Vector3.UP * _bank_lift(i + 1, -_half_ws[i + 1])
+		var b_r := b + r1 + Vector3.UP * _bank_lift(i + 1, _half_ws[i + 1])
+		_add_tri(st, a_l, a_r, b_r, Vector2.ZERO, Vector2.RIGHT, Vector2.ONE)
+		_add_tri(st, a_l, b_r, b_l, Vector2.ZERO, Vector2.ONE, Vector2.UP)
 	st.generate_normals()
 	var mesh := st.commit()
 	if mesh == null or mesh.get_surface_count() == 0:
@@ -1653,9 +1706,14 @@ func _build_street_shoulders() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var yaw: float = _yaws[0]
 	var run_in := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _run_in_m
-	_add_shoulder_span(st, run_in, yaw, _half_ws[0], _pts[0], yaw, _half_ws[0])
+	var lifts := _edge_lifts()
+	var start_lift := Vector2(lifts[0][0], lifts[1][0])
+	_add_shoulder_span(st, run_in, yaw, _half_ws[0], _pts[0], yaw, _half_ws[0], start_lift, start_lift)
 	for i in range(_pts.size() - 1):
-		_add_shoulder_span(st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1])
+		_add_shoulder_span(
+			st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1],
+			Vector2(lifts[0][i], lifts[1][i]), Vector2(lifts[0][i + 1], lifts[1][i + 1])
+		)
 	st.generate_normals()
 	var mesh := st.commit()
 	mesh.surface_set_material(0, _GroundMaterial.shoulder_concrete())
@@ -1663,16 +1721,25 @@ func _build_street_shoulders() -> void:
 	mi.name = "Shoulders"
 	mi.mesh = mesh
 	add_child(mi)
+	if _banked:
+		_build_street_banks(lifts)
 
 
-func _add_shoulder_span(st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p1: Vector3, yaw1: float, hw1: float) -> void:
+## `lift0` and `lift1` are how high each end's left (x) and right (y) edge stands over the road's
+## height on a banked road. The shoulder lies on the ground there, falling with it.
+func _add_shoulder_span(
+	st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p1: Vector3, yaw1: float, hw1: float,
+	lift0: Vector2 = Vector2.ZERO, lift1: Vector2 = Vector2.ZERO
+) -> void:
 	var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0))
 	var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1))
 	for side: float in [-1.0, 1.0]:
-		var inner0 := p0 + r0 * (side * hw0)
-		var outer0 := p0 + r0 * (side * (hw0 + _STREET_SHOULDER_W))
-		var inner1 := p1 + r1 * (side * hw1)
-		var outer1 := p1 + r1 * (side * (hw1 + _STREET_SHOULDER_W))
+		var up0 := lift0.x if side > 0.0 else lift0.y
+		var up1 := lift1.x if side > 0.0 else lift1.y
+		var inner0 := p0 + r0 * (side * hw0) + Vector3.UP * up0
+		var outer0 := p0 + r0 * (side * (hw0 + _STREET_SHOULDER_W)) + Vector3.UP * up0 * _embank_keep(up0, _STREET_SHOULDER_W)
+		var inner1 := p1 + r1 * (side * hw1) + Vector3.UP * up1
+		var outer1 := p1 + r1 * (side * (hw1 + _STREET_SHOULDER_W)) + Vector3.UP * up1 * _embank_keep(up1, _STREET_SHOULDER_W)
 		var a0 := inner0 if side > 0.0 else outer0
 		var b0 := outer0 if side > 0.0 else inner0
 		var a1 := inner1 if side > 0.0 else outer1
@@ -1683,11 +1750,52 @@ func _add_shoulder_span(st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p
 
 func _add_run_in(st: SurfaceTool) -> void:
 	var yaw: float = _yaws[0]
-	var side := Vector3(cos(yaw), 0.0, -sin(yaw)) * _half_ws[0]
+	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * _half_ws[0]
+	# Banked as the start is.
+	var left := across + Vector3.UP * _bank_lift(0, _half_ws[0])
+	var right := -across + Vector3.UP * _bank_lift(0, -_half_ws[0])
 	var back := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _run_in_m
 	var v := -_run_in_m * 0.15
-	_add_tri(st, back - side, back + side, _pts[0] + side, Vector2(0, v), Vector2(1, v), Vector2(1, 0))
-	_add_tri(st, back - side, _pts[0] + side, _pts[0] - side, Vector2(0, v), Vector2(1, 0), Vector2(0, 0))
+	_add_tri(st, back + right, back + left, _pts[0] + left, Vector2(0, v), Vector2(1, v), Vector2(1, 0))
+	_add_tri(st, back + right, _pts[0] + left, _pts[0] + right, Vector2(0, v), Vector2(1, 0), Vector2(0, 0))
+
+
+## On a banked street track, the ground beside each raised edge, from the shoulder's outer edge down
+## to where it meets the ground again (`_embank_keep()`), so the road doesn't stand over a gap.
+func _build_street_banks(lifts: Array[PackedFloat32Array]) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var count := 0
+	for side: float in [1.0, -1.0]:
+		var up := lifts[0] if side > 0.0 else lifts[1]
+		for i in range(_pts.size() - 1):
+			if up[i] <= 0.01 and up[i + 1] <= 0.01:
+				continue
+			count += 1
+			var ends: Array[Vector3] = []
+			for k: int in [i, i + 1]:
+				var across := Vector3(cos(_yaws[k]), 0.0, -sin(_yaws[k])) * side
+				var from_out := _half_ws[k] + _STREET_SHOULDER_W
+				var foot_out := _half_ws[k] + maxf(up[k] / _BANK_EMBANK_SLOPE, _STREET_SHOULDER_W + 0.05)
+				ends.append(_pts[k] + across * from_out + Vector3.UP * up[k] * _embank_keep(up[k], _STREET_SHOULDER_W))
+				ends.append(_pts[k] + across * foot_out + Vector3.UP * -_TERRAIN_SINK)
+			# The road mesh's order, the point on the driver's right first, so it faces up.
+			var a0 := ends[0] if side > 0.0 else ends[1]
+			var b0 := ends[1] if side > 0.0 else ends[0]
+			var a1 := ends[2] if side > 0.0 else ends[3]
+			var b1 := ends[3] if side > 0.0 else ends[2]
+			_add_tri(st, a0, b0, b1, Vector2(0, 0), Vector2(1, 0), Vector2(1, 1))
+			_add_tri(st, a0, b1, a1, Vector2(0, 0), Vector2(1, 1), Vector2(0, 1))
+	if count == 0:
+		return
+	st.generate_normals()
+	var mesh := st.commit()
+	mesh.surface_set_material(0, _GroundMaterial.grass())
+	var mi := MeshInstance3D.new()
+	mi.name = "BankSides"
+	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 func _add_tri(

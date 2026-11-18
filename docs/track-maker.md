@@ -20,7 +20,7 @@ The road back to the start can come in at any angle. The race rounds that corner
 
 ## Banking
 
-Bank, under Sharp in the selected node's fields, leans the road across at that node, up to 45° either way, on a circuit track. Above 0 the left edge is up, for a bend to the right; below 0 the right edge is up. The line under it says which edge is up and whether that leans into the node's bend or out of it (off-camber). The bank holds all round the node's corner and eases to the next node's over the straight between, so give a straight's middle node a bank of 0 if the straight should be flat. On other styles the maker warns that the road won't bank. How the game builds and drives a banked road is in [track-format.md](track-format.md#banking).
+Bank, under Sharp in the selected node's fields, leans the road across at that node, up to 45° either way, on any style. Above 0 the left edge is up, for a bend to the right; below 0 the right edge is up. The line under it says which edge is up and whether that leans into the node's bend or out of it (off-camber). The bank holds all round the node's corner and eases to the next node's over the straight between, so give a straight's middle node a bank of 0 if the straight should be flat. How the game builds and drives a banked road is in [track-format.md](track-format.md#banking).
 
 ## Sky
 

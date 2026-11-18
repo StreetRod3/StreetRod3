@@ -31,6 +31,8 @@ const AQUEDUCT_HIGH_AT := AQUEDUCT_FLOOR_HALF + 180.0 * 8.0 / 1800.0
 
 ## How far the ground beside the road reaches, unless another part of the course is nearer.
 const _FAR_M := 280.0
+## Beside a banked Aqueduct's raised side, the concrete falls this much a meter out.
+const _BANK_FALL := 0.5
 const _HILL_TOP_M := 30.0
 const _HILL_TOP_RISE := 1.25
 const _SECTION_STEP := 2
@@ -122,24 +124,27 @@ static func build_mountain(
 	far_y: PackedFloat32Array,
 	run_in_m: float,
 	reaches: Array[PackedFloat32Array],
-	back_reach: Vector2
+	back_reach: Vector2,
+	lifts: Array = []
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
+	var up := _side_lifts(lifts, pts.size())
 	for side: float in [1.0, -1.0]:
 		var heights := left if side > 0.0 else right
 		var reach: PackedFloat32Array = reaches[0] if side > 0.0 else reaches[1]
 		var back_side := back_reach.x if side > 0.0 else back_reach.y
-		_add_side_span(st, _mountain_section(back, yaws[0], side, half_ws[0], heights[0], far_y[0], back_side), _mountain_section(pts[0], yaws[0], side, half_ws[0], heights[0], far_y[0], reach[0]))
+		var raise := up[0] if side > 0.0 else up[1]
+		_add_side_span(st, _mountain_section(back, yaws[0], side, half_ws[0], heights[0], far_y[0], back_side, raise[0]), _mountain_section(pts[0], yaws[0], side, half_ws[0], heights[0], far_y[0], reach[0], raise[0]))
 		for k in range(sections.size() - 1):
 			var a := sections[k]
 			var b := sections[k + 1]
 			_add_side_span(
 				st,
-				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a]),
-				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b])
+				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a], raise[a]),
+				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b], raise[b])
 			)
 	var ground := _GroundMaterial.vertex_ground()
 	ground.set_shader_parameter(&"verge_m", MOUNTAIN_VERGE)
@@ -150,9 +155,9 @@ static func build_mountain(
 	var hill_right := _hill_flares(pts, right)
 	for i in right_out.size():
 		right_out[i] = maxf(right_out[i], hill_right[i])
-	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections)
-	_build_rails(track, pts, yaws, half_ws, railed, right_out)
-	_build_trusses(track, pts, yaws, half_ws, types)
+	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections, up)
+	_build_rails(track, pts, yaws, half_ws, railed, right_out, up[1])
+	_build_trusses(track, pts, yaws, half_ws, types, up)
 	_build_under(track, pts, _GREEN.darkened(0.25), _GroundMaterial.grass())
 	_build_mountains(track, pts)
 
@@ -165,20 +170,28 @@ static func build_aqueduct(
 	yaws: PackedFloat32Array,
 	run_in_m: float,
 	reaches: Array[PackedFloat32Array],
-	back_reach: Vector2
+	back_reach: Vector2,
+	lifts: Array = []
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
+	var banked := not lifts.is_empty()
+	var up := _side_lifts(lifts, pts.size())
 	for side: float in [1.0, -1.0]:
 		var reach: PackedFloat32Array = reaches[0] if side > 0.0 else reaches[1]
 		var back_side := back_reach.x if side > 0.0 else back_reach.y
-		_add_side_span(st, _aqueduct_section(back, yaws[0], side, back_side), _aqueduct_section(pts[0], yaws[0], side, reach[0]))
+		var start_tilt := Vector2(up[0][0], up[1][0])
+		_add_side_span(st, _aqueduct_section(back, yaws[0], side, back_side, start_tilt, banked), _aqueduct_section(pts[0], yaws[0], side, reach[0], start_tilt, banked))
 		for k in range(sections.size() - 1):
 			var a := sections[k]
 			var b := sections[k + 1]
-			_add_side_span(st, _aqueduct_section(pts[a], yaws[a], side, reach[a]), _aqueduct_section(pts[b], yaws[b], side, reach[b]))
+			_add_side_span(
+				st,
+				_aqueduct_section(pts[a], yaws[a], side, reach[a], Vector2(up[0][a], up[1][a]), banked),
+				_aqueduct_section(pts[b], yaws[b], side, reach[b], Vector2(up[0][b], up[1][b]), banked)
+			)
 	_add_mesh(track, "Channel", st, _GroundMaterial.vertex_colored_concrete())
 	var faces := PackedVector3Array()
 	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
@@ -186,9 +199,28 @@ static func build_aqueduct(
 		var a := sections[k]
 		var b := sections[k + 1]
 		for side: float in [1.0, -1.0]:
-			_add_wall_quad(faces, pts[a], yaws[a], side * top, pts[b], yaws[b], side * top)
+			var raise := up[0] if side > 0.0 else up[1]
+			_add_wall_quad(faces, pts[a], yaws[a], side * top, pts[b], yaws[b], side * top, raise[a], raise[b])
 	_add_wall_body(track, faces)
 	_build_under(track, pts, _UNDER_CONCRETE.darkened(0.2))
+
+
+## The left (0) and right (1) edge lifts of a banked road, or all 0 when `lifts` is empty.
+static func _side_lifts(lifts: Array, count: int) -> Array[PackedFloat32Array]:
+	if lifts.size() == 2:
+		return [lifts[0] as PackedFloat32Array, lifts[1] as PackedFloat32Array]
+	var none := PackedFloat32Array()
+	none.resize(count)
+	none.fill(0.0)
+	return [none, none]
+
+
+## How much of a raised edge's height the ground keeps `out` meters past it, falling 1 m in 2 as
+## beside a banked street (race_track.gd's `_embank_keep()`).
+static func _bank_keep(lift: float, out: float) -> float:
+	if lift <= 0.0:
+		return 0.0
+	return clampf(1.0 - out * _BANK_FALL / lift, 0.0, 1.0)
 
 
 static func _section_indices(count: int) -> PackedInt32Array:
@@ -240,9 +272,11 @@ static func _slow_heights_round(pts: PackedVector3Array) -> PackedFloat32Array:
 
 
 ## Columns across one side of the road, from the road's edge outward, each {point, color, dirt}.
-## Nothing goes past `reach` from the middle of the road, except the verge.
-static func _mountain_section(center: Vector3, yaw: float, side: float, half: float, height: float, far_y: float, reach: float) -> Array[Dictionary]:
+## Nothing goes past `reach` from the middle of the road, except the verge. A banked road's edge
+## stands `lift` over its middle's height; the verge and the hillside or drop start from there.
+static func _mountain_section(center: Vector3, yaw: float, side: float, half: float, height: float, far_y: float, reach: float, lift: float = 0.0) -> Array[Dictionary]:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
+	var near := center + Vector3.UP * lift
 	var verge := half + MOUNTAIN_VERGE
 	var limit := maxf(reach, verge)
 	var slope_end := minf(verge + MOUNTAIN_BANK_RUN, limit)
@@ -258,28 +292,40 @@ static func _mountain_section(center: Vector3, yaw: float, side: float, half: fl
 	# foot and the field beside it stays grass; and it draws gravel out to a wavy line near
 	# `MOUNTAIN_VERGE` all along the road.
 	return [
-		_column(center + across * half, 0.0, _GREEN, 0.0),
-		_column(center + across * verge, 0.0, _GREEN, MOUNTAIN_VERGE),
-		_column(center + across * slope_end, height, bank, slope_end - half),
+		_column(near + across * half, 0.0, _GREEN, 0.0),
+		_column(near + across * verge, 0.0, _GREEN, MOUNTAIN_VERGE),
+		_column(near + across * slope_end, height, bank, slope_end - half),
 		_column(far_center + across * hill_top, top, bank, hill_top - half),
 		_column(far_center + across * far, top, bank if height > 0.0 else _GREEN, far - half),
 	]
 
 
-static func _aqueduct_section(center: Vector3, yaw: float, side: float, reach: float) -> Array[Dictionary]:
+## A banked channel tilts as one, its left side's top `tilt.x` over the middle's height and its
+## right's `tilt.y`; past a raised top the concrete falls back as the ground beside a banked street
+## does. `banked` adds the column where it comes down, on every section so they all match.
+static func _aqueduct_section(center: Vector3, yaw: float, side: float, reach: float, tilt: Vector2 = Vector2.ZERO, banked: bool = false) -> Array[Dictionary]:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
 	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
 	const EDGE_LINE := 0.22
 	var limit := maxf(reach, top + EDGE_LINE)
-	return [
-		_column(center, 0.0, _CONCRETE),
-		_column(center + across * AQUEDUCT_FLOOR_HALF, 0.0, _CONCRETE),
-		_column(center + across * top, AQUEDUCT_BANK_HIGH, _CONCRETE),
-		_column(center + across * top, AQUEDUCT_BANK_HIGH, _YELLOW_EDGE),
-		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH, _YELLOW_EDGE),
-		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP),
-		_column(center + across * minf(top + _FAR_M, limit), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP),
+	# Across the channel the tilt runs straight from one top to the other.
+	var middle := (tilt.x + tilt.y) * 0.5
+	var edge := tilt.x if side > 0.0 else tilt.y
+	var floor_up := lerpf(middle, edge, AQUEDUCT_FLOOR_HALF / top)
+	var line_up := edge * _bank_keep(edge, EDGE_LINE)
+	var columns: Array[Dictionary] = [
+		_column(center, middle, _CONCRETE),
+		_column(center + across * AQUEDUCT_FLOOR_HALF, floor_up, _CONCRETE),
+		_column(center + across * top, AQUEDUCT_BANK_HIGH + edge, _CONCRETE),
+		_column(center + across * top, AQUEDUCT_BANK_HIGH + edge, _YELLOW_EDGE),
+		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH + line_up, _YELLOW_EDGE),
+		_column(center + across * (top + EDGE_LINE), AQUEDUCT_BANK_HIGH + line_up, _CONCRETE_TOP),
 	]
+	if banked:
+		var foot := minf(top + maxf(edge / _BANK_FALL, EDGE_LINE + 0.05), limit)
+		columns.append(_column(center + across * foot, AQUEDUCT_BANK_HIGH, _CONCRETE_TOP))
+	columns.append(_column(center + across * minf(top + _FAR_M, limit), AQUEDUCT_BANK_HIGH, _CONCRETE_TOP))
+	return columns
 
 
 ## `out` is how far the column is from the road's edge, in meters, for Mulholland's gravel verge.
@@ -415,28 +461,31 @@ static func _build_walls(
 	rails: PackedByteArray,
 	left_out: PackedFloat32Array,
 	right_out: PackedFloat32Array,
-	sections: PackedInt32Array
+	sections: PackedInt32Array,
+	up: Array[PackedFloat32Array]
 ) -> void:
 	var faces := PackedVector3Array()
 	for k in range(sections.size() - 1):
 		var a := sections[k]
 		var b := sections[k + 1]
 		for side: float in [1.0, -1.0]:
+			var raise := up[0] if side > 0.0 else up[1]
 			var wall_a := _wall_at(a, side, half_ws, types, left, right, rails, left_out, right_out)
 			var wall_b := _wall_at(b, side, half_ws, types, left, right, rails, left_out, right_out)
 			if wall_a > 0.0 and wall_b > 0.0:
-				_add_wall_quad(faces, pts[a], yaws[a], side * wall_a, pts[b], yaws[b], side * wall_b)
+				_add_wall_quad(faces, pts[a], yaws[a], side * wall_a, pts[b], yaws[b], side * wall_b, raise[a], raise[b])
 			# Where a bridge starts or ends, a face across the road's old edge.
 			if (types[a] == TrackFile.ROAD_BRIDGE) != (types[b] == TrackFile.ROAD_BRIDGE):
 				var wide := maxf(half_ws[a], half_ws[b]) + MOUNTAIN_VERGE
 				var narrow := minf(half_ws[a], half_ws[b])
-				_add_wall_quad(faces, pts[b], yaws[b], side * narrow, pts[b], yaws[b], side * wide)
+				_add_wall_quad(faces, pts[b], yaws[b], side * narrow, pts[b], yaws[b], side * wide, raise[b], raise[b])
 	_add_wall_body(track, faces)
 
 
-static func _add_wall_quad(faces: PackedVector3Array, p0: Vector3, yaw0: float, lat0: float, p1: Vector3, yaw1: float, lat1: float) -> void:
-	var a := p0 + Vector3(cos(yaw0), 0.0, -sin(yaw0)) * lat0
-	var b := p1 + Vector3(cos(yaw1), 0.0, -sin(yaw1)) * lat1
+## `lift0` and `lift1` raise each end, for a banked road's raised side.
+static func _add_wall_quad(faces: PackedVector3Array, p0: Vector3, yaw0: float, lat0: float, p1: Vector3, yaw1: float, lat1: float, lift0: float = 0.0, lift1: float = 0.0) -> void:
+	var a := p0 + Vector3(cos(yaw0), 0.0, -sin(yaw0)) * lat0 + Vector3.UP * lift0
+	var b := p1 + Vector3(cos(yaw1), 0.0, -sin(yaw1)) * lat1 + Vector3.UP * lift1
 	var up := Vector3(0.0, _WALL_H, 0.0)
 	var down := Vector3(0.0, -1.0, 0.0)
 	faces.append_array(PackedVector3Array([a + down, b + down, b + up, a + down, b + up, a + up]))
@@ -461,7 +510,8 @@ static func _add_wall_body(track: Node3D, faces: PackedVector3Array) -> void:
 
 
 ## Street Rod 2's guard rail: a low beam on posts at the verge, on the right only.
-static func _build_rails(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, half_ws: PackedFloat32Array, rails: PackedByteArray, right_out: PackedFloat32Array) -> void:
+## `lift` raises the rail where a banked road's right edge stands up.
+static func _build_rails(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, half_ws: PackedFloat32Array, rails: PackedByteArray, right_out: PackedFloat32Array, lift: PackedFloat32Array) -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var posts: Array[Transform3D] = []
@@ -469,8 +519,8 @@ static func _build_rails(track: Node3D, pts: PackedVector3Array, yaws: PackedFlo
 	for i in range(pts.size() - 1):
 		if rails[i] == 0 or rails[i + 1] == 0:
 			continue
-		var a := _rail_foot(pts[i], yaws[i], half_ws[i] + right_out[i])
-		var b := _rail_foot(pts[i + 1], yaws[i + 1], half_ws[i + 1] + right_out[i + 1])
+		var a := _rail_foot(pts[i], yaws[i], half_ws[i] + right_out[i]) + Vector3.UP * lift[i]
+		var b := _rail_foot(pts[i + 1], yaws[i + 1], half_ws[i + 1] + right_out[i + 1]) + Vector3.UP * lift[i + 1]
 		_add_vertex(st, a + Vector3.UP * _RAIL_LOW, _RAIL_GRAY)
 		_add_vertex(st, b + Vector3.UP * _RAIL_LOW, _RAIL_GRAY)
 		_add_vertex(st, b + Vector3.UP * _RAIL_HIGH, _RAIL_GRAY)
@@ -491,7 +541,8 @@ static func _rail_foot(center: Vector3, yaw: float, half: float) -> Vector3:
 
 
 ## Street Rod 2's narrow road: dark red posts, bars over the road and diagonals on each side.
-static func _build_trusses(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, half_ws: PackedFloat32Array, types: PackedStringArray) -> void:
+## `lifts` raise each side's feet where a banked road's edge stands up.
+static func _build_trusses(track: Node3D, pts: PackedVector3Array, yaws: PackedFloat32Array, half_ws: PackedFloat32Array, types: PackedStringArray, lifts: Array[PackedFloat32Array]) -> void:
 	var beams: Array[Transform3D] = []
 	var i := 0
 	var run := 0.0
@@ -507,7 +558,7 @@ static func _build_trusses(track: Node3D, pts: PackedVector3Array, yaws: PackedF
 		if last.is_empty() or run >= _TRUSS_BAY_M:
 			run = 0.0
 			var across := Vector3(cos(yaws[i]), 0.0, -sin(yaws[i])) * (half_ws[i] + 0.1)
-			var feet: Array[Vector3] = [pts[i] + across, pts[i] - across]
+			var feet: Array[Vector3] = [pts[i] + across + Vector3.UP * lifts[0][i], pts[i] - across + Vector3.UP * lifts[1][i]]
 			var up := Vector3.UP * _TRUSS_H
 			for foot: Vector3 in feet:
 				beams.append(_beam(foot, foot + up))
