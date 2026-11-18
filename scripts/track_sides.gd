@@ -36,6 +36,8 @@ const _BANK_FALL := 0.5
 const _HILL_TOP_M := 30.0
 const _HILL_TOP_RISE := 1.25
 const _SECTION_STEP := 2
+## Two sections' far points closer than this across are one point.
+const _MEET_M := 0.01
 ## About 150 m each way, with the track's sample every 2 m.
 const _SLOW_SAMPLES := 75
 const _WALL_H := 2.5
@@ -176,6 +178,8 @@ static func build_aqueduct(
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var steps := SurfaceTool.new()
+	steps.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
 	var banked := not lifts.is_empty()
 	var up := _side_lifts(lifts, pts.size())
@@ -187,12 +191,22 @@ static func build_aqueduct(
 		for k in range(sections.size() - 1):
 			var a := sections[k]
 			var b := sections[k + 1]
+			var meet := _inside_meet(pts, yaws, a, b, side)
 			_add_side_span(
 				st,
-				_aqueduct_section(pts[a], yaws[a], side, reach[a], Vector2(up[0][a], up[1][a]), banked),
-				_aqueduct_section(pts[b], yaws[b], side, reach[b], Vector2(up[0][b], up[1][b]), banked)
+				_aqueduct_section(pts[a], yaws[a], side, minf(reach[a], meet), Vector2(up[0][a], up[1][a]), banked),
+				_aqueduct_section(pts[b], yaws[b], side, minf(reach[b], meet), Vector2(up[0][b], up[1][b]), banked),
+				steps
 			)
 	_add_mesh(track, "Channel", st, _GroundMaterial.vertex_colored_concrete())
+	var step_mesh := steps.commit()
+	if step_mesh != null and step_mesh.get_surface_count() > 0:
+		step_mesh.surface_set_material(0, _GroundMaterial.vertex_colored_concrete())
+		var step_mi := MeshInstance3D.new()
+		step_mi.name = "ChannelSteps"
+		step_mi.mesh = step_mesh
+		step_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		track.add_child(step_mi)
 	var faces := PackedVector3Array()
 	var top := AQUEDUCT_FLOOR_HALF + AQUEDUCT_BANK_RUN
 	for k in range(sections.size() - 1):
@@ -203,6 +217,27 @@ static func build_aqueduct(
 			_add_wall_quad(faces, pts[a], yaws[a], side * top, pts[b], yaws[b], side * top, raise[a], raise[b])
 	_add_wall_body(track, faces)
 	_build_under(track, pts, _UNDER_CONCRETE.darkened(0.2))
+
+
+## How far out on `side` (1 left, -1 right) the sideways lines at samples `a` and `b` meet, on the
+## inside of a bend, or INF where they don't. Ground reaching past there folds back over itself: its
+## triangles turn face down and the backs show dark on the ground round them, as the concrete is
+## drawn from both sides. So the span between two sections runs out to where their lines meet, a
+## wedge, and on the inside of a bend the wedges meet at its middle like spokes at a hub; the
+## ground of the road before and after the bend covers on past there. Each span stops at its own
+## meeting point rather than its neighbors', so no gap opens between them where the bend tightens.
+## A circuit's grass does much the same (race_track.gd's `_inside_reach_caps()`).
+static func _inside_meet(pts: PackedVector3Array, yaws: PackedFloat32Array, a: int, b: int, side: float) -> float:
+	var r0 := Vector3(cos(yaws[a]), 0.0, -sin(yaws[a])) * side
+	var r1 := Vector3(cos(yaws[b]), 0.0, -sin(yaws[b])) * side
+	var mid_yaw := yaws[a] + angle_difference(yaws[a], yaws[b]) * 0.5
+	var fwd := Vector3(sin(mid_yaw), 0.0, cos(mid_yaw))
+	var along := Vector3(pts[b].x - pts[a].x, 0.0, pts[b].z - pts[a].z).dot(fwd)
+	# How fast the two sideways lines close on each other, per meter out.
+	var closing := -(r1 - r0).dot(fwd)
+	if closing <= 0.0001 or along <= 0.0:
+		return INF
+	return along / closing
 
 
 ## The left (0) and right (1) edge lifts of a banked road, or all 0 when `lifts` is empty.
@@ -334,7 +369,9 @@ static func _column(point: Vector3, rise: float, color: Color, out: float = 0.0)
 	return {"point": point + Vector3(0.0, rise, 0.0), "color": color, "above": maxf(rise, 0.0), "out": out}
 
 
-static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[Dictionary]) -> void:
+## `steps`, when given, takes the steps in height where wedges meet on the inside of a bend
+## (`_add_step()`).
+static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[Dictionary], steps: SurfaceTool = null) -> void:
 	for c in range(near.size() - 1):
 		var a0: Vector3 = near[c]["point"]
 		var a1: Vector3 = near[c + 1]["point"]
@@ -347,12 +384,41 @@ static func _add_side_span(st: SurfaceTool, near: Array[Dictionary], far: Array[
 		var fb: Dictionary = far[c]
 		var fb1: Dictionary = far[c + 1]
 		# Facing up on either side of the road.
-		if (a1 - a0).cross(b0 - a0).y > 0.0:
-			for col: Dictionary in [na, na1, fb1, na, fb1, fb]:
-				_add_column_vertex(st, col)
+		var up := (a1 - a0).cross(b0 - a0).y > 0.0
+		if steps != null and Vector2(a1.x - b1.x, a1.z - b1.z).length() < _MEET_M:
+			_add_step(steps, na, na1, fb1, b0)
 		else:
-			for col: Dictionary in [na, fb1, na1, na, fb, fb1]:
+			for col: Dictionary in [na, na1, fb1] if up else [na, fb1, na1]:
 				_add_column_vertex(st, col)
+		for col: Dictionary in [na, fb1, fb] if up else [na, fb, fb1]:
+			_add_column_vertex(st, col)
+
+
+## Where two sections' ground meets on the inside of a bend (`_inside_meet()`), the span is a
+## wedge whose tip, `far`, stands at its far section's height, and the next wedge's at the next
+## section's: on a climbing bend each stands a little over the one before, and between them
+## the far ground showed through as dark lines. This upright sliver fills the step, under the edge
+## of the higher wedge from `near` to `tip`, its own section's tip below `far`. It faces the lower
+## side, the only side it can be seen from, and is lit as the ground there, facing up; drawn
+## smoothed with the ground it bent the normals round it, and lit as a wall it showed as a line.
+## On the flat it is nothing and is left out. `toward` is a point on the wedge's side of it.
+static func _add_step(steps: SurfaceTool, near: Dictionary, tip: Dictionary, far: Dictionary, toward: Vector3) -> void:
+	var p0: Vector3 = near["point"]
+	var p1: Vector3 = tip["point"]
+	var p2: Vector3 = far["point"]
+	if absf(p2.y - p1.y) < _MEET_M:
+		return
+	# The wedge is on the lower side when its tip is the lower one.
+	var lower := (toward - p0) * signf(p1.y - p2.y)
+	lower.y = 0.0
+	# Its front is the side the cross product of its winding points away from, as the normals
+	# SurfaceTool.generate_normals() makes for the ground show.
+	var order: Array[Dictionary] = [near, tip, far]
+	if (p1 - p0).cross(p2 - p0).dot(lower) > 0.0:
+		order = [near, far, tip]
+	for col: Dictionary in order:
+		steps.set_normal(Vector3.UP)
+		_add_column_vertex(steps, col)
 
 
 ## A column's point, with its color, its height over the road in UV.x and its distance from the

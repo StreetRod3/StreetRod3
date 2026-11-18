@@ -114,20 +114,6 @@ GitHub issue #131.
 
 Not looked into yet: why the arcade rival is in the left lane where traffic meets it, whether it sees the traffic car in time to dodge it, and why the simulation rival runs into the wall in that corner.
 
-## Dark shapes on the concrete inside a curved Aqueduct-style course
-
-GitHub issue #220.
-
-On an Aqueduct-style track that curves round, such as a loop made in the track maker, jagged dark shapes cover the flat concrete on the inside of the curves. They are there with or without banking. The game's own Aqueduct runs straight and doesn't show them.
-
-To reproduce:
-
-1. In the track maker, make a loop with four 90 degree corners, for example nodes at 0, 0; 0, 150; -200, 150; -200, -150; 0, -150, on a 14 m road.
-2. Set the style to aqueduct and test-drive it.
-3. Look across the inside of a corner from the concrete beside the channel. The dark shapes lie on the concrete there.
-
-Likely cause, not confirmed: the Aqueduct's sections (`_aqueduct_section()` in `scripts/track_sides.gd`) reach out flat to halfway to the next part of the course. On the inside of a curve they cross the next sections' and their triangles turn to face down, and the concrete material draws both faces (`vertex_colored_concrete()` sets `CULL_DISABLED`), so the backs show dark. A circuit's grass had the same trouble and was fixed by stopping each strip short of where it crosses its neighbor (`_inside_reach_caps()` in `scripts/race_track.gd`). Mulholland's sides are built the same way as the Aqueduct's and may need it too.
-
 ## Dark slivers beside the road on a curved street-style course
 
 GitHub issue #221.
