@@ -1,0 +1,276 @@
+extends RefCounted
+
+## Heat and crash scenes for a free roam. The traffic cars do the driving.
+## A cop sees SIGHT_M. Speeding counts only while one can see the car. A crash
+## counts from anywhere, and a hit on a cop fills the heat.
+
+const SIGHT_M := 150.0
+const LIMIT_MPS := 11.0
+const NOTICE_MPS := 1.5
+const SPEED_HOLD_S := 1.0
+## Time that used to clear the heat. It now takes that long to lose LOSE_DROP.
+const LOSE_S := 4.0
+const LOSE_DROP := 0.05
+const PULL_RANGE_M := 8.0
+const CRAWL_MPS := 3.0
+const PULL_HOLD_S := 2.0
+const GRACE_S := 20.0
+## The ticket follows the heat: $10 with barely any, $100 when it is full.
+const FINE_MIN := 10
+const FINE_MAX := 100
+## Watched speeding fills the meter slowly. A couple of seconds over the pace is a
+## small mark, and a full meter takes a long run.
+const HEAT_PER_S := 0.025
+const HIT_HEAT := 0.35
+## Cars out driving. Two with an empty meter, five when it is full.
+const COPS_MIN := 2
+const COPS_MAX := 5
+const HARD_MPS := 6.0
+const SCENE_JOIN_M := 18.0
+const FAR_M := 80.0
+const HOLD_MIN_S := 10.0
+const HOLD_MAX_S := 20.0
+const SCENE_LIFE_S := 20.0
+const RETARGET_S := 0.5
+const PATROL_MPS := 11.0
+const PURSUE_MPS := 26.0
+
+const PATROL := 0
+const PURSUE := 1
+const ATTEND := 2
+
+var heat := 0.0
+var grace := 0.0
+var scenes: Array[Dictionary] = []
+
+var _over_s := 0.0
+var _crawl_s := 0.0
+var _crash := false
+var _stop := false
+## Fastest the car went while the heat was up, for the ticket.
+var _top_mps := 0.0
+
+
+## `cop_seen` is a cop inside SIGHT_M. `cop_close` is one inside PULL_RANGE_M.
+func tick(delta: float, speed: float, cop_seen: bool, cop_close: bool) -> void:
+	if delta <= 0.0:
+		return
+	if grace > 0.0:
+		grace = maxf(grace - delta, 0.0)
+		_over_s = 0.0
+	elif speed > LIMIT_MPS:
+		_over_s += delta
+		if _over_s >= SPEED_HOLD_S and cop_seen:
+			heat = minf(heat + HEAT_PER_S * delta, 1.0)
+	else:
+		_over_s = 0.0
+		if heat > 0.0 and not cop_seen:
+			heat = maxf(heat - LOSE_DROP / LOSE_S * delta, 0.0)
+			if heat <= 0.0:
+				_crash = false
+				_top_mps = 0.0
+	if heat > 0.0:
+		_top_mps = maxf(_top_mps, speed)
+	if heat > 0.0 and speed <= CRAWL_MPS and cop_close:
+		_crawl_s += delta
+		if _crawl_s >= PULL_HOLD_S:
+			_stop = true
+			_crawl_s = 0.0
+	else:
+		_crawl_s = 0.0
+
+
+## How many police cars should be out driving at this heat. The steps land on
+## each third of the meter, and full heat is the maximum.
+func cops_for(amount: float) -> int:
+	var heat_now := clampf(amount, 0.0, 1.0)
+	var extra := int(floor(heat_now * float(COPS_MAX - COPS_MIN)))
+	if heat_now >= 1.0:
+		extra = COPS_MAX - COPS_MIN
+	return COPS_MIN + extra
+
+
+## A real hit on the player, or any new contact with a cop when `on_cop`.
+func note_hit(amount: float, on_cop: bool) -> void:
+	if on_cop:
+		heat = 1.0
+		_crash = true
+		return
+	if amount <= NOTICE_MPS:
+		return
+	heat = minf(heat + HIT_HEAT, 1.0)
+	_crash = true
+
+
+## A place other cars (or the player) just crashed. A later hit nearby joins it.
+## `holder` is a car sitting there, or -1 when the scene is only a spot.
+func open_scene(pos: Vector3, hard: bool, holder: int = -1) -> void:
+	var flat := Vector2(pos.x, pos.z)
+	for scene: Dictionary in scenes:
+		var at: Vector3 = scene["pos"]
+		if Vector2(at.x, at.z).distance_to(flat) > SCENE_JOIN_M:
+			continue
+		if hard:
+			scene["hard"] = true
+		if holder < 0:
+			return
+		var holders: Array = scene["holders"]
+		if holders.has(holder):
+			return
+		holders.append(holder)
+		if holders.size() >= 3:
+			scene["hard"] = true
+		scene["left"] = maxf(float(scene["left"]), SCENE_LIFE_S)
+		return
+	var holders: Array[int] = []
+	if holder >= 0:
+		holders.append(holder)
+	scenes.append({
+		"pos": pos,
+		"left": SCENE_LIFE_S,
+		"hard": hard,
+		"holders": holders,
+		"dropped": false,
+	})
+
+
+## Drops a scene whose cars have driven off, or whose time is up.
+## `sitting` is instance id to whether that car is still pulled over.
+func tick_scenes(delta: float, sitting: Dictionary) -> void:
+	var keep: Array[Dictionary] = []
+	for scene: Dictionary in scenes:
+		scene["left"] = float(scene["left"]) - delta
+		if float(scene["left"]) <= 0.0:
+			continue
+		var holders: Array = scene["holders"]
+		if not holders.is_empty():
+			var any := false
+			for id: Variant in holders:
+				if bool(sitting.get(id, false)):
+					any = true
+					break
+			if not any:
+				continue
+		keep.append(scene)
+	scenes = keep
+
+
+func main_scene() -> Dictionary:
+	if scenes.is_empty():
+		return {}
+	return scenes[scenes.size() - 1]
+
+
+## One duty per cop, in the same order as `cop_at`. A scene the player has left
+## keeps one cop. Full heat with the player still there sends every cop.
+func duties(cop_at: Array[Vector3], player: Vector3) -> Array[int]:
+	var out: Array[int] = []
+	out.resize(cop_at.size())
+	if cop_at.is_empty():
+		return out
+	var scene := main_scene()
+	var live := not scene.is_empty()
+	var scene_pos := Vector3.ZERO
+	var hard := false
+	if live:
+		scene_pos = scene["pos"]
+		hard = bool(scene["hard"])
+	var away := Vector2(player.x - scene_pos.x, player.z - scene_pos.z).length()
+	var fled := live and away > SIGHT_M
+	var attend_n := 0
+	var pursue_n := 0
+	if heat <= 0.0:
+		if live:
+			attend_n = 2 if hard else 1
+	elif fled:
+		attend_n = 1
+		pursue_n = 1
+	elif heat >= 1.0:
+		pursue_n = cop_at.size()
+	else:
+		pursue_n = 1
+		if live and hard:
+			attend_n = 1
+	var used := {}
+	_claim(out, used, _nearest_order(cop_at, scene_pos), ATTEND, attend_n)
+	_claim(out, used, _nearest_order(cop_at, player), PURSUE, pursue_n)
+	return out
+
+
+## The nearest cop to a scene is still too far, and no cop has been moved in yet.
+func wants_drop(distance: float) -> bool:
+	var scene := main_scene()
+	if scene.is_empty() or bool(scene.get("dropped", false)):
+		return false
+	return distance > FAR_M
+
+
+func mark_dropped() -> void:
+	var scene := main_scene()
+	if scene.is_empty():
+		return
+	scene["dropped"] = true
+
+
+## The fine for this much heat, in dollars, held between FINE_MIN and FINE_MAX.
+static func fine_for(guilt: float) -> int:
+	var t := clampf(guilt, 0.0, 1.0)
+	return clampi(roundi(lerpf(float(FINE_MIN), float(FINE_MAX), t)), FINE_MIN, FINE_MAX)
+
+
+## Empties the pull-over, clears the heat, and starts the grace.
+func take_stop(money: int) -> Dictionary:
+	if not _stop:
+		return {}
+	_stop = false
+	var amount := fine_for(heat)
+	var broke := money <= 0
+	var paid := 0 if broke else mini(money, amount)
+	var top := _top_mps
+	var crashed := _crash
+	heat = 0.0
+	grace = GRACE_S
+	_crash = false
+	_over_s = 0.0
+	_crawl_s = 0.0
+	_top_mps = 0.0
+	return {"paid": paid, "broke": broke, "amount": amount, "speed": top, "crash": crashed}
+
+
+func hud_text(chasing: bool) -> String:
+	if heat <= 0.0 and not chasing:
+		return "Heat: 0%"
+	var pct := roundi(clampf(heat, 0.0, 1.0) * 100.0)
+	if chasing:
+		return "Heat: %d%%  Police" % pct
+	return "Heat: %d%%" % pct
+
+
+func _claim(out: Array[int], used: Dictionary, order: Array[int], duty: int, count: int) -> void:
+	var left := count
+	for idx: int in order:
+		if left <= 0:
+			return
+		if used.has(idx):
+			continue
+		out[idx] = duty
+		used[idx] = true
+		left -= 1
+
+
+func _nearest_order(spots: Array[Vector3], target: Vector3) -> Array[int]:
+	var left: Array[int] = []
+	for i in spots.size():
+		left.append(i)
+	var order: Array[int] = []
+	while not left.is_empty():
+		var best := 0
+		var best_d := spots[left[0]].distance_squared_to(target)
+		for i in range(1, left.size()):
+			var dist := spots[left[i]].distance_squared_to(target)
+			if dist < best_d:
+				best_d = dist
+				best = i
+		order.append(left[best])
+		left.remove_at(best)
+	return order

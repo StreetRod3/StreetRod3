@@ -20,6 +20,9 @@ extends RefCounted
 ## `wheels.size` multiplies the size of whatever wheels are fitted, for a car
 ## whose tires are bigger or smaller than the wheel parts draw them (1 if left out).
 ##
+## `model.paintable` is false when the body's colors are fixed, as on the police Fairlane.
+## Left out, a car can be painted.
+##
 ## `model.cove` is a second paint zone, like the side coves of the 1956-62 Corvettes:
 ## `outline` is its shape seen from the side, [z, y] points in meters in the body's
 ## space (the model's CarBody, Y up, +Z forward), and `min_x` how far from the middle
@@ -110,6 +113,7 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		"ground_clearance": float(body.get("ground_clearance", 0.0)),
 		# Size of the paint's EGA-style dither squares in meters (car_paint_mask.gdshader); 0 is none.
 		"dither_cell": float(body.get("dither_cell", 0.0)),
+		"paintable": bool(body.get("paintable", true)),
 	}
 	# A second paint zone (the Corvettes' side coves): a side-view outline of [z, y] points
 	# in meters, in the car's space, and how far out from the middle its faces lie.
