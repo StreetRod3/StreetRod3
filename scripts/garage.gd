@@ -311,6 +311,10 @@ const _T_WRENCH_GAP := 0.3
 const _T_WRENCH := 0.4
 const _T_TIRE_MOVE := 0.55
 const _T_JACK := 0.9
+## How far the jack's front wheels reach ahead of its origin, and how far short of the car's
+## side they stop.
+const _JACK_FRONT := 0.33
+const _JACK_GAP := 0.1
 const _T_LIFT := 1.0
 const _T_DROP := 0.4
 const _T_RISE := 0.4
@@ -3571,8 +3575,7 @@ func _shop_sound_stop(sound_name: String) -> void:
 
 ## The jack rolls in and raises the car.
 func _jack_up(car_start: Vector3) -> void:
-	var work := Vector3(-2.15, _lift_home.origin.y, 0.12)
-	await _tween_global_pos(_lift, work, _T_JACK)
+	await _tween_global_pos(_lift, _jack_work_spot(), _T_JACK)
 	if not is_instance_valid(self):
 		return
 	_shop_sound("jack_pump")
@@ -3581,6 +3584,24 @@ func _jack_up(car_start: Vector3) -> void:
 	if not is_instance_valid(self):
 		return
 	await _pause(_T_PAUSE)
+
+
+## Where the jack stops: rolled straight ahead, saddle first, from its corner until its
+## front wheels are _JACK_GAP short of the car's side.
+func _jack_work_spot() -> Vector3:
+	var home := _lift_home.origin
+	var body := _car_pivot.get_node_or_null("CarBody") as Node3D
+	if body == null:
+		return home
+	var box := _world_mesh_aabb(body)
+	var ahead := _lift_home.basis.x
+	ahead.y = 0.0
+	ahead = ahead.normalized()
+	if box.size == Vector3.ZERO or ahead.x <= 0.01:
+		return home
+	var front := home + ahead * _JACK_FRONT
+	var travel := (box.position.x - _JACK_GAP - front.x) / ahead.x
+	return home + ahead * maxf(travel, 0.0)
 
 
 ## The jack lets the car down and rolls home.
