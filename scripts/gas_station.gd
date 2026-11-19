@@ -27,6 +27,11 @@ const _POUR_L_PER_S := 4.0
 ## Full service starts when the player has not begun fueling by this time.
 const _SERVICE_WAIT := 60.0
 const _RAG_MODEL := "res://assets/locations/gas-station/rag.glb"
+## Both pumps are this model (tools/gas_pump_to_glb.py); its side plate reads REGULAR.
+const _PUMP_MODEL := "res://assets/locations/gas-station/pump.glb"
+## The super pump's body maps: the same atlas with the plate reading SUPER.
+const _PUMP_SUPER_COLOR := "res://assets/locations/gas-station/pump-super-color.png"
+const _PUMP_SUPER_NORMAL := "res://assets/locations/gas-station/pump-super-normal.png"
 ## Width of the rag on the ground, in meters.
 const _RAG_WIDTH := 0.32
 ## Car files point the nose along local +Z. The glass is the forward edge of the roof.
@@ -124,6 +129,12 @@ var _nozzles: Dictionary = {}
 var _homes: Dictionary = {}
 var _hoses: Dictionary = {}
 var _outlets: Dictionary = {}
+## Per pump: the marker on the nozzle where the hose goes in, the model's hanging hose
+## (shown only while the nozzle is home), and the nozzle's resting orientation.
+var _hose_ends: Dictionary = {}
+var _hanging_hoses: Dictionary = {}
+var _home_bases: Dictionary = {}
+var _pump_glass_mat: BaseMaterial3D
 var _materials: Dictionary = {}
 var _sign_font: Font
 var _box_meshes: Dictionary = {}
@@ -1104,13 +1115,23 @@ func _nozzle(id: String) -> Node3D:
 	return _nozzles.get(id, null) as Node3D
 
 
+## With the nozzle home the model's own hose hangs in its loop; once it is lifted that
+## hose is hidden and a straight one runs from the pump's fitting into the handle.
 func _aim_hoses() -> void:
 	for id: String in _hoses.keys():
 		var hose := _hoses[id] as MeshInstance3D
 		var nozzle := _nozzle(String(id))
 		if hose == null or nozzle == null or not _outlets.has(id):
 			continue
-		_aim_segment(hose, _outlets[id] as Vector3, nozzle.global_position)
+		var home := nozzle.global_position.distance_to(_homes[id] as Vector3) < 0.01
+		var hanging := _hanging_hoses.get(id, null) as Node3D
+		if hanging != null:
+			hanging.visible = home
+		if home:
+			hose.visible = false
+			continue
+		var end := _hose_ends.get(id, null) as Node3D
+		_aim_segment(hose, _outlets[id] as Vector3, end.global_position if end != null else nozzle.global_position)
 
 
 func _aim_nozzles() -> void:
@@ -1123,7 +1144,7 @@ func _aim_nozzles() -> void:
 			continue
 		var home: Vector3 = _homes[id]
 		if nozzle.global_position.distance_to(home) < 0.08:
-			nozzle.rotation = Vector3(1.05, 0.25, 0.1)
+			nozzle.global_basis = _home_bases[id] as Basis
 		elif nozzle.global_position.distance_to(aim) > 0.2:
 			nozzle.look_at(aim, Vector3.UP)
 		var in_hand := String(id) == _held and not _nozzle_seated and not _busy
@@ -1516,13 +1537,13 @@ func _build_office(parent: Node3D) -> void:
 
 
 func _build_pumps() -> void:
-	_pump(_PUMP_REGULAR, "REGULAR", "regular")
-	_pump(_PUMP_SUPER, "SUPER", "super")
+	_pump(_PUMP_REGULAR, "regular")
+	_pump(_PUMP_SUPER, "super")
 	_box(_world, Vector3(2.45, 0.08, 0.85), Vector3(-4.95, 0.08, 4.85), Color(0.58, 0.56, 0.52), 0.8)
 	_build_rag()
 
 
-func _pump(pos: Vector3, title: String, id: String) -> void:
+func _pump(pos: Vector3, id: String) -> void:
 	var pump := StaticBody3D.new()
 	pump.name = "Pump" + id.capitalize()
 	pump.position = pos
@@ -1531,36 +1552,70 @@ func _pump(pos: Vector3, title: String, id: String) -> void:
 	_world.add_child(pump)
 	var shape := CollisionShape3D.new()
 	var box := BoxShape3D.new()
-	box.size = Vector3(0.82, 2.15, 0.7)
+	box.size = Vector3(0.86, 1.8, 0.56)
 	shape.shape = box
-	shape.position = Vector3(0.0, 1.05, 0.0)
+	shape.position = Vector3(-0.07, 0.9, 0.0)
 	pump.add_child(shape)
-	_box(pump, Vector3(0.72, 0.1, 0.52), Vector3(0.0, 0.05, 0.0), Color(0.78, 0.76, 0.72), 0.55)
-	_box(pump, Vector3(0.58, 1.35, 0.4), Vector3(0.0, 0.76, 0.0), _RED, 0.4)
-	var grade_bg := Color(0.16, 0.12, 0.09)
-	_box(pump, Vector3(0.5, 0.52, 0.03), Vector3(0.0, 1.05, 0.22), grade_bg, 0.55)
-	_box(pump, Vector3(0.52, 0.07, 0.04), Vector3(0.0, 1.32, 0.23), _YELLOW, 0.35, 0.0, _YELLOW, 0.5)
-	_label(pump, title, Vector3(0.0, 1.05, 0.26), 32, 0.004, Color(0.96, 0.92, 0.82), grade_bg, 2, _readable_font())
-	_label(pump, "Chris' Gas", Vector3(0.0, 0.48, 0.24), 28, 0.0038, Color(1.6, 0.9, 0.18), _RED, 3, _readable_font())
-	_sphere(pump, 0.2, Vector3(0.0, 1.62, 0.0), Color(0.75, 0.88, 0.95), 0.15, 0.05, Color(0.8, 0.92, 1.0), 0.35)
-	_cylinder(pump, 0.1, 0.12, 0.07, Vector3(0.0, 1.86, 0.0), Color(0.84, 0.8, 0.72), 0.3, 0.55)
-	var nozzle := Node3D.new()
-	nozzle.name = "Nozzle"
-	nozzle.position = Vector3(0.22, 1.05, 0.26)
-	pump.add_child(nozzle)
-	_box(nozzle, Vector3(0.07, 0.2, 0.06), Vector3(0.0, 0.0, 0.0), Color(0.12, 0.12, 0.13), 0.45, 0.2)
-	_box(nozzle, Vector3(0.035, 0.035, 0.22), Vector3(0.0, -0.02, -0.12), _METAL, 0.3, 0.7)
+	var packed := load(_PUMP_MODEL) as PackedScene
+	if packed == null:
+		push_error("Pump model failed to load: %s" % _PUMP_MODEL)
+		return
+	var model := packed.instantiate() as Node3D
+	model.name = "Model"
+	pump.add_child(model)
+	if id == "super":
+		_paint_super_plate(model.get_node_or_null("pump") as MeshInstance3D)
+	_clear_pump_glass(model.get_node_or_null("pump_glass") as MeshInstance3D)
+	var nozzle := model.get_node_or_null("nozzle") as Node3D
+	var outlet := model.get_node_or_null("hose_outlet") as Node3D
+	if nozzle == null or outlet == null:
+		push_error("Pump model is missing its nozzle or hose outlet: %s" % _PUMP_MODEL)
+		return
 	_nozzles[id] = nozzle
 	_homes[id] = nozzle.global_position
+	_home_bases[id] = nozzle.global_basis
+	_hose_ends[id] = nozzle.get_node_or_null("hose_end")
+	_hanging_hoses[id] = model.get_node_or_null("hose")
+	_outlets[id] = outlet.global_position
 	var hose := MeshInstance3D.new()
 	var mesh := BoxMesh.new()
 	mesh.size = Vector3(0.032, 0.032, 1.0)
 	hose.mesh = mesh
 	hose.material_override = _flat(Color(0.07, 0.07, 0.08), 0.9)
 	hose.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	hose.visible = false
 	_world.add_child(hose)
 	_hoses[id] = hose
-	_outlets[id] = pump.to_global(Vector3(-0.02, 1.28, 0.18))
+
+
+## The glTF import gives the dial glass a depth pre-pass, which hides the dial behind
+## it; a plain alpha blend shows the dial through the grimy glass.
+func _clear_pump_glass(glass: MeshInstance3D) -> void:
+	if glass == null:
+		return
+	if _pump_glass_mat == null:
+		var base := glass.get_active_material(0) as BaseMaterial3D
+		if base == null:
+			return
+		_pump_glass_mat = base.duplicate() as BaseMaterial3D
+		_pump_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.set_surface_override_material(0, _pump_glass_mat)
+
+
+## The super pump wears the same atlas with its side plate repainted to read SUPER.
+func _paint_super_plate(body: MeshInstance3D) -> void:
+	if body == null:
+		return
+	var base := body.get_active_material(0) as BaseMaterial3D
+	var color := load(_PUMP_SUPER_COLOR) as Texture2D
+	var normal := load(_PUMP_SUPER_NORMAL) as Texture2D
+	if base == null or color == null or normal == null:
+		push_error("Super pump maps failed to load")
+		return
+	var mat := base.duplicate() as BaseMaterial3D
+	mat.albedo_texture = color
+	mat.normal_texture = normal
+	body.set_surface_override_material(0, mat)
 
 
 func _build_rag() -> void:
