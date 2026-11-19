@@ -216,6 +216,10 @@ var _roll_inertia: float = 600.0
 var _spring_rate: float = spring_stiffness
 var _shock_rate: float = damper_coefficient
 var _ride_lower: float = 0.0
+## How high the car's origin rides over the road when settled, set by the car that owns this: each
+## wheel's rest is its hub's height over that. 0 where no car sets it, and the rest is measured
+## from the road under each wheel, which is right only on level ground.
+var ride_base: float = 0.0
 var _ride_grip: float = 1.0
 ## The hand brake, 0 to 1, for whoever drives this car.
 var handbrake_input: float = 0.0
@@ -312,7 +316,9 @@ func set_wheel_positions(local_positions: Array) -> void:
 	# Some car files mount a wheel by a point well above its axle. The hub has to be low
 	# enough for the suspension to find the road, or the tires never touch it.
 	var car := get_parent() as Node3D
-	var car_y := car.global_position.y if car != null else 0.0
+	var car_y := ride_base
+	if ride_base <= 0.0:
+		car_y = car.global_position.y if car != null else 0.0
 	for point: Vector3 in local_positions:
 		var hub := point as Vector3
 		if hub.y + car_y > _MAX_RIDE_DROP_M:
@@ -933,7 +939,11 @@ func _update_suspension(dt: float) -> void:
 		var ground_y := _raycast_ground(space, car, origin, wheel.road_y)
 		var drop := origin.y - ground_y
 		if wheel.ride_recapture:
-			wheel.ride_drop = _ride_drop_sample(wheel.ride_drop, drop)
+			# Settled, a hub stands its own height over the car's base. Measured from the road
+			# instead, a car set down on a bank or a slope keeps the wrong rest on each wheel for
+			# the rest of the race: one hanging, another bottomed, even back on the level.
+			var settled := wheel.local_position.y + ride_base if ride_base > 0.0 else drop
+			wheel.ride_drop = _ride_drop_sample(wheel.ride_drop, settled)
 			wheel.ride_recapture = false
 		var sag := wheel.static_load / stiffness
 		wheel.rest_length = wheel.ride_drop + sag

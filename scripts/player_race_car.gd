@@ -208,6 +208,7 @@ func _ready() -> void:
 		_dynamics = _VehicleDynamics.new()
 		_dynamics.name = "VehicleDynamics"
 		add_child(_dynamics)
+	_dynamics.ride_base = _road_base_y
 	motion_mode = MOTION_MODE_FLOATING
 	# Layer 2 is cars. Only the road and its barriers stop this body. Contact with the other
 	# car is all in `car_bump.gd`, or on a slope the bodies touch before it sees a hit.
