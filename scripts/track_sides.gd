@@ -73,8 +73,8 @@ const _GREEN := Color(0.11, 0.42, 0.1, 1)
 const _HILL_BROWN := Color(0.56, 0.3, 0.07, 0)
 const _RAIL_GRAY := Color(0.62, 0.62, 0.6, 1)
 const _TRUSS_RED := Color(0.5, 0.05, 0.04, 1)
-## The Aqueduct's vertex colors shade its concrete texture, whose mean is 0.651 in linear light
-## (see ground_material.gd). Vertex colors are sRGB, so each is the old flat color (0.58 channel,
+## The Aqueduct's vertex colors shade its concrete texture, which ground_material.gd brings to a
+## mean of 0.651 in linear light, the old photo's (`CONCRETE_LINEAR_MEAN`). Vertex colors are sRGB, so each is the old flat color (0.58 channel,
 ## 0.5 top, 0.9/0.78/0.12 yellow) taken to linear, divided by that mean, and taken back. The yellow
 ## line's red would need more than 1, so the line keeps its hue at a little under the old brightness.
 const _CONCRETE := Color(0.704, 0.704, 0.68, 1)
