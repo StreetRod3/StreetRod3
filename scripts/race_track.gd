@@ -83,6 +83,8 @@ const _FAR_SAMPLE_STEP := 8
 ## How much farther under its height than the strip the grid is drawn at a point the strip or the
 ## road covers. More left a lip at the strip's edge that showed as a dark line.
 const _COVERED_SINK := 0.04
+## How far the curtain under the strip's outer edge hangs down (`_add_curtain()`).
+const _CURTAIN_M := 1.0
 ## How far the skirt round each chunk of the grid hangs down.
 const _SKIRT_M := 3.0
 const _SKIRT_OUT_M := 0.6
@@ -1605,9 +1607,11 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 		offsets.sort()
 	var reaches: Array[PackedFloat32Array] = _grass_sides if _grass_sides.size() == 4 else _side_reaches(true)
 	var ground := _drawn_ground()
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var count := 0
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	# Pairs of points along the strip's outer edges and its ends, where it meets the grid.
+	var rim := PackedInt32Array()
 	for side: float in [1.0, -1.0]:
 		var k := 0 if side > 0.0 else 1
 		var caps := _inside_reach_caps(side)
@@ -1633,6 +1637,7 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 			var limit := minf(reaches[k][i], caps[i])
 			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "limit": limit, "edge": _half_ws[i], "i": i})
 		var cols := offsets.size()
+		var count := verts.size()
 		for row: Dictionary in rows:
 			var at: Vector3 = row["at"]
 			var yaw: float = row["yaw"]
@@ -1644,8 +1649,8 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 				var point := at + across * out
 				# The row's own sample is the nearest, as far out as the strip reaches.
 				var y := _height_on(point, ground, int(row["i"])) - _ground_sink()
-				st.set_uv(_ground_uv(point, y, out - float(row["edge"]), at.y))
-				st.add_vertex(Vector3(point.x, y, point.z))
+				uvs.append(_ground_uv(point, y, out - float(row["edge"]), at.y))
+				verts.append(Vector3(point.x, y, point.z))
 		for r in rows.size() - 1:
 			var a := count + r * cols
 			var b := a + cols
@@ -1659,8 +1664,7 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 				var q0 := outer0 if side > 0.0 else inner0
 				var p1 := inner1 if side > 0.0 else outer1
 				var q1 := outer1 if side > 0.0 else inner1
-				for index: int in [p0, q0, q1, p0, q1, p1]:
-					st.add_index(index)
+				indices.append_array(PackedInt32Array([p0, q0, q1, p0, q1, p1]))
 		# What the strip covers, for the grid under it.
 		for r in rows.size() - 1:
 			var ra: Dictionary = rows[r]
@@ -1671,16 +1675,73 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 			var b1 := _strip_corner(rb, side, _STRIP_W)
 			_cover_triangle(covered, a0, a1, b1)
 			_cover_triangle(covered, a0, b1, b0)
-		count += rows.size() * cols
+		for r in rows.size() - 1:
+			rim.append_array(PackedInt32Array([count + r * cols + cols - 1, count + (r + 1) * cols + cols - 1]))
+		var last := count + (rows.size() - 1) * cols
+		for c in cols - 1:
+			rim.append_array(PackedInt32Array([count + c, count + c + 1, last + c, last + c + 1]))
+	# Where the strip meets the grid it takes the grid's own drawn height, so the two meet with no
+	# step: a step of a few centimeters showed as a thin dark line, the screen's shading darkening
+	# the crease. Its points there move a little from `_height_on()`'s height, no more than the
+	# grid does.
+	var grid_heights: Dictionary = {}
+	for index: int in rim:
+		var v := verts[index]
+		v.y = _grid_surface(Vector2(v.x, v.z), covered, ground, grid_heights)
+		verts[index] = v
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in verts.size():
+		st.set_uv(uvs[k])
+		st.add_vertex(verts[k])
+	for index: int in indices:
+		st.add_index(index)
 	st.generate_normals()
 	var mesh := _steep_to_dirt(st)
 	mesh.surface_set_material(0, mat)
+	# Down the strip's outer edge and across its two ends: under the strip the grid is left out,
+	# so low along the ground the eye could pass under the edge to the ground far below.
+	var curtain := PackedVector3Array()
+	for index: int in rim:
+		curtain.append(verts[index])
+	_add_curtain(mesh, curtain, mat)
 	var mi := MeshInstance3D.new()
 	mi.name = "PaintedGroundStrip"
 	mi.mesh = mesh
 	# It lies over the grid, sunk under it, and its shadow fell on the grid where that showed.
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## The height the grid (`_build_ground_patch()`, at the grid's own spacing) is drawn at `point`,
+## from its points' heights, kept in `cache` by grid point.
+func _grid_surface(point: Vector2, covered: Dictionary, ground: int, cache: Dictionary) -> float:
+	var cell := _TrackTerrain.CELL_M
+	var i := floori(point.x / cell)
+	var j := floori(point.y / cell)
+	var fx := point.x / cell - i
+	var fy := point.y / cell - j
+	var h00 := _grid_point_height(Vector2i(i, j), covered, ground, cache)
+	var h10 := _grid_point_height(Vector2i(i + 1, j), covered, ground, cache)
+	var h01 := _grid_point_height(Vector2i(i, j + 1), covered, ground, cache)
+	var h11 := _grid_point_height(Vector2i(i + 1, j + 1), covered, ground, cache)
+	# The grid's two triangles a cell, split from its low corner to its high one.
+	if fx >= fy:
+		return h00 + fx * (h10 - h00) + fy * (h11 - h10)
+	return h00 + fy * (h01 - h00) + fx * (h11 - h01)
+
+
+## The height a grid point is drawn at, as `_build_ground_patch()` draws it.
+func _grid_point_height(g: Vector2i, covered: Dictionary, ground: int, cache: Dictionary) -> float:
+	if cache.has(g):
+		return float(cache[g])
+	var world := Vector3(g.x * _TrackTerrain.CELL_M, 0.0, g.y * _TrackTerrain.CELL_M)
+	var near := _nearest_index(world)
+	var y := _height_on(world, ground, near) - _ground_sink()
+	if _under_road(world, near).x > 0.0 or covered.has(g):
+		y -= _COVERED_SINK
+	cache[g] = y
+	return y
 
 
 ## The mesh `st` holds, with each point's steepness, from its normal, turned to dirt in its UV.x as
@@ -1697,6 +1758,40 @@ func _steep_to_dirt(st: SurfaceTool) -> ArrayMesh:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+## A curtain hanging `_CURTAIN_M` down from each pair of points in `edges`, added to `mesh` as its
+## own surface. It is lit as flat ground, so where it shows through a crack it is the grass's color.
+func _add_curtain(mesh: ArrayMesh, edges: PackedVector3Array, mat: Material) -> void:
+	if edges.size() < 2:
+		return
+	var verts := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var drop := Vector3.DOWN * _CURTAIN_M
+	for e in range(0, edges.size() - 1, 2):
+		var a := edges[e]
+		var b := edges[e + 1]
+		if a.is_equal_approx(b):
+			continue
+		var next := verts.size()
+		verts.append_array(PackedVector3Array([a, b, a + drop, b + drop]))
+		indices.append_array(PackedInt32Array([next, next + 1, next + 3, next, next + 3, next + 2]))
+	if indices.is_empty():
+		return
+	var normals := PackedVector3Array()
+	normals.resize(verts.size())
+	normals.fill(Vector3.UP)
+	var uvs := PackedVector2Array()
+	uvs.resize(verts.size())
+	uvs.fill(Vector2(0.0, _FAR_OUT_UV))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mat)
 
 
 ## `uv` with ground as steep as `normal` says turned to dirt (`_steep_to_dirt()`).
@@ -1965,6 +2060,9 @@ func _build_ground_patch(base: Vector2i, cells: int, step: int, mat: Material, c
 			normals[v] = normal
 			uvs[v] = _dirt_uv(_ground_uv(world, y, _FAR_OUT_UV, road_ys[k]), normal)
 	var indices := PackedInt32Array()
+	# Triangles reaching in under the strip from past it. They cast no shadow: lying just under the
+	# strip's edge, they shaded it in a thin dark line.
+	var edge_indices := PackedInt32Array()
 	# Ground the strip or the road covers all of is left to them: the grid there can't follow a
 	# hillside's foot or the drop under a bridge, and stood up through them or sank into pits.
 	for vj in n - 1:
@@ -1973,12 +2071,16 @@ func _build_ground_patch(base: Vector2i, cells: int, step: int, mat: Material, c
 			var i10 := i00 + 1
 			var i01 := i00 + n
 			var i11 := i01 + 1
-			if inside[i00] == 0 or inside[i10] == 0 or inside[i11] == 0:
-				indices.append_array(PackedInt32Array([i00, i10, i11]))
-			if inside[i00] == 0 or inside[i11] == 0 or inside[i01] == 0:
-				indices.append_array(PackedInt32Array([i00, i11, i01]))
+			for tri: PackedInt32Array in [PackedInt32Array([i00, i10, i11]), PackedInt32Array([i00, i11, i01])]:
+				var under := int(inside[tri[0]]) + int(inside[tri[1]]) + int(inside[tri[2]])
+				if under == 3:
+					continue
+				if under > 0:
+					edge_indices.append_array(tri)
+				else:
+					indices.append_array(tri)
 	# With no triangles there is nothing to draw.
-	if indices.is_empty():
+	if indices.is_empty() and edge_indices.is_empty():
 		return
 	# A skirt down each edge hides any crack where chunks drawn at different spacings meet. Each
 	# leans a little out under its neighbor, so a crack seen from above is covered too.
@@ -2007,14 +2109,20 @@ func _build_ground_patch(base: Vector2i, cells: int, step: int, mat: Material, c
 	arrays[Mesh.ARRAY_VERTEX] = verts
 	arrays[Mesh.ARRAY_NORMAL] = normals
 	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	mesh.surface_set_material(0, mat)
-	var mi := MeshInstance3D.new()
-	mi.name = "PaintedGround_%d_%d" % [base.x, base.y]
-	mi.mesh = mesh
-	add_child(mi)
+	for part: Array in [[indices, "PaintedGround_%d_%d", true], [edge_indices, "PaintedGroundEdge_%d_%d", false]]:
+		var part_indices: PackedInt32Array = part[0]
+		if part_indices.is_empty():
+			continue
+		arrays[Mesh.ARRAY_INDEX] = part_indices
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.surface_set_material(0, mat)
+		var mi := MeshInstance3D.new()
+		mi.name = str(part[1]) % [base.x, base.y]
+		mi.mesh = mesh
+		if not bool(part[2]):
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
 
 
 func _build_terrain() -> void:
