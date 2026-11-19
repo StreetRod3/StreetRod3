@@ -70,21 +70,29 @@ const _PAINT_WALL_LOOK_M := 1.5
 ## it reaches past where it starts, and where its columns are.
 const _STRIP_W := 12.0
 const _STRIP_OFFSETS := [0.0, 0.5, 1.0, 1.5, 2.25, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 12.0]
-## Unpainted chunks of the grid are drawn with points this many cells apart near the road, and
-## this many away from it.
-const _NEAR_STEP := 2
+## Unpainted chunks of the grid away from the road are drawn with points this many cells apart.
+## Near it they are drawn at the grid's own spacing, so a triangle reaching in under the strip from
+## past it reaches no nearer the road than Mulholland's hillsides and drops, which it can't follow.
 const _COARSE_STEP := 8
 ## Looking for the road near a chunk of the grid, it looks at every so many samples near the road,
 ## and far from it at fewer, then finely round the best.
 const _NEAR_SAMPLE_STEP := 4
+## Points a side of the blocks a fine chunk looks for the road in (`_samples_near()`).
+const _NEAR_BLOCK := 6
 const _FAR_SAMPLE_STEP := 8
-## How far under the road or the strip the grid is sunk where they cover it, and a little under
-## the strip where it is only partly covered.
-const _SUNK_M := 0.6
-const _COVERED_SINK := 0.07
+## How much farther under its height than the strip the grid is drawn at a point the strip or the
+## road covers. More left a lip at the strip's edge that showed as a dark line.
+const _COVERED_SINK := 0.04
 ## How far the skirt round each chunk of the grid hangs down.
 const _SKIRT_M := 3.0
 const _SKIRT_OUT_M := 0.6
+## Painted ground turns from grass to dirt between these steepnesses, as the cosine of its slope
+## (about 35 and 45 degrees, the ground shader's own), and the UV.x that gives none and all of it
+## (shaders/vertex_ground.gdshader's `dirt_from_m` and `dirt_over_m`).
+const _DIRT_STEEP_FROM := 0.82
+const _DIRT_STEEP_FULL := 0.7
+const _DIRT_UV_FROM := 0.15
+const _DIRT_UV_OVER := 0.5
 ## The ground shader's distance from the road's edge for ground well clear of the verge.
 const _FAR_OUT_UV := 100.0
 ## Which ground `_height_on()` reads: whatever is there, or a plain track's road or grass alone.
@@ -1560,11 +1568,14 @@ func _strip_start(i: int, left: bool) -> float:
 ## The ground of a track with painted ground (track_terrain.gd): everything beyond the road's own
 ## build, painted or not, so the two meet without a seam. A strip down each side of the road follows
 ## its edge (`_build_ground_strip()`), and a grid in `_TrackTerrain.CHUNK_M` squares covers the rest
-## (`_build_ground_grid()`), sunk under the strip and the road where they cover it. Both are drawn
+## (`_build_ground_grid()`) where they don't cover it. Both are drawn
 ## at `_height_on()`'s heights, so the car rides on what it sees.
 func _build_painted_ground() -> void:
 	var mat := _GroundMaterial.vertex_ground().duplicate() as ShaderMaterial
 	mat.set_shader_parameter(&"verge_m", _TrackSides.MOUNTAIN_VERGE if _style == TrackFile.STYLE_MOUNTAIN else 0.0)
+	# Steep ground turns to dirt by its points' steepness (`_steep_to_dirt()`), not each triangle's.
+	mat.set_shader_parameter(&"steep_from", -0.5)
+	mat.set_shader_parameter(&"steep_full", -1.0)
 	var covered: Dictionary = {}
 	_build_ground_strip(mat, covered)
 	_build_ground_grid(mat, covered)
@@ -1604,13 +1615,19 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 		# the road's edge is out, and the road's height.
 		var rows: Array[Dictionary] = []
 		if _run_in_m > 0.0:
-			var back := _pts[0] - Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0])) * _run_in_m
-			back.y = _pts[0].y
-			var back_reach := _reach_and_far_y_at(back, _yaws[0], -_run_in_m, true)
+			# Behind the start, a row every sample's length as along the course, so the strip
+			# follows painted ground there too.
+			var steps := maxi(ceili(_run_in_m / BAKE_STEP), 1)
+			var behind := Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0]))
 			# Behind a circuit's start there is no road: the ground runs across its line.
 			var from := 0.0 if not _street else _strip_start(0, side > 0.0)
-			var limit := back_reach.x if side > 0.0 else back_reach.y
-			rows.append({"at": back, "yaw": _yaws[0], "start": from, "limit": limit, "edge": from, "i": 0})
+			for r in steps:
+				var back_m := _run_in_m * float(steps - r) / float(steps)
+				var back := _pts[0] - behind * back_m
+				back.y = _pts[0].y
+				var back_reach := _reach_and_far_y_at(back, _yaws[0], -back_m, true)
+				var limit := back_reach.x if side > 0.0 else back_reach.y
+				rows.append({"at": back, "yaw": _yaws[0], "start": from, "limit": limit, "edge": _half_ws[0] if _street else 0.0, "i": 0})
 		for i in _pts.size():
 			var from := _strip_start(i, side > 0.0)
 			var limit := minf(reaches[k][i], caps[i])
@@ -1656,7 +1673,7 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 			_cover_triangle(covered, a0, b1, b0)
 		count += rows.size() * cols
 	st.generate_normals()
-	var mesh := st.commit()
+	var mesh := _steep_to_dirt(st)
 	mesh.surface_set_material(0, mat)
 	var mi := MeshInstance3D.new()
 	mi.name = "PaintedGroundStrip"
@@ -1664,6 +1681,30 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 	# It lies over the grid, sunk under it, and its shadow fell on the grid where that showed.
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## The mesh `st` holds, with each point's steepness, from its normal, turned to dirt in its UV.x as
+## the ground shader turns ground above the road to dirt (`_ground_uv()`). The shader's own test,
+## by each triangle's slope, is off for this ground (`_build_painted_ground()`): on a grid it made
+## a checkerboard of grass and dirt triangles down a slope.
+func _steep_to_dirt(st: SurfaceTool) -> ArrayMesh:
+	var arrays := st.commit_to_arrays()
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	for k in uvs.size():
+		uvs[k] = _dirt_uv(uvs[k], normals[k])
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+## `uv` with ground as steep as `normal` says turned to dirt (`_steep_to_dirt()`).
+static func _dirt_uv(uv: Vector2, normal: Vector3) -> Vector2:
+	var steep := 1.0 - smoothstep(_DIRT_STEEP_FULL, _DIRT_STEEP_FROM, absf(normal.y))
+	if steep > 0.0:
+		uv.x = maxf(uv.x, _DIRT_UV_FROM + _DIRT_UV_OVER * steep)
+	return uv
 
 
 ## How far under `_height_on()`'s height the drawn ground lies: a circuit's and street's grass a
@@ -1717,8 +1758,8 @@ func _build_ground_grid(mat: Material, covered: Dictionary) -> void:
 	var back := _pts[0] - Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0])) * _run_in_m
 	var low := Vector2(back.x, back.z)
 	var high := low
-	# Painted chunks are drawn at the grid's own spacing; unpainted ones near the road, where they
-	# meet the strip, at twice that; the rest coarsely.
+	# Painted chunks are drawn at the grid's own spacing, and so are unpainted ones near the road,
+	# where the grid meets the strip and has to follow the ground's shape there; the rest coarsely.
 	var near: Dictionary = {}
 	var reach := _STRIP_W + ROAD_HALF_W + 2.0 * _TrackTerrain.CELL_M
 	for i in range(0, _pts.size(), 2):
@@ -1740,12 +1781,8 @@ func _build_ground_grid(mat: Material, covered: Dictionary) -> void:
 	for cj in range(from.y, to.y + 1):
 		for ci in range(from.x, to.x + 1):
 			var key := Vector2i(ci, cj)
-			var step := _COARSE_STEP
-			if _terrain.chunks.has(key):
-				step = 1
-			elif near.has(key):
-				step = _NEAR_STEP
-			_build_ground_chunk(key, step, mat, covered, ground, sparse)
+			var step := 1 if _terrain.chunks.has(key) or near.has(key) else _COARSE_STEP
+			_build_ground_patch(key * _TrackTerrain.CHUNK, _TrackTerrain.CHUNK, step, mat, covered, ground, sparse)
 
 
 ## The samples that may be nearest some point within `half` meters (square) of `center`, every
@@ -1781,34 +1818,82 @@ func _near_candidates(center: Vector2, half: float, sparse: PackedInt32Array) ->
 	return {"list": list, "stride": stride, "low": nearest - span}
 
 
-## The sample nearest `world` among `found` (`_near_candidates()`), looked for finely round the best.
+## The sample nearest `world` among `found` (`_near_candidates()`), looked for finely round every
+## candidate that could be beside it: where two parts of the course pass close, the nearest of every
+## few samples can be on the other part.
 func _nearest_among(world: Vector3, found: Dictionary) -> int:
 	var list: PackedInt32Array = found["list"]
+	var stride: int = found["stride"]
+	var nearest := INF
+	for i: int in list:
+		nearest = minf(nearest, _planar_distance_sq(world, _pts[i]))
+	# A sample between two candidates is at most half their spacing nearer than the nearer of them.
+	var slack := sqrt(nearest) + BAKE_STEP * stride
+	slack *= slack
+	var top := _pts.size() - 1
+	var best := list[0]
+	var best_d := INF
+	for c: int in list:
+		if _planar_distance_sq(world, _pts[c]) > slack:
+			continue
+		for i in range(maxi(c - stride, 0), mini(c + stride, top) + 1):
+			var d := _planar_distance_sq(world, _pts[i])
+			if d < best_d:
+				best_d = d
+				best = i
+	return best
+
+
+## Every sample that may be the nearest to some point within `half` meters (square) of `center`.
+func _samples_near(center: Vector2, half: float) -> PackedInt32Array:
+	var at := Vector3(center.x, 0.0, center.y)
+	var nearest := sqrt(_planar_distance_sq(at, _pts[_nearest_index(at)]))
+	# Anything nearest a point in the square is within this of its middle.
+	var radius := nearest + 2.0 * half * sqrt(2.0) + 0.01
+	var limit := radius * radius
+	var list := PackedInt32Array()
+	var cells := ceili(radius / _BIN_CELL)
+	var home := _bin_key(at)
+	for dz in range(-cells, cells + 1):
+		for dx in range(-cells, cells + 1):
+			var key := Vector2i(home.x + dx, home.y + dz)
+			if not _bins.has(key):
+				continue
+			var packed: PackedInt32Array = _bins[key]
+			for i: int in packed:
+				var p := _pts[i]
+				var ex := p.x - at.x
+				var ez := p.z - at.z
+				if ex * ex + ez * ez <= limit:
+					list.append(i)
+	if list.is_empty():
+		list.append(_nearest_index(at))
+	return list
+
+
+## The sample in `list` nearest `world`.
+func _nearest_in(world: Vector3, list: PackedInt32Array) -> int:
 	var best := list[0]
 	var best_d := INF
 	for i: int in list:
-		var d := _planar_distance_sq(world, _pts[i])
-		if d < best_d:
-			best_d = d
-			best = i
-	var stride: int = found["stride"]
-	var top := _pts.size() - 1
-	for i in range(maxi(best - stride, 0), mini(best + stride, top) + 1):
-		var d := _planar_distance_sq(world, _pts[i])
+		var p := _pts[i]
+		var ex := p.x - world.x
+		var ez := p.z - world.z
+		var d := ex * ex + ez * ez
 		if d < best_d:
 			best_d = d
 			best = i
 	return best
 
 
-## One chunk of `_build_ground_grid()`, its points `step` grid cells apart.
-func _build_ground_chunk(key: Vector2i, step: int, mat: Material, covered: Dictionary, ground: int, sparse: PackedInt32Array) -> void:
+## One square of `_build_ground_grid()`, `cells` grid cells a side from grid point `base`, its
+## points `step` cells apart.
+func _build_ground_patch(base: Vector2i, cells: int, step: int, mat: Material, covered: Dictionary, ground: int, sparse: PackedInt32Array) -> void:
 	var cell := _TrackTerrain.CELL_M
-	var n := int(_TrackTerrain.CHUNK / float(step)) + 1
-	var base := key * _TrackTerrain.CHUNK
+	var n := int(cells / float(step)) + 1
 	var spacing := cell * step
-	var middle := (Vector2(key) + Vector2(0.5, 0.5)) * _TrackTerrain.CHUNK_M
-	var found := _near_candidates(middle, _TrackTerrain.CHUNK_M * 0.5 + spacing, sparse)
+	var middle := (Vector2(base) + Vector2(cells, cells) * 0.5) * cell
+	var found := _near_candidates(middle, cells * cell * 0.5 + spacing, sparse)
 	# Far enough from the road that no cut or fill can reach, painted ground is simply its paint.
 	var clear := float(found["low"]) - ROAD_HALF_W - _STRIP_W - _TrackSides.MOUNTAIN_VERGE - _AQUEDUCT_LIP_M
 	var road_low := INF
@@ -1826,6 +1911,15 @@ func _build_ground_chunk(key: Vector2i, step: int, mat: Material, covered: Dicti
 	cover.resize(wide * wide)
 	var road_ys := PackedFloat32Array()
 	road_ys.resize(wide * wide)
+	# Where the grid is fine, every sample that may be nearest a block of its points, so each point
+	# looks at few (`_NEAR_BLOCK` points a side).
+	var blocks: Dictionary = {}
+	if step < _COARSE_STEP:
+		var block_half := (_NEAR_BLOCK - 1) * 0.5 * spacing
+		for bj in range(0, wide, _NEAR_BLOCK):
+			for bi in range(0, wide, _NEAR_BLOCK):
+				var corner := Vector2((base.x + (bi - 1) * step) * cell, (base.y + (bj - 1) * step) * cell)
+				blocks[Vector2i(bi, bj)] = _samples_near(corner + Vector2(block_half, block_half), block_half)
 	for vj in wide:
 		for vi in wide:
 			var g := Vector2i(base.x + (vi - 1) * step, base.y + (vj - 1) * step)
@@ -1836,76 +1930,89 @@ func _build_ground_chunk(key: Vector2i, step: int, mat: Material, covered: Dicti
 				heights[k] = painted
 				road_ys[k] = painted
 				continue
-			var near_i := _nearest_among(world, found)
+			var near_i := 0
+			if blocks.is_empty():
+				near_i = _nearest_among(world, found)
+			else:
+				near_i = _nearest_in(world, blocks[Vector2i(vi - vi % _NEAR_BLOCK, vj - vj % _NEAR_BLOCK)])
 			var under := _under_road(world, near_i)
 			road_ys[k] = under.y
 			cover[k] = 1 if under.x > 0.0 or (step < _COARSE_STEP and covered.has(g)) else 0
 			heights[k] = _height_on(world, ground, near_i)
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var tops := PackedVector3Array()
-	tops.resize(n * n)
+	# The mesh's arrays are filled directly: a SurfaceTool call a point was most of the time here.
+	var verts := PackedVector3Array()
+	verts.resize(n * n)
+	var normals := PackedVector3Array()
+	normals.resize(n * n)
+	var uvs := PackedVector2Array()
+	uvs.resize(n * n)
+	var inside := PackedByteArray()
+	inside.resize(n * n)
 	for vj in n:
 		for vi in n:
-			var g := Vector2i(base.x + vi * step, base.y + vj * step)
 			var k := (vj + 1) * wide + vi + 1
+			var v := vj * n + vi
 			var y := heights[k]
-			var drawn := y - _TERRAIN_SINK
-			if cover[k] != 0:
-				# Sunk under the lowest ground round it, so no edge between it and the next point
-				# comes up through the strip, where that ground dips.
-				var whole := true
-				var lowest := minf(y, road_ys[k])
-				for dj in 3:
-					for di in 3:
-						var m := (vj + dj) * wide + vi + di
-						lowest = minf(lowest, heights[m])
-						if cover[m] == 0:
-							whole = false
-				drawn = lowest - _SUNK_M if whole else y - _TERRAIN_SINK - _COVERED_SINK
-			var world := Vector3(g.x * cell, drawn, g.y * cell)
-			tops[vj * n + vi] = world
+			inside[v] = cover[k]
+			# A point the strip or the road covers is only ever the corner of a triangle reaching
+			# out past them; a little low, so where the two disagree the strip stays on top.
+			var drawn := y - _ground_sink() - (_COVERED_SINK if cover[k] != 0 else 0.0)
+			var world := Vector3((base.x + vi * step) * cell, drawn, (base.y + vj * step) * cell)
+			verts[v] = world
 			# From the heights round it, the ring past the edge too, so chunks shade alike where
 			# they meet.
-			var normal := Vector3(heights[k - 1] - heights[k + 1], 2.0 * spacing, heights[k - wide] - heights[k + wide])
-			st.set_normal(normal.normalized())
-			st.set_uv(_ground_uv(world, y, _FAR_OUT_UV, road_ys[k]))
-			st.add_vertex(world)
+			var normal := Vector3(heights[k - 1] - heights[k + 1], 2.0 * spacing, heights[k - wide] - heights[k + wide]).normalized()
+			normals[v] = normal
+			uvs[v] = _dirt_uv(_ground_uv(world, y, _FAR_OUT_UV, road_ys[k]), normal)
+	var indices := PackedInt32Array()
+	# Ground the strip or the road covers all of is left to them: the grid there can't follow a
+	# hillside's foot or the drop under a bridge, and stood up through them or sank into pits.
 	for vj in n - 1:
 		for vi in n - 1:
 			var i00 := vj * n + vi
 			var i10 := i00 + 1
 			var i01 := i00 + n
 			var i11 := i01 + 1
-			for index: int in [i00, i10, i11, i00, i11, i01]:
-				st.add_index(index)
-	# A skirt down each edge hides any crack where chunks drawn at different spacings meet.
-	var next := n * n
+			if inside[i00] == 0 or inside[i10] == 0 or inside[i11] == 0:
+				indices.append_array(PackedInt32Array([i00, i10, i11]))
+			if inside[i00] == 0 or inside[i11] == 0 or inside[i01] == 0:
+				indices.append_array(PackedInt32Array([i00, i11, i01]))
+	# With no triangles there is nothing to draw.
+	if indices.is_empty():
+		return
+	# A skirt down each edge hides any crack where chunks drawn at different spacings meet. Each
+	# leans a little out under its neighbor, so a crack seen from above is covered too.
 	var edges: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
 	for v in n:
 		edges[0].append(v)
 		edges[1].append((n - 1) * n + v)
 		edges[2].append(v * n)
 		edges[3].append(v * n + n - 1)
-	# Each leans a little out under its neighbor, so a crack seen from above is covered too.
 	var outs: Array[Vector3] = [Vector3(0, 0, -1), Vector3(0, 0, 1), Vector3(-1, 0, 0), Vector3(1, 0, 0)]
 	for e in edges.size():
 		var edge := edges[e]
 		var hang := Vector3.DOWN * _SKIRT_M + outs[e] * _SKIRT_OUT_M
 		for v in edge.size() - 1:
-			var a := tops[edge[v]]
-			var b := tops[edge[v + 1]]
-			for point: Vector3 in [a, b, a + hang, b + hang]:
-				st.set_normal(Vector3.UP)
-				st.set_uv(Vector2(0.0, _FAR_OUT_UV))
-				st.add_vertex(point)
-			for index: int in [next, next + 1, next + 3, next, next + 3, next + 2]:
-				st.add_index(index)
-			next += 4
-	var mesh := st.commit()
+			if inside[edge[v]] != 0 and inside[edge[v + 1]] != 0:
+				continue
+			var next := verts.size()
+			var a := verts[edge[v]]
+			var b := verts[edge[v + 1]]
+			verts.append_array(PackedVector3Array([a, b, a + hang, b + hang]))
+			normals.append_array(PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP]))
+			uvs.append_array(PackedVector2Array([Vector2(0.0, _FAR_OUT_UV), Vector2(0.0, _FAR_OUT_UV), Vector2(0.0, _FAR_OUT_UV), Vector2(0.0, _FAR_OUT_UV)]))
+			indices.append_array(PackedInt32Array([next, next + 1, next + 3, next, next + 3, next + 2]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	mesh.surface_set_material(0, mat)
 	var mi := MeshInstance3D.new()
-	mi.name = "PaintedGround_%d_%d" % [key.x, key.y]
+	mi.name = "PaintedGround_%d_%d" % [base.x, base.y]
 	mi.mesh = mesh
 	add_child(mi)
 
