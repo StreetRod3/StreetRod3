@@ -1708,12 +1708,17 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 	for index: int in rim:
 		curtain.append(verts[index])
 	_add_curtain(mesh, curtain, mat)
-	# And down from the road's edge past the strip's inner edge, which lies `_ground_sink()` under
-	# it: low along the ground the eye passed between them under the road, to the sky.
+	# And down from the road's edges past the strip's inner edge, which lies `_ground_sink()` under
+	# them: low along the ground the eye passed between them under the road, to the sky.
 	if _ground_sink() > 0.0:
 		var lip := PackedVector3Array()
 		for index: int in inner:
 			lip.append(verts[index] + Vector3.UP * _ground_sink())
+		# And across the road's two ends, where the ground runs on past them.
+		if not _loop:
+			for i: int in [0, _pts.size() - 1]:
+				var ext := _sample_extents(i)
+				lip.append_array(PackedVector3Array([_road_point(i, -ext.y), _road_point(i, ext.x)]))
 		_add_curtain(mesh, lip, mat)
 	var mi := MeshInstance3D.new()
 	mi.name = "PaintedGroundStrip"
