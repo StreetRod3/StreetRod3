@@ -77,6 +77,12 @@ const REVERSE_ENGAGE_SPEED := 2.0
 ## Reverse tops out at this share of first gear, and never slower than a brisk walk.
 const REVERSE_TOP_FRACTION := 0.38
 const REVERSE_TOP_MIN := 7.0
+## An automatic under throttle that is losing at least this much speed, in m/s², drops to a lower
+## gear that pulls this many times harder, as a kickdown does on a climb, rather than lug.
+const AUTO_KICKDOWN_LOSS := 0.3
+const AUTO_KICKDOWN_PULL := 1.1
+## How long, in seconds, the automatic watches the speed for that.
+const AUTO_TREND_TIME := 0.4
 ## Share of how hard a landing is that comes off the car's speed.
 const LANDING_SPEED_LOSS := 0.15
 ## A blown tire pulls the car towards its side, as in Street Rod 2. The pull is steering input,
@@ -116,6 +122,9 @@ var _touch: Node = null
 var _gearbox: Dictionary = {}
 var _gear: int = 0
 var _shift_timer: float = 0.0
+## How fast the car is gaining speed, in m/s², smoothed, for the automatic.
+var _speed_trend: float = 0.0
+var _trend_from: float = 0.0
 ## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
 var _shifter_gear: int = _Controller.POSITION_NONE
 var _rumble := _Rumble.new()
@@ -866,7 +875,7 @@ func _physics_simulation(delta: float) -> void:
 	if _engine_blown:
 		throttle = false
 	elif _is_automatic():
-		_auto_shift(throttle, brake)
+		_auto_shift(throttle, brake, delta)
 
 	var track := _race_track()
 	if _escape_obstacle(track):
@@ -923,7 +932,7 @@ func _physics_arcade(delta: float) -> void:
 	if _engine_blown:
 		throttle = false
 	elif _is_automatic():
-		_auto_shift(throttle, brake)
+		_auto_shift(throttle, brake, delta)
 
 	if _escape_obstacle(_race_track()):
 		_arcade.hold(self, delta, _car_center)
@@ -1043,6 +1052,14 @@ func _signed_gear_accel() -> float:
 	return pull * GameState.weight_accel() * _damage.power_left()
 
 
+## How hard a forward gear pulls at the car's speed, for comparing gears: both driving models
+## push by the ratio, less as the gear runs out of revs (`gear_acceleration()`, `drive_force()`).
+func _gear_pull(gear_index: int) -> float:
+	var ratios := _ratios()
+	var ratio := float(ratios[clampi(gear_index, 0, ratios.size() - 1)])
+	return _ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(gear_index), maxf(forward_speed, 0.0), GameState.engine_power_hp)
+
+
 ## Lowest and highest speed this gear allows, in m/s. Neutral coasts either way.
 func _speed_limits() -> Vector2:
 	var vmax := GameState.get_effective_vmax_kmh() / 3.6
@@ -1116,7 +1133,10 @@ func _request_shift(direction: int) -> void:
 	gear_changed.emit(prev, next)
 
 
-func _auto_shift(throttle: bool, brake: bool) -> void:
+func _auto_shift(throttle: bool, brake: bool, delta: float) -> void:
+	var gained := (forward_speed - _trend_from) / maxf(delta, 0.0001)
+	_trend_from = forward_speed
+	_speed_trend = lerpf(_speed_trend, gained, clampf(delta / AUTO_TREND_TIME, 0.0, 1.0))
 	if _shift_timer > 0.0:
 		return
 	var top := _gear_top_mps(_gear)
@@ -1126,7 +1146,9 @@ func _auto_shift(throttle: bool, brake: bool) -> void:
 	if _gear <= 0:
 		return
 	var prev_top := _gear_top_mps(_gear - 1)
-	if forward_speed < prev_top * 0.38:
+	var kickdown := throttle and _speed_trend < -AUTO_KICKDOWN_LOSS and forward_speed < prev_top * 0.85 \
+		and _gear_pull(_gear - 1) > _gear_pull(_gear) * AUTO_KICKDOWN_PULL
+	if forward_speed < prev_top * 0.38 or kickdown:
 		_request_shift(-1)
 	elif (brake or not throttle) and forward_speed < prev_top * 0.62:
 		_request_shift(-1)
