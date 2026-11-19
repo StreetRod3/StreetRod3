@@ -814,14 +814,17 @@ func _physics_process(delta: float) -> void:
 		_shift_timer = maxf(0.0, _shift_timer - delta)
 	_update_clutch(delta)
 	_ride_on_flat(delta)
+	var from := global_position
 	if _air.airborne:
 		_physics_air(delta)
 	elif GameState.arcade_drive:
 		_physics_arcade(delta)
+		_hold_off_steep(from)
 		_dynamics.sample_surfaces(_race_track(), global_transform)
 		_body_motion.ride_from_motion(delta, _arcade.planar_velocity(), heading_yaw)
 	else:
 		_physics_simulation(delta)
+		_hold_off_steep(from)
 		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_update_burnout(delta)
 	_update_rumble(delta)
@@ -1305,6 +1308,32 @@ func _escape_obstacle(track: Node) -> bool:
 		return false
 	global_position = safe
 	return true
+
+
+## Painted ground too steep to climb (race_track.gd's `too_steep_uphill()`) stops the car as a
+## wall would, without harm: it goes back as far as it climbed this step, from `from`, and loses the
+## part of its motion that heads uphill, so it slides along the foot of the slope.
+func _hold_off_steep(from: Vector3) -> void:
+	var track := _race_track()
+	if track == null or not track.has_method(&"too_steep_uphill"):
+		return
+	var up: Vector3 = track.too_steep_uphill(global_position)
+	if up == Vector3.ZERO:
+		return
+	var climbed := Vector3(global_position.x - from.x, 0.0, global_position.z - from.z).dot(up)
+	if climbed > 0.0:
+		global_position -= up * climbed
+	var planar := Vector3(velocity.x, 0.0, velocity.z)
+	var into := planar.dot(up)
+	if into <= 0.0:
+		return
+	var after := planar - up * into
+	if GameState.arcade_drive:
+		_arcade.apply_planar_velocity(self, after, _car_center)
+	else:
+		_dynamics.cg_velocity = after
+		velocity = after
+		_sync_motion_state()
 
 
 ## Applies touching a barrier to the driving model. True when one was touched.

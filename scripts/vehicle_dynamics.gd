@@ -178,6 +178,9 @@ var cg_velocity: Vector3 = Vector3.ZERO
 var off_road: bool = false
 ## How steeply a banked road rises across the car, toward its +X (see road_bank.gd).
 var bank_slope: float = 0.0
+## How steeply painted ground rises ahead of the car, a meter forward (race_track.gd's
+## `ground_grade()`); 0 on the road.
+var grade_slope: float = 0.0
 ## Sideways acceleration last step, toward the car's +X, with the bank's pull in it.
 var _bank_lat: float = 0.0
 ## How many times their flat grip the tires have on the bank this step.
@@ -499,6 +502,9 @@ func sample_surfaces(track: Object, body: Transform3D) -> void:
 	bank_slope = 0.0
 	if track != null and track.has_method(&"bank_slope"):
 		bank_slope = float(track.bank_slope(body.origin, yaw))
+	grade_slope = 0.0
+	if track != null and track.has_method(&"ground_grade"):
+		grade_slope = float(track.ground_grade(body.origin, yaw))
 
 
 ## The road's surface under a wheel over its smooth height: a fine roughness and a slow
@@ -614,6 +620,8 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 	_long_accel = force_body.z / config.mass_kg
 	_lat_accel = force_body.x / config.mass_kg
 	force_body.x += config.mass_kg * _RoadBank.pull(bank_slope, Vector2(cg_velocity.x, cg_velocity.z).length())
+	# Up a hill the car slows, and down one it runs on.
+	force_body.z += config.mass_kg * _RoadBank.pull(grade_slope, Vector2(cg_velocity.x, cg_velocity.z).length())
 	_bank_lat = force_body.x / config.mass_kg
 
 	cg_velocity += basis * force_body * (dt / config.mass_kg)

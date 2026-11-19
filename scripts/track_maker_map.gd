@@ -3,11 +3,13 @@ extends Control
 ## The track maker's top-down map. It draws a course (`track_maker_doc.gd`) and edits it with
 ## the mouse: with the road tool, a click on empty ground adds a node at the finish end, a click on a
 ## road splits it there, and nodes drag about; with the scenery tool, a click places the
-## chosen kind and placed things drag about. The wheel zooms, and the right or middle button
+## chosen kind and placed things drag about; with the ground tool, holding the button paints the
+## ground's height with the chosen brush (track_terrain.gd). The wheel zooms, and the right or middle button
 ## drags the view. The map is drawn as the driver sees it: +Y (ahead from the start) is up
 ## and the driver's right, -X, is on the right.
 
 const _Doc := preload("res://scripts/track_maker_doc.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 ## Before the first change of an edit, so the maker can keep an undo step.
 signal edit_begun
@@ -16,8 +18,10 @@ signal doc_edited
 ## A drag or click edit is over.
 signal edit_ended
 signal selection_changed
+## Ctrl+click with the ground tool: the ground's height there, for Flatten.
+signal ground_picked(height: float)
 
-enum Tool { ROAD, SCENERY }
+enum Tool { ROAD, SCENERY, GROUND }
 
 const SNAP_M := 5.0
 const MIN_SCALE := 0.02
@@ -42,6 +46,11 @@ var scenery_kind: String = "tree"
 var snap: bool = false
 var selected_node: int = -1
 var selected_scenery: int = -1
+## The ground tool's brush, its radius in meters, its strength (0 to 1), and Flatten's height.
+var brush: _TrackTerrain.Brush = _TrackTerrain.Brush.RAISE
+var brush_radius: float = 30.0
+var brush_strength: float = 0.5
+var flatten_height: float = 0.0
 ## The track point at the middle of the map, and pixels per meter.
 var view_center: Vector2 = Vector2(0.0, 100.0)
 var view_scale: float = 1.5
@@ -53,12 +62,34 @@ var _drag_index: int = -1
 var _drag_begun: bool = false
 var _pan_mouse: Vector2 = Vector2.ZERO
 var _pan_center: Vector2 = Vector2.ZERO
+var _painting: bool = false
+var _mouse: Vector2 = Vector2(-1000.0, -1000.0)
+## Chunk -> [stamp, ImageTexture]: each painted chunk drawn shaded, remade when it changes.
+var _paint_images: Dictionary = {}
 
 
 func _ready() -> void:
 	focus_mode = Control.FOCUS_CLICK
 	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+
+
+func _process(delta: float) -> void:
+	if not _painting or doc == null:
+		return
+	if _dab(minf(delta, 0.1)):
+		doc_edited.emit()
+		queue_redraw()
+
+
+func is_painting() -> bool:
+	return _painting
+
+
+## One dab of the brush under the pointer, for `seconds` of painting.
+func _dab(seconds: float) -> bool:
+	return doc.terrain.paint(brush, to_track(_mouse), brush_radius, brush_strength, seconds, flatten_height, doc.ground_base)
 
 
 # --- View ----------------------------------------------------------------------------------
@@ -124,15 +155,35 @@ func _gui_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				if button.pressed:
 					grab_focus()
-					_press(button.position)
+					if tool == Tool.GROUND and button.ctrl_pressed:
+						ground_picked.emit(doc.ground_at(to_track(button.position)))
+					else:
+						_press(button.position)
 				else:
 					_release()
 				accept_event()
 	elif event is InputEventMouseMotion:
-		_motion((event as InputEventMouseMotion).position)
+		_mouse = (event as InputEventMouseMotion).position
+		_motion(_mouse)
+		if tool == Tool.GROUND:
+			queue_redraw()
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_MOUSE_EXIT and tool == Tool.GROUND:
+		_mouse = Vector2(-1000.0, -1000.0)
+		queue_redraw()
 
 
 func _press(at: Vector2) -> void:
+	if tool == Tool.GROUND:
+		_mouse = at
+		edit_begun.emit()
+		_painting = true
+		if _dab(1.0 / 30.0):
+			doc_edited.emit()
+		queue_redraw()
+		return
 	if tool == Tool.SCENERY:
 		var hit := _scenery_at(at)
 		if hit < 0:
@@ -195,6 +246,10 @@ func _start_drag_edit() -> void:
 
 
 func _release() -> void:
+	if _painting:
+		_painting = false
+		edit_ended.emit()
+		return
 	var was := _drag
 	_drag = _Drag.NONE
 	if (was == _Drag.NODE or was == _Drag.SCENERY) and _drag_begun:
@@ -271,11 +326,110 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), _BACKGROUND)
 	if doc == null:
 		return
+	_draw_ground()
 	_draw_grid()
 	_draw_roads()
 	_draw_scenery()
 	_draw_nodes()
+	_draw_brush()
 	_draw_scale_bar()
+
+
+## The painted ground, shaded as if lit from the top left and colored by height, with a contour
+## line every `_CONTOUR_M` meters. Unpainted ground isn't drawn.
+func _draw_ground() -> void:
+	var terrain := doc.terrain
+	var keep: Dictionary = {}
+	var chunk_m := _TrackTerrain.CHUNK_M
+	var cell := _TrackTerrain.CELL_M
+	var view := Rect2(Vector2.ZERO, size)
+	for key: Vector2i in terrain.chunks:
+		var origin := Vector2(key) * chunk_m
+		# The image's pixels sit on the grid's points; the map runs +X to the left and +Y up.
+		var corner := to_screen(origin + Vector2(chunk_m - cell * 0.5, chunk_m - cell * 0.5))
+		var rect := Rect2(corner, Vector2(chunk_m, chunk_m) * view_scale)
+		keep[key] = true
+		if not view.intersects(rect):
+			continue
+		var stamp := terrain.stamp(key)
+		var cached: Array = _paint_images.get(key, [])
+		if cached.is_empty() or int(cached[0]) != stamp:
+			cached = [stamp, ImageTexture.create_from_image(_ground_image(key))]
+			_paint_images[key] = cached
+		draw_texture_rect(cached[1] as ImageTexture, rect, false)
+	for key: Variant in _paint_images.keys():
+		if not keep.has(key):
+			_paint_images.erase(key)
+
+
+const _CONTOUR_M := 5.0
+
+
+func _ground_image(key: Vector2i) -> Image:
+	var terrain := doc.terrain
+	var n := _TrackTerrain.CHUNK
+	var cell := _TrackTerrain.CELL_M
+	var image := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	# In screen terms: x right, y up out of the map, z up the screen; lit from the top left.
+	var light := Vector3(-1.0, 1.4, 1.0).normalized()
+	var flat := light.y
+	for lj in n:
+		for li in n:
+			var i := key.x * n + li
+			var j := key.y * n + lj
+			var h := terrain.height(i, j)
+			if is_nan(h):
+				continue
+			# Screen right is track -X, and screen up +Y.
+			var right := _near_height(terrain, i - 1, j, h)
+			var left := _near_height(terrain, i + 1, j, h)
+			var down := _near_height(terrain, i, j - 1, h)
+			var up := _near_height(terrain, i, j + 1, h)
+			var normal := Vector3(left - right, 2.0 * cell, down - up).normalized()
+			var shade := clampf(0.85 + 0.9 * (normal.dot(light) - flat), 0.35, 1.2)
+			var color := height_color(h) * shade
+			var band := floori(h / _CONTOUR_M)
+			if floori(right / _CONTOUR_M) != band or floori(up / _CONTOUR_M) != band:
+				color = color.darkened(0.35)
+			color.a = 0.85
+			image.set_pixel(n - 1 - li, n - 1 - lj, color)
+	return image
+
+
+static func _near_height(terrain: _TrackTerrain, i: int, j: int, fallback: float) -> float:
+	var h := terrain.height(i, j)
+	return fallback if is_nan(h) else h
+
+
+## The map's color for ground `h` meters high: green low, through tan and brown, to grey and
+## white on the heights.
+static func height_color(h: float) -> Color:
+	var stops: Array[Vector2] = [Vector2(-50, 0), Vector2(0, 1), Vector2(40, 2), Vector2(150, 3), Vector2(400, 4), Vector2(1000, 5)]
+	var colors: Array[Color] = [
+		Color(0.12, 0.3, 0.25), Color(0.3, 0.5, 0.22), Color(0.62, 0.58, 0.32),
+		Color(0.5, 0.36, 0.22), Color(0.55, 0.55, 0.55), Color(0.95, 0.95, 0.95),
+	]
+	if h <= stops[0].x:
+		return colors[0]
+	for k in range(1, stops.size()):
+		if h <= stops[k].x:
+			return colors[k - 1].lerp(colors[k], (h - stops[k - 1].x) / (stops[k].x - stops[k - 1].x))
+	return colors[colors.size() - 1]
+
+
+## The ground tool's brush round the pointer, and the ground's height under it.
+func _draw_brush() -> void:
+	if tool != Tool.GROUND or not Rect2(Vector2.ZERO, size).has_point(_mouse):
+		return
+	var r := brush_radius * view_scale
+	draw_arc(_mouse, r, 0.0, TAU, 48, Color(_CREAM, 0.9), 1.5)
+	draw_arc(_mouse, r * 0.5, 0.0, TAU, 32, Color(_CREAM, 0.35), 1.0)
+	var at := to_track(_mouse)
+	var paint := doc.terrain.sample(at)
+	var text := "ground %.1f m" % doc.ground_at(at)
+	if paint.y <= 0.0:
+		text += " (not painted)"
+	draw_string(get_theme_default_font(), _mouse + Vector2(r * 0.7 + 8.0, -8.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, _CREAM)
 
 
 func _draw_grid() -> void:

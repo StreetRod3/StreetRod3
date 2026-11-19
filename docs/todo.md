@@ -8,6 +8,10 @@ The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened f
 
 - scenery available on all track types.
 - jumps available on all track types.
+- painting the ground's surface as well as its height: gravel, dirt, rock, sand, snow, like the gravel at the edge of the mountain roads. Painted ground is grass, and dirt where it is steep, for now.
+- barriers to place anywhere, to keep cars out of where they shouldn't go now that they can drive off onto painted ground.
+- hills on the road itself: uphill slows a car and downhill speeds it up only off the road on painted ground so far. On the road a climb drives as it always has, so a hill climb up a painted mountain is no slower than the flat.
+- loading a course with painted ground takes longer, more the longer its road: about 2.3 s more for a Mulholland course, so a 20 km hill climb would add about 9 s. The ground beside the road is worked out point by point in GDScript (`race_track.gd`'s `_build_painted_ground()`).
 
 ## Make burnouts do something
 
