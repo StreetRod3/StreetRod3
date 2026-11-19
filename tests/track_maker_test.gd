@@ -6,6 +6,7 @@ extends SceneTree
 const _Doc := preload("res://scripts/track_maker_doc.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
 const _RoadBank := preload("res://scripts/road_bank.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 
 func _initialize() -> void:
@@ -17,6 +18,7 @@ func _run() -> void:
 	_editing()
 	_loops()
 	_banking()
+	_painted_ground()
 	_test_drive_race_type()
 	print("track_maker_test: ok")
 	quit()
@@ -256,6 +258,52 @@ func _banking() -> void:
 	assert(is_equal_approx(_RoadBank.load(0.0, 10.0), 1.0))
 	assert(is_equal_approx(_RoadBank.pull(rise, 30.0), -_RoadBank.GRAVITY * rise))
 	assert(is_zero_approx(_RoadBank.pull(rise, 0.0)))
+
+
+## Painting the ground: the brushes, the file, and the road following it.
+func _painted_ground() -> void:
+	var doc := _Doc.blank()
+	assert(doc.terrain.is_empty() and not doc.to_text().contains("terrain"))
+	var base := doc.ground_base
+	# A dab of Raise lifts the middle most, and starts from the road's height.
+	doc.set_node_field(1, "z", 2.0)
+	assert(doc.terrain.paint(_TrackTerrain.Brush.RAISE, Vector2(40, 100), 20.0, 1.0, 1.0, 0.0, base))
+	var middle := doc.terrain.sample(Vector2(40, 100))
+	var rim := doc.terrain.sample(Vector2(40, 116))
+	assert(middle.y == 1.0 and middle.x > rim.x and rim.x > 1.0)
+	assert(absf(middle.x - (doc.ground_base(Vector2(40, 100)) + _TrackTerrain.RAISE_MPS)) < 0.01)
+	# Off the paint there is none, and the chunks round a painted point are kept.
+	assert(doc.terrain.sample(Vector2(400, 400)).y == 0.0)
+	# Flatten goes to its height; Smooth leaves unpainted ground alone.
+	doc.terrain.paint(_TrackTerrain.Brush.FLATTEN, Vector2(40, 100), 8.0, 1.0, 10.0, -3.0, base)
+	assert(absf(doc.terrain.sample(Vector2(40, 100)).x + 3.0) < 0.01)
+	assert(not doc.terrain.paint(_TrackTerrain.Brush.SMOOTH, Vector2(300, 300), 20.0, 1.0, 1.0, 0.0, base))
+	# Painting across a chunk's low edge keeps the chunk below too, so the area's rim is unpainted.
+	doc.terrain.set_height(_TrackTerrain.CHUNK, _TrackTerrain.CHUNK, 5.0)
+	assert(doc.terrain.chunks.has(Vector2i(0, 0)) and doc.terrain.chunks.has(Vector2i(1, 1)))
+	# The file keeps it to the centimeter, and a resave is the same text.
+	var text := doc.to_text()
+	var back: _Doc = _Doc.from_text(text, "paint").doc
+	assert(back != null and back.to_text() == text)
+	for key: Vector2i in doc.terrain.chunks:
+		var a: PackedFloat32Array = doc.terrain.chunks[key]
+		var b: PackedFloat32Array = back.terrain.chunks[key]
+		for k in a.size():
+			assert(is_nan(a[k]) == is_nan(b[k]))
+			assert(is_nan(a[k]) or absf(a[k] - b[k]) <= 0.005)
+	# An undo copy doesn't change with the doc.
+	var before := doc.copy()
+	doc.terrain.paint(_TrackTerrain.Brush.LOWER, Vector2(40, 100), 20.0, 1.0, 1.0, 0.0, base)
+	assert(before.terrain.sample(Vector2(40, 100)).x > doc.terrain.sample(Vector2(40, 100)).x + 1.0)
+	# The road follows painted ground at its nodes.
+	doc.terrain.paint(_TrackTerrain.Brush.FLATTEN, Vector2(0, 200), 30.0, 1.0, 10.0, 7.5, base)
+	assert(doc.road_follows_ground() == 1 and doc.node_height(1) == 7.5)
+	# Erase takes it all away, chunks too.
+	doc.terrain.paint(_TrackTerrain.Brush.ERASE, Vector2(60, 140), 400.0, 1.0, 1.0, 0.0, base)
+	assert(doc.terrain.is_empty())
+	# A bad chunk is an error, not a crash.
+	var bad := TrackFile.parse_text('{"name": "x", "nodes": [{"id": 1, "x": 0, "y": 0}, {"id": 2, "x": 0, "y": 100}], "roads": [{"from": 1, "to": 2}], "terrain": [{"x": 0, "y": 0, "h": "nonsense"}]}')
+	assert(not bad.errors.is_empty())
 
 
 func _test_drive_race_type() -> void:

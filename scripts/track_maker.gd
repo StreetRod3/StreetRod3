@@ -12,6 +12,7 @@ const _MapView := preload("res://scripts/track_maker_map.gd")
 const _ProfileView := preload("res://scripts/track_maker_profile.gd")
 const _Skies := preload("res://scripts/skies.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 const USER_TRACKS_DIR := "user://tracks"
 const GAME_TRACKS_DIR := "res://assets/tracks"
@@ -38,7 +39,7 @@ const _ROAD_TYPES := [
 	TrackFile.ROAD_GRAVEL,
 ]
 const _SURFACES := [TrackFile.SURFACE_REGULAR, TrackFile.SURFACE_DRY, TrackFile.SURFACE_WET, TrackFile.SURFACE_ICY]
-const HELP := "Left click: add a node, split a road, or drag · Right drag: move the map · Wheel: zoom · Del: delete · Ctrl+Z / Ctrl+Y: undo / redo · Ctrl+S: save · F: whole track · F5: test drive · Esc: menu"
+const HELP := "Left click: add a node, split a road, or drag; with Ground, hold to paint (Ctrl+click picks a height) · Right drag: move the map · Wheel: zoom · Del: delete · Ctrl+Z / Ctrl+Y: undo / redo · Ctrl+S: save · F: whole track · F5: test drive · Esc: menu"
 
 var doc: _Doc = _Doc.blank()
 ## The file the course was read from or last saved to, or "" for a new one.
@@ -71,6 +72,14 @@ var _sky_ids: Array[String] = []
 var _length_label: Label
 var _road_tool: Button
 var _scenery_tool: Button
+var _ground_tool: Button
+var _ground_box: VBoxContainer
+var _brush_option: OptionButton
+var _brush_size_spin: SpinBox
+var _brush_strength_spin: SpinBox
+var _flatten_spin: SpinBox
+var _flatten_row: HBoxContainer
+var _ground_label: Label
 var _snap_check: CheckBox
 var _node_box: VBoxContainer
 var _node_heading: Label
@@ -140,6 +149,7 @@ func _build_ui() -> void:
 	_map.doc_edited.connect(_after_edit)
 	_map.edit_ended.connect(_end_edit)
 	_map.selection_changed.connect(_on_selection_changed)
+	_map.ground_picked.connect(_on_ground_picked)
 	left.add_child(_map)
 	_profile = _ProfileView.new()
 	_profile.custom_minimum_size = Vector2(0, 150)
@@ -178,6 +188,7 @@ func _build_ui() -> void:
 	_build_node_section(box)
 	_build_road_section(box)
 	_build_scenery_section(box)
+	_build_ground_section(box)
 	box.add_child(HSeparator.new())
 	_errors_label = _label("", 14, _ERROR)
 	box.add_child(_errors_label)
@@ -280,6 +291,11 @@ func _build_tool_section(box: VBoxContainer) -> void:
 	_scenery_tool.button_group = group
 	_scenery_tool.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tools.add_child(_scenery_tool)
+	_ground_tool = _button("Ground", _set_tool.bind(_MapView.Tool.GROUND))
+	_ground_tool.toggle_mode = true
+	_ground_tool.button_group = group
+	_ground_tool.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tools.add_child(_ground_tool)
 	box.add_child(tools)
 	var snaps := HBoxContainer.new()
 	_snap_check = CheckBox.new()
@@ -357,6 +373,28 @@ func _build_scenery_section(box: VBoxContainer) -> void:
 	_scenery_box.add_child(_scenery_selected_label)
 	_scenery_delete = _button("Delete scenery", _delete_selected)
 	_scenery_box.add_child(_scenery_delete)
+
+
+func _build_ground_section(box: VBoxContainer) -> void:
+	_ground_box = VBoxContainer.new()
+	box.add_child(_ground_box)
+	_ground_box.add_child(_label("Ground", 18))
+	_brush_option = _option(["Raise", "Lower", "Smooth", "Flatten", "Erase"])
+	_brush_option.item_selected.connect(_on_brush_selected)
+	_ground_box.add_child(_row("Brush", _brush_option))
+	_brush_size_spin = _spin(_TrackTerrain.CELL_M, 500.0, 1.0, " m", _on_brush_size_changed)
+	_brush_size_spin.set_value_no_signal(_map.brush_radius)
+	_ground_box.add_child(_row("Size", _brush_size_spin))
+	_brush_strength_spin = _spin(1.0, 100.0, 1.0, " %", _on_brush_strength_changed)
+	_brush_strength_spin.set_value_no_signal(_map.brush_strength * 100.0)
+	_ground_box.add_child(_row("Strength", _brush_strength_spin))
+	_flatten_spin = _spin(-_TrackTerrain.HEIGHT_LIMIT, _TrackTerrain.HEIGHT_LIMIT, 0.1, " m", _on_flatten_changed)
+	_flatten_row = _row("Height", _flatten_spin)
+	_ground_box.add_child(_flatten_row)
+	_ground_label = _label("", 13, _DIM)
+	_ground_box.add_child(_ground_label)
+	_ground_box.add_child(_button("Road follows ground", _road_follows_ground))
+	_ground_box.add_child(_label("Sets each node on painted ground to the ground's height there.", 13, _DIM))
 
 
 func _label(text: String, font_size: int, color: Color = _CREAM) -> Label:
@@ -453,6 +491,7 @@ func _after_edit() -> void:
 
 func _end_edit() -> void:
 	_last_tag = ""
+	_refresh_ground_fields()
 
 
 func _undo_step() -> void:
@@ -517,6 +556,8 @@ func _refresh_selection_fields() -> void:
 	_node_box.visible = on_node
 	_road_box.visible = on_node and i < doc.road_count()
 	_scenery_box.visible = _map.tool == _MapView.Tool.SCENERY or _map.selected_scenery >= 0
+	_ground_box.visible = _map.tool == _MapView.Tool.GROUND
+	_refresh_ground_fields()
 	if on_node:
 		var where := ""
 		if i == 0:
@@ -571,12 +612,73 @@ func _on_profile_picked(index: int) -> void:
 
 func _set_tool(which: _MapView.Tool) -> void:
 	_map.tool = which
-	if which == _MapView.Tool.ROAD:
+	if which != _MapView.Tool.SCENERY:
 		_map.selected_scenery = -1
-	else:
+	if which != _MapView.Tool.ROAD:
 		_map.selected_node = -1
 	_on_selection_changed()
 	_map.queue_redraw()
+
+
+func _refresh_ground_fields() -> void:
+	var brush := _map.brush
+	_brush_option.select(int(brush))
+	_flatten_row.visible = brush == _TrackTerrain.Brush.FLATTEN
+	var help := {
+		_TrackTerrain.Brush.RAISE: "Hold the left button to raise the ground under the brush, most in its middle.",
+		_TrackTerrain.Brush.LOWER: "Hold the left button to lower the ground under the brush.",
+		_TrackTerrain.Brush.SMOOTH: "Hold the left button to even out painted ground.",
+		_TrackTerrain.Brush.FLATTEN: "Hold the left button to bring the ground to Height. Ctrl+click picks the height there.",
+		_TrackTerrain.Brush.ERASE: "Hold the left button to clear the paint, back to the style's own ground.",
+	}
+	var text := str(help[brush])
+	if _map.is_painting():
+		return
+	var painted := doc.terrain.area()
+	if doc.terrain.is_empty():
+		text += " Nothing is painted yet."
+	else:
+		var heights := doc.terrain.height_range()
+		text += " Painted from %.1f to %.1f m, over %s by %s." % [heights.x, heights.y, _meters(painted.size.x), _meters(painted.size.y)]
+	_ground_label.text = text
+
+
+func _on_brush_selected(index: int) -> void:
+	_map.brush = index as _TrackTerrain.Brush
+	_refresh_ground_fields()
+
+
+func _on_brush_size_changed(value: float) -> void:
+	_map.brush_radius = value
+	_map.queue_redraw()
+
+
+func _on_brush_strength_changed(value: float) -> void:
+	_map.brush_strength = value / 100.0
+
+
+func _on_flatten_changed(value: float) -> void:
+	_map.flatten_height = value
+
+
+func _on_ground_picked(height: float) -> void:
+	_map.flatten_height = snappedf(height, 0.1)
+	_flatten_spin.set_value_no_signal(_map.flatten_height)
+	if _map.brush != _TrackTerrain.Brush.FLATTEN:
+		_map.brush = _TrackTerrain.Brush.FLATTEN
+		_refresh_ground_fields()
+	_set_status("Flatten height %.1f m" % _map.flatten_height)
+
+
+func _road_follows_ground() -> void:
+	_begin_edit()
+	var changed := doc.road_follows_ground()
+	if changed == 0:
+		_undo.pop_back()
+		_set_status("No node is on painted ground at another height.")
+		return
+	_after_edit()
+	_set_status("%d nodes moved to the ground's height." % changed)
 
 
 func _on_snap_toggled(on: bool) -> void:

@@ -165,14 +165,19 @@ static func build_mountain(
 	run_in_m: float,
 	reaches: Array[PackedFloat32Array],
 	back_reach: Vector2,
-	lifts: Array = []
+	lifts: Array = [],
+	open_sides: Array[PackedByteArray] = [],
+	floor_y: float = INF
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var back := _behind_start(pts, yaws, run_in_m)
 	var up := _side_lifts(lifts, pts.size())
-	for side: float in [1.0, -1.0]:
+	# A track with painted ground draws all of its ground beyond the road itself, verge and all
+	# (race_track.gd's `_build_painted_ground()`).
+	var own_ground := open_sides.is_empty()
+	for side: float in ([1.0, -1.0] if own_ground else []):
 		var heights := left if side > 0.0 else right
 		var reach: PackedFloat32Array = reaches[0] if side > 0.0 else reaches[1]
 		var back_side := back_reach.x if side > 0.0 else back_reach.y
@@ -186,19 +191,20 @@ static func build_mountain(
 				_mountain_section(pts[a], yaws[a], side, half_ws[a], heights[a], far_y[a], reach[a], raise[a]),
 				_mountain_section(pts[b], yaws[b], side, half_ws[b], heights[b], far_y[b], reach[b], raise[b])
 			)
-	var ground := _GroundMaterial.vertex_ground()
-	ground.set_shader_parameter(&"verge_m", MOUNTAIN_VERGE)
-	_add_mesh(track, "Sides", st, ground)
+	if own_ground:
+		var ground := _GroundMaterial.vertex_ground()
+		ground.set_shader_parameter(&"verge_m", MOUNTAIN_VERGE)
+		_add_mesh(track, "Sides", st, ground)
 	var railed := rails.duplicate()
 	var right_out := _rail_flares(pts, types, railed)
 	var left_out := _hill_flares(pts, left)
 	var hill_right := _hill_flares(pts, right)
 	for i in right_out.size():
 		right_out[i] = maxf(right_out[i], hill_right[i])
-	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections, up)
+	_build_walls(track, pts, yaws, half_ws, types, left, right, railed, left_out, right_out, sections, up, open_sides)
 	_build_rails(track, pts, yaws, half_ws, railed, right_out, up[1])
 	_build_trusses(track, pts, yaws, half_ws, types, up)
-	_build_under(track, pts, _GREEN.darkened(0.25), _GroundMaterial.grass())
+	_build_under(track, pts, _GREEN.darkened(0.25), _GroundMaterial.grass(), floor_y)
 	_build_mountains(track, pts)
 
 
@@ -212,7 +218,9 @@ static func build_aqueduct(
 	reaches: Array[PackedFloat32Array],
 	back_reach: Vector2,
 	lifts: Array = [],
-	highs: Array = []
+	highs: Array = [],
+	open_sides: Array[PackedByteArray] = [],
+	floor_y: float = INF
 ) -> void:
 	var sections := _section_indices(pts.size())
 	var st := SurfaceTool.new()
@@ -259,13 +267,15 @@ static func build_aqueduct(
 		var b := sections[k + 1]
 		for side: float in [1.0, -1.0]:
 			var s := 0 if side > 0.0 else 1
+			if not open_sides.is_empty() and (open_sides[s][a] != 0 or open_sides[s][b] != 0):
+				continue
 			var top_a := AQUEDUCT_FLOOR_HALF + aqueduct_run(tall[s][a])
 			var top_b := AQUEDUCT_FLOOR_HALF + aqueduct_run(tall[s][b])
 			var raise_a := _aqueduct_top_raise(Vector2(up[0][a], up[1][a]), side, tall[s][a])
 			var raise_b := _aqueduct_top_raise(Vector2(up[0][b], up[1][b]), side, tall[s][b])
 			_add_wall_quad(faces, pts[a], yaws[a], side * top_a, pts[b], yaws[b], side * top_b, raise_a, raise_b)
 	_add_wall_body(track, faces)
-	_build_under(track, pts, _UNDER_CONCRETE.darkened(0.2))
+	_build_under(track, pts, _UNDER_CONCRETE.darkened(0.2), null, floor_y)
 
 
 ## How far out on `side` (1 left, -1 right) the sideways lines at samples `a` and `b` meet, on the
@@ -619,13 +629,18 @@ static func _build_walls(
 	left_out: PackedFloat32Array,
 	right_out: PackedFloat32Array,
 	sections: PackedInt32Array,
-	up: Array[PackedFloat32Array]
+	up: Array[PackedFloat32Array],
+	open_sides: Array[PackedByteArray] = []
 ) -> void:
 	var faces := PackedVector3Array()
 	for k in range(sections.size() - 1):
 		var a := sections[k]
 		var b := sections[k + 1]
 		for side: float in [1.0, -1.0]:
+			# Painted ground beyond the edge is open: a car can drive off into it.
+			var s := 0 if side > 0.0 else 1
+			if not open_sides.is_empty() and (open_sides[s][a] != 0 or open_sides[s][b] != 0):
+				continue
 			var raise := up[0] if side > 0.0 else up[1]
 			var wall_a := _wall_at(a, side, half_ws, types, left, right, rails, left_out, right_out)
 			var wall_b := _wall_at(b, side, half_ws, types, left, right, rails, left_out, right_out)
@@ -761,9 +776,10 @@ static func _add_unit_boxes(parent: Node3D, node_name: String, xforms: Array[Tra
 	parent.add_child(mmi)
 
 
-## `ground` replaces the flat `color` when given.
-static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color, ground: Material = null) -> void:
-	var low := INF
+## `ground` replaces the flat `color` when given. It lies `_UNDER_M` below the lowest of the road
+## and `floor_y`, the lowest painted ground.
+static func _build_under(track: Node3D, pts: PackedVector3Array, color: Color, ground: Material = null, floor_y: float = INF) -> void:
+	var low := floor_y
 	var center := Vector3.ZERO
 	for p: Vector3 in pts:
 		low = minf(low, p.y)

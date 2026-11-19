@@ -41,6 +41,7 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `sky` | no | `"day"` | The photographed sky over the course in races and test drives: `day`, `dusk`, `evening-orange`, `sunset-pink` or `night-stars`, from `scripts/skies.gd`. A sky whose file isn't in the game yet, or an unknown name, is the day sky. Street Rod 2's cruise races are at night: a course for one that leaves this out, or says `day`, gets their plain black sky, and any other sky replaces it (the street drag says `night-stars`). |
 | `laps` | no | `1` | Times round a `loop`. The race shows the lap and, at the end of a test drive, the best lap. |
 | `scenery` | no | none | What stands on and beside a `street`, `mountain`, or `aqueduct` track. See [Scenery](#scenery). |
+| `terrain` | no | none | Painted ground: the ground's height wherever it has been painted, on any style. See [Painted ground](#painted-ground). |
 | `left_out` | no | none | Things baked from Street Rod 2 but not put on the track, with where they were and why. The game does not read this. No track has one at the moment. |
 
 Unknown root fields are ignored. A race course can leave `pois` out.
@@ -152,6 +153,27 @@ On an `aqueduct` track a node's `left` and `right` can stand that side of the ch
 | With a bank | The bank tilts the channel about Street Rod 2's tops as before, and a wider bowl goes on tilting the same way, so it stands higher still on the bank's high side. |
 | Cars | A car is on the road all the way to a raised side's top. Street Rod 2's sides push a car back to the floor. A raised side pushes less the more it curves, and not at all from 3 m up. Instead its slope counts as a bank (`race_track.gd`'s `bank_slope()`), so a car can run up it and be held round the corner. |
 | What doesn't follow | Street Rod 2's seams and drains are drawn for its own sides, so on a raised side they don't follow it. |
+
+## Painted ground
+
+`terrain` holds ground painted in the track maker, so a course can climb a mountain or run down a holler between ridges rather than over flat ground. It works on every style. A track without it builds exactly as before.
+
+```json
+"terrain": [
+  {"x": 0, "y": 0, "h": "eJzt..."},
+  {"x": 1, "y": 0, "h": "eJzt..."}
+]
+```
+
+| What | How |
+| --- | --- |
+| The grid | Heights on a square grid 4 m apart, in track meters, kept in chunks of 32 by 32 points (128 m a side). A chunk's `x` and `y` are its place counted in chunks, so chunk 1, 0 starts at track x 128, y 0. |
+| `h` | The chunk's 1024 heights row by row along x, each a whole number of centimeters as a 32-bit little-endian integer, deflated and written in base64. -2147483648 marks a point that isn't painted. A chunk with nothing painted in it is left out of the file. Decoding is in `scripts/track_terrain.gd`. |
+| Between points | The height is the painted points' around it, weighted by nearness, and it counts only as much as those points are painted. Where some of them aren't, the painted ground eases back to the style's own ground over the last 4 m. |
+| Meeting the road | The road keeps its nodes' heights. Past the road's own edge, painted ground is cut down to meet it at no steeper than 45°, or built up to it at no steeper than about 31°, as a road cut through a hill or carried over a hollow on an embankment. A `bridge` stands over whatever is painted under it. The edge is a circuit's road edge, a street's gravel shoulder, Mulholland's gravel verge, and on the Aqueduct the top of a side and 1 m of concrete past its yellow line. |
+| Unpainted ground | Keeps the style's own shape: a circuit's grass, a street's banks, Mulholland's hillsides and drops from each node's `left` and `right`, the Aqueduct's concrete. |
+| How it's drawn | On a track with any painting, all the ground past the road's edge is drawn from the paint and the style's own ground together (`race_track.gd`'s `_build_painted_ground()`), unpainted parts included. A strip down each side of the road follows its edge exactly, from the road's edge out 12 m, and behind a course's start, where there is no road, from its center line out as far, and a grid covers the rest: every 4 m in painted chunks and in unpainted ones near the road, 32 m away from it. Where the strip covers the ground the grid leaves it to the strip. It is grass, turning to dirt where it is steeper than about 35°, and on Mulholland its unpainted hillsides turn to dirt as they rise, as before. |
+| Driving on it | A car can leave the road and drive over painted ground. Where it is painted, Mulholland's hillside walls and the Aqueduct's side walls are left out and Mulholland's drops don't send the car over an edge. Uphill slows the car and downhill speeds it up, in both driving models, and a slope across it leans and pulls it as a bank does. Ground steeper than about 37° (a rise of 0.75 m a meter) can't be climbed: the engine stops helping, so the car runs up it only as far as its speed carries it, against gravity, with its rear wheels spinning and the engine revving, then slides back down to where the grass holds it. A car stuck on the gas facing uphill anywhere spins its wheels the same way. Ground steeper than about 50° (1.2 m a meter) is a cliff and stops the car at once, as a wall would, without damage (`player_race_car.gd`'s `_hold_off_steep()`). On the road nothing changes, so the road drives as it did. |
 
 ## Points of interest
 

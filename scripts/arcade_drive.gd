@@ -100,6 +100,9 @@ var _swing: float = 0.0
 var _lateral_grip: float = MU_DRY * GRAVITY
 ## How steeply a banked road rises across the car, toward its +X (see road_bank.gd).
 var bank_slope: float = 0.0
+## How steeply painted ground rises ahead of the car, a meter forward (race_track.gd's
+## `ground_grade()`); 0 on the road.
+var grade_slope: float = 0.0
 ## Sideways acceleration last step, toward the car's +X, with the bank's pull in it.
 var _bank_lat: float = 0.0
 var _handbrake: bool = false
@@ -216,6 +219,8 @@ func step(
 			forward_speed = move_toward(forward_speed, offroad_max, OFFROAD_SLOWDOWN * delta)
 		elif forward_speed < -offroad_max:
 			forward_speed = move_toward(forward_speed, -offroad_max, OFFROAD_SLOWDOWN * delta)
+	# Up a hill the car slows, and down one it runs on, as the bank pulls it across.
+	forward_speed += _RoadBank.pull(grade_slope, forward_speed) * delta
 	_hold_speed_range(min_mps, max_mps, delta)
 
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
@@ -405,9 +410,11 @@ func _update_surface(body: Node3D) -> void:
 			var right_ext := float(sample.get("right_ext", sample.get("half_width", half)))
 			_off_road = lat < -(left_ext - 1.0) or lat > (right_ext - 1.0) or bool(sample.get("gravel", false))
 			bank_slope = float(track.bank_slope(body.global_position, heading_yaw)) if track.has_method(&"bank_slope") else 0.0
+			grade_slope = float(track.ground_grade(body.global_position, heading_yaw)) if track.has_method(&"ground_grade") else 0.0
 			return
 	_off_road = absf(body.global_position.x) > TRACK_X_LIMIT
 	bank_slope = 0.0
+	grade_slope = 0.0
 
 
 func _apply_heading(body: CharacterBody3D, car_center: Vector3) -> void:

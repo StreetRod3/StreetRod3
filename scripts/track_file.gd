@@ -4,6 +4,8 @@ extends RefCounted
 ## Loader and validator for `.trk` race-track graphs.
 ## See `docs/track-format.md`.
 
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
+
 const NODE_START := "start"
 const NODE_FINISH := "finish"
 const NODE_REGULAR := "regular"
@@ -115,6 +117,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	_parse_pois(root, result)
 	_parse_buildings(root, result)
 	_parse_scenery(root, result)
+	result.terrain = _TrackTerrain.from_file(root.get("terrain"), result.errors)
 	if result.errors.is_empty():
 		_build_race_path(result)
 	return result
@@ -145,6 +148,7 @@ static func _empty_result() -> Dictionary:
 		"laps": 1, # times round a loop
 		"sky": "day", # a sky in skies.gd
 		"scenery": [], # what stands beside a street track: kind, x, y
+		"terrain": null, # painted ground, a track_terrain.gd; empty when nothing is painted
 		"errors": [],
 		"warnings": [],
 	}

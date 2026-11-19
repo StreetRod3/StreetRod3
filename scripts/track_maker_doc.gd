@@ -11,10 +11,11 @@ extends RefCounted
 
 const _Self := preload("res://scripts/track_maker_doc.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
-const _OWN_ROOT_KEYS := ["name", "style", "jumps", "auto_bank", "loop", "laps", "sky", "nodes", "roads", "scenery"]
+const _OWN_ROOT_KEYS := ["name", "style", "jumps", "auto_bank", "loop", "laps", "sky", "nodes", "roads", "scenery", "terrain"]
 const MAX_LAPS := 99
 ## Fields in meters, written with a decimal point even when whole.
 const _METRIC_KEYS := ["x", "y", "z", "width", "left", "right", "to", "w", "d", "h"]
@@ -41,6 +42,8 @@ var laps: int = 1
 ## The sky over the course, an id in skies.gd.
 var sky: String = "day"
 var scenery: Array[Dictionary] = []
+## The painted ground (track_terrain.gd), empty when nothing is painted.
+var terrain: _TrackTerrain = _TrackTerrain.new()
 ## Root fields the maker does not edit, kept in file order.
 var extra: Dictionary = {}
 
@@ -66,6 +69,7 @@ func copy() -> _Self:
 	doc.roads = _copy_list(roads)
 	doc.loop_road = loop_road.duplicate(true)
 	doc.scenery = _copy_list(scenery)
+	doc.terrain = terrain.copy()
 	doc.extra = extra.duplicate(true)
 	return doc
 
@@ -147,6 +151,9 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 		if typeof(item) == TYPE_DICTIONARY:
 			sights.append((item as Dictionary).duplicate(true))
 	doc.scenery = sights
+	var painted: _TrackTerrain = parsed.terrain
+	if painted != null:
+		doc.terrain = painted
 	var kept: Dictionary = {}
 	for key: Variant in root.keys():
 		if not _OWN_ROOT_KEYS.has(str(key)):
@@ -202,6 +209,8 @@ func to_text() -> String:
 		root[key] = extra[key]
 	if not scenery.is_empty():
 		root["scenery"] = scenery
+	if not terrain.is_empty():
+		root["terrain"] = terrain.to_file()
 	var entries: PackedStringArray = []
 	for key: Variant in root.keys():
 		entries.append("  %s: %s" % [JSON.stringify(str(key)), _block_text(root[key])])
@@ -500,6 +509,56 @@ func remove_node(i: int) -> bool:
 	# The road into node `i` (roads[i - 1]) is kept; the one out of it goes.
 	roads.remove_at(mini(i, roads.size() - 1))
 	return true
+
+
+## The road's height nearest `point` (track x, y), along the straight lines between the nodes,
+## and on the Aqueduct the top of its sides: where painting starts from on unpainted ground, near
+## enough to what the game builds there that the paint meets it.
+func ground_base(point: Vector2) -> float:
+	var best := INF
+	var height := 0.0
+	var count := nodes.size()
+	var spans := count if loop and count > 2 else count - 1
+	for i in spans:
+		var j := (i + 1) % count
+		var a := node_point(i)
+		var b := node_point(j)
+		var on := Geometry2D.get_closest_point_to_segment(point, a, b)
+		var d := on.distance_squared_to(point)
+		if d < best:
+			best = d
+			var span := a.distance_to(b)
+			var t := a.distance_to(on) / span if span > 0.001 else 0.0
+			height = lerpf(node_height(i), node_height(j), t)
+	if count == 1:
+		height = node_height(0)
+	if style == TrackFile.STYLE_AQUEDUCT:
+		height += _TrackSides.AQUEDUCT_BANK_HIGH
+	return height
+
+
+## The ground at `point`: painted where it is painted, otherwise `ground_base()`.
+func ground_at(point: Vector2) -> float:
+	var paint := terrain.sample(point)
+	if paint.y <= 0.0:
+		return ground_base(point)
+	return lerpf(ground_base(point), paint.x, paint.y)
+
+
+## Sets every node on painted ground to the ground's height there, so the road follows it.
+## Returns how many changed.
+func road_follows_ground() -> int:
+	var changed := 0
+	for i in nodes.size():
+		var paint := terrain.sample(node_point(i))
+		if paint.y < 0.5:
+			continue
+		var z := cm(paint.x)
+		if is_equal_approx(z, node_height(i)):
+			continue
+		set_node_field(i, "z", z)
+		changed += 1
+	return changed
 
 
 ## Straight-line length from the start to the finish, or once round a loop. The game rounds

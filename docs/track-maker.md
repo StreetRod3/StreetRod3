@@ -32,16 +32,34 @@ The same fields are a Mulholland track's hillsides and drops, so changing the st
 
 Sky, under Laps, picks the photographed sky over the course in races and test drives. A sky whose file isn't in the game yet says "file missing: day sky" and races under the day sky until it is added. The track keeps the choice either way, so adding the file later is enough. The skies, and how to add one, are in [ground-textures.md](ground-textures.md#skies).
 
+## Ground
+
+The Ground tool, beside Road and Scenery, paints the ground's height anywhere on the map, not only beside the road: a mountain for a hill climb, ridges either side of a holler, a hollow to cross on an embankment. Hold the left button and the brush works on the ground under it for as long as it is held, most in its middle and fading to nothing at its rim. Each stroke is one undo step.
+
+| Brush | What it does |
+| --- | --- |
+| Raise, Lower | Lifts or sinks the ground, up to 8 m a second in the middle at full strength. |
+| Smooth | Evens out painted ground. It leaves unpainted ground alone. |
+| Flatten | Brings the ground to Height. Ctrl+click on the map picks the ground's height there and switches to Flatten. |
+| Erase | Clears the paint, back to the style's own ground. |
+
+Size is the brush's radius and Strength how fast it works. Ground that has never been painted starts from the road's height nearby (on the Aqueduct, the top of its sides), so new paint meets what the style already builds there. The painted ground shows on the map shaded as if lit from the top left, colored by height from green through tan and brown to grey and white, with a contour line every 5 m. Under the brush the map shows the ground's height, or says it isn't painted. The height strip shows the painted ground under the road's middle as a brown line.
+
+"Road follows ground" sets every node that stands on painted ground to the ground's height there. Paint the land first, draw the road over it, and press it: the road then runs on the ground, and the game cuts and fills the ground beside it to meet the road wherever the two still differ. Raising or lowering a node afterwards is fine; the ground is cut down to it or built up under it.
+
+Cars can drive off the road onto painted ground. Uphill slows them and downhill speeds them up, and ground steeper than about 37° can't be climbed: a car runs up it as far as its speed carries it, wheels spinning, and slides back. Ground steeper than about 50° is a cliff and stops a car like a wall. Where it is painted, Mulholland's hillside walls and the Aqueduct's walls are left out. Barriers to keep cars on the course where that matters aren't built yet. What the file holds and how the game builds and drives it is in [track-format.md](track-format.md#painted-ground).
+
 ## Mouse and keys
 
-| Input | Road tool | Scenery tool |
-| --- | --- | --- |
-| Left click on empty ground | Adds a node at the finish end | Places the chosen kind |
-| Left click on a road | Splits it there with a new node | — |
-| Left drag | Moves a node | Moves a placed thing |
-| Right or middle drag | Moves the map | Moves the map |
-| Wheel | Zooms at the pointer | Zooms at the pointer |
-| Delete or Backspace | Deletes the selected node | Deletes the selected thing |
+| Input | Road tool | Scenery tool | Ground tool |
+| --- | --- | --- | --- |
+| Left click on empty ground | Adds a node at the finish end | Places the chosen kind | Paints with the brush while held |
+| Left click on a road | Splits it there with a new node | — | Paints with the brush while held |
+| Left drag | Moves a node | Moves a placed thing | Paints along the way |
+| Ctrl+left click | — | — | Picks the ground's height for Flatten |
+| Right or middle drag | Moves the map | Moves the map | Moves the map |
+| Wheel | Zooms at the pointer | Zooms at the pointer | Zooms at the pointer |
+| Delete or Backspace | Deletes the selected node | Deletes the selected thing | — |
 
 | Key | What it does |
 | --- | --- |
@@ -69,7 +87,7 @@ Sky, under Laps, picks the photographed sky over the course in races and test dr
 | `assets/tracks/` | The game's own tracks. "Open game track..." starts here, and only shows when the game runs from the project rather than an exported build. Save writes straight back to the file, so the change shows in git. |
 | `user://track_maker_test.trk` | The course as it was sent on the last test drive. |
 
-Opening a file reads it along its race path. Fields the maker doesn't edit are kept and written back in place: node ids, `pois`, `buildings`, `left_out`, a closing road from the finish back to the start, and extra scenery fields such as `to`. Nodes and roads off the race path are left out, with a warning.
+Opening a file reads it along its race path. The painted ground comes back as it was saved, to the centimeter. Fields the maker doesn't edit are kept and written back in place: node ids, `pois`, `buildings`, `left_out`, a closing road from the finish back to the start, and extra scenery fields such as `to`. Nodes and roads off the race path are left out, with a warning.
 
 Files are written in the layout the bake tools use (`tools/make_sr2_courses.py`, `tools/make_street_drag.py`): one line for each node, road, and piece of scenery. Measurements keep a decimal point (`8.0`), ids are whole numbers, and other numbers are written exactly as read. Saving a game track without editing it leaves the course the same. The Mulholland files come back byte for byte. The Aqueduct and street drag change only `0` to `0.0` in a few places, and `track1.trk` and `stunt.trk`, which are laid out one field to a line, change layout the first time they are saved. `tests/track_maker_test.gd` checks this for every track.
 
@@ -94,6 +112,7 @@ A course with errors can't be test-driven; the panel lists what to fix.
 | `scripts/track_maker_doc.gd` | The course: reading, writing, editing, and checking it |
 | `scripts/track_maker_map.gd` | The top-down map |
 | `scripts/track_maker_profile.gd` | The height strip |
+| `scripts/track_terrain.gd` | The painted ground: its grid, the brushes, and its place in the file |
 | `GameState.begin_test_drive()`, `end_test_drive()`, `RACE_TEST` | The test drive race type |
 | `race.gd`, `_test_drive` | What a test drive does differently in the race |
 
