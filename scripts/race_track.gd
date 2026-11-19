@@ -85,6 +85,9 @@ const _FAR_SAMPLE_STEP := 8
 const _COVERED_SINK := 0.04
 ## How far the curtain under the strip's outer edge hangs down (`_add_curtain()`).
 const _CURTAIN_M := 1.0
+## How far in under the road the curtains along its edges and ends hang: right at its edge, the
+## screen could leave a crack a pixel wide between them.
+const _LIP_UNDER_M := 0.1
 ## How far the skirt round each chunk of the grid hangs down.
 const _SKIRT_M := 3.0
 const _SKIRT_OUT_M := 0.6
@@ -1613,6 +1616,8 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 	# along its inner edges beside the road.
 	var rim := PackedInt32Array()
 	var inner := PackedInt32Array()
+	# The tops of the curtain along those, by the strip point each is at.
+	var lip_at: Dictionary = {}
 	for side: float in [1.0, -1.0]:
 		var k := 0 if side > 0.0 else 1
 		var caps := _inside_reach_caps(side)
@@ -1638,15 +1643,14 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 		for i in _pts.size():
 			var from := _strip_start(i, side > 0.0)
 			var width := _STRIP_W
-			var road := true
+			var lip := from
 			if i == 0 and _run_in_m > 0.0 and not _street:
 				# The start line's row reaches in under the road as the rows behind it do, so no
 				# wedge is left between them under the road's end.
 				width += from
 				from = 0.0
-				road = false
 			var limit := minf(reaches[k][i], caps[i])
-			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "width": width, "limit": limit, "edge": _half_ws[i], "i": i, "road": road})
+			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "width": width, "limit": limit, "edge": _half_ws[i], "i": i, "road": true, "lip": lip})
 		var cols := offsets.size()
 		var count := verts.size()
 		for row: Dictionary in rows:
@@ -1661,6 +1665,9 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 				var point := at + across * out
 				# The row's own sample is the nearest, as far out as the strip reaches.
 				var y := _height_on(point, ground, int(row["i"])) - _ground_sink()
+				if off == offsets[0] and bool(row["road"]):
+					var under := at + across * (float(row["lip"]) - _LIP_UNDER_M)
+					lip_at[verts.size()] = Vector3(under.x, _height_on(under, ground, int(row["i"])), under.z)
 				uvs.append(_ground_uv(point, y, out - float(row["edge"]), at.y))
 				verts.append(Vector3(point.x, y, point.z))
 		for r in rows.size() - 1:
@@ -1724,12 +1731,13 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 	if _ground_sink() > 0.0:
 		var lip := PackedVector3Array()
 		for index: int in inner:
-			lip.append(verts[index] + Vector3.UP * _ground_sink())
+			lip.append(lip_at[index])
 		# And across the road's two ends, where the ground runs on past them.
 		if not _loop:
 			for i: int in [0, _pts.size() - 1]:
 				var ext := _sample_extents(i)
-				lip.append_array(PackedVector3Array([_road_point(i, -ext.y), _road_point(i, ext.x)]))
+				var into := Vector3(sin(_yaws[i]), 0.0, cos(_yaws[i])) * (_LIP_UNDER_M if i == 0 else -_LIP_UNDER_M)
+				lip.append_array(PackedVector3Array([_road_point(i, -ext.y) + into, _road_point(i, ext.x) + into]))
 		_add_curtain(mesh, lip, mat)
 	var mi := MeshInstance3D.new()
 	mi.name = "PaintedGroundStrip"
