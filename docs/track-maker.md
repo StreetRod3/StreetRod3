@@ -47,7 +47,7 @@ Size is the brush's radius and Strength how fast it works. Ground that has never
 
 "Road follows ground" sets every node that stands on painted ground to the ground's height there. Paint the land first, draw the road over it, and press it: the road then runs on the ground, and the game cuts and fills the ground beside it to meet the road wherever the two still differ. Raising or lowering a node afterwards is fine; the ground is cut down to it or built up under it.
 
-Cars can drive off the road onto painted ground. Uphill slows them and downhill speeds them up, and ground steeper than about 37° stops them like a wall. Where it is painted, Mulholland's hillside walls and the Aqueduct's walls are left out. Barriers to keep cars on the course where that matters aren't built yet. What the file holds and how the game builds and drives it is in [track-format.md](track-format.md#painted-ground).
+Cars can drive off the road onto painted ground. Uphill slows them and downhill speeds them up, and ground steeper than about 37° can't be climbed: a car runs up it as far as its speed carries it, wheels spinning, and slides back. Ground steeper than about 50° is a cliff and stops a car like a wall. Where it is painted, Mulholland's hillside walls and the Aqueduct's walls are left out. Barriers to keep cars on the course where that matters aren't built yet. What the file holds and how the game builds and drives it is in [track-format.md](track-format.md#painted-ground).
 
 ## Mouse and keys
 

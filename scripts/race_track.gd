@@ -62,7 +62,7 @@ const _FILL_SLOPE := 0.6
 ## On the Aqueduct the painted ground starts this far past the yellow line at the top of a side.
 const _AQUEDUCT_LIP_M := 1.22
 ## The steepest painted ground a car can drive up, as a rise a meter: about 37 degrees. Past it the
-## ground stops a car as a wall would (player_race_car.gd's `_hold_off_steep()`).
+## car can't climb on (player_race_car.gd's `_hold_off_steep()`).
 const CLIMB_MAX := 0.75
 ## How far past the road's edge the walls of Mulholland and the Aqueduct look for painted ground.
 const _PAINT_WALL_LOOK_M := 1.5
@@ -366,15 +366,14 @@ func ground_grade(world: Vector3, yaw: float) -> float:
 
 
 ## On painted ground off the road that is too steep to climb (`CLIMB_MAX`), which way is uphill,
-## flat and one long; otherwise zero. The car can't drive up it, as at a wall.
+## flat and as long as the ground's rise a meter; otherwise zero. The car can't drive up it.
 func too_steep_uphill(world: Vector3) -> Vector3:
 	if painted_off_road(world) <= 0.0:
 		return Vector3.ZERO
 	var rise := ground_gradient(world)
 	if rise.length() <= CLIMB_MAX:
 		return Vector3.ZERO
-	var up := rise.normalized()
-	return Vector3(up.x, 0.0, up.y)
+	return Vector3(rise.x, 0.0, rise.y)
 
 
 ## The track's own ground, as it is with nothing painted. `near`, when given, is the sample nearest
@@ -1610,8 +1609,10 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 	var verts := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
-	# Pairs of points along the strip's outer edges and its ends, where it meets the grid.
+	# Pairs of points along the strip's outer edges and its ends, where it meets the grid, and
+	# along its inner edges beside the road.
 	var rim := PackedInt32Array()
+	var inner := PackedInt32Array()
 	for side: float in [1.0, -1.0]:
 		var k := 0 if side > 0.0 else 1
 		var caps := _inside_reach_caps(side)
@@ -1631,11 +1632,11 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 				back.y = _pts[0].y
 				var back_reach := _reach_and_far_y_at(back, _yaws[0], -back_m, true)
 				var limit := back_reach.x if side > 0.0 else back_reach.y
-				rows.append({"at": back, "yaw": _yaws[0], "start": from, "limit": limit, "edge": _half_ws[0] if _street else 0.0, "i": 0})
+				rows.append({"at": back, "yaw": _yaws[0], "start": from, "limit": limit, "edge": _half_ws[0] if _street else 0.0, "i": 0, "road": false})
 		for i in _pts.size():
 			var from := _strip_start(i, side > 0.0)
 			var limit := minf(reaches[k][i], caps[i])
-			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "limit": limit, "edge": _half_ws[i], "i": i})
+			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "limit": limit, "edge": _half_ws[i], "i": i, "road": true})
 		var cols := offsets.size()
 		var count := verts.size()
 		for row: Dictionary in rows:
@@ -1677,6 +1678,8 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 			_cover_triangle(covered, a0, b1, b0)
 		for r in rows.size() - 1:
 			rim.append_array(PackedInt32Array([count + r * cols + cols - 1, count + (r + 1) * cols + cols - 1]))
+			if bool(rows[r]["road"]) and bool(rows[r + 1]["road"]):
+				inner.append_array(PackedInt32Array([count + r * cols, count + (r + 1) * cols]))
 		var last := count + (rows.size() - 1) * cols
 		for c in cols - 1:
 			rim.append_array(PackedInt32Array([count + c, count + c + 1, last + c, last + c + 1]))
@@ -1705,6 +1708,13 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 	for index: int in rim:
 		curtain.append(verts[index])
 	_add_curtain(mesh, curtain, mat)
+	# And down from the road's edge past the strip's inner edge, which lies `_ground_sink()` under
+	# it: low along the ground the eye passed between them under the road, to the sky.
+	if _ground_sink() > 0.0:
+		var lip := PackedVector3Array()
+		for index: int in inner:
+			lip.append(verts[index] + Vector3.UP * _ground_sink())
+		_add_curtain(mesh, lip, mat)
 	var mi := MeshInstance3D.new()
 	mi.name = "PaintedGroundStrip"
 	mi.mesh = mesh
