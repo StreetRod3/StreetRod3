@@ -364,6 +364,7 @@ func _ready() -> void:
 	_build_tire_machine()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
+	_jack.global_position.y = _floor_top()
 	GameState.update_music()
 	_calendar.set_meta(&"garage_interact", &"calendar")
 	_calendar_home = _calendar.global_transform
@@ -412,6 +413,13 @@ func _on_carbody_stl_loaded(_mesh: Variant) -> void:
 	# When the CarBody's mesh is ready, re-align wheels to the floor.
 	_align_wheels_to_floor()
 	_place_bay_targets()
+
+
+## Height of the floor's drawn surface, which sits a little below its collision box.
+func _floor_top() -> float:
+	var floor_mesh := $Floor/MeshInstance3D as MeshInstance3D
+	var box := _transformed_aabb(floor_mesh.global_transform, floor_mesh.mesh.get_aabb())
+	return box.end.y
 
 
 func _align_wheels_to_floor() -> void:
