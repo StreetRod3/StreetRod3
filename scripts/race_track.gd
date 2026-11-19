@@ -1624,29 +1624,40 @@ func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
 			# follows painted ground there too.
 			var steps := maxi(ceili(_run_in_m / BAKE_STEP), 1)
 			var behind := Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0]))
-			# Behind a circuit's start there is no road: the ground runs across its line.
+			# Behind a circuit's start there is no road: the ground runs across its line, out as
+			# far as beside the road, so its edge runs on straight past the start.
 			var from := 0.0 if not _street else _strip_start(0, side > 0.0)
+			var width := _STRIP_W + _strip_start(0, side > 0.0) - from
 			for r in steps:
 				var back_m := _run_in_m * float(steps - r) / float(steps)
 				var back := _pts[0] - behind * back_m
 				back.y = _pts[0].y
 				var back_reach := _reach_and_far_y_at(back, _yaws[0], -back_m, true)
 				var limit := back_reach.x if side > 0.0 else back_reach.y
-				rows.append({"at": back, "yaw": _yaws[0], "start": from, "limit": limit, "edge": _half_ws[0] if _street else 0.0, "i": 0, "road": false})
+				rows.append({"at": back, "yaw": _yaws[0], "start": from, "width": width, "limit": limit, "edge": _half_ws[0] if _street else 0.0, "i": 0, "road": false})
 		for i in _pts.size():
 			var from := _strip_start(i, side > 0.0)
+			var width := _STRIP_W
+			var road := true
+			if i == 0 and _run_in_m > 0.0 and not _street:
+				# The start line's row reaches in under the road as the rows behind it do, so no
+				# wedge is left between them under the road's end.
+				width += from
+				from = 0.0
+				road = false
 			var limit := minf(reaches[k][i], caps[i])
-			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "limit": limit, "edge": _half_ws[i], "i": i, "road": true})
+			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "width": width, "limit": limit, "edge": _half_ws[i], "i": i, "road": road})
 		var cols := offsets.size()
 		var count := verts.size()
 		for row: Dictionary in rows:
 			var at: Vector3 = row["at"]
 			var yaw: float = row["yaw"]
 			var from: float = row["start"]
-			var limit := clampf(float(row["limit"]), from, from + _STRIP_W)
+			var width: float = row["width"]
+			var limit := clampf(float(row["limit"]), from, from + width)
 			var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
 			for off: float in offsets:
-				var out := minf(from + off, limit)
+				var out := minf(from + off * width / _STRIP_W, limit)
 				var point := at + across * out
 				# The row's own sample is the nearest, as far out as the strip reaches.
 				var y := _height_on(point, ground, int(row["i"])) - _ground_sink()
@@ -1823,12 +1834,13 @@ func _ground_sink() -> float:
 	return 0.0 if _style == TrackFile.STYLE_MOUNTAIN else _TERRAIN_SINK
 
 
-## A row's point `off` meters out past its start, toward its limit, flat.
+## A row's point `off` meters out past its start (stretched with the row's width), toward its limit, flat.
 func _strip_corner(row: Dictionary, side: float, off: float) -> Vector2:
 	var at: Vector3 = row["at"]
 	var yaw: float = row["yaw"]
 	var from: float = row["start"]
-	var out := clampf(from + off, from, maxf(from, minf(float(row["limit"]), from + _STRIP_W)))
+	var width: float = row["width"]
+	var out := clampf(from + off * width / _STRIP_W, from, maxf(from, minf(float(row["limit"]), from + width)))
 	var point := at + Vector3(cos(yaw), 0.0, -sin(yaw)) * side * out
 	return Vector2(point.x, point.z)
 
