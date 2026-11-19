@@ -75,3 +75,5 @@ reference/**/*.fbx filter=lfs diff=lfs merge=lfs -text
 reference/**/*.uasset filter=lfs diff=lfs merge=lfs -text
 reference/**/*.ttf filter=lfs diff=lfs merge=lfs -text
 assets/locations/gas-station/pump_*.png filter=lfs diff=lfs merge=lfs -text
+assets/locations/garage/jack.glb filter=lfs diff=lfs merge=lfs -text
+assets/locations/garage/jack_*.png filter=lfs diff=lfs merge=lfs -text

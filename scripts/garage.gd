@@ -47,7 +47,7 @@ var _view_port: SubViewport
 @onready var _hud_bottom: Control = $GarageUI/HudBottom
 @onready var _lift: StaticBody3D = $InteractLift
 @onready var _vodka: StaticBody3D = $InteractDesk/InteractVodka
-@onready var _lift_arm: Node3D = $InteractLift/LiftArm
+@onready var _jack: Node3D = $InteractLift/Jack
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
 @onready var _door_right: Node3D = $InteractDoors/DoorRight
 @onready var _clock_hour: Node3D = $InteractClock/Face/HourHand
@@ -119,7 +119,6 @@ var _offer_kind: String = ""
 var _offer_id: String = ""
 var _offer_amount: int = 0
 var _lift_home: Transform3D
-var _lift_arm_home: Vector3
 var _bay_busy: bool = false
 var _departing: bool = false
 var _departure_finished: bool = false
@@ -361,7 +360,6 @@ func _ready() -> void:
 	_build_tire_machine()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
-	_lift_arm_home = _lift_arm.position
 	GameState.update_music()
 	_calendar.set_meta(&"garage_interact", &"calendar")
 	_calendar_home = _calendar.global_transform
@@ -3579,8 +3577,7 @@ func _jack_up(car_start: Vector3) -> void:
 		return
 	_shop_sound("jack_pump")
 	var lift_to := car_start + Vector3(0.0, _LIFT_HEIGHT, 0.0)
-	var arm_to := _lift_arm_home + Vector3(0.0, _LIFT_HEIGHT, 0.0)
-	await _tween_together(_car_pivot, lift_to, _lift_arm, arm_to, _T_LIFT)
+	await _tween_car_and_jack(lift_to, 1.0, _T_LIFT)
 	if not is_instance_valid(self):
 		return
 	await _pause(_T_PAUSE)
@@ -3589,7 +3586,7 @@ func _jack_up(car_start: Vector3) -> void:
 ## The jack lets the car down and rolls home.
 func _jack_down(car_start: Vector3) -> void:
 	_shop_sound("jack_release")
-	await _tween_together(_car_pivot, car_start, _lift_arm, _lift_arm_home, _T_LIFT)
+	await _tween_car_and_jack(car_start, 0.0, _T_LIFT)
 	if not is_instance_valid(self):
 		return
 	await _tween_global_xform(_lift, _lift_home, _T_JACK)
@@ -3862,12 +3859,13 @@ func _tween_global_pos(node: Node3D, to: Vector3, duration: float) -> void:
 	await tw.finished
 
 
-func _tween_together(car: Node3D, car_to: Vector3, arm: Node3D, arm_to: Vector3, duration: float) -> void:
+## Moves the car to `car_to` while the jack's arm goes to `raise_to` (0 down, 1 up).
+func _tween_car_and_jack(car_to: Vector3, raise_to: float, duration: float) -> void:
 	var tw := create_tween()
 	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.set_parallel(true)
-	tw.tween_property(car, "position", car_to, duration)
-	tw.tween_property(arm, "position", arm_to, duration)
+	tw.tween_property(_car_pivot, "position", car_to, duration)
+	tw.tween_property(_jack, "raise", raise_to, duration)
 	await tw.finished
 
 
