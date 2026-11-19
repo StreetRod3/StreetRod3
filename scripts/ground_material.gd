@@ -1,10 +1,11 @@
 extends RefCounted
 
 ## Textured ground: grass under the race tracks, the city and Mulholland; Mulholland's dirt and
-## gravel; the asphalt of the roads; and the concrete of the Aqueduct and the street drag's
+## gravel; the asphalt of the roads; the Aqueduct's concrete; and the street drag's concrete
 ## shoulders. Each is mapped from above in world space, so any ground or road mesh takes it without
 ## UVs of its own, and one tile covers the same ground whatever the mesh's size. Sources and notes
-## are in reference/tracks/ (grass, CityStreetAsphalt, dirt, rockytrail, concrete.md), and
+## are in reference/tracks/ (grass, CityStreetAsphalt, dirt, rockytrail, CA_ConcreteRoad,
+## concrete.md), and
 ## docs/ground-textures.md lists them and the settings below.
 
 ## Poliigon GrassPatchyGround 4585 at 2K.
@@ -52,6 +53,15 @@ const DARK_ASPHALT_TINT := Color(0.3, 0.3, 0.3, 1)
 ## roughness map. It is bright, with a mean of 0.651 in linear light, so a tint sets its shade.
 const CONCRETE_TILE_M := 2.0
 const CONCRETE_LINEAR_MEAN := 0.651
+## Leartes Cosmos CA Concrete Road, 2048 square despite the "4096" in its file names, for the
+## Aqueduct. Its "R" map, and the green of its ORM map, average 0.1 and drew glassy concrete; its "G"
+## map is the same inverted, and that is used as the roughness. One tile at 2 m repeated in bands.
+const CA_CONCRETE_TILE_M := 4.0
+## The texture's mean color in linear light, measured from the file. It is darker than the old
+## photo's `CONCRETE_LINEAR_MEAN`, which the Aqueduct's vertex colors were worked out for
+## (track_sides.gd), so the color is multiplied up to that mean.
+const CA_CONCRETE_LINEAR_MEAN := 0.257
+const CA_CONCRETE_AO_LIGHT_AFFECT := 0.5
 ## The street drag's shoulders: lighter than the asphalt beside them.
 const SHOULDER_TINT := Color(0.6, 0.6, 0.58, 1)
 ## Gravel: Mulholland's verge and its gravel stretches. Poly Haven Rocky Trail at 2K, whose
@@ -64,6 +74,7 @@ const _GRASS_AO := _GRASS + "AmbientOcclusion.jpg"
 const _ASPHALT := "res://assets/textures/asphalt/CityStreetAsphaltGenericClean001_"
 const _ASPHALT_AO := _ASPHALT + "AO_2K.jpg"
 const _CONCRETE := "res://assets/textures/concrete/old-grunge-concrete.jpg"
+const _CA_CONCRETE := "res://assets/textures/concrete/T_CA_ConcreteRoad_4096_"
 const _GRAVEL := "res://assets/textures/gravel/rocky_trail_"
 const _DIRT := "res://assets/textures/dirt/GroundDirtWeedsPatchy004_"
 const _VERTEX_GROUND_SHADER := preload("res://shaders/vertex_ground.gdshader")
@@ -125,8 +136,13 @@ static func shoulder_concrete() -> StandardMaterial3D:
 ## linear light times `CONCRETE_LINEAR_MEAN` is the shade it comes out.
 static func vertex_colored_concrete() -> StandardMaterial3D:
 	if _vertex_concrete == null:
-		_vertex_concrete = _make(_CONCRETE, "", "", CONCRETE_TILE_M)
-		_vertex_concrete.roughness = 0.95
+		_vertex_concrete = _make(_CA_CONCRETE + "B.png", _CA_CONCRETE + "OpenGL_N.png",
+			_CA_CONCRETE + "G.png", CA_CONCRETE_TILE_M)
+		_vertex_concrete.ao_enabled = true
+		_vertex_concrete.ao_texture = load(_CA_CONCRETE + "AO.png") as Texture2D
+		_vertex_concrete.ao_light_affect = CA_CONCRETE_AO_LIGHT_AFFECT
+		var gain := CONCRETE_LINEAR_MEAN / CA_CONCRETE_LINEAR_MEAN
+		_vertex_concrete.albedo_color = Color(gain, gain, gain).linear_to_srgb()
 		_vertex_concrete.vertex_color_use_as_albedo = true
 		_vertex_concrete.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _vertex_concrete

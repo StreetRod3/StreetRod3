@@ -19,8 +19,6 @@ const _SIGN_WHITE := Color(0.95, 0.95, 0.93, 1)
 const _SIGN_BLACK := Color(0.03, 0.03, 0.03, 1)
 const _SIGN_POST := Color(0.6, 0.6, 0.6, 1)
 const _GRAVEL := Color(0.36, 0.36, 0.34, 1)
-const _JOINT := Color(0.08, 0.08, 0.08, 1)
-const _GUTTER := Color(0.2, 0.2, 0.2, 1)
 const _DRAIN := Color(0.26, 0.26, 0.26, 1)
 const _STAIN := Color(0.04, 0.04, 0.04, 1)
 const _OBSTACLE := Color(0.22, 0.22, 0.22, 1)
@@ -38,6 +36,19 @@ const _FIN_W := 0.3
 const _FIN_H := 340.0 * 8.0 / 1800.0
 const _OBSTACLE_HIT_H := 1.6
 const _DRAIN_DEEP := 0.25
+## The Aqueduct's seams and dark middle are flat strips lying on the concrete, which multiply the
+## concrete under them darker, so its grain runs on through them (`_strip_material()`). Each
+## darkens to `STRIP_CORE` across its middle and fades back to the bare concrete at its edges:
+## `SEAM_STRIP_W` and `GUTTER_STRIP_W` are their whole widths, and `SEAM_FADE` and `GUTTER_FADE`
+## where across the strip (0 to 1) the fade runs, from the edge in.
+const STRIP_CORE := 0.3
+const SEAM_STRIP_W := 0.1
+const SEAM_FADE := Vector2(0.3, 0.42)
+## The middle's dark core is about 0.39 m across, a little over Street Rod 2's 80 units (0.36 m).
+const GUTTER_STRIP_W := 0.54
+const GUTTER_FADE := Vector2(0.07, 0.139)
+## How far over the concrete the strips lie, against flicker where they meet it.
+const _STRIP_LIFT := 0.01
 
 
 static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
@@ -59,6 +70,7 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 	var posts: Array[Transform3D] = []
 	var bands: Array[Transform3D] = []
 	var gutters: Array[Dictionary] = []
+	var seams: Array[Transform3D] = []
 	for item: Dictionary in items:
 		var kind := str(item["kind"])
 		var at := Vector3(float(item["x"]), 0.0, float(item["y"]))
@@ -100,7 +112,7 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 			"road_work_sign", "speed_sign", "narrows_sign", "curves_sign", "curves_back_sign", "chevron_left", "chevron_right":
 				signs.append({"kind": kind, "foot": ground, "yaw": yaw, "lateral": lateral})
 			"joint":
-				_add_joint(boxes, ground, yaw)
+				_add_joint(seams, ground, yaw)
 			"gutter":
 				gutters.append({"from": float(item["y"]), "to": float(item.get("to", item["y"]))})
 			"drain":
@@ -130,6 +142,7 @@ static func build(track: Node3D, items: Array[Dictionary]) -> Dictionary:
 		var list: Array[Transform3D] = []
 		list.assign(boxes[color])
 		_TrackSides._add_unit_boxes(root, "Marks", list, color)
+	_add_strips(root, "Seams", seams, SEAM_FADE)
 	_add_gutters(track, root, gutters)
 	for sign: Dictionary in signs:
 		_add_sign(root, sign)
@@ -251,25 +264,64 @@ static func _add_sawhorse(track: Node3D, root: Node3D, ground: Vector3, yaw: flo
 
 
 ## A seam across the floor and up both banks.
-static func _add_joint(boxes: Dictionary, ground: Vector3, yaw: float) -> void:
+static func _add_joint(seams: Array[Transform3D], ground: Vector3, yaw: float) -> void:
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw))
 	var floor_half: float = _TrackSides.AQUEDUCT_FLOOR_HALF
 	var top_lat: float = floor_half + _TrackSides.AQUEDUCT_BANK_RUN
 	var center := Vector3(ground.x, 0.0, ground.z)
-	var lift := Vector3.UP * 0.02
+	var lift := Vector3.UP * _STRIP_LIFT
 	var a := center + across * floor_half + lift
 	var b := center - across * floor_half + lift
-	_box_into(boxes, _JOINT, _thin_beam(a, b))
+	seams.append(_strip(a, b, SEAM_STRIP_W))
 	var bank_top := Vector3.UP * _TrackSides.AQUEDUCT_BANK_HIGH
-	_box_into(boxes, _JOINT, _thin_beam(a, center + across * top_lat + bank_top + lift))
-	_box_into(boxes, _JOINT, _thin_beam(b, center - across * top_lat + bank_top + lift))
+	seams.append(_strip(a, center + across * top_lat + bank_top + lift, SEAM_STRIP_W))
+	seams.append(_strip(b, center - across * top_lat + bank_top + lift, SEAM_STRIP_W))
 
 
-static func _thin_beam(a: Vector3, b: Vector3) -> Transform3D:
+## A flat strip `width` wide from `a` to `b`, for `_add_strips()`: the plane's X across it, Z along.
+static func _strip(a: Vector3, b: Vector3, width: float) -> Transform3D:
 	var beam: Transform3D = _TrackSides._beam(a, b)
-	var scale_down := 0.06 / _TrackSides._TRUSS_BEAM
-	var flat := Basis(beam.basis.x * scale_down, beam.basis.y * (0.02 / _TrackSides._TRUSS_BEAM), beam.basis.z)
-	return Transform3D(flat, beam.origin)
+	return Transform3D(Basis(beam.basis.x.normalized() * width, beam.basis.y.normalized(), beam.basis.z), beam.origin)
+
+
+## Flat strips (`_strip()`) that darken the concrete under them, with `fade` as in `SEAM_FADE`.
+static func _add_strips(root: Node3D, node_name: String, xforms: Array[Transform3D], fade: Vector2) -> void:
+	if xforms.is_empty():
+		return
+	var plane := PlaneMesh.new()
+	plane.size = Vector2.ONE
+	plane.material = _strip_material(fade)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = plane
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = node_name
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(mmi)
+
+
+## Multiplies what is under it by white at the strip's edges, a little darker by `fade.x` of the
+## way in, and `STRIP_CORE` from `fade.y` in to the same distance from the other edge.
+static func _strip_material(fade: Vector2) -> StandardMaterial3D:
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, fade.x, fade.y, 1.0 - fade.y, 1.0 - fade.x, 1.0])
+	var core := Color(STRIP_CORE, STRIP_CORE, STRIP_CORE)
+	var soft := Color(0.8, 0.8, 0.8)
+	grad.colors = PackedColorArray([Color.WHITE, soft, core, core, soft, Color.WHITE])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 64
+	tex.height = 4
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_MUL
+	mat.albedo_texture = tex
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return mat
 
 
 ## Street Rod 2's dark mark on a bank, a line long, which ends the race if the car touches it.
@@ -295,7 +347,6 @@ static func _add_drain(boxes: Dictionary, body: StaticBody3D, ground: Vector3, y
 
 ## The channel's dark middle. A gap in it is where Street Rod 2's table has a line with bit 1.
 static func _add_gutters(track: Node3D, root: Node3D, gutters: Array[Dictionary]) -> void:
-	const WIDTH := 80.0 * 8.0 / 1800.0
 	const PIECE := 2.5
 	var xforms: Array[Transform3D] = []
 	for gutter: Dictionary in gutters:
@@ -304,9 +355,9 @@ static func _add_gutters(track: Node3D, root: Node3D, gutters: Array[Dictionary]
 		while z < finish:
 			var length := minf(PIECE, finish - z)
 			var center: Vector3 = _StreetScenery._ground(track, 0.0, z + length * 0.5)
-			xforms.append(Transform3D(Basis.IDENTITY.scaled(Vector3(WIDTH, 0.02, length)), center + Vector3.UP * 0.015))
+			xforms.append(Transform3D(Basis.IDENTITY.scaled(Vector3(GUTTER_STRIP_W, 1.0, length)), center + Vector3.UP * _STRIP_LIFT))
 			z += length
-	_TrackSides._add_unit_boxes(root, "Gutter", xforms, _GUTTER)
+	_add_strips(root, "Gutter", xforms, GUTTER_FADE)
 
 
 static func _add_sign(root: Node3D, sign: Dictionary) -> void:

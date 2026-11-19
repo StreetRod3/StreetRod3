@@ -18,7 +18,8 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | Mulholland's gravel (`assets/textures/gravel/`) | "Rocky Trail" by Amal Kumar, Poly Haven (https://polyhaven.com/a/rocky_trail) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | Tree bark (`assets/textures/bark/`) | "Poplar Bark" (BarkPoplar001) by Poliigon (https://www.poliigon.com/texture/poplar-bark-texture/2985) | Poliigon royalty-free license |
 | Tree leaf shape (`assets/textures/leaves/leaf_alpha.png`) and leaf shader (`shaders/tree_leaves.gdshader`, adapted) | "Godot 3D PixelArt Vegetation Demo" by PixelageGames, Eduardo Schildt (https://pixelagegames.itch.io/3d-pixelart-vegetation) | MIT License, `assets/textures/leaves/LICENSE-pixelage.txt` |
-| Aqueduct and street shoulder concrete (`assets/textures/concrete/`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
+| Aqueduct concrete (`assets/textures/concrete/T_CA_ConcreteRoad_4096_*`) | "CA Concrete Road" by Leartes Studios, Leartes Cosmos (https://cosmos.leartesstudios.com/materials/ca-concrete-road) | Leartes Cosmos license (https://cosmos.leartesstudios.com/legal/digital-asset-licensing-contract) |
+| Street drag shoulder concrete (`assets/textures/concrete/old-grunge-concrete.jpg`) | "Old grunge concrete" photo from Magnific (https://www.magnific.com) | Free |
 
 ## Skies
 
