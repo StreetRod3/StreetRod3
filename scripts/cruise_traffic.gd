@@ -22,6 +22,39 @@ const _COP_DRIVING := 2
 const _POLICE_CAR := "res://assets/cars/police-fairlane-1957.car"
 const _LOOK := 9.0
 const _MAX_YAW := 1.15
+## A chase can turn only as tight as the tires allow. Stopped wheels do not yaw the car.
+const _TURN_RADIUS := 5.6
+const _LATERAL := 6.5
+## Front wheels stay inside about 30 degrees, so a slow police car cannot pivot or slide sideways.
+const _STEER_MAX := 0.5236
+const _WHEELBASE := 3.0
+## A chase car this slow, facing this far across the street, is blocking the lane.
+const _WALK_MPS := 0.8
+const _STUCK_S := 1.0
+const _CROSS_YAW := 0.87
+## Back up, then creep along the road until the nose is in the lane.
+const _BACK_S := 1.0
+const _UNSTICK_MPS := 2.5
+const _CREEP_MPS := 3.2
+const _ALIGNED := 0.40
+## A car stopped in a jam waits this long, then pulls out and goes around.
+const _WAIT_MIN := 10.0
+const _WAIT_MAX := 30.0
+## Police give the queue much less time. A chase barely waits at all.
+const _COP_WAIT_MIN := 2.0
+const _COP_WAIT_MAX := 4.0
+const _PURSUE_WAIT := 0.5
+const _PASS_S := 5.0
+const _PASS_M := 3.2
+const _JAM_MPS := 1.6
+## Once a chase is this close to a car that has stopped, it leaves the loop and parks beside it.
+const _PARK_REACH := 48.0
+const _PARK_GAP := 3.6
+const _PARK_STOP := 1.8
+## Straight at the player only while that line stays on a street. Past this, it is a block.
+const _CORRIDOR := 14.0
+## Extra meters around a building so the body stops at the wall, not inside it.
+const _BLOCK_PAD := 0.45
 ## Streets this wide, curb to curb, get a lane off the center line.
 const _TWO_LANE_HALF := 6.0
 const _BODY_Y := 0.35
@@ -57,10 +90,13 @@ var _cops_halted := false
 var _station := Vector3.ZERO
 var _station_size := Vector2.ZERO
 var _have_station := false
+## Building footprints from the city map. x is world X, y is world Z, h is the half size.
+var _blocks: Array[Dictionary] = []
 
 
 func setup(track: Dictionary, avoid: Vector3, floor_mesh: MeshInstance3D, car_files: Array[String], with_police := false) -> void:
 	_police_on = with_police
+	_note_blocks(track)
 	if _police_on:
 		_police = _Police.new()
 		_note_station(track)
@@ -179,8 +215,9 @@ func tick(delta: float, player: Node3D) -> void:
 		if car != null:
 			car.sync_speed()
 			if _police_on and car.on_duty:
-				var wail := car.duty == _Police.PURSUE or (car.duty == _Police.ATTEND and car.speed > 2.0)
-				car.show_call(car.duty != _Police.PATROL, wail, delta)
+				var hunt := car.duty == _Police.PURSUE or car.duty == _Police.STOP
+				var wail := hunt or (car.duty == _Police.ATTEND and car.speed > 2.0)
+				car.show_call(hunt, wail, delta)
 	if _police_on and player != null and not _player_wrecked(player):
 		_note_odd_cars(delta)
 		_police.tick_scenes(delta, _sitting())
@@ -238,6 +275,14 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	if car.parked:
 		_sit(car, delta)
 		return
+	if _park_for_stop(car):
+		_drive_alongside(car, delta)
+		return
+	if _pursuing(car) and not _cops_halted:
+		_drive_pursuit(car, delta)
+		return
+	car.stuck_s = 0.0
+	car.unstick = 0.0
 	if _off_road(car):
 		_reacquire(car)
 	var sitting := car.held > 0.0
@@ -249,7 +294,9 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	var forward := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
 	var desired := car.cruise_mps
 	var curb_target := 0.0
+	var jammed := false
 	var self_id := car.get_instance_id()
+	var passing := car.pass_s > 0.0
 	for block: Dictionary in blockers:
 		if int(block["id"]) == self_id:
 			continue
@@ -258,6 +305,10 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 		var ahead := gap.dot(forward)
 		var lateral := absf(forward.x * gap.z - forward.z * gap.x)
 		var other_speed := float(block["speed"])
+		if ahead > 0.4 and ahead < 14.0 and lateral < 2.8 and other_speed < _JAM_MPS and car.speed < _JAM_MPS:
+			jammed = true
+		if passing:
+			continue
 		if ahead > 0.4 and ahead < 16.0 and lateral < 2.6:
 			var room := ahead - 5.0
 			var cap := other_speed
@@ -270,6 +321,9 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 			curb_target = 2.4
 			if other_speed > car.speed - 0.5:
 				desired = maxf(desired, minf(other_speed + 1.0, 22.0))
+	_queue_pass(car, delta, jammed, sitting, center, forward, blockers)
+	if car.pass_s > 0.0:
+		desired = maxf(desired, minf(car.cruise_mps, 9.0))
 	if sitting:
 		desired = 0.0
 		curb_target = 2.4
@@ -280,6 +334,9 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	var aim := _ahead(car.edge_i, car.along, car.next_i, _LOOK, car.lane_bias + car.curb)
 	if car.aiming:
 		aim = car.aim_at
+	if car.pass_s > 0.0 and car.edge_i >= 0 and car.edge_i < _edges.size():
+		var right: Vector3 = _edges[car.edge_i]["right"]
+		aim += right * (_PASS_M * car.pass_side)
 	var flat := Vector2(aim.x - center.x, aim.z - center.z)
 	var desired_yaw := car.rotation.y
 	if flat.length_squared() > 0.36:
@@ -291,17 +348,28 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	if absf(err) > 0.5:
 		desired = minf(desired, 6.2)
 	var yaw_rate := clampf(err * 2.6, -_MAX_YAW, _MAX_YAW) + car.spin
+	if car.cop:
+		var yaw_cap := _yaw_limit(Vector2(car.shove.x, car.shove.z).length())
+		yaw_rate = clampf(yaw_rate, -yaw_cap, yaw_cap)
 	car.spin = move_toward(car.spin, 0.0, 4.0 * delta)
 	car.rotation.y += yaw_rate * delta
 	forward = Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
 	var blend := 1.15 if car.loose > 0.0 else 3.4
 	car.loose = maxf(car.loose - delta, 0.0)
 	car.shove = car.shove.lerp(forward * maxf(desired, 0.0), 1.0 - exp(-blend * delta))
+	if car.cop and car.loose <= 0.0:
+		car.shove = forward * maxf(car.shove.dot(forward), 0.0)
 	var moved := car.shove * delta
-	car.global_position += moved
-	car.global_position.y = _BODY_Y
+	if car.cop:
+		_step_cop(car, moved)
+	else:
+		car.global_position += moved
+		car.global_position.y = _BODY_Y
 	car.roll_wheels(Vector2(moved.x, moved.z).length())
-	_hold_lane(car, delta)
+	if car.pass_s <= 0.0:
+		_hold_lane(car, delta)
+	if car.cop:
+		_keep_solid(car)
 	if sitting and car.held <= 0.0:
 		car.route.clear()
 		car.next_i = -1
@@ -312,6 +380,552 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	car.along = (car.center() - a).dot(dir)
 	if car.along > float(edge["length"]) - 0.8:
 		_enter(car, car.next_i)
+
+
+## A chase ignores the lane and the right of way. It still rolls: the nose only turns
+## as fast as the tires can at this speed, and the car moves along that nose.
+## Other cars and buildings stop that move. The bump afterwards is what shoves the cars.
+func _drive_pursuit(car: _TrafficCar, delta: float) -> void:
+	var reversing := false
+	var creeping := false
+	if car.pass_s > 0.0:
+		car.pass_s = maxf(car.pass_s - delta, 0.0)
+	_mark_stuck(car, delta)
+	if car.unstick > 0.0:
+		car.unstick -= delta
+		reversing = true
+		if car.unstick <= 0.0:
+			car.unstick = -1.0
+			reversing = false
+			creeping = true
+	elif car.unstick < 0.0:
+		creeping = true
+		if _creep_done(car):
+			car.unstick = 0.0
+			car.stuck_s = 0.0
+			creeping = false
+		elif Vector2(car.shove.x, car.shove.z).length() < _WALK_MPS:
+			car.stuck_s += delta
+			if car.stuck_s >= _STUCK_S:
+				car.unstick = _BACK_S
+				car.stuck_s = 0.0
+				creeping = false
+				reversing = true
+		else:
+			car.stuck_s = 0.0
+	var center := car.center()
+	var desired_yaw := car.rotation.y
+	var desired := 0.0
+	if reversing:
+		desired = -_UNSTICK_MPS
+	elif creeping:
+		desired_yaw = _street_yaw(car)
+		desired = _CREEP_MPS
+	else:
+		var aim := center
+		var player := _player()
+		if player != null:
+			var prey := _player_center(player)
+			if player.has_method(&"planar_velocity"):
+				var lead: Vector3 = player.call(&"planar_velocity")
+				lead.y = 0.0
+				prey += lead * 0.35
+			aim = _pursuit_aim(car, center, prey)
+		else:
+			aim = _pursuit_road_point(car, 22.0)
+		var flat := Vector2(aim.x - center.x, aim.z - center.z)
+		if flat.length_squared() > 4.0:
+			desired_yaw = atan2(flat.x, flat.y)
+		var tight := clampf(absf(angle_difference(car.rotation.y, desired_yaw)) / 1.15, 0.0, 1.0)
+		desired = lerpf(_Police.PURSUE_MPS, _CREEP_MPS, tight)
+		var nose := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
+		_pursue_pass(car, delta, center, nose)
+		if car.pass_s > 0.0:
+			var aside := Vector3(nose.z, 0.0, -nose.x) * (_PASS_M * car.pass_side)
+			aim = center + nose * 8.0 + aside
+			if aside.length_squared() > 0.01:
+				desired_yaw = atan2(aim.x - center.x, aim.z - center.z)
+			desired = maxf(desired, _CREEP_MPS)
+	var err := angle_difference(car.rotation.y, desired_yaw)
+	var speed := Vector2(car.shove.x, car.shove.z).length()
+	var yaw_max := _yaw_limit(speed)
+	var yaw_rate := clampf(err * 2.2 + car.spin, -yaw_max, yaw_max)
+	car.spin = move_toward(car.spin, 0.0, 4.0 * delta)
+	car.rotation.y += yaw_rate * delta
+	var forward := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
+	car.loose = maxf(car.loose - delta, 0.0)
+	car.shove = car.shove.lerp(forward * desired, 1.0 - exp(-3.2 * delta))
+	if car.loose <= 0.0:
+		var along_v := car.shove.dot(forward)
+		if desired < 0.0:
+			along_v = minf(along_v, 0.0)
+		else:
+			along_v = maxf(along_v, 0.0)
+		car.shove = forward * along_v
+	_step_cop(car, car.shove * delta)
+	car.roll_wheels(car.shove.dot(forward) * delta)
+	_note_nearest_edge(car)
+
+
+## The chased car has stopped. Leave the road loop and wait beside it for the ticket.
+func _park_for_stop(car: _TrafficCar) -> bool:
+	if not _hunting(car) or _cops_halted:
+		return false
+	var player := _player()
+	if player == null or _player_wrecked(player):
+		return false
+	if _player_speed(player) > _Police.CRAWL_MPS:
+		return false
+	return _flat_dist(car.center(), _player_center(player)) <= _PARK_REACH
+
+
+func _hunting(car: _TrafficCar) -> bool:
+	return car.cop and car.on_duty and (car.duty == _Police.STOP or car.duty == _Police.PURSUE)
+
+
+func _drive_alongside(car: _TrafficCar, delta: float) -> void:
+	car.pass_s = 0.0
+	car.wait_s = 0.0
+	car.stuck_s = 0.0
+	car.unstick = 0.0
+	car.aiming = false
+	var player := _player()
+	var prey := _player_center(player)
+	var pyaw := player.rotation.y
+	var pforward := Vector3(sin(pyaw), 0.0, cos(pyaw))
+	var pright := Vector3(pforward.z, 0.0, -pforward.x)
+	var center := car.center()
+	var side := _park_side(center, prey, pright)
+	var rank := _park_rank(car, prey)
+	if rank % 2 == 1:
+		side = -side
+	var slot := prey + pright * (_PARK_GAP * side) - pforward * (6.0 * float(rank))
+	if _slot_blocked(slot):
+		side = -side
+		slot = prey + pright * (_PARK_GAP * side) - pforward * (6.0 * float(rank))
+	var flat := Vector2(slot.x - center.x, slot.z - center.z)
+	var dist := flat.length()
+	var desired_yaw := pyaw
+	if dist > _PARK_STOP:
+		desired_yaw = atan2(flat.x, flat.y)
+	var err := angle_difference(car.rotation.y, desired_yaw)
+	var desired := 0.0
+	if dist <= _PARK_STOP:
+		desired = 0.0
+	elif dist < 14.0 and absf(err) > 0.55:
+		desired = minf(_CREEP_MPS, maxf(dist * 0.4, 1.4))
+	else:
+		desired = minf(_Police.STOP_MPS, dist * 0.55)
+		desired = minf(desired, sqrt(maxf(dist, 1.0) * _LATERAL))
+		if absf(err) > 0.8:
+			desired = minf(desired, _CREEP_MPS)
+	var speed := Vector2(car.shove.x, car.shove.z).length()
+	var yaw_max := _yaw_limit(speed)
+	car.rotation.y += clampf(err * 2.2, -yaw_max, yaw_max) * delta
+	var forward := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
+	car.shove = car.shove.lerp(forward * desired, 1.0 - exp(-3.4 * delta))
+	if dist < 22.0:
+		var have := Vector2(car.shove.x, car.shove.z).length()
+		if have > desired + 0.5:
+			car.shove = Vector3.ZERO if desired <= 0.2 else forward * desired
+	if dist <= _PARK_STOP:
+		car.shove = Vector3.ZERO
+	_step_cop(car, car.shove * delta)
+	car.roll_wheels(car.shove.dot(forward) * delta)
+	_note_nearest_edge(car)
+
+
+func _park_side(center: Vector3, prey: Vector3, pright: Vector3) -> float:
+	var side := (center - prey).dot(pright)
+	if absf(side) < 1.2:
+		return 1.0
+	return 1.0 if side > 0.0 else -1.0
+
+
+func _park_rank(car: _TrafficCar, prey: Vector3) -> int:
+	var mine := _flat_dist(car.center(), prey)
+	var rank := 0
+	for body: CharacterBody3D in _cars:
+		var other := body as _TrafficCar
+		if other == null or other == car or not _hunting(other):
+			continue
+		if _flat_dist(other.center(), prey) < mine - 0.5:
+			rank += 1
+	return mini(rank, 2)
+
+
+func _slot_blocked(slot: Vector3) -> bool:
+	var flat := Vector2(slot.x, slot.z)
+	for block: Dictionary in _blocks:
+		var at: Vector2 = block["c"]
+		var half: Vector2 = block["h"]
+		if absf(flat.x - at.x) < half.x + 1.4 and absf(flat.y - at.y) < half.y + 1.4:
+			return true
+	return false
+
+
+## Stopped behind a car. Civilians wait tens of seconds. Police pull out much sooner.
+func _queue_pass(car: _TrafficCar, delta: float, jammed: bool, sitting: bool, center: Vector3, forward: Vector3, blockers: Array[Dictionary]) -> void:
+	if car.pass_s > 0.0:
+		car.pass_s = maxf(car.pass_s - delta, 0.0)
+		car.wait_s = 0.0
+		return
+	var held := sitting or (_cops_halted and car.cop)
+	if not jammed or held:
+		car.wait_s = 0.0
+		car.wait_for = 0.0
+		return
+	if car.wait_for <= 0.0:
+		car.wait_for = _wait_span(car)
+	car.wait_s += delta
+	if car.wait_s < car.wait_for:
+		return
+	car.pass_s = _PASS_S
+	car.pass_side = _pass_side(car, center, forward, blockers)
+	car.wait_s = 0.0
+	car.wait_for = 0.0
+
+
+func _wait_span(car: _TrafficCar) -> float:
+	if car.cop:
+		return randf_range(_COP_WAIT_MIN, _COP_WAIT_MAX)
+	return randf_range(_WAIT_MIN, _WAIT_MAX)
+
+
+func _pass_side(car: _TrafficCar, center: Vector3, forward: Vector3, blockers: Array[Dictionary]) -> float:
+	var right := Vector3(forward.z, 0.0, -forward.x)
+	var left_n := 0
+	var right_n := 0
+	var self_id := car.get_instance_id()
+	for block: Dictionary in blockers:
+		if int(block["id"]) == self_id:
+			continue
+		var other: Vector3 = block["center"]
+		var gap := other - center
+		var ahead := gap.dot(forward)
+		if ahead < -2.0 or ahead > 16.0:
+			continue
+		var side := gap.dot(right)
+		if side > 0.5:
+			right_n += 1
+		elif side < -0.5:
+			left_n += 1
+	if left_n != right_n:
+		return -1.0 if left_n < right_n else 1.0
+	return -1.0 if randf() < 0.5 else 1.0
+
+
+## A chase does not queue. A car stopped in front of it is a reason to swing out.
+func _pursue_pass(car: _TrafficCar, delta: float, center: Vector3, forward: Vector3) -> void:
+	if car.pass_s > 0.0 or car.unstick != 0.0:
+		return
+	if not _jam_ahead(car, center, forward):
+		car.wait_s = 0.0
+		return
+	car.wait_s += delta
+	if car.wait_s < _PURSUE_WAIT:
+		return
+	var blockers: Array[Dictionary] = []
+	for body: CharacterBody3D in _cars:
+		var other := body as _TrafficCar
+		if other == null or other == car:
+			continue
+		blockers.append({"id": other.get_instance_id(), "center": other.center()})
+	car.pass_s = _PASS_S
+	car.pass_side = _pass_side(car, center, forward, blockers)
+	car.wait_s = 0.0
+
+
+func _jam_ahead(car: _TrafficCar, center: Vector3, forward: Vector3) -> bool:
+	if Vector2(car.shove.x, car.shove.z).length() >= _JAM_MPS:
+		return false
+	for body: CharacterBody3D in _cars:
+		var other := body as _TrafficCar
+		if other == null or other == car:
+			continue
+		var gap := other.center() - center
+		var ahead := gap.dot(forward)
+		var lateral := absf(forward.x * gap.z - forward.z * gap.x)
+		if ahead > 0.5 and ahead < 12.0 and lateral < 2.6 and other.speed < _JAM_MPS:
+			return true
+	return false
+
+
+## Nearly stopped and sideways to the street. The next second is spent backing out.
+func _mark_stuck(car: _TrafficCar, delta: float) -> void:
+	if car.unstick != 0.0 or car.pass_s > 0.0:
+		return
+	var slow := Vector2(car.shove.x, car.shove.z).length() < _WALK_MPS
+	if slow and _off_street(car) > _CROSS_YAW:
+		car.stuck_s += delta
+		if car.stuck_s >= _STUCK_S:
+			car.unstick = _BACK_S
+			car.stuck_s = 0.0
+	else:
+		car.stuck_s = 0.0
+
+
+## The creep has the nose along the street and the car rolling that way.
+func _creep_done(car: _TrafficCar) -> bool:
+	if absf(angle_difference(car.rotation.y, _street_yaw(car))) > _ALIGNED:
+		return false
+	var forward := Vector3(sin(car.rotation.y), 0.0, cos(car.rotation.y))
+	return car.shove.dot(forward) > 1.0
+
+
+## Street direction nearest the nose, so the car takes the shorter turn back into the lane.
+func _street_yaw(car: _TrafficCar) -> float:
+	if car.edge_i < 0 or car.edge_i >= _edges.size():
+		return car.rotation.y
+	var dir: Vector3 = _edges[car.edge_i]["dir"]
+	var yaw := atan2(dir.x, dir.z)
+	var ahead := absf(angle_difference(car.rotation.y, yaw))
+	var back := absf(angle_difference(car.rotation.y, yaw + PI))
+	return yaw if ahead <= back else yaw + PI
+
+
+func _off_street(car: _TrafficCar) -> float:
+	return absf(angle_difference(car.rotation.y, _street_yaw(car)))
+
+
+## Short steps, so a fast chase cannot skip through a car or a wall in one frame.
+func _step_cop(car: _TrafficCar, move: Vector3) -> void:
+	var dist := Vector2(move.x, move.z).length()
+	var steps := maxi(int(ceil(dist / 0.45)), 1)
+	var slice := move / float(steps)
+	for _i in steps:
+		car.global_position += slice
+		car.global_position.y = _BODY_Y
+		_keep_solid(car)
+
+
+## Buildings push the body back out. Another car only stops the speed going into it,
+## and the bump that follows is what shoves the two apart.
+func _keep_solid(car: _TrafficCar) -> void:
+	for _i in 4:
+		var hit := _building_hit(car)
+		if hit.is_empty():
+			break
+		var normal: Vector2 = hit["normal"]
+		var depth := float(hit["depth"])
+		car.global_position += Vector3(normal.x, 0.0, normal.y) * (depth + 0.08)
+		car.global_position.y = _BODY_Y
+		_strip_into(car, normal)
+	var crowd := _crowd_hit(car)
+	if crowd.is_empty():
+		return
+	_strip_into(car, crowd["normal"])
+
+
+func _strip_into(car: _TrafficCar, normal: Vector2) -> void:
+	var flat := Vector2(car.shove.x, car.shove.z)
+	var into := flat.dot(normal)
+	if into >= 0.0:
+		return
+	flat -= normal * into
+	car.shove = Vector3(flat.x, 0.0, flat.y)
+
+
+func _building_hit(car: _TrafficCar) -> Dictionary:
+	var box := _body_box(car)
+	if box.is_empty():
+		return {}
+	var best := 0.0
+	var normal := Vector2.ZERO
+	var found := false
+	for block: Dictionary in _blocks:
+		var center: Vector2 = block["c"]
+		var half: Vector2 = block["h"]
+		var hit := _separate(
+			box["center"], box["axis_x"], box["axis_z"], float(box["half_x"]), float(box["half_z"]),
+			center, Vector2.RIGHT, Vector2(0.0, 1.0), half.x, half.y
+		)
+		if hit.is_empty():
+			continue
+		var depth := float(hit["depth"])
+		if not found or depth > best:
+			found = true
+			best = depth
+			normal = hit["normal"]
+	if not found:
+		return {}
+	return {"depth": best, "normal": normal}
+
+
+func _crowd_hit(car: _TrafficCar) -> Dictionary:
+	var box := _body_box(car)
+	if box.is_empty():
+		return {}
+	var best := 0.0
+	var normal := Vector2.ZERO
+	var found := false
+	for body: CharacterBody3D in _cars:
+		if body == car:
+			continue
+		var other := _body_box(body)
+		if other.is_empty():
+			continue
+		var hit := _separate(
+			box["center"], box["axis_x"], box["axis_z"], float(box["half_x"]), float(box["half_z"]),
+			other["center"], other["axis_x"], other["axis_z"], float(other["half_x"]), float(other["half_z"])
+		)
+		if hit.is_empty():
+			continue
+		var depth := float(hit["depth"])
+		if not found or depth > best:
+			found = true
+			best = depth
+			normal = hit["normal"]
+	var player := _player()
+	if player is CharacterBody3D:
+		var theirs := _body_box(player as CharacterBody3D)
+		if not theirs.is_empty():
+			var hit := _separate(
+				box["center"], box["axis_x"], box["axis_z"], float(box["half_x"]), float(box["half_z"]),
+				theirs["center"], theirs["axis_x"], theirs["axis_z"], float(theirs["half_x"]), float(theirs["half_z"])
+			)
+			if not hit.is_empty() and float(hit["depth"]) > best:
+				found = true
+				normal = hit["normal"]
+	if not found:
+		return {}
+	return {"depth": best, "normal": normal}
+
+
+func _body_box(body: CharacterBody3D) -> Dictionary:
+	var shape_node := body.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if shape_node == null or not shape_node.shape is BoxShape3D:
+		return {}
+	var shape := shape_node.shape as BoxShape3D
+	var xf := shape_node.global_transform
+	var scale := xf.basis.get_scale()
+	var axis_x := Vector2(xf.basis.x.x, xf.basis.x.z)
+	var axis_z := Vector2(xf.basis.z.x, xf.basis.z.z)
+	if axis_x.length_squared() < 0.0001 or axis_z.length_squared() < 0.0001:
+		return {}
+	return {
+		"center": Vector2(xf.origin.x, xf.origin.z),
+		"axis_x": axis_x.normalized(),
+		"axis_z": axis_z.normalized(),
+		"half_x": shape.size.x * absf(scale.x) * 0.5,
+		"half_z": shape.size.z * absf(scale.z) * 0.5,
+	}
+
+
+## Smallest overlap. The normal pushes the first box out of the second. Empty when they are apart.
+func _separate(
+	a_center: Vector2, a_x: Vector2, a_z: Vector2, a_hx: float, a_hz: float,
+	b_center: Vector2, b_x: Vector2, b_z: Vector2, b_hx: float, b_hz: float
+) -> Dictionary:
+	var best := INF
+	var normal := Vector2.ZERO
+	var delta := a_center - b_center
+	var axes: Array[Vector2] = [a_x, a_z, b_x, b_z]
+	for axis: Vector2 in axes:
+		if axis.length_squared() < 0.0001:
+			continue
+		var n := axis.normalized()
+		var dist := delta.dot(n)
+		var reach_a := a_hx * absf(a_x.dot(n)) + a_hz * absf(a_z.dot(n))
+		var reach_b := b_hx * absf(b_x.dot(n)) + b_hz * absf(b_z.dot(n))
+		var overlap := reach_a + reach_b - absf(dist)
+		if overlap <= 0.0:
+			return {}
+		if overlap < best:
+			best = overlap
+			normal = n if dist >= 0.0 else -n
+	if best == INF:
+		return {}
+	return {"depth": best, "normal": normal}
+
+
+## How fast the nose may yaw at this speed. Thirty degrees of steer, and no tighter than the tires.
+func _yaw_limit(speed: float) -> float:
+	var v := absf(speed)
+	if v < 0.05:
+		return 0.0
+	var radius := maxf(_TURN_RADIUS, v * v / _LATERAL)
+	return minf(v / radius, v * tan(_STEER_MAX) / _WHEELBASE)
+
+
+func _pursuing(car: _TrafficCar) -> bool:
+	return car.cop and car.on_duty and car.duty == _Police.PURSUE
+
+
+## Coming to pull the car over. Still on the lane, with the lights on.
+func _stopping(car: _TrafficCar) -> bool:
+	return car.cop and car.on_duty and car.duty == _Police.STOP
+
+
+## Across an open street, aim at the car. Through a block, take the road instead.
+func _pursuit_aim(car: _TrafficCar, from: Vector3, prey: Vector3) -> Vector3:
+	var gap := Vector2(prey.x - from.x, prey.z - from.z).length()
+	if gap < 22.0 or _line_on_roads(from, prey):
+		return prey
+	return _pursuit_road_point(car, 24.0)
+
+
+func _line_on_roads(a: Vector3, b: Vector3) -> bool:
+	for t: float in [0.35, 0.65]:
+		var at := a.lerp(b, t)
+		if _road_gap(at) > _CORRIDOR:
+			return false
+	return true
+
+
+func _road_gap(pos: Vector3) -> float:
+	var best := INF
+	for i in _edges.size():
+		best = minf(best, _gap(pos, _edges[i]))
+	return best
+
+
+## A point ahead on the street center, so a chase can cut the corner without a lane.
+func _pursuit_road_point(car: _TrafficCar, dist: float) -> Vector3:
+	if car.edge_i < 0 or car.edge_i >= _edges.size():
+		return car.center()
+	if car.route.is_empty() or car.next_i < 0:
+		var player := _player()
+		if player != null:
+			_retarget(car, _player_center(player))
+	if car.next_i < 0:
+		car.next_i = _next_edge(car)
+	var edge: Dictionary = _edges[car.edge_i]
+	var remain := float(edge["length"]) - car.along
+	if dist <= remain or car.next_i < 0 or car.next_i >= _edges.size():
+		var at := clampf(car.along + dist, 0.0, float(edge["length"]))
+		var dir: Vector3 = edge["dir"]
+		var a: Vector3 = edge["a"]
+		return a + dir * at
+	var nxt: Dictionary = _edges[car.next_i]
+	var into := clampf(dist - remain, 0.0, float(nxt["length"]))
+	var dir_n: Vector3 = nxt["dir"]
+	var origin: Vector3 = nxt["a"]
+	return origin + dir_n * into
+
+
+func _note_nearest_edge(car: _TrafficCar) -> void:
+	var center := car.center()
+	var best := car.edge_i
+	var best_gap := INF
+	var best_along := car.along
+	for i in _edges.size():
+		var edge: Dictionary = _edges[i]
+		var a: Vector3 = edge["a"]
+		var dir: Vector3 = edge["dir"]
+		var along := clampf((center - a).dot(dir), 0.0, float(edge["length"]))
+		var point := a + dir * along
+		var gap := Vector2(point.x - center.x, point.z - center.z).length()
+		if gap < best_gap:
+			best_gap = gap
+			best = i
+			best_along = along
+	if best < 0:
+		return
+	if best != car.edge_i:
+		car.next_i = -1
+	car.edge_i = best
+	car.along = best_along
 
 
 func _hold_lane(car: _TrafficCar, delta: float) -> void:
@@ -325,7 +939,12 @@ func _hold_lane(car: _TrafficCar, delta: float) -> void:
 	if pull.length() > 12.0:
 		return
 	var hold := 0.35 if absf(car.spin) > 0.35 or car.loose > 0.0 else 1.6
-	car.global_position += pull * minf(hold * delta, 0.4)
+	var step := pull * minf(hold * delta, 0.4)
+	if car.cop:
+		var cap := _yaw_limit(Vector2(car.shove.x, car.shove.z).length()) * _WHEELBASE * delta
+		if step.length() > cap:
+			step = step.normalized() * cap if cap > 0.0 else Vector3.ZERO
+	car.global_position += step
 	car.global_position.y = _BODY_Y
 
 
@@ -379,6 +998,11 @@ func _next_edge(car: _TrafficCar) -> int:
 func _plan_trip(car: _TrafficCar) -> void:
 	if car.returning:
 		_retarget(car, car.stall)
+		return
+	if _pursuing(car) or _stopping(car):
+		var player := _player()
+		if player != null:
+			_retarget(car, _player_center(player))
 		return
 	if _working(car):
 		_plan_patrol(car)
@@ -676,6 +1300,22 @@ func _note_station(track: Dictionary) -> void:
 		return
 
 
+func _note_blocks(track: Dictionary) -> void:
+	_blocks.clear()
+	for raw: Variant in track.get("buildings", []):
+		if typeof(raw) != TYPE_DICTIONARY:
+			continue
+		var block: Dictionary = raw
+		var half := Vector2(float(block.get("w", 0.0)), float(block.get("d", 0.0))) * 0.5
+		if half.x < 0.5 or half.y < 0.5:
+			continue
+		half += Vector2(_BLOCK_PAD, _BLOCK_PAD)
+		_blocks.append({
+			"c": Vector2(float(block.get("x", 0.0)), float(block.get("y", 0.0))),
+			"h": half,
+		})
+
+
 func _closest_on_road(pos: Vector3) -> Dictionary:
 	var best := -1
 	var best_along := 0.0
@@ -907,23 +1547,26 @@ func _direct_cops(player: Node3D, delta: float) -> void:
 	for i in cops.size():
 		var car := cops[i]
 		car.duty = plan[i]
-		if car.duty == _Police.PURSUE:
+		if car.duty == _Police.PURSUE or car.duty == _Police.STOP:
 			_any_pursuit = true
 		var pace := _Police.PATROL_MPS
 		if car.duty == _Police.PURSUE:
 			pace = _Police.PURSUE_MPS
+		elif car.duty == _Police.STOP:
+			pace = _Police.STOP_MPS
 		elif car.duty == _Police.ATTEND and not scene.is_empty():
 			var at: Vector3 = scene["pos"]
 			var gap := Vector2(at.x - car.center().x, at.z - car.center().z).length()
 			pace = 0.0 if gap < 14.0 else _Police.PATROL_MPS
 		car.cruise_mps = pace
-		# A chase stays on the lane. Steering at the car makes the body slide while the nose hunts it.
+		# The chase itself steers. Aiming here would fight the lane hold and slide the body.
 		car.aiming = false
 		car.retarget -= delta
 		if car.duty == _Police.PATROL or car.retarget > 0.0:
 			continue
 		car.retarget = _Police.RETARGET_S
-		var goal := player_pos if car.duty == _Police.PURSUE else scene_pos
+		var hunting := car.duty == _Police.PURSUE or car.duty == _Police.STOP
+		var goal := player_pos if hunting else scene_pos
 		_retarget(car, goal)
 
 

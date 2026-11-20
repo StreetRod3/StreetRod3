@@ -12,8 +12,10 @@ const SPEED_HOLD_S := 1.0
 const LOSE_S := 4.0
 const LOSE_DROP := 0.05
 const PULL_RANGE_M := 8.0
+## Cops pull alongside once the car is down to this. The ticket itself is TICKET_MPS.
 const CRAWL_MPS := 3.0
-const PULL_HOLD_S := 2.0
+## 3 mph. Under this, with a cop alongside, the car stops and the ticket is written.
+const TICKET_MPS := 1.341
 const GRACE_S := 20.0
 ## The ticket follows the heat: $10 with barely any, $100 when it is full.
 const FINE_MIN := 10
@@ -34,21 +36,32 @@ const SCENE_LIFE_S := 20.0
 const RETARGET_S := 0.5
 const PATROL_MPS := 11.0
 const PURSUE_MPS := 26.0
+## On the road, trying to catch the car and make it pull over. Not the hard chase.
+const STOP_MPS := 18.0
+## The meter stops here until a stop has failed. Then it jumps to HEAT_RAMPAGE.
+const HEAT_CAP := 1.0
+const HEAT_RAMPAGE := 1.5
+## How long the pull-over has to fail before the hard chase.
+const EVADE_S := 180.0
 
 const PATROL := 0
 const PURSUE := 1
 const ATTEND := 2
+const STOP := 3
 
 var heat := 0.0
 var grace := 0.0
 var scenes: Array[Dictionary] = []
 
 var _over_s := 0.0
-var _crawl_s := 0.0
 var _crash := false
 var _stop := false
 ## Fastest the car went while the heat was up, for the ticket.
 var _top_mps := 0.0
+## Seconds the car has stayed wanted without pulling over.
+var _evade_s := 0.0
+## The pull-over failed. Cops use the hard chase until the heat is gone.
+var _rampage := false
 
 
 ## `cop_seen` is a cop inside SIGHT_M. `cop_close` is one inside PULL_RANGE_M.
@@ -60,24 +73,25 @@ func tick(delta: float, speed: float, cop_seen: bool, cop_close: bool) -> void:
 		_over_s = 0.0
 	elif speed > LIMIT_MPS:
 		_over_s += delta
-		if _over_s >= SPEED_HOLD_S and cop_seen:
-			heat = minf(heat + HEAT_PER_S * delta, 1.0)
+		if _over_s >= SPEED_HOLD_S and cop_seen and heat < _heat_cap():
+			heat = minf(heat + HEAT_PER_S * delta, _heat_cap())
 	else:
 		_over_s = 0.0
 		if heat > 0.0 and not cop_seen:
 			heat = maxf(heat - LOSE_DROP / LOSE_S * delta, 0.0)
 			if heat <= 0.0:
-				_crash = false
-				_top_mps = 0.0
+				_clear_want()
 	if heat > 0.0:
 		_top_mps = maxf(_top_mps, speed)
-	if heat > 0.0 and speed <= CRAWL_MPS and cop_close:
-		_crawl_s += delta
-		if _crawl_s >= PULL_HOLD_S:
-			_stop = true
-			_crawl_s = 0.0
+		if not _rampage:
+			_evade_s += delta
+			if _evade_s >= EVADE_S:
+				_rampage = true
+				heat = HEAT_RAMPAGE
 	else:
-		_crawl_s = 0.0
+		_evade_s = 0.0
+	if heat > 0.0 and speed <= TICKET_MPS and cop_close:
+		_stop = true
 
 
 ## How many police cars should be out driving at this heat. The steps land on
@@ -93,12 +107,12 @@ func cops_for(amount: float) -> int:
 ## A real hit on the player, or any new contact with a cop when `on_cop`.
 func note_hit(amount: float, on_cop: bool) -> void:
 	if on_cop:
-		heat = 1.0
+		heat = maxf(heat, HEAT_CAP)
 		_crash = true
 		return
 	if amount <= NOTICE_MPS:
 		return
-	heat = minf(heat + HIT_HEAT, 1.0)
+	heat = minf(heat + HIT_HEAT, _heat_cap())
 	_crash = true
 
 
@@ -178,22 +192,24 @@ func duties(cop_at: Array[Vector3], player: Vector3) -> Array[int]:
 	var away := Vector2(player.x - scene_pos.x, player.z - scene_pos.z).length()
 	var fled := live and away > SIGHT_M
 	var attend_n := 0
-	var pursue_n := 0
+	var chase_n := 0
 	if heat <= 0.0:
 		if live:
 			attend_n = 2 if hard else 1
 	elif fled:
 		attend_n = 1
-		pursue_n = 1
-	elif heat >= 1.0:
-		pursue_n = cop_at.size()
+		chase_n = 1
+	elif heat >= HEAT_CAP:
+		chase_n = cop_at.size()
 	else:
-		pursue_n = 1
+		chase_n = 1
 		if live and hard:
 			attend_n = 1
+	# Below the rampage line the chase is a pull-over. Past it, the hard chase.
+	var chase := PURSUE if _rampage else STOP
 	var used := {}
 	_claim(out, used, _nearest_order(cop_at, scene_pos), ATTEND, attend_n)
-	_claim(out, used, _nearest_order(cop_at, player), PURSUE, pursue_n)
+	_claim(out, used, _nearest_order(cop_at, player), chase, chase_n)
 	return out
 
 
@@ -230,20 +246,29 @@ func take_stop(money: int) -> Dictionary:
 	var crashed := _crash
 	heat = 0.0
 	grace = GRACE_S
-	_crash = false
+	_clear_want()
 	_over_s = 0.0
-	_crawl_s = 0.0
-	_top_mps = 0.0
 	return {"paid": paid, "broke": broke, "amount": amount, "speed": top, "crash": crashed}
 
 
 func hud_text(chasing: bool) -> String:
 	if heat <= 0.0 and not chasing:
 		return "Heat: 0%"
-	var pct := roundi(clampf(heat, 0.0, 1.0) * 100.0)
+	var pct := roundi(clampf(heat, 0.0, HEAT_RAMPAGE) * 100.0)
 	if chasing:
 		return "Heat: %d%%  Police" % pct
 	return "Heat: %d%%" % pct
+
+
+func _heat_cap() -> float:
+	return HEAT_RAMPAGE if _rampage else HEAT_CAP
+
+
+func _clear_want() -> void:
+	_crash = false
+	_top_mps = 0.0
+	_evade_s = 0.0
+	_rampage = false
 
 
 func _claim(out: Array[int], used: Dictionary, order: Array[int], duty: int, count: int) -> void:
