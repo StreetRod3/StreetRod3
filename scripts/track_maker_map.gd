@@ -489,6 +489,8 @@ func _draw_roads() -> void:
 
 
 static func scenery_color(kind: String) -> Color:
+	if kind == "dumpster":
+		return Color(0.2, 0.55, 0.42, 1)
 	if kind.contains("tree") or kind == "shrub" or kind == "bush":
 		return Color(0.35, 0.75, 0.3, 1)
 	if kind.contains("rock") or kind.contains("boulder"):

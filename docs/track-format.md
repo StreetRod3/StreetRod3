@@ -214,7 +214,7 @@ Optional boxes for the city view. They do not affect the road graph or the cruis
 
 ## Scenery
 
-A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. Height comes from the ground at that spot. On a `street` track nothing has collision. The kinds marked solid below stop a car, and a rival steers around them.
+A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. Height comes from the ground at that spot. On a `street` track nothing has collision except dumpsters. The kinds marked solid below stop a car, and a rival steers around them. A plain track builds only its dumpsters from the list.
 
 ```json
 { "kind": "tree", "x": 5.78, "y": 120 }
@@ -247,6 +247,7 @@ A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. 
 | `stain` | A black patch on the floor. |
 | `slab` | Solid. A low block 5.4 m wide and 5 m long across the middle of the floor. |
 | `fin` | Solid. A wall 1.5 m high and 5 m long, standing along the floor. |
+| `dumpster` | A steel dumpster, on any style of track, with its long side along the road and its front to it. A car shoves it, sending it sliding and spinning by how hard it hits, and a knock throws its lids open. A rival steers around the spot it was put. |
 
 ## Street drag
 

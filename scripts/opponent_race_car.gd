@@ -923,9 +923,9 @@ func _scrape_barrier(before: Vector3, track: Node, delta: float) -> bool:
 	if hit.is_empty():
 		return false
 	var after: Vector3 = hit["velocity"]
-	if hit.has("snapped"):
-		# Through a tree: it gave way, so the car keeps its heading.
-		take_hit(float(hit["snapped"]))
+	if hit.has("gave_way"):
+		# Through a tree, or shoving a dumpster: it gave way, so the car keeps its heading.
+		take_hit(float(hit["gave_way"]))
 		_dynamics.cg_velocity = after
 		velocity = after
 		_sync_motion_state()
