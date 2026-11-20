@@ -14,8 +14,11 @@ is a boundary and no unwrap can make islands bigger than one triangle. It is wel
 sharp. The CAD can has wall thickness, so its inside is modeled too: nearly half the
 surface, never seen. Faces no outside ray reaches are found, and the big connected
 patches of them (the inside walls) are deleted; small hidden patches in crevices stay
-so nothing opens a hole. The rest is unwrapped with Smart UV Project at one texel
-density and packed by island shape.
+so nothing opens a hole. The CAD fillets are cut finer than a garage prop needs, so
+the rest is collapsed to DECIMATE of its triangles (13,016 to 1,560; the surface moves
+1.5 mm at most) and its normals weighted by face area, or the long collapsed triangles
+smear the shading across the flat panels. It is unwrapped with Smart UV Project at one
+texel density and packed by island shape.
 
 The paint is baked onto that unwrap with Cycles. The CS1 maps tile, and are sampled
 by box projection in object space (TILE_M meters a tile) so their grain runs across
@@ -70,6 +73,7 @@ RIM = 0.45             # how dark the paint goes at a chip's rim
 CHIP_STEP = 0.0004     # paint thickness, meters, at a chip's edge
 HIDDEN_RAYS = 256
 HIDDEN_MIN_AREA = 0.01  # m^2: hidden patches smaller than this stay
+DECIMATE = 0.12        # share of the cleaned mesh's triangles kept
 COLOR_SIZE = 1024
 MAP_SIZE = 512
 MARGIN = 0.003
@@ -141,10 +145,34 @@ def remove_hidden(obj):
     bmesh.ops.delete(bm, geom=doomed, context='FACES')
     bm.to_mesh(me)
     bm.free()
+    return len(hidden), len(doomed)
+
+
+def decimate(obj):
+    """Collapse the mesh to DECIMATE of its triangles, then shade it smooth with
+    edges over SHARP_DEG sharp and normals weighted by face area."""
+    mod = obj.modifiers.new('decimate', 'DECIMATE')
+    mod.ratio = DECIMATE
+    mod.use_collapse_triangulate = True
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(obj.evaluated_get(dg))
+    obj.modifiers.clear()
+    old, obj.data = obj.data, me
+    bpy.data.meshes.remove(old)
     for p in me.polygons:
         p.use_smooth = True
     me.set_sharp_from_angle(angle=math.radians(SHARP_DEG))
-    return len(hidden), len(doomed)
+    # plain smooth normals bend across the long collapsed triangles and smear the flat
+    # panels; weighting by face area keeps big flat faces flat and curves the fillets
+    mod = obj.modifiers.new('weighted', 'WEIGHTED_NORMAL')
+    mod.mode = 'FACE_AREA'
+    mod.weight = 100
+    mod.keep_sharp = True
+    dg = bpy.context.evaluated_depsgraph_get()
+    me = bpy.data.meshes.new_from_object(obj.evaluated_get(dg))
+    obj.modifiers.clear()
+    old, obj.data = obj.data, me
+    bpy.data.meshes.remove(old)
 
 
 def unwrap(obj):
@@ -464,6 +492,7 @@ def main():
     weld(obj)
     size = place(obj)
     hidden, removed = remove_hidden(obj)
+    decimate(obj)
     used, density = unwrap(obj)
 
     sc = bpy.context.scene
