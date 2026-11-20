@@ -339,7 +339,7 @@ roughness = 0.4
 size = Vector3(0.18, 0.38, 0.08)
 
 [sub_resource type="BoxShape3D" id="FuelCanShape"]
-size = Vector3(0.36, 0.528, 0.186)
+size = Vector3(0.347, 0.47, 0.165)
 
 [sub_resource type="BoxShape3D" id="LiftShape"]
 size = Vector3(1.14, 0.48, 0.3)
@@ -1056,7 +1056,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.08, 0, 2.5)
 [node name="Model" parent="InteractFuelCan" instance=ExtResource("4")]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractFuelCan" unique_id=135487322]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.264, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.235, 0)
 shape = SubResource("FuelCanShape")
 
 [node name="InteractLift" type="StaticBody3D" parent="." unique_id=210050001]
