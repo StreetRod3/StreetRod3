@@ -10,8 +10,9 @@ extends CharacterBody3D
 ## City traffic drives its lanes through anything, so a traffic car that runs into it shoves it
 ## the same way, and drives on.
 ##
-## Nothing here needs ground to collide with: the dumpster stands at the height `ground` gives
-## (a race track's `surface_height()`), or stays at the height it was put at with no ground.
+## Nothing here needs ground to collide with: the dumpster stands on its four casters at the
+## heights `ground` gives (a race track's `surface_height()`), tilted to the ground's slope and
+## bank there, or stays level at the height it was put at with no ground.
 
 const _MODEL := preload("res://assets/locations/city/dumpster.glb")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
@@ -38,6 +39,8 @@ const _REST_MPS := 0.05
 const _REST_SPIN := 0.05
 ## How far it must be free to move to count as not pinned.
 const _BLOCK_TEST := 0.05
+## Where the casters stand, from the middle along X and Z.
+const _CASTERS := Vector2(0.95, 0.5)
 ## A knock this hard bangs.
 const _BANG_MPS := 2.0
 
@@ -65,6 +68,8 @@ var ground: Object = null
 
 var _velocity := Vector3.ZERO
 var _spin := 0.0
+## Its turn about the vertical; the tilt to the ground goes on top.
+var _yaw := 0.0
 var _lids: Array[Node3D] = []
 var _lid_open: Array[float] = [0.0, 0.0]
 var _lid_rate: Array[float] = [0.0, 0.0]
@@ -108,6 +113,7 @@ func _ready() -> void:
 	_bang.stream = _ShopSounds.stream("thud")
 	_bang.position = Vector3(0.0, 0.8, 0.0)
 	add_child(_bang)
+	_yaw = rotation.y
 	_stand()
 	set_physics_process(false)
 
@@ -170,7 +176,7 @@ func _physics_process(delta: float) -> void:
 		var hit := move_and_collide(_velocity * delta)
 		if hit != null:
 			_bounce(hit)
-	rotation.y += _spin * delta
+	_yaw += _spin * delta
 	_stand()
 	var lids_still := true
 	for i in _lids.size():
@@ -221,9 +227,24 @@ func _bounce(hit: KinematicCollision3D) -> void:
 	_knock(into)
 
 
+## On its casters: the plane through the ground under the four of them sets its tilt, and their
+## mean height its own.
 func _stand() -> void:
-	if ground != null and ground.has_method(&"surface_height"):
-		global_position.y = float(ground.call(&"surface_height", global_position))
+	var turn := Basis(Vector3.UP, _yaw)
+	var at := global_position
+	if ground == null or not ground.has_method(&"surface_height"):
+		global_transform = Transform3D(turn, at)
+		return
+	var heights: Array[float] = []
+	for corner: Vector2 in [Vector2(1, 1), Vector2(1, -1), Vector2(-1, 1), Vector2(-1, -1)]:
+		var caster := at + turn * Vector3(corner.x * _CASTERS.x, 0.0, corner.y * _CASTERS.y)
+		heights.append(float(ground.call(&"surface_height", caster)))
+	var rise_x := (heights[0] + heights[1] - heights[2] - heights[3]) / (4.0 * _CASTERS.x)
+	var rise_z := (heights[0] + heights[2] - heights[1] - heights[3]) / (4.0 * _CASTERS.y)
+	var up := (turn * Vector3(-rise_x, 1.0, -rise_z)).normalized()
+	var tilt := Basis(Quaternion(Vector3.UP, up))
+	var mean := (heights[0] + heights[1] + heights[2] + heights[3]) * 0.25
+	global_transform = Transform3D(tilt * turn, Vector3(at.x, mean, at.z))
 
 
 ## Gravity on lid `i` about its hinge, stopped by the rim shut and by the back flipped over.

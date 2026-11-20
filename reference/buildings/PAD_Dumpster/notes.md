@@ -1,6 +1,6 @@
 # PAD Dumpster
 
-Source: "PAD Dumpster" by Leartes Studios, Leartes Cosmos (source page link to be added; license: https://cosmos.leartesstudios.com/legal/digital-asset-licensing-contract). Used for the dumpsters in the city and the `dumpster` track scenery (`assets/locations/city/dumpster.glb`).
+Source: "PAD Dumpster" by Leartes Studios, Leartes Cosmos, https://cosmos.leartesstudios.com/assets/pad-dumpster (license: https://cosmos.leartesstudios.com/legal/digital-asset-licensing-contract). Used for the dumpsters in the city and the `dumpster` track scenery (`assets/locations/city/dumpster.glb`).
 
 | Folder | What it is |
 | --- | --- |

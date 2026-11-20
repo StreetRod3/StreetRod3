@@ -247,7 +247,7 @@ A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. 
 | `stain` | A black patch on the floor. |
 | `slab` | Solid. A low block 5.4 m wide and 5 m long across the middle of the floor. |
 | `fin` | Solid. A wall 1.5 m high and 5 m long, standing along the floor. |
-| `dumpster` | A steel dumpster, on any style of track, with its long side along the road and its front to it. A car shoves it, sending it sliding and spinning by how hard it hits, and a knock throws its lids open. A rival steers around the spot it was put. |
+| `dumpster` | A steel dumpster, on any style of track, with its long side along the road and its front to it, standing on its casters tilted to the ground's slope and bank. A car shoves it, sending it sliding and spinning by how hard it hits, and a knock throws its lids open. A rival steers around the spot it was put. |
 
 ## Street drag
 
