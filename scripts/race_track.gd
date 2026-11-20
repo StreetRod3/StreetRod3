@@ -4,6 +4,7 @@ extends Node3D
 
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CourseScenery := preload("res://scripts/course_scenery.gd")
+const _Dumpster := preload("res://scripts/dumpster.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
 const _GroundMaterial := preload("res://scripts/ground_material.gd")
 const _TrackTerrain := preload("res://scripts/track_terrain.gd")
@@ -572,6 +573,28 @@ func over_the_edge(world: Vector3) -> bool:
 	return absf(lateral) > _half_ws[i] + _TrackSides.MOUNTAIN_VERGE + _TrackSides.OVER_EDGE_PAST_VERGE
 
 
+## The scenery list's dumpsters (dumpster.gd), on every style of track: long side along the road
+## and front to it, standing on the ground there. Rivals steer round the spot each was put, as
+## round a sawhorse; one shoved somewhere else is just a solid thing to them.
+func _build_dumpsters() -> void:
+	for item: Dictionary in _scenery:
+		if str(item["kind"]) != "dumpster":
+			continue
+		var at := Vector3(float(item["x"]), 0.0, float(item["y"]))
+		var here := closest_sample(at)
+		var yaw := float(here["yaw"])
+		var lateral := float(here["lateral"])
+		var along := Vector3(sin(yaw), 0.0, cos(yaw))
+		var s := float(here["s"]) + (at - (here["position"] as Vector3)).dot(along)
+		var bin := _Dumpster.new()
+		bin.ground = self
+		var turn := yaw - PI * 0.5 if lateral >= 0.0 else yaw + PI * 0.5
+		bin.transform = Transform3D(Basis(Vector3.UP, turn), Vector3(at.x, surface_height(at), at.z))
+		add_child(bin)
+		var half := _Dumpster.SIZE * 0.5
+		add_block({"s": s - half.x, "to": s + half.x, "low": lateral - half.z, "high": lateral + half.z, "soft": true})
+
+
 ## Something new on the road for rivals to steer round for the rest of the race, such as a fallen
 ## tree (tree_grove.gd): {"s", "to", "low", "high"}, as course_scenery.gd's blocks.
 func add_block(block: Dictionary) -> void:
@@ -839,6 +862,7 @@ func build_road_course() -> void:
 		_build_obstacles()
 		_build_narrow_signs()
 		_build_finish_line()
+	_build_dumpsters()
 	_built = true
 
 

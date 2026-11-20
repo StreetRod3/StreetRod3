@@ -6,6 +6,7 @@ const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _PlaceDeparture := preload("res://scripts/place_departure.gd")
 const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _PumpSound := preload("res://scripts/pump_sound.gd")
+const _GasPump := preload("res://scripts/gas_pump.gd")
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 
@@ -27,11 +28,6 @@ const _POUR_L_PER_S := 4.0
 ## Full service starts when the player has not begun fueling by this time.
 const _SERVICE_WAIT := 60.0
 const _RAG_MODEL := "res://assets/locations/gas-station/rag.glb"
-## Both pumps are this model (tools/gas_pump_to_glb.py); its side plate reads REGULAR.
-const _PUMP_MODEL := "res://assets/locations/gas-station/pump.glb"
-## The super pump's body maps: the same atlas with the plate reading SUPER.
-const _PUMP_SUPER_COLOR := "res://assets/locations/gas-station/pump-super-color.png"
-const _PUMP_SUPER_NORMAL := "res://assets/locations/gas-station/pump-super-normal.png"
 ## Width of the rag on the ground, in meters.
 const _RAG_WIDTH := 0.32
 ## Car files point the nose along local +Z. The glass is the forward edge of the roof.
@@ -134,7 +130,6 @@ var _outlets: Dictionary = {}
 var _hose_ends: Dictionary = {}
 var _hanging_hoses: Dictionary = {}
 var _home_bases: Dictionary = {}
-var _pump_glass_mat: BaseMaterial3D
 var _materials: Dictionary = {}
 var _sign_font: Font
 var _box_meshes: Dictionary = {}
@@ -1556,20 +1551,14 @@ func _pump(pos: Vector3, id: String) -> void:
 	shape.shape = box
 	shape.position = Vector3(-0.07, 0.9, 0.0)
 	pump.add_child(shape)
-	var packed := load(_PUMP_MODEL) as PackedScene
-	if packed == null:
-		push_error("Pump model failed to load: %s" % _PUMP_MODEL)
+	var model := _GasPump.make(id)
+	if model == null:
 		return
-	var model := packed.instantiate() as Node3D
-	model.name = "Model"
 	pump.add_child(model)
-	if id == "super":
-		_paint_super_plate(model.get_node_or_null("pump") as MeshInstance3D)
-	_clear_pump_glass(model.get_node_or_null("pump_glass") as MeshInstance3D)
 	var nozzle := model.get_node_or_null("nozzle") as Node3D
 	var outlet := model.get_node_or_null("hose_outlet") as Node3D
 	if nozzle == null or outlet == null:
-		push_error("Pump model is missing its nozzle or hose outlet: %s" % _PUMP_MODEL)
+		push_error("Pump model is missing its nozzle or hose outlet: %s" % _GasPump.MODEL)
 		return
 	_nozzles[id] = nozzle
 	_homes[id] = nozzle.global_position
@@ -1586,36 +1575,6 @@ func _pump(pos: Vector3, id: String) -> void:
 	hose.visible = false
 	_world.add_child(hose)
 	_hoses[id] = hose
-
-
-## The glTF import gives the dial glass a depth pre-pass, which hides the dial behind
-## it; a plain alpha blend shows the dial through the grimy glass.
-func _clear_pump_glass(glass: MeshInstance3D) -> void:
-	if glass == null:
-		return
-	if _pump_glass_mat == null:
-		var base := glass.get_active_material(0) as BaseMaterial3D
-		if base == null:
-			return
-		_pump_glass_mat = base.duplicate() as BaseMaterial3D
-		_pump_glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glass.set_surface_override_material(0, _pump_glass_mat)
-
-
-## The super pump wears the same atlas with its side plate repainted to read SUPER.
-func _paint_super_plate(body: MeshInstance3D) -> void:
-	if body == null:
-		return
-	var base := body.get_active_material(0) as BaseMaterial3D
-	var color := load(_PUMP_SUPER_COLOR) as Texture2D
-	var normal := load(_PUMP_SUPER_NORMAL) as Texture2D
-	if base == null or color == null or normal == null:
-		push_error("Super pump maps failed to load")
-		return
-	var mat := base.duplicate() as BaseMaterial3D
-	mat.albedo_texture = color
-	mat.normal_texture = normal
-	body.set_surface_override_material(0, mat)
 
 
 func _build_rag() -> void:

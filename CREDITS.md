@@ -8,6 +8,7 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | --- | --- | --- |
 | 1950 Studebaker Champion body (`assets/cars/studebaker-champion-1950.glb`) | This work is based on "Studebaker - Car Model" (https://sketchfab.com/3d-models/studebaker-car-model-c7578ec0f82043e6b392fcdf9b00c743) by Allie2k (https://sketchfab.com/Allie2k) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/) | [CC BY 4.0](http://creativecommons.org/licenses/by/4.0/) |
 | Gas pumps (`assets/locations/gas-station/pump.glb`, `pump-super-*.png`) | "PAD Gas Pumps" by Leartes Studios, Leartes Cosmos (https://cosmos.leartesstudios.com/assets/pad-gas-pumps); side plate relettered | Leartes Cosmos license (https://cosmos.leartesstudios.com/legal/digital-asset-licensing-contract) |
+| Dumpsters (`assets/locations/city/dumpster.glb`) | "PAD Dumpster" by Leartes Studios, Leartes Cosmos (https://cosmos.leartesstudios.com/assets/pad-dumpster); cut down, lids hinged | Leartes Cosmos license (https://cosmos.leartesstudios.com/legal/digital-asset-licensing-contract) |
 | Garage floor jack (`assets/locations/garage/jack.glb`) | SM_HydraulicJack from the "Tire Repair Shop" Unreal Engine environment pack (source link to be added); split into moving parts and scaled to real size | (to be added) |
 
 ## Textures

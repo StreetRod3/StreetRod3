@@ -1425,9 +1425,9 @@ func _scrape_barrier(before: Vector3, delta: float) -> bool:
 	if hit.is_empty():
 		return false
 	var after: Vector3 = hit["velocity"]
-	if hit.has("snapped"):
-		# Through a tree: it gave way, so the car keeps its heading.
-		take_hit(float(hit["snapped"]))
+	if hit.has("gave_way"):
+		# Through a tree, or shoving a dumpster: it gave way, so the car keeps its heading.
+		take_hit(float(hit["gave_way"]))
 		if GameState.arcade_drive:
 			_arcade.apply_planar_velocity(self, after, _car_center)
 		else:

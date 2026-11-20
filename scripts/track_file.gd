@@ -50,7 +50,7 @@ const SCENERY_KINDS := [
 	"tree", "big_tree", "bare_tree", "pole", "gantry", "dash", "finish", "dark_streak",
 	"shrub", "bush", "post", "rock", "boulder_side", "rockfall_left", "rockfall_right", "road_boulder", "road_rock",
 	"road_work_sign", "barricade", "speed_sign", "narrows_sign", "curves_sign", "curves_back_sign", "chevron_left", "chevron_right",
-	"joint", "gutter", "drain", "stain", "slab", "fin",
+	"joint", "gutter", "drain", "stain", "slab", "fin", "dumpster",
 ]
 
 const _NODE_TYPES := [NODE_START, NODE_FINISH, NODE_REGULAR]
