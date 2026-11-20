@@ -20,6 +20,7 @@ const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 const _PlayerCar := preload("res://scripts/player_race_car.gd")
 const _Dumpster := preload("res://scripts/dumpster.gd")
+const _GasPump := preload("res://scripts/gas_pump.gd")
 const _RpmMeter := preload("res://scripts/rpm_meter.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _TouchControls := preload("res://scripts/race_touch_controls.gd")
@@ -1872,17 +1873,21 @@ func _build_gas_station(root: Node3D) -> void:
 		var sx := 5.28 * side
 		_add_box(root, Vector3(0.1, 0.7, 3.0), Vector3(sx, 4.15, 1.45), _GAS_BLUE, 0.5, 0.0, Color.BLACK, 0.0, Vector3(-0.7, 0.0, 0.0))
 		_add_box(root, Vector3(0.1, 0.7, 3.0), Vector3(sx, 4.15, 3.95), _GAS_BLUE, 0.5, 0.0, Color.BLACK, 0.0, Vector3(0.7, 0.0, 0.0))
-	_gas_pump(root, Vector3(-1.5, 0.08, -2.3))
-	_gas_pump(root, Vector3(0.7, 0.08, -2.3))
+	_gas_pump(root, Vector3(-1.5, 0.08, -2.3), "regular")
+	_gas_pump(root, Vector3(0.7, 0.08, -2.3), "super")
 	_gas_sign(root)
 
 
-func _gas_pump(root: Node3D, pos: Vector3) -> void:
-	var red := Color(0.62, 0.1, 0.1)
-	_add_box(root, Vector3(0.7, 0.1, 0.5), pos + Vector3(0.0, 0.05, 0.0), Color(0.78, 0.76, 0.72), 0.55)
-	_add_box(root, Vector3(0.55, 1.2, 0.38), pos + Vector3(0.0, 0.7, 0.0), red, 0.42)
-	_add_box(root, Vector3(0.48, 0.07, 0.04), pos + Vector3(0.0, 1.05, -0.2), _GAS_YELLOW, 0.35, 0.0, _GAS_YELLOW, 0.45)
-	_add_sphere(root, 0.16, pos + Vector3(0.0, 1.48, 0.0), Color(0.75, 0.88, 0.95), 0.18, 0.08, Color(0.8, 0.92, 1.0), 0.3)
+## The gas station scene's pump (gas_pump.gd) on a concrete island, its front to the street.
+func _gas_pump(root: Node3D, pos: Vector3, id: String) -> void:
+	_add_box(root, Vector3(1.1, 0.1, 0.8), pos + Vector3(0.0, 0.05, 0.0), Color(0.78, 0.76, 0.72), 0.55)
+	var model := _GasPump.make(id)
+	if model == null:
+		return
+	model.name = "Pump" + id.capitalize()
+	model.position = pos + Vector3(0.0, 0.1, 0.0)
+	model.rotation.y = PI
+	root.add_child(model)
 
 
 func _gas_sign(root: Node3D) -> void:
