@@ -83,3 +83,5 @@ assets/locations/city/dumpster.glb filter=lfs diff=lfs merge=lfs -text
 assets/locations/city/dumpster_*.png filter=lfs diff=lfs merge=lfs -text
 assets/locations/garage/us_jerry_can.glb filter=lfs diff=lfs merge=lfs -text
 assets/locations/garage/us_jerry_can_*.png filter=lfs diff=lfs merge=lfs -text
+reference/**/*.blend filter=lfs diff=lfs merge=lfs -text
+reference/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
