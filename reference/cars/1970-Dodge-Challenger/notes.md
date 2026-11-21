@@ -54,6 +54,9 @@ The game's body is built from it by `tools/challenger_to_glb.py` (it runs Blende
 | --- | --- |
 | `photos/1970-cuda-interior-6336878902.jpg` | 1970 Plymouth 'Cuda 440 Six Pack interior from the passenger door (the Challenger's E-body twin: same buckets, wheel, shifter and door panels; its dash is the 'Cuda's own), by sv1ambo, CC BY 2.0, https://commons.wikimedia.org/wiki/File:1970_Plymouth_%27Cuda_coupe_(6336878902).jpg |
 | `photos/1970-cuda-interior-6336116475.jpg` | The same car from the driver's door, by sv1ambo, CC BY 2.0, https://commons.wikimedia.org/wiki/File:1970_Plymouth_%27Cuda_coupe_(6336116475).jpg |
+| `photos/challenger-interior-driver-door.png` | A 1970 Challenger's interior from the driver's door: Rallye dash, three-spoke wood-rim wheel with ribbed column cover, high-back buckets with crosswise pleats, pistol-grip four-speed in a boot, clutch and brake pedals, door panel with a woodgrain insert. The user supplied it on 2026-11-21 with https://www.justdashes.com/blog/instructions-1970-74-mopar-e-body-dash-pad-removal-and-replacement/ |
+| `photos/challenger-dash-out-of-car.png` | A Rallye dash out of the car: the padded hood over the cluster, the four pods, the knob panel at the left end, the heater controls below it, the radio, the glovebox. Supplied by the user with the same link |
+| `photos/challenger-rallye-cluster.png` | The Rallye cluster straight on, left to right: 150 mph speedometer with odometer, 8000 rpm tachometer, the four-in-one gauge (fuel at the top, oil left, temperature right, ammeter at the bottom), clock. Supplied by the user with the same link |
 
 What the R/T's Rallye dash holds (four large round pods: 150 mph speedometer, 8000 rpm tachometer, clock, and a pod of four small gauges for oil pressure, temperature, fuel and ammeter; standard on the R/T, optional on other Challengers), from web searches on 2026-11-21:
 
