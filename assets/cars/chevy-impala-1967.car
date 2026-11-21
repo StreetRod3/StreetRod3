@@ -1,0 +1,78 @@
+{
+  "id": "chevy-impala-1967",
+  "name": "Chevy Impala 1967",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/chevy-impala-1967.glb",
+    "position": [0.0, 0.17, 0.0],
+    "height": 1.637,
+    "ground_clearance": 0.17,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.821, 0.329, 1.787],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.821, 0.329, 1.787],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.821, 0.329, -1.271],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.821, 0.329, -1.271],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "v8-283",
+    "transmission": "gb_man3",
+    "wheels": "wheel-c1"
+  },
+  "driver": {
+    "position": [0.374, 1.2, 0.05]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.65, -10.8],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.9, -6.4],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.374, 1.25, 0.05],
+      "pitch": -2.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.6, 2.82],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 32.0},
+    "rear": {"node": "bumper_rear", "mass": 27.0}
+  },
+  "chassis": {
+    "mass": 1640,
+    "wheelbase": 3.058,
+    "cg_height": 0.55,
+    "front_axle_fraction": 0.54,
+    "max_steer_deg": 30
+  }
+}

@@ -8,6 +8,10 @@ uniform sampler2D normal_tex : hint_default_black, filter_linear_mipmap, repeat_
 uniform float metallic : hint_range(0.0, 1.0) = 0.35;
 uniform float roughness : hint_range(0.0, 1.0) = 0.42;
 uniform float use_orm : hint_range(0.0, 1.0) = 0.0;
+// A clear coat over the paint (not over the trim, glass or interior), for cars whose
+// .car file gives model.paint.clearcoat: a second, glossier highlight on top.
+uniform float clearcoat : hint_range(0.0, 1.0) = 0.0;
+uniform float clearcoat_roughness : hint_range(0.0, 1.0) = 0.1;
 uniform float use_normal : hint_range(0.0, 1.0) = 0.0;
 uniform float normal_scale = 1.0;
 // An EGA-style checkerboard dither in the paint, like the 1956 Corvette's texture, for
@@ -107,6 +111,8 @@ void fragment() {
 		METALLIC = mix(0.05, metallic, tex.a);
 		ROUGHNESS = mix(0.82, roughness, tex.a);
 	}
+	CLEARCOAT = clearcoat * tex.a;
+	CLEARCOAT_ROUGHNESS = clearcoat_roughness;
 	if (use_normal > 0.5) {
 		NORMAL_MAP = texture(normal_tex, UV).rgb;
 		NORMAL_MAP_DEPTH = normal_scale;
