@@ -40,6 +40,12 @@ uniform vec4 cove_color = vec4(0.0);
 uniform int cove_count = 0;
 uniform vec2 cove_outline[24];
 uniform float cove_min_x = 0.0;
+// A second paint marked in the texture, for cars whose .car file gives model.accent (the
+// 1963 C10's grille and its frame, bumpers and tailgate lettering): of the paint's texels
+// (alpha 1), the body's are grey (blue as bright as red) and the accent's have no blue.
+// The paint's shade is then the texel's red.
+uniform float use_accent = 0.0;
+uniform vec4 accent_color : source_color = vec4(1.0);
 
 varying vec3 model_pos;
 varying vec3 model_normal;
@@ -98,6 +104,10 @@ void fragment() {
 	vec4 tex = texture(albedo_tex, UV);
 	vec3 paint = in_cove() ? cove_color.rgb : paint_color.rgb;
 	vec3 painted = paint * tex.rgb;
+	if (use_accent > 0.5) {
+		float accent = clamp(1.0 - tex.b / max(tex.r, 0.004), 0.0, 1.0);
+		painted = mix(paint, accent_color.rgb, accent) * tex.r;
+	}
 	if (dither_cell > 0.0) {
 		painted *= paint_tone();
 	}

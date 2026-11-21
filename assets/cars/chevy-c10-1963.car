@@ -8,10 +8,7 @@
     "height": 1.5073,
     "ground_clearance": 0.302,
     "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02},
-    "accent": {
-      "nodes": ["grille", "bumper_front", "bumper_rear"],
-      "color": [0.9, 0.89, 0.84]
-    }
+    "accent": {"color": [0.9, 0.89, 0.84]}
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {

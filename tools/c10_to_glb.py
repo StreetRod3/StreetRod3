@@ -20,12 +20,13 @@ The GLB is laid out like the other cars' (tools/impala_to_glb.py):
     model's tires to the roof; the steering wheel is scaled evenly so it stays round;
   * the model's textures with the paint as a mask for car_paint_mask.gdshader: the
     teal paint is white with alpha 1 (the shading baked into it left off, the panel
-    seams kept), and so are the off-white grille and bumpers, which take the car's
-    accent paint; everything else has alpha 0 and keeps its colors;
+    seams kept), and so is the white the texture has on the body behind the bumpers;
+    the off-white grille, the frame round it, the bumpers and the tailgate's CHEVROLET
+    are the accent paint (the car file's model.accent), alpha 1 with blue 0;
+    everything else has alpha 0 and keeps its colors;
   * an ORM texture per material (R = AO, G = roughness, B = metallic);
   * the glass as its own see-through material;
   * `bumper_front` and `bumper_rear` nodes so the game can strip them, and `grille`;
-    those three are the accent (the car file's model.accent);
   * the model's European plates swapped for the Impala's blank US plate, 12 x 6 in;
   * the model's steering wheel and blank instrument hood swapped for a 1960-63 two-spoke
     wheel (`driving_wheel`) and cluster with working gauges (tools/c10_dash.py).
@@ -76,6 +77,22 @@ WHEEL_MAX_WIDTH = 25.0
 TEAL = 30
 ACCENT_LUM = 150
 ACCENT_CHROMA = 30
+## The body's white in the texture, by where it is on the truck (the GLB's frame, meters):
+## ahead of NOSE_Z, below FRONT_BUMPER_TOP it is behind the front bumper and takes the
+## body paint, and up to GRILLE_FRAME_TOP it is the frame round the grille, the accent;
+## behind TAIL_Z, below REAR_BUMPER_TOP it is behind the rear bumper (body paint), and
+## on the tailgate (behind TAILGATE_Z, above REAR_BUMPER_TOP, within TAILGATE_HALF of the
+## middle) it is the CHEVROLET lettering, the accent. The rest of the body's white (door
+## handles, badges, lamp rims) stays as it is.
+NOSE_Z = 1.9
+FRONT_BUMPER_TOP = 0.26
+GRILLE_FRAME_TOP = 0.6
+TAIL_Z = -1.9
+REAR_BUMPER_TOP = 0.285
+TAILGATE_Z = -2.2
+TAILGATE_HALF = 0.66
+BODY, ACCENT = 1, 2
+ACCENT_GROUPS = ('grille', 'bumper_front', 'bumper_rear')
 SHADE_RADIUS = 6
 SHADE_FLOOR = 0.3
 
@@ -198,40 +215,62 @@ def blur_masked(values, mask, radius):
     return blur(values * mask) / np.maximum(w, 1e-6)
 
 
-def uv_mask(shape, uv_tris):
-    """Texels covered by the given UV triangles (n, 3, 2), grown a few texels."""
+def zone_of(group, center):
+    """Which paint the texture's white takes on a triangle centered at `center` (the
+    GLB's frame): BODY, ACCENT or 0 (none)."""
+    if group in ACCENT_GROUPS:
+        return ACCENT
+    x, y, z = center
+    if z > NOSE_Z:
+        return BODY if y < FRONT_BUMPER_TOP else ACCENT if y < GRILLE_FRAME_TOP else 0
+    if z < TAIL_Z:
+        if y < REAR_BUMPER_TOP:
+            return BODY
+        if z < TAILGATE_Z and abs(x) < TAILGATE_HALF:
+            return ACCENT
+    return 0
+
+
+def zone_map(shape, zoned):
+    """Each texel's zone from the UV triangles that cover it [(uv tris (n, 3, 2), zones (n,))],
+    grown a few texels so filtering at the edges finds it."""
     from PIL import Image, ImageDraw, ImageFilter
     h, w = shape
     im = Image.new('L', (w, h), 0)
     d = ImageDraw.Draw(im)
-    for tri in uv_tris:
-        d.polygon([(u * w, (1.0 - v) * h) for u, v in tri], fill=255)
-    return np.asarray(im.filter(ImageFilter.MaxFilter(5))) > 0
+    for uv_tris, zones in zoned:
+        for tri, zone in zip(uv_tris, zones):
+            if zone:
+                d.polygon([(u * w, (1.0 - v) * h) for u, v in tri], fill=int(zone))
+    return np.asarray(im.filter(ImageFilter.MaxFilter(5)))
 
 
-def body_albedo(rgb, accent_uv):
-    """The body texture as a paint mask: paint and accent white, shaded only by their
-    seams, with alpha 1; the rest as it is with alpha 0. (In float32 and a channel at a
-    time: the texture is 4096 px.)"""
+def body_albedo(rgb, zoned):
+    """The body texture as a paint mask: the paint white, shaded only by its seams, with
+    alpha 1; the accent the same with blue 0; the rest as it is with alpha 0. (In float32
+    and a channel at a time: the texture is 4096 px.)"""
     r, g, b = (rgb[..., i].astype(np.int16) for i in range(3))
     teal = (g - r > TEAL) & (b - r > TEAL)
     del r, g, b
     lum = rgb.mean(2, dtype=np.float32)
     chroma = rgb.max(2) - rgb.min(2)
-    accent = uv_mask(rgb.shape[:2], accent_uv) & (lum > ACCENT_LUM) & (chroma < ACCENT_CHROMA)
+    white = (lum > ACCENT_LUM) & (chroma < ACCENT_CHROMA) & ~teal
     del chroma
+    zones = zone_map(rgb.shape[:2], zoned)
     alpha = np.zeros(rgb.shape[:2], np.float32)
     out = rgb.copy()
-    for zone in (teal, accent):
+    # Teal and white shaded apart, each against its own surroundings.
+    for zone, accent in ((teal, False), (white & (zones == BODY), False), (white & (zones == ACCENT), True)):
         broad = blur_masked(lum, zone, SHADE_RADIUS)
         shade = np.clip(1.0 + np.minimum(lum / np.maximum(broad, 1.0) - 1.0, 0.0), SHADE_FLOOR, 1.0)
         del broad
-        out[zone] = np.round(255.0 * shade[zone])[:, None].astype(np.uint8)
+        level = np.round(255.0 * shade[zone]).astype(np.uint8)
+        out[zone] = np.stack([level, level, np.zeros_like(level) if accent else level], -1)
         alpha[zone] = 1.0
     return out, alpha
 
 
-def textures(files, mat, accent_uv):
+def textures(files, mat, zoned):
     """(albedo PNG, ORM PNG, normal PNG or None) for one of the model's materials."""
     from PIL import Image
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -241,7 +280,7 @@ def textures(files, mat, accent_uv):
     rgb = np.asarray(Image.open(io.BytesIO(files[f'{mat}_Base_Color.png'])).convert('RGB')).copy()
     alpha = np.zeros(rgb.shape[:2], np.float32)
     if mat == 'Body':
-        rgb, alpha = body_albedo(rgb, accent_uv)
+        rgb, alpha = body_albedo(rgb, zoned)
     if mat == GLASS:
         alpha = np.asarray(gray(files['Glass_Opacity.png'], rgb.shape[0]), np.float32) / 255.0
     # Color and alpha resized apart: PIL premultiplies an RGBA image when it resizes it,
@@ -338,15 +377,15 @@ def build(src_zip, dst, impala_zip=IMPALA_ZIP):
     def to_game(q):
         return (q - origin) * scale
 
-    accent_uv = []
+    zoned = []
     meshes = {}
     for group, members in groups.items():
         for name, isl in members:
             mat, polys = objs[name]
             pos, nrm, uv = triangles([polys[i] for i in isl], V, T, N)
-            if group in ('grille', 'bumper_front', 'bumper_rear') and mat == 'Body':
-                accent_uv.append(uv)
             pos = to_game(pos)
+            if mat == 'Body':
+                zoned.append((uv, [zone_of(group, tri.mean(0)) for tri in pos]))
             nrm = nrm / scale
             nrm /= np.maximum(np.linalg.norm(nrm, axis=-1, keepdims=True), 1e-12)
             meshes.setdefault(group, {}).setdefault(mat, []).append((pos, nrm, uv))
@@ -354,7 +393,7 @@ def build(src_zip, dst, impala_zip=IMPALA_ZIP):
     out = Gltf()
     mat_index = {}
     for mat in TEXTURE:
-        albedo, orm, normal = textures(files, mat, np.concatenate(accent_uv) if mat == 'Body' else None)
+        albedo, orm, normal = textures(files, mat, zoned if mat == 'Body' else None)
         base = len(out.images)
         out.images += [albedo, orm] + ([normal] if normal else [])
         out.textures += list(range(base, len(out.images)))

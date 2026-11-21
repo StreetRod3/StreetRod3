@@ -32,11 +32,11 @@ extends RefCounted
 ## space (the model's CarBody, Y up, +Z forward), and `min_x` how far from the middle
 ## its faces are. It is the same on both sides.
 ##
-## `model.accent` is a second paint zone made of whole parts, like the 1963 C10's grille
-## and bumpers, which were painted off-white: `nodes` names the model's nodes in it, and
-## `color` ([r, g, b], 0 to 1) is their paint until the accent is painted on its own.
-## Only the texels the model's texture marks as paint take it. A car has a cove or an
-## accent, not both; either is painted with the garage paint menu's Accent choice.
+## `model.accent` is a second paint marked in the model's texture, like the 1963 C10's
+## grille, bumpers and tailgate lettering, which were painted off-white: of the texels
+## that are paint (alpha 1), the accent's have no blue (car_paint_mask.gdshader). `color`
+## ([r, g, b], 0 to 1) is its paint until it is painted on its own. A car has a cove or
+## an accent, not both; either is painted with the garage paint menu's Accent choice.
 ##
 ## `bumpers` names the bumpers that can be stripped, `front` and `rear`: `node` is the
 ## mesh in the model that is the bumper with its brackets, and `mass` what it weighs in
@@ -156,25 +156,15 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 				"outline": outline,
 				"min_x": float((cove as Dictionary).get("min_x", 0.0)),
 			}
-	# A second paint zone of whole parts (the C10's grille and bumpers): their nodes, and
-	# their own paint until the accent is painted.
+	# A second paint marked in the texture (the C10's grille, bumpers and lettering), and
+	# its paint until the accent is painted.
 	var accent: Variant = body.get("accent", null)
 	if typeof(accent) == TYPE_DICTIONARY:
-		var nodes := PackedStringArray()
-		var listed: Variant = (accent as Dictionary).get("nodes", [])
-		if typeof(listed) == TYPE_ARRAY:
-			for node_name: Variant in listed:
-				nodes.append(str(node_name))
 		var rgb: Variant = (accent as Dictionary).get("color", [1.0, 1.0, 1.0])
-		if nodes.is_empty():
-			result.errors.append("Car model accent needs at least one node.")
-		elif typeof(rgb) != TYPE_ARRAY or (rgb as Array).size() < 3:
+		if typeof(rgb) != TYPE_ARRAY or (rgb as Array).size() < 3:
 			result.errors.append("Car model accent color must be [r, g, b].")
 		else:
-			result.model["accent"] = {
-				"nodes": nodes,
-				"color": Color(float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0),
-			}
+			result.model["accent"] = {"color": Color(float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0)}
 
 
 static func _parse_wheels(root: Dictionary, result: Dictionary) -> void:

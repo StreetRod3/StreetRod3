@@ -28,7 +28,7 @@ Before this one, two other "1970 Chevrolet Chevelle SS 454" downloads were looke
 | Wheels left out (the four in LowInterior) | The game mounts its own wheels; the model's set the wheel positions |
 | The plates (European, 52 x 11 cm, reading "ROH3D.COM") swapped for the Impala's blank US plate, 12 x 6 in | US plates, and no lettering |
 | Teal paint turned into the paint mask, its baked shading left off and the panel seams kept | The game paints the truck any color, clean and shiny |
-| Grille (with the headlight rims) and bumpers made the accent (`model.accent`), off-white until painted | On the real truck they were painted, off-white; the garage paints them with its Accent choice |
+| Grille (with the headlight rims), the frame round it, the bumpers and the tailgate's CHEVROLET made the accent (`model.accent`), off-white until painted; the texture's white on the body behind the bumpers made body paint | On the real truck they were painted, off-white; the garage paints them with its Accent choice. The white behind the bumpers showed when they were stripped (2026-11-21) |
 | The steering wheel swapped for an 18 in two-spoke wheel with a dished hub | The model's was a small four-spoke wheel; the photo shows the real one |
 | An instrument cluster in a hooded brow on the dash, and a matching brow over the glovebox | The model's dash is a plain strip with a dark patch painted where the gauges would be; it sits too low for a cluster above the steering column, so the cluster stands on it as the real one stands out of the dash |
 | Each axis scaled to the real truck | Scaled evenly, the model is 2 to 3% long for its width and height |
