@@ -316,6 +316,8 @@ func _apply_camera_mode() -> void:
 				pos = raw_pos
 			pitch_deg = float(cam_dict.get("pitch", pitch_deg))
 			fov_deg = float(cam_dict.get("fov", fov_deg))
+	if slot == "cockpit":
+		pos.y -= GameState.car_seat_drop()
 	var local_pos := Vector3(_car_center.x + pos.x, pos.y - _road_base_y, _car_center.z + pos.z)
 	_cam_rest = _camera_pose(local_pos, pitch_deg)
 	_cam.fov = fov_deg

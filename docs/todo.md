@@ -33,7 +33,7 @@ Bumpers can be stripped and put back as in Street Rod 2 on the Studebaker, the 1
 
 ## Chopped roofs
 
-Street Rod 2 also chopped roofs for $70. No car here has a roof that can be chopped yet, so it waits for one.
+Street Rod 2 also chopped roofs for $70. The 1970 Challenger's can be chopped now (3 inches, $70 in the garage, only how it looks); the other cars wait for roofs that can be.
 
 ## Time of day
 

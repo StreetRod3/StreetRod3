@@ -159,8 +159,9 @@ void fragment() {
 		NORMAL_MAP = texture(normal_tex, UV).rgb;
 		NORMAL_MAP_DEPTH = normal_scale;
 	}
-	if (accent_finish == 1 && zone > 0.0) {
-		// Vinyl's grain, fixed to the car, fading out where a cell is smaller than a pixel.
+	if (accent_finish == 1 && zone > 0.0 && use_normal < 0.5) {
+		// Vinyl's grain, fixed to the car, fading out where a cell is smaller than a pixel;
+		// a material with its own normal map (the Challenger's vinyl top) has its own grain.
 		vec3 p = model_pos * GRAIN_SCALE;
 		float fade = 1.0 - smoothstep(0.4, 1.0, length(fwidth(p)));
 		vec3 g = vec3(grain_noise(p), grain_noise(p + 17.3), grain_noise(p + 41.9)) - 0.5;

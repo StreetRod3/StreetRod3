@@ -67,6 +67,9 @@ const BUMPER_CLICK_MARGIN := 0.06
 ## How far in from the bumper's outer face its click box reaches: the bar, its ends and
 ## guards, but not the mounting irons that run back under the body to the frame.
 const BUMPER_CLICK_DEPTH := 0.45
+## How far down from the top of the roof its click box reaches: the roof, not the
+## windows and doors below it.
+const ROOF_CLICK_DEPTH := 0.12
 ## Height above the floor the camera aims at: about the car's beltline, so the whole
 ## car and the wall behind it, with its shelves and clock, are in the frame.
 const CAM_LOOK_HEIGHT := 1.2
@@ -194,8 +197,10 @@ var _bumper_panel: Control
 var _bumper_label: Label
 var _bumper_do: Button
 var _bumper_forget: Button
-## The end whose bumper the box is about.
+## The end whose bumper the box is about, or "roof" when it offers a chop.
 var _bumper_end: String = ""
+## Click box on the roof of a car whose roof can be chopped (car file model.roof).
+var _roof_target: StaticBody3D
 var _creeper: StaticBody3D
 var _tire_machine: StaticBody3D
 ## Players for the jack, wheels, and tire machine, by sound name.
@@ -231,6 +236,7 @@ const _TOOLTIPS := {
 	&"vodka": "Wanna drink?",
 	&"bumper_front": "Front bumper",
 	&"bumper_rear": "Rear bumper",
+	&"roof": "Roof",
 }
 const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
@@ -363,6 +369,7 @@ func _ready() -> void:
 	_build_hood_target()
 	_build_under_car_target()
 	_build_bumper_targets()
+	_build_roof_target()
 	_build_bumper_panel()
 	_build_creeper()
 	_build_tire_machine()
@@ -1295,11 +1302,13 @@ func _handle_interact(kind: Variant) -> void:
 			_offer_bumper_job("front")
 		&"bumper_rear":
 			_offer_bumper_job("rear")
+		&"roof":
+			_offer_roof_job()
 
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear", &"roof":
 			return true
 	return false
 
@@ -3172,6 +3181,7 @@ func _place_bay_targets() -> void:
 	_hood.global_position = hood.get_center()
 	_hood_shape.size = hood.size
 	_place_bumper_targets(body)
+	_place_roof_target(body)
 	if _under_car == null or _under_car_shape == null:
 		return
 	# Low band between the axles, just behind the engine: where the gearbox sits.
@@ -3230,6 +3240,37 @@ func _place_bumper_targets(body: Node3D) -> void:
 		(col.shape as BoxShape3D).size = box.size + Vector3.ONE * BUMPER_CLICK_MARGIN
 
 
+func _build_roof_target() -> void:
+	_roof_target = StaticBody3D.new()
+	_roof_target.name = "InteractRoof"
+	var col := CollisionShape3D.new()
+	col.shape = BoxShape3D.new()
+	col.disabled = true
+	_roof_target.add_child(col)
+	_car_pivot.add_child(_roof_target)
+	_roof_target.set_meta(&"garage_interact", &"roof")
+
+
+## Fits the roof's click box over the top of the roof showing now (ROOF_CLICK_DEPTH deep),
+## on a car whose roof can be chopped; other cars have none.
+func _place_roof_target(body: Node3D) -> void:
+	var col := _roof_target.get_child(0) as CollisionShape3D
+	var skin: Node3D = null
+	if GameState.car_roof_choppable():
+		for node: Node in body.find_children("roof_*", "Node3D", true, false):
+			var shown := node as Node3D
+			if shown.is_visible_in_tree() and (shown.name.ends_with("_vinyl") or shown.name.ends_with("_smooth")):
+				skin = shown
+	var box: AABB = _world_mesh_aabb(skin) if skin != null else AABB()
+	col.disabled = box.size == Vector3.ZERO
+	if col.disabled:
+		return
+	box.position.y = box.end.y - ROOF_CLICK_DEPTH
+	box.size.y = ROOF_CLICK_DEPTH
+	_roof_target.global_position = box.get_center()
+	(col.shape as BoxShape3D).size = box.size + Vector3.ONE * BUMPER_CLICK_MARGIN
+
+
 func _build_bumper_panel() -> void:
 	var shade := ColorRect.new()
 	shade.name = "BumperPanel"
@@ -3286,9 +3327,29 @@ func _offer_bumper_job(end: String) -> void:
 	_bumper_do.grab_focus()
 
 
+## Offers to chop the roof, or says it is chopped: a chop is for good.
+func _offer_roof_job() -> void:
+	if not GameState.car_roof_choppable():
+		return
+	_bumper_end = "roof"
+	var inches := roundi(float(GameState.spec_roof(GameState.car_spec).get("chop_in", 3.0)))
+	_bumper_do.visible = not GameState.car_roof_chopped
+	if GameState.car_roof_chopped:
+		_bumper_label.text = "The roof is chopped %d inches." % inches
+	else:
+		_bumper_label.text = "Roof"
+		_bumper_do.text = "Chop roof %d in - $%d" % [inches, GameState.ROOF_CHOP_PRICE]
+	_bumper_panel.visible = true
+	_sync_menu_nav()
+	if _bumper_do.visible:
+		_bumper_do.grab_focus()
+	else:
+		_bumper_forget.grab_focus()
+
+
 ## Pays for the job; without the money the box says so and only Forget it is left.
 func _on_bumper_do() -> void:
-	var err := GameState.toggle_bumper(_bumper_end)
+	var err := GameState.chop_roof() if _bumper_end == "roof" else GameState.toggle_bumper(_bumper_end)
 	if not err.is_empty():
 		_bumper_label.text = err
 		_bumper_do.visible = false

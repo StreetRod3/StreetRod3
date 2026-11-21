@@ -50,6 +50,10 @@ The GLB is laid out like the Studebaker's (tools/studebaker_to_glb.py):
     projected from the front;
   * the bumpers as `bumper_front` and `bumper_rear` nodes so the game can strip them,
     with a panel of body paint behind each where the body is open (BACKING_*);
+  * the roof four ways, stock or chopped 3 in and each with the vinyl top or a smooth
+    painted roof, as nodes `roof_stock` and `roof_chopped` with `_vinyl` and `_smooth`
+    under them; each holds the glass and trim, the headliner, visors, mirror and the
+    front seats, which come down with a chop (ROOF_*, SEAM_*, CHOP_*, VINYL_*);
   * an interior (tools/challenger_interior.py) in place of the model's stand-in (the lid
     at the window line, the block seats and the ring of `Inside` are left out, its
     underbody kept): the Rallye dash with working speedometer, tachometer and gas gauge
@@ -125,7 +129,7 @@ BACKING_INSET = 0.004
 ## panel round the taillights, by (object, material). Their palette cell is yellow, paint
 ## (alpha 1) with no blue, which car_paint_mask.gdshader paints with the accent.
 ACCENT = 'Accent'
-ACCENT_PARTS = {('Roof', 'Leather'), ('BackPlate', 'BlackMetal')}
+ACCENT_PARTS = {('Roof', 'Leather'), ('RoofSmooth', 'Leather'), ('BackPlate', 'BlackMetal')}
 ## The model's stand-in interior: its pieces wholly above INSIDE_DROP_Y (game frame) are
 ## the lid, the block seats and the ring, and are left out; the underbody stays.
 INSIDE = 'Inside'
@@ -138,6 +142,42 @@ HEADLINER_ABOVE = 0.95
 HEADLINER_GAP = 0.012
 HEADLINER_SPAN = ((-0.70, 0.70), (-1.12, 0.29))
 HEADLINER_GRID = (29, 37)
+## The roof comes four ways: stock or chopped, each with the vinyl top (ROOF_VINYL, with
+## its seam and grain) or a smooth painted roof (SMOOTH_ROOF). They are the nodes
+## `roof_stock` and `roof_chopped`, each holding the glass, trim, headliner, visors and
+## mirror, with `<that>_vinyl` and `<that>_smooth` under it; the game shows one of each.
+ROOF_VINYL = 'Roof'
+SMOOTH_ROOF = 'RoofSmooth'
+ROOF_NODES = ('roof_stock', 'roof_chopped')
+## The vinyl top's seam, along each side of the roof and down the sail panel, is a groove
+## of loops a few millimeters apart. In the smooth roof its points (nearer a neighbor than
+## SEAM_TIGHT, beyond SEAM_FROM: x, y, model units) are merged cluster by cluster.
+SEAM_TIGHT = 0.0055
+SEAM_FROM = (1.0, -1.85)
+## What comes down with the roof in a chop: the glass and its trim.
+GREENHOUSE = {'WindShield', 'WindShieldChrome', 'BackWindow', 'BackWindowChrome', 'DoorGlass',
+              'DoorGlassSmall', 'SideWindowSplitter', 'RoofChromeBack', 'RoofChromeSide',
+              'RoofIsolationSide'}
+## The chop, game frame: everything above CHOP_TOP comes down CHOP (3 in); between the
+## beltline and CHOP_TOP in step with height, so the pillars and glass get shorter. The beltline
+## is CHOP_BELT[0] along the doors, rising to CHOP_BELT[1] over CHOP_BELT_Z (z) to where
+## the sail panels and back window sit on the body. The drop eases in and out over
+## CHOP_EASE of the band at each end (chop_ramp).
+CHOP = 3 * 0.0254
+CHOP_TOP = 0.99
+CHOP_BELT = (0.76, 0.835)
+CHOP_BELT_Z = (-0.85, -1.15)
+CHOP_EASE = 0.35
+## The buckets sit this much lower under the chopped roof, as a chop needs: their
+## headrests would reach the headliner (the car file's model.roof.seat_drop).
+SEAT_DROP = 0.04
+## The vinyl top's grain: the download's leather bump image as a normal map, VINYL_TEX
+## px, its slopes (per pixel of the full-size image) times VINYL_BUMP, repeating every
+## VINYL_TILE m, projected along whichever axis each face looks along most.
+VINYL_BUMP_IMAGE = 'textures/leather_bumpmap.jpeg'
+VINYL_TEX = 512
+VINYL_BUMP = 2.2
+VINYL_TILE = 0.118
 GRILLE_MATERIAL = 'Grille'
 GLASS = 'Glass'
 LENS = 'Lens'
@@ -209,6 +249,7 @@ def dump(blend, out):
                 if m.type == 'SOLIDIFY':
                     o.modifiers.remove(m)
     grille_sheet(bpy.data.objects[GRILLE])
+    smooth_roof()
     dg = bpy.context.evaluated_depsgraph_get()
     arrays = {}
     for o in bpy.data.objects:
@@ -530,11 +571,11 @@ def lens_tile():
             png_bytes(Image.fromarray(np.round((n * 0.5 + 0.5) * 255).astype(np.uint8), 'RGB')))
 
 
-def roof_underside(roof_tris):
+def roof_underside(roof_tris, above=HEADLINER_ABOVE):
     """The headliner's height at points (x, z), game frame: HEADLINER_GAP under the
-    lowest roof surface above HEADLINER_ABOVE straight over each; NaN under no roof."""
+    lowest roof surface higher than `above` straight over each; NaN under no roof."""
     tris = np.concatenate(roof_tris)
-    tris = tris[tris[:, :, 1].min(1) > HEADLINER_ABOVE]
+    tris = tris[tris[:, :, 1].min(1) > above]
     # Looking up: depth along -Y is -y, so the front-most is the lowest.
     frame = (np.array([0.0, -1.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
 
@@ -631,6 +672,92 @@ def bumper_backing(tris, sign):
     return pos, np.repeat(n, 3, axis=0)
 
 
+def smooth_roof():
+    """Under Blender: SMOOTH_ROOF, a copy of the vinyl roof with each tight cluster of the
+    seam's points merged into one, so the seam's extra loops go and subdivision rounds the
+    shoulder from the shape round it (SEAM_*)."""
+    import bpy
+    import bmesh
+    src = bpy.data.objects[ROOF_VINYL]
+    o = src.copy()
+    o.data = src.data.copy()
+    o.name = SMOOTH_ROOF
+    for c in src.users_collection:
+        c.objects.link(o)
+    m = np.array(o.matrix_world)
+    bm = bmesh.new()
+    bm.from_mesh(o.data)
+    seam = []
+    for v in bm.verts:
+        w = m[:3, :3] @ np.array(v.co) + m[:3, 3]
+        near = [(e.other_vert(v).co - v.co).length for e in v.link_edges]
+        scale = np.linalg.norm(m[:3, :3] @ np.array([1.0, 0.0, 0.0]))
+        if near and w[0] > SEAM_FROM[0] and w[1] > SEAM_FROM[1] and min(near) * scale < SEAM_TIGHT:
+            seam.append(v)
+    scale = np.linalg.norm(m[:3, :3] @ np.array([1.0, 0.0, 0.0]))
+    bmesh.ops.remove_doubles(bm, verts=seam, dist=SEAM_TIGHT * 1.6 / scale)
+    bm.to_mesh(o.data)
+    bm.free()
+
+
+def chop(points):
+    """Where the chop moves points (..., 3), game frame."""
+    p = np.array(points, float)
+    t = np.clip((p[..., 2] - CHOP_BELT_Z[0]) / (CHOP_BELT_Z[1] - CHOP_BELT_Z[0]), 0.0, 1.0)
+    belt = CHOP_BELT[0] + (CHOP_BELT[1] - CHOP_BELT[0]) * t * t * (3 - 2 * t)
+    p[..., 1] -= CHOP * chop_ramp(np.clip((p[..., 1] - belt) / (CHOP_TOP - belt), 0.0, 1.0))
+    return p
+
+
+def chop_ramp(t):
+    """How far through its drop the chop moves a point t of the way from the beltline to
+    CHOP_TOP: even in the middle, eased in and out over CHOP_EASE at each end so the
+    surfaces don't fold where it starts and stops."""
+    w = CHOP_EASE
+    k = 1.0 / (1.0 - w)
+    return np.where(t < w, k * t * t / (2 * w),
+                    np.where(t > 1 - w, 1 - k * (1 - t) ** 2 / (2 * w), k * (t - w / 2)))
+
+
+def chop_normals(points, normals):
+    """Normals (N, 3) at points (N, 3) after the chop: through the inverse transpose of
+    its slope there, found by small steps."""
+    p = np.asarray(points, float)
+    eps = 1e-4
+    jac = np.stack([(chop(p + d) - chop(p - d)) / (2 * eps) for d in np.eye(3) * eps], -1)
+    n = np.linalg.solve(np.transpose(jac, (0, 2, 1)), np.asarray(normals, float)[..., None])[..., 0]
+    return n / np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+
+
+def vinyl_textures(src):
+    """The vinyl top's textures: albedo (accent paint: yellow, alpha 1), ORM and the
+    leather grain's normal map, as PNG bytes."""
+    from PIL import Image
+    from studebaker_to_glb import png_bytes
+    image = Image.open(os.path.join(src, VINYL_BUMP_IMAGE)).convert('L')
+    h = np.asarray(image.resize((VINYL_TEX, VINYL_TEX), Image.LANCZOS), np.float32) / 255.0
+    # Slopes per pixel of the full-size image, which VINYL_BUMP is set against.
+    scale = VINYL_TEX / image.width
+    dx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) / 2 * VINYL_BUMP * scale
+    dy = (np.roll(h, -1, 0) - np.roll(h, 1, 0)) / 2 * VINYL_BUMP * scale
+    n = np.dstack([-dx, dy, np.ones_like(h)])
+    n /= np.linalg.norm(n, axis=2, keepdims=True)
+    normal = Image.fromarray(np.round((n * 0.5 + 0.5) * 255).astype(np.uint8), 'RGB')
+    color, _, finish = LOOKS[ACCENT]
+    return (png_bytes(Image.new('RGBA', (4, 4), color + (255,))), png_bytes(Image.new('RGB', (4, 4), finish)),
+            png_bytes(normal))
+
+
+def box_uv(tris):
+    """UVs (by corner) for tris (N, 3, 3), game frame: each face projected along the axis
+    it looks along most, VINYL_TILE m to the repeat."""
+    fn = np.abs(np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0]))
+    axis = np.argmax(fn, 1)
+    pick = np.array([[2, 1], [0, 2], [0, 1]])[axis]
+    uv = np.take_along_axis(tris, np.repeat(pick[:, None, :], 3, 1), 2)
+    return (uv / VINYL_TILE).reshape(-1, 2)
+
+
 def load_pieces(path):
     data = np.load(path)
     pieces = {}
@@ -704,11 +831,15 @@ def build(src, dst):
         for k in ('pos', 'nrm', 'uv'):
             p[k] = p[k].reshape(len(keep), 3, -1)[keep].reshape(-1, p[k].shape[-1])
 
-    under = roof_underside([to_game(p['pos']).reshape(-1, 3, 3) for (nm, _), p in kept.items()
-                            if nm in ROOF_PARTS])
-    inside_parts = interior.interior_parts(under)
-    inside_parts.append(headliner(under, interior))
-    looks = sorted({mat for _, mat in kept if mat in LOOKS} | {m for m, *_ in inside_parts if m in looks_all})
+    roof_tris = [to_game(p['pos']).reshape(-1, 3, 3) for (nm, _), p in kept.items() if nm in ROOF_PARTS]
+    under = {'roof_stock': roof_underside(roof_tris),
+             'roof_chopped': roof_underside([chop(t) for t in roof_tris], HEADLINER_ABOVE - CHOP)}
+    hung = {'roof_stock': interior.roof_interior(under['roof_stock']) + [headliner(under['roof_stock'], interior)]
+            + interior.front_seats(),
+            'roof_chopped': interior.roof_interior(under['roof_chopped'], chop)
+            + [headliner(under['roof_chopped'], interior)] + interior.front_seats(SEAT_DROP)}
+    inside_parts = interior.interior_parts()
+    looks = sorted({mat for _, mat in kept if mat in LOOKS} | {m for m, *_ in inside_parts + hung['roof_stock'] if m in looks_all})
     grid = math.ceil(math.sqrt(len(looks)))
     size = grid * CELL
     albedo = Image.new('RGBA', (size, size), (0, 0, 0, 0))
@@ -785,11 +916,37 @@ def build(src, dst):
         decal_meshes.append((pos, nrm, uv))
     kept = {k: p for k, p in kept.items() if k[0] not in DECALS}
 
+    # The vinyl top on its own material, for its grain.
+    first = len(out.images)
+    out.images += list(vinyl_textures(src))
+    out.textures += [first, first + 1, first + 2]
+    slot['vinyl'] = len(out.materials)
+    out.materials.append({'name': 'vinyl_top', 'doubleSided': True,
+                          'pbrMetallicRoughness': {'baseColorTexture': {'index': first},
+                                                   'metallicRoughnessTexture': {'index': first + 1},
+                                                   'metallicFactor': 1.0, 'roughnessFactor': 1.0},
+                          'normalTexture': {'index': first + 2}})
+
     groups = {}
     for (name, mat), p in kept.items():
         pos = to_game(p['pos'])
         nrm = p['nrm'] / scale
         nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
+        if name in GREENHOUSE or name in (ROOF_VINYL, SMOOTH_ROOF):
+            # Stock and chopped; the vinyl grain keeps to the stock shape's projection.
+            skin = {ROOF_VINYL: '_vinyl', SMOOTH_ROOF: '_smooth'}.get(name, '')
+            material = slot['vinyl'] if name == ROOF_VINYL else slot.get(mat, 0)
+            if name == ROOF_VINYL:
+                uv = box_uv(pos.reshape(-1, 3, 3))
+            elif mat in LOOKS:
+                uv = np.tile(np.array(cells[mat]), (len(pos), 1))
+            else:
+                uv = p['uv'].copy()
+                uv[:, 1] = 1.0 - uv[:, 1]
+            for node in ROOF_NODES:
+                q, n = (pos, nrm) if node == 'roof_stock' else (chop(pos), chop_normals(pos, nrm))
+                groups.setdefault(node + skin, {}).setdefault(material, []).append((q, n, uv))
+            continue
         if mat in LOOKS:
             uv = np.tile(np.array(cells[mat]), (len(pos), 1))
         elif mat == LENS:
@@ -827,6 +984,10 @@ def build(src, dst):
     for mat, tris, nrm, uv in inside_parts:
         material, entry = interior_entry(mat, tris, nrm, uv)
         groups['body'].setdefault(material, []).append(entry)
+    for node in ROOF_NODES:
+        for mat, tris, nrm, uv in hung[node]:
+            material, entry = interior_entry(mat, tris, nrm, uv)
+            groups[node].setdefault(material, []).append(entry)
     wheel_groups = {}
     for mat, tris, nrm, uv in interior.wheel_parts():
         material, entry = interior_entry(mat, tris, nrm, uv)
@@ -866,6 +1027,9 @@ def build(src, dst):
     roots = [out.node(name, mesh=out.mesh(name, primitives('body')))]
     for group in BUMPERS:
         roots.append(out.node(group, mesh=out.mesh(group, primitives(group))))
+    for node in ROOF_NODES:
+        skins = [out.node(node + k, mesh=out.mesh(node + k, primitives(node + k))) for k in ('_vinyl', '_smooth')]
+        roots.append(out.node(node, mesh=out.mesh(node, primitives(node)), children=skins))
 
     # The steering wheel, turned by the game about its +Z (down the column).
     hub, wheel_basis = interior.wheel_frame()
@@ -906,9 +1070,12 @@ def build(src, dst):
     out.write(dst, roots)
 
     size_m = (hi - lo) * scale
-    tris = sum(len(p) for g in groups.values() for parts in g.values() for p, _, _ in parts) // 3
-    print(f'{dst}: {tris} tris, {os.path.getsize(dst) / 1e6:.1f} MB, '
-          f'size {size_m.round(3)} m ({(size_m / 0.0254).round(1)} in), scale {scale.round(4)}')
+    def count(names):
+        return sum(len(p) for g in names for parts in groups[g].values() for p, _, _ in parts) // 3
+    drawn = [g for g in groups if not g.startswith('roof_')] + ['roof_stock', 'roof_stock_vinyl']
+    print(f'{dst}: {count(drawn)} tris drawn (stock vinyl roof), {count(list(groups))} in the file, '
+          f'{os.path.getsize(dst) / 1e6:.1f} MB, size {size_m.round(3)} m ({(size_m / 0.0254).round(1)} in), '
+          f'scale {scale.round(4)}')
     for g, names in BUMPERS.items():
         b = np.concatenate([to_game(kept[k]['pos']) for k in kept if k[0] in names])
         print(f'{g}: {b.min(0).round(3)} .. {b.max(0).round(3)}')
@@ -927,6 +1094,7 @@ def build(src, dst):
     print('wheel centers: x front ±%.3f rear ±%.3f (track %.1f / %.1f in), y %.3f (body bottom = 0), '
           'front z %.3f, rear z %.3f, wheelbase %.1f in'
           % (track, rtrack, track * 2 / 0.0254, rtrack * 2 / 0.0254, wheel_y, fz, rz, (fz - rz) / 0.0254))
+    print('roof: chop %.1f in, seats %.3f m lower under it (model.roof)' % (CHOP / 0.0254, SEAT_DROP))
     print('ground clearance in the model %.3f m' % (-w[:, 1].min()))
 
 

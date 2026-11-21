@@ -956,33 +956,45 @@ def visor_parts(under):
     return parts
 
 
-def extras_parts(under):
-    """The rear-view mirror at the top of the windshield and the sun visors."""
+def roof_interior(under, lower=None):
+    """What hangs from the roof inside, which comes down with it when it is chopped: the
+    rear-view mirror at the top of the windshield (moved by `lower(points)`, if given)
+    and the sun visors under the headliner (`under(x, z)`: its height)."""
     parts = []
-    parts.append(_part('Chrome', tube([(0.0, 1.03, 0.30), (0.0, 0.985, 0.285)], 0.006, 8)))
-    mirror = blob((0.11, 0.032, 0.014), (0.0, 0.965, 0.27), rot_x(8.0), (0.3, 0.3), 16, 8)
-    parts.append(_part('Knob', mirror))
-    glass = np.array([[(-0.10, 0.94, 0.255), (0.10, 0.99, 0.262), (0.10, 0.94, 0.255)],
-                      [(-0.10, 0.94, 0.255), (-0.10, 0.99, 0.262), (0.10, 0.99, 0.262)]])
-    parts.append(_part('Chrome', glass, closed=False))
+    mirror = [tube([(0.0, 1.03, 0.30), (0.0, 0.985, 0.285)], 0.006, 8),
+              blob((0.11, 0.032, 0.014), (0.0, 0.965, 0.27), rot_x(8.0), (0.3, 0.3), 16, 8),
+              np.array([[(-0.10, 0.94, 0.255), (0.10, 0.99, 0.262), (0.10, 0.94, 0.255)],
+                        [(-0.10, 0.94, 0.255), (-0.10, 0.99, 0.262), (0.10, 0.99, 0.262)]])]
+    if lower is not None:
+        mirror = [lower(t) for t in mirror]
+    parts.append(_part('Chrome', mirror[0]))
+    parts.append(_part('Knob', mirror[1]))
+    parts.append(_part('Chrome', mirror[2], closed=False))
     parts += visor_parts(under)
     return parts
 
 
-def interior_parts(under):
+def front_seats(drop=0.0):
+    """The two buckets, `drop` m lower than they stand stock (a chopped roof's)."""
+    parts = []
+    for s in (-1, 1):
+        for mat, tris, nrm, uv in seat_parts(s * SEAT_X):
+            parts.append((mat, tris - np.array([0.0, drop, 0.0]), nrm, uv))
+    return parts
+
+
+def interior_parts():
     """Everything fixed in the body: [(material, tris, normals, uv or None)], car frame.
-    `under(x, z)` is the headliner's height, which the sun visors hang from."""
+    What hangs from the roof is roof_interior(), the buckets front_seats()."""
     parts = []
     parts += dash_parts()
     parts += floor_parts()
     for s in (-1, 1):
-        parts += seat_parts(s * SEAT_X)
         parts += door_parts(s)
     parts += rear_seat_parts()
     parts += pedal_parts()
     parts += shifter_parts()
     parts += column_parts()
-    parts += extras_parts(under)
     # The cluster's woodgrain panel and the knob strip, in the body.
     origin, basis = np.asarray(CLUSTER_AT, float), cluster_basis()
     cl = cluster_parts()

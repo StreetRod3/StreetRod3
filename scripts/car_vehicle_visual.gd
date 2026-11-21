@@ -36,7 +36,7 @@ func driver_seat_position() -> Vector3:
 		return Vector3(-0.35, 1.05, 0.2)
 	var pos: Variant = (driver as Dictionary).get("position", null)
 	if pos is Vector3:
-		return pos
+		return (pos as Vector3) + Vector3.DOWN * (0.0 if _previewing else GameState.car_seat_drop())
 	return Vector3(-0.35, 1.05, 0.2)
 
 
@@ -101,6 +101,26 @@ func _active_cove_color() -> Color:
 	if _previewing:
 		return _preview_cove
 	return GameState.car_cove_color
+
+
+## For a car whose roof can be chopped (car file model.roof), shows the stock roof or the
+## chopped one, and under it the vinyl top while the accent's finish is vinyl, else the
+## smooth roof. A preview shows the stock roof.
+func apply_roof() -> void:
+	var body := get_node_or_null("CarBody")
+	if body == null or GameState.spec_roof(_active_spec()).is_empty():
+		return
+	var chopped := not _previewing and GameState.car_roof_chopped
+	var vinyl := _active_accent_finish() == "vinyl"
+	for state: String in ["stock", "chopped"]:
+		var node := body.find_child("roof_" + state, true, false) as Node3D
+		if node == null:
+			continue
+		node.visible = chopped == (state == "chopped")
+		for skin: String in ["vinyl", "smooth"]:
+			var skin_node := node.find_child("roof_%s_%s" % [state, skin], true, false) as Node3D
+			if skin_node != null:
+				skin_node.visible = vinyl == (skin == "vinyl")
 
 
 ## The cove's or accent's finish: a preview shows its car file's, the player's car the
@@ -450,6 +470,7 @@ func _apply_body_paint(car_body: MeshInstance3D) -> void:
 		#car_body.connect(&"stl_loaded", Callable(self, "_on_car_body_stl_loaded").bind(car_body))
 
 func set_car_body_color(new_color: Color) -> void:
+	apply_roof()
 	if not _body_paintable():
 		return
 	var color := new_color

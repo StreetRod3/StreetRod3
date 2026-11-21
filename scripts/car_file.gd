@@ -41,6 +41,14 @@ extends RefCounted
 ## A cove or accent can give its `finish` until the player picks one in the garage:
 ## "paint" (the body's finish, the default), "vinyl" or "matte" (ACCENT_FINISHES).
 ##
+## `model.roof` is for a model whose roof the garage can chop: it has nodes `roof_stock`
+## and `roof_chopped` (the roof's glass, trim and what hangs inside from it), each with
+## `<that>_vinyl` and `<that>_smooth` under it, the vinyl top and a smooth painted roof.
+## The game shows the stock or chopped one, and under it the vinyl top while the accent's
+## finish is vinyl. `chop_in` is how far down a chop takes the roof, in inches, and
+## `seat_drop` how far the chopped roof's seats sit lower, in meters, which the cockpit
+## camera and driver come down by too.
+##
 ## `bumpers` names the bumpers that can be stripped, `front` and `rear`: `node` is the
 ## mesh in the model that is the bumper with its brackets, and `mass` what it weighs in
 ## kg, which comes off the chassis mass when it is stripped. A car without the block has
@@ -163,6 +171,12 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 				"min_x": float((cove as Dictionary).get("min_x", 0.0)),
 				"finish": _accent_finish(cove as Dictionary, result),
 			}
+	var roof: Variant = body.get("roof", null)
+	if typeof(roof) == TYPE_DICTIONARY:
+		result.model["roof"] = {
+			"chop_in": float((roof as Dictionary).get("chop_in", 3.0)),
+			"seat_drop": float((roof as Dictionary).get("seat_drop", 0.0)),
+		}
 	# A second paint marked in the texture (the C10's grille, bumpers and lettering), and
 	# its paint until the accent is painted.
 	var accent: Variant = body.get("accent", null)

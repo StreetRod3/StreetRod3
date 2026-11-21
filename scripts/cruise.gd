@@ -471,6 +471,8 @@ func _apply_auto_camera_mode() -> void:
 				pos = raw_pos
 			pitch_deg = float(cam_dict.get("pitch", pitch_deg))
 			fov_deg = float(cam_dict.get("fov", fov_deg))
+	if slot == "cockpit":
+		pos.y -= GameState.car_seat_drop()
 	var local_pos := Vector3(_pivot.position.x + pos.x, pos.y - _BODY_Y, _pivot.position.z + pos.z)
 	_cam_rest = Transform3D(Basis.from_euler(Vector3(deg_to_rad(pitch_deg), PI, 0.0)), local_pos)
 	_camera.fov = fov_deg
