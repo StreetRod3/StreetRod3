@@ -6,7 +6,8 @@
     "path": "res://assets/cars/chevy-impala-1967.glb",
     "position": [0.0, 0.17, 0.0],
     "height": 1.637,
-    "ground_clearance": 0.17
+    "ground_clearance": 0.17,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
   },
   "register": "res://assets/parts/parts.register",
   "wheels": {

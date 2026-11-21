@@ -23,6 +23,7 @@ The game's body is built from it by `tools/impala_to_glb.py` (it runs Blender to
 | Black paint turned into the paint mask | The model is painted gloss black (about 2/255); the game paints the car any color through `car_paint_mask.gdshader` |
 | Dirt left off, its grit smoothed out of the normal map | The user wants clean, smooth, shiny paint on every panel, including the ones the bumpers hide (2026-11-20); the panel seams stay |
 | Printed faces on the seven blank dials; speedometer, tachometer and gas gauge work (`tools/impala_dash.py`) | The model's dials have needles but no markings |
+| Broad shading taken out of the body's normal map on the paint, seams kept | Baked from the high-poly model, it evened out the light across every panel in the game and the paint looked flat; the car file gives the paint a glossy finish with a clear coat |
 | Each axis scaled to the real car | Scaled evenly, the model is about 3% too wide and too tall for its length |
 | Textures cut to 1024 px | Keeps the GLB about 11 MB |
 

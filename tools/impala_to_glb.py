@@ -76,6 +76,8 @@ GLASS = 'Window_M'
 DIRTY = 8.0
 GRIT_RADIUS = 10
 GRIT_SHARE = 0.3
+## Detail in the body's normal map wider than this (px at 2048) is dropped on the paint.
+SEAM_RADIUS = 12
 ## The plate in FrontChromes_M (2048 px texture): its flat face inside the rim.
 PLATE = (1408, 1558, 1662, 1958)
 PLATE_TEXTURE = 'FrontChromes_M'
@@ -177,6 +179,17 @@ def smooth_grit(nrm, grit):
     nrm[:] = np.round(nrm * (1.0 - weight) + blurred * weight).astype(np.uint8)
 
 
+def keep_seams(nrm, paint):
+    """On the paint, keep only the normal map's fine detail (the panel seams and edges):
+    the broad shading baked into it from the high-poly model evened out the light across
+    every panel in the game, so the paint looked flat."""
+    import numpy as np
+    from PIL import Image, ImageFilter
+    broad = np.asarray(Image.fromarray(nrm).filter(ImageFilter.GaussianBlur(SEAM_RADIUS)), np.float64)
+    fine = np.clip(nrm.astype(np.float64) - broad + np.array([128.0, 128.0, 255.0]), 0, 255)
+    nrm[paint] = np.round(fine[paint]).astype(np.uint8)
+
+
 def textures(texdir, mat, size):
     """(albedo PNG, ORM PNG, normal PNG) for one of the model's materials."""
     import numpy as np
@@ -208,6 +221,7 @@ def textures(texdir, mat, size):
     nrm[..., 1] = 255 - nrm[..., 1]
     if mat == BODY:
         smooth_grit(nrm, grit)
+        keep_seams(nrm, ~tan)
     normal = Image.fromarray(nrm).resize((size, size), Image.LANCZOS)
     return png_bytes(albedo), png_bytes(orm), png_bytes(normal)
 

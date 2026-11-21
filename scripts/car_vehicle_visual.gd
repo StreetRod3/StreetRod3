@@ -491,9 +491,9 @@ func _shaded_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: M
 	var shader_mat := ShaderMaterial.new()
 	shader_mat.shader = _PaintShader
 	shader_mat.set_shader_parameter("albedo_tex", _white_texture)
-	_set_paint_params(shader_mat, color, mesh_instance)
 	shader_mat.set_shader_parameter("metallic", std.metallic)
 	shader_mat.set_shader_parameter("roughness", std.roughness)
+	_set_paint_params(shader_mat, color, mesh_instance)
 	if std.normal_enabled and std.normal_texture != null:
 		shader_mat.set_shader_parameter("normal_tex", std.normal_texture)
 		shader_mat.set_shader_parameter("use_normal", 1.0)
@@ -502,9 +502,15 @@ func _shaded_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: M
 
 
 ## Everything car_paint_mask.gdshader takes from the car rather than the material: the
-## body and cove colors, the dither, the cove's outline, and where the mesh sits in the car.
+## body and cove colors, the paint's finish, the dither, the cove's outline, and where the
+## mesh sits in the car.
 func _set_paint_params(shader_mat: ShaderMaterial, color: Color, mesh_instance: MeshInstance3D) -> void:
 	shader_mat.set_shader_parameter("paint_color", color)
+	var model: Variant = _active_spec().get("model", {})
+	var finish: Variant = (model as Dictionary).get("paint", {}) if typeof(model) == TYPE_DICTIONARY else {}
+	if typeof(finish) == TYPE_DICTIONARY:
+		for key: Variant in (finish as Dictionary):
+			shader_mat.set_shader_parameter(StringName(str(key)), float((finish as Dictionary)[key]))
 	shader_mat.set_shader_parameter("dither_cell", _dither_cell())
 	shader_mat.set_shader_parameter("car_from_mesh", Projection(_car_from_mesh(mesh_instance)))
 	var cove := _cove()

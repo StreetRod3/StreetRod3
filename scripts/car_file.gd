@@ -23,6 +23,10 @@ extends RefCounted
 ## `model.paintable` is false when the body's colors are fixed, as on the police Fairlane.
 ## Left out, a car can be painted.
 ##
+## `model.paint` sets the paint's finish (car_paint_mask.gdshader): any of `metallic`,
+## `roughness`, `clearcoat` and `clearcoat_roughness`, 0 to 1. Left out, the shader's own
+## (metallic 0.35, roughness 0.42, no clear coat), or on a dithered body its model's.
+##
 ## `model.cove` is a second paint zone, like the side coves of the 1956-62 Corvettes:
 ## `outline` is its shape seen from the side, [z, y] points in meters in the body's
 ## space (the model's CarBody, Y up, +Z forward), and `min_x` how far from the middle
@@ -40,12 +44,25 @@ const COVE_POINTS_MAX := 24
 ## The two ends a bumper can be on.
 const BUMPER_ENDS: Array[String] = ["front", "rear"]
 const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
+## The paint finish a car file can set in model.paint: shader parameters of the same names.
+const PAINT_FINISH_KEYS: Array[String] = ["metallic", "roughness", "clearcoat", "clearcoat_roughness"]
 const DEFAULT_CAMERAS: Dictionary = {
 	"far": {"position": Vector3(0.0, 2.55, -10.4), "pitch": -14.0, "fov": 68.0},
 	"close": {"position": Vector3(0.0, 1.8, -6.1), "pitch": -10.0, "fov": 70.0},
 	"cockpit": {"position": Vector3(0.42, 1.23, -0.38), "pitch": -2.0, "fov": 72.0},
 	"bumper": {"position": Vector3(0.0, 0.51, 2.95), "pitch": -1.0, "fov": 72.0},
 }
+
+
+## The paint finish keys a car file gave, as floats clamped to 0-1; the rest left out.
+static func _paint_finish(value: Variant) -> Dictionary:
+	var finish := {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return finish
+	for key: String in PAINT_FINISH_KEYS:
+		if (value as Dictionary).has(key):
+			finish[key] = clampf(float((value as Dictionary)[key]), 0.0, 1.0)
+	return finish
 
 
 static func load_path(path: String) -> Dictionary:
@@ -114,6 +131,7 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		# Size of the paint's EGA-style dither squares in meters (car_paint_mask.gdshader); 0 is none.
 		"dither_cell": float(body.get("dither_cell", 0.0)),
 		"paintable": bool(body.get("paintable", true)),
+		"paint": _paint_finish(body.get("paint", {})),
 	}
 	# A second paint zone (the Corvettes' side coves): a side-view outline of [z, y] points
 	# in meters, in the car's space, and how far out from the middle its faces lie.
