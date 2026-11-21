@@ -931,7 +931,32 @@ def shifter_parts():
     return parts
 
 
-def extras_parts():
+## The sun visors: half size (across, thickness, front to back), how far out from the
+## middle, their front and back edges (Z), and how far under the headliner they hang.
+VISOR_HALF = (0.17, 0.008, 0.075)
+VISOR_X = 0.36
+VISOR_Z = (0.275, 0.125)
+VISOR_GAP = 0.010
+
+
+def visor_parts(under):
+    """The sun visors, each tipped to follow the headliner (`under(x, z)`: its height)
+    and hung VISOR_GAP below it at its lowest along each edge."""
+    parts = []
+    hx, ht, hz = VISOR_HALF
+    zf, zb = VISOR_Z
+    for s in (-1, 1):
+        xs = s * VISOR_X + np.array([-hx, 0.0, hx])
+        yf = np.nanmin(under(xs, np.full(3, zf))) - VISOR_GAP - ht
+        yb = np.nanmin(under(xs, np.full(3, zb))) - VISOR_GAP - ht
+        tilt = -math.degrees(math.atan2(yf - yb, zf - zb))
+        at = (s * VISOR_X, (yf + yb) / 2, (zf + zb) / 2)
+        visor = blob((hx, ht, hz * math.hypot(1.0, (yf - yb) / (zf - zb))), at, rot_x(tilt), (0.3, 0.3), 16, 6)
+        parts.append(_part('Vinyl', visor))
+    return parts
+
+
+def extras_parts(under):
     """The rear-view mirror at the top of the windshield and the sun visors."""
     parts = []
     parts.append(_part('Chrome', tube([(0.0, 1.03, 0.30), (0.0, 0.985, 0.285)], 0.006, 8)))
@@ -940,14 +965,13 @@ def extras_parts():
     glass = np.array([[(-0.10, 0.94, 0.255), (0.10, 0.99, 0.262), (0.10, 0.94, 0.255)],
                       [(-0.10, 0.94, 0.255), (-0.10, 0.99, 0.262), (0.10, 0.99, 0.262)]])
     parts.append(_part('Chrome', glass, closed=False))
-    for s in (-1, 1):
-        visor = blob((0.17, 0.008, 0.075), (s * 0.36, 1.035, 0.20), rot_x(-12.0), (0.3, 0.3), 16, 6)
-        parts.append(_part('Vinyl', visor))
+    parts += visor_parts(under)
     return parts
 
 
-def interior_parts():
-    """Everything fixed in the body: [(material, tris, normals, uv or None)], car frame."""
+def interior_parts(under):
+    """Everything fixed in the body: [(material, tris, normals, uv or None)], car frame.
+    `under(x, z)` is the headliner's height, which the sun visors hang from."""
     parts = []
     parts += dash_parts()
     parts += floor_parts()
@@ -958,7 +982,7 @@ def interior_parts():
     parts += pedal_parts()
     parts += shifter_parts()
     parts += column_parts()
-    parts += extras_parts()
+    parts += extras_parts(under)
     # The cluster's woodgrain panel and the knob strip, in the body.
     origin, basis = np.asarray(CLUSTER_AT, float), cluster_basis()
     cl = cluster_parts()

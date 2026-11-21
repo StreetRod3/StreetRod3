@@ -530,20 +530,27 @@ def lens_tile():
             png_bytes(Image.fromarray(np.round((n * 0.5 + 0.5) * 255).astype(np.uint8), 'RGB')))
 
 
-def headliner(roof_tris, interior):
-    """The headliner under the model's roof: a grid over HEADLINER_SPAN, each point
-    HEADLINER_GAP under the lowest roof surface above HEADLINER_ABOVE straight over it;
-    cells with a corner under no roof are left out."""
+def roof_underside(roof_tris):
+    """The headliner's height at points (x, z), game frame: HEADLINER_GAP under the
+    lowest roof surface above HEADLINER_ABOVE straight over each; NaN under no roof."""
     tris = np.concatenate(roof_tris)
     tris = tris[tris[:, :, 1].min(1) > HEADLINER_ABOVE]
+    # Looking up: depth along -Y is -y, so the front-most is the lowest.
+    frame = (np.array([0.0, -1.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+
+    def under(x, z):
+        x, z = np.asarray(x, float), np.asarray(z, float)
+        return -surface_depth(tris, frame, x, z, 0.0) - HEADLINER_GAP
+    return under
+
+
+def headliner(under, interior):
+    """The headliner under the model's roof: a grid over HEADLINER_SPAN at `under`'s
+    height; cells with a corner under no roof are left out."""
     xs = np.linspace(*HEADLINER_SPAN[0], HEADLINER_GRID[0])
     zs = np.linspace(*HEADLINER_SPAN[1], HEADLINER_GRID[1])
     X, Z = np.meshgrid(xs, zs)
-    # Looking up: depth along -Y is -y, so the front-most is the lowest.
-    frame = (np.array([0.0, -1.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
-    depth = surface_depth(tris, frame, X, Z, 0.0)
-    Y = -depth - HEADLINER_GAP
-    pts = np.stack([X, Y, Z], -1)
+    pts = np.stack([X, under(X, Z), Z], -1)
     cells = interior.grid_tris(pts)
     ok = np.isfinite(cells).all(axis=(1, 2))
     cells = cells[ok]
@@ -697,9 +704,10 @@ def build(src, dst):
         for k in ('pos', 'nrm', 'uv'):
             p[k] = p[k].reshape(len(keep), 3, -1)[keep].reshape(-1, p[k].shape[-1])
 
-    inside_parts = interior.interior_parts()
-    inside_parts.append(headliner([to_game(p['pos']).reshape(-1, 3, 3) for (nm, _), p in kept.items()
-                                   if nm in ROOF_PARTS], interior))
+    under = roof_underside([to_game(p['pos']).reshape(-1, 3, 3) for (nm, _), p in kept.items()
+                            if nm in ROOF_PARTS])
+    inside_parts = interior.interior_parts(under)
+    inside_parts.append(headliner(under, interior))
     looks = sorted({mat for _, mat in kept if mat in LOOKS} | {m for m, *_ in inside_parts if m in looks_all})
     grid = math.ceil(math.sqrt(len(looks)))
     size = grid * CELL
