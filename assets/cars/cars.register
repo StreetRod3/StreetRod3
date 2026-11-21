@@ -80,6 +80,15 @@
       "hp": 155.0,
       "color": [0.32, 0.62, 0.6, 1.0],
       "car_file": "res://assets/cars/chevy-c10-1963.car"
+    },
+    {
+      "id": "dodge-challenger-1970",
+      "name": "1970 Dodge Challenger",
+      "price": 1400,
+      "vmax": 250.0,
+      "hp": 350.0,
+      "color": [0.85, 0.42, 0.1, 1.0],
+      "car_file": "res://assets/cars/dodge-challenger-1970.car"
     }
   ]
 }

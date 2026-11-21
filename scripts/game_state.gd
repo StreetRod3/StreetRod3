@@ -251,6 +251,9 @@ var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
 ## and a cove takes the body color, an accent the car file's accent color.
 const NO_COVE_PAINT := Color(0, 0, 0, 0)
 var car_cove_color: Color = NO_COVE_PAINT
+## The cove's or accent's finish chosen in the garage ("paint", "vinyl" or "matte",
+## CarFile.ACCENT_FINISHES); empty until one is chosen, and then the car file's.
+var car_accent_finish: String = ""
 ## The active car's stripped bumpers, by end ("front", "rear"; car file `bumpers`).
 var bumpers_off: Array[String] = []
 ## Fuel in the active car's tank, in liters.
@@ -1149,6 +1152,7 @@ func new_game() -> void:
 	car_name = "Corvette 1956"
 	car_color = Color(0.78, 0.14, 0.14, 1.0)
 	car_cove_color = NO_COVE_PAINT
+	car_accent_finish = ""
 	bumpers_off = []
 	fuel = DEFAULT_TANK_L
 	vmax_kmh = 220.0
@@ -3250,6 +3254,27 @@ func set_car_cove_color(next: Color) -> void:
 	_sync_record_from_active()
 
 
+func set_car_accent_finish(next: String) -> void:
+	car_accent_finish = next
+	_sync_record_from_active()
+
+
+## The active car's cove or accent finish: the one chosen in the garage, else its car file's.
+func car_accent_finish_now() -> String:
+	return car_accent_finish if not car_accent_finish.is_empty() else spec_accent_finish(car_spec)
+
+
+## A car file's cove or accent finish ("paint" when it gives none, or has no cove or accent).
+static func spec_accent_finish(spec: Dictionary) -> String:
+	var model: Variant = spec.get("model", {})
+	if typeof(model) == TYPE_DICTIONARY:
+		for key: String in ["accent", "cove"]:
+			var zone: Variant = (model as Dictionary).get(key, null)
+			if typeof(zone) == TYPE_DICTIONARY:
+				return str((zone as Dictionary).get("finish", "paint"))
+	return "paint"
+
+
 ## Whether the active car has a cove or an accent to paint on its own.
 func car_has_cove() -> bool:
 	var model: Variant = car_spec.get("model", {})
@@ -4132,6 +4157,7 @@ func _sync_record_from_active() -> void:
 	rec["model_id"] = model_id
 	rec["color"] = car_color
 	rec["cove_color"] = car_cove_color
+	rec["accent_finish"] = car_accent_finish
 	rec["bumpers_off"] = bumpers_off.duplicate()
 	rec["fuel"] = fuel
 	rec["engine_id"] = equipped_engine_id
@@ -4163,6 +4189,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 		car_color = paint
 	var cove_paint: Variant = rec.get("cove_color", NO_COVE_PAINT)
 	car_cove_color = cove_paint if cove_paint is Color else NO_COVE_PAINT
+	car_accent_finish = str(rec.get("accent_finish", ""))
 	bumpers_off = bumper_ends(rec.get("bumpers_off", []))
 	fuel = float(rec.get("fuel", DEFAULT_TANK_L))
 	equipped_engine_id = str(rec.get("engine_id", equipped_engine_id))
@@ -4205,6 +4232,7 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 		"model_id": str(rec.get("model_id", model_id)),
 		"color": [paint.r, paint.g, paint.b, paint.a],
 		"cove_color": [cove_paint.r, cove_paint.g, cove_paint.b, cove_paint.a],
+		"accent_finish": str(rec.get("accent_finish", "")),
 		"bumpers_off": bumper_ends(rec.get("bumpers_off", [])),
 		"fuel": float(rec.get("fuel", fuel)),
 		"engine_id": str(rec.get("engine_id", "")),
@@ -4284,6 +4312,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"model_id": model_id,
 		"color": _color_from_save(row.get("color", null), car_color),
 		"cove_color": _color_from_save(row.get("cove_color", null), NO_COVE_PAINT),
+		"accent_finish": str(row.get("accent_finish", "")),
 		"bumpers_off": bumper_ends(row.get("bumpers_off", [])),
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
 		"engine_id": str(row.get("engine_id", "")),

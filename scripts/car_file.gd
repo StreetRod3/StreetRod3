@@ -38,6 +38,9 @@ extends RefCounted
 ## ([r, g, b], 0 to 1) is its paint until it is painted on its own. A car has a cove or
 ## an accent, not both; either is painted with the garage paint menu's Accent choice.
 ##
+## A cove or accent can give its `finish` until the player picks one in the garage:
+## "paint" (the body's finish, the default), "vinyl" or "matte" (ACCENT_FINISHES).
+##
 ## `bumpers` names the bumpers that can be stripped, `front` and `rear`: `node` is the
 ## mesh in the model that is the bumper with its brackets, and `mass` what it weighs in
 ## kg, which comes off the chassis mass when it is stripped. A car without the block has
@@ -52,6 +55,9 @@ const BUMPER_ENDS: Array[String] = ["front", "rear"]
 const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
 ## The paint finish a car file can set in model.paint: shader parameters of the same names.
 const PAINT_FINISH_KEYS: Array[String] = ["metallic", "roughness", "clearcoat", "clearcoat_roughness"]
+## A cove's or accent's finishes, in the garage paint menu's order; car_paint_mask.gdshader's
+## accent_finish is the index.
+const ACCENT_FINISHES: Array[String] = ["paint", "vinyl", "matte"]
 const DEFAULT_CAMERAS: Dictionary = {
 	"far": {"position": Vector3(0.0, 2.55, -10.4), "pitch": -14.0, "fov": 68.0},
 	"close": {"position": Vector3(0.0, 1.8, -6.1), "pitch": -10.0, "fov": 70.0},
@@ -155,6 +161,7 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 			result.model["cove"] = {
 				"outline": outline,
 				"min_x": float((cove as Dictionary).get("min_x", 0.0)),
+				"finish": _accent_finish(cove as Dictionary, result),
 			}
 	# A second paint marked in the texture (the C10's grille, bumpers and lettering), and
 	# its paint until the accent is painted.
@@ -164,7 +171,20 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		if typeof(rgb) != TYPE_ARRAY or (rgb as Array).size() < 3:
 			result.errors.append("Car model accent color must be [r, g, b].")
 		else:
-			result.model["accent"] = {"color": Color(float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0)}
+			result.model["accent"] = {
+				"color": Color(float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0),
+				"finish": _accent_finish(accent as Dictionary, result),
+			}
+
+
+## A cove's or accent's `finish` until one is chosen in the garage: "paint" (the body's
+## finish, the default), "vinyl" or "matte".
+static func _accent_finish(block: Dictionary, result: Dictionary) -> String:
+	var finish := str(block.get("finish", ACCENT_FINISHES[0]))
+	if not ACCENT_FINISHES.has(finish):
+		result.errors.append("Car model accent finish must be one of %s." % ", ".join(ACCENT_FINISHES))
+		return ACCENT_FINISHES[0]
+	return finish
 
 
 static func _parse_wheels(root: Dictionary, result: Dictionary) -> void:
