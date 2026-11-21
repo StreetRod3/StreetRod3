@@ -71,6 +71,15 @@
       "hp": 280.0,
       "color": [0.16, 0.3, 0.6, 1.0],
       "car_file": "res://assets/cars/chevy-impala-1967.car"
+    },
+    {
+      "id": "chevy-c10-1963",
+      "name": "1963 Chevy C10",
+      "price": 800,
+      "vmax": 170.0,
+      "hp": 155.0,
+      "color": [0.32, 0.62, 0.6, 1.0],
+      "car_file": "res://assets/cars/chevy-c10-1963.car"
     }
   ]
 }

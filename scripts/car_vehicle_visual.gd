@@ -502,7 +502,7 @@ func _shaded_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: M
 
 
 ## Everything car_paint_mask.gdshader takes from the car rather than the material: the
-## body and cove colors, the paint's finish, the dither, the cove's outline, and where the
+## body, cove and accent colors, the paint's finish, the dither, the cove's outline, and where the
 ## mesh sits in the car.
 func _set_paint_params(shader_mat: ShaderMaterial, color: Color, mesh_instance: MeshInstance3D) -> void:
 	shader_mat.set_shader_parameter("paint_color", color)
@@ -521,6 +521,8 @@ func _set_paint_params(shader_mat: ShaderMaterial, color: Color, mesh_instance: 
 	shader_mat.set_shader_parameter("cove_count", outline.size())
 	shader_mat.set_shader_parameter("cove_outline", outline)
 	shader_mat.set_shader_parameter("cove_min_x", float(cove.get("min_x", 0.0)))
+	shader_mat.set_shader_parameter("use_accent", 0.0 if _accent().is_empty() else 1.0)
+	shader_mat.set_shader_parameter("accent_color", _accent_color())
 
 
 func _cove() -> Dictionary:
@@ -533,6 +535,26 @@ func _cove() -> Dictionary:
 
 func _has_cove() -> bool:
 	return not _cove().is_empty()
+
+
+## The car file's model.accent (the C10's grille, bumpers and lettering): its paint
+## until it is painted on its own.
+func _accent() -> Dictionary:
+	var model: Variant = _active_spec().get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return {}
+	var accent: Variant = (model as Dictionary).get("accent", {})
+	return accent if typeof(accent) == TYPE_DICTIONARY else {}
+
+
+## The accent's paint: its own once it has been painted (the cove paint), else the car
+## file's accent color.
+func _accent_color() -> Color:
+	var own := _active_cove_color()
+	if own.a > 0.5:
+		return Color(own.r, own.g, own.b, 1.0)
+	var color: Variant = _accent().get("color", Color.WHITE)
+	return color if color is Color else Color.WHITE
 
 
 ## A car file can set model.paintable to false, and then its own colors stay.

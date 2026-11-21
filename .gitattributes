@@ -69,6 +69,7 @@ reference/**/*.exr filter=lfs diff=lfs merge=lfs -text
 reference/**/*.bin filter=lfs diff=lfs merge=lfs -text
 assets/cars/police-fairlane-1957.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/chevy-impala-1967.glb filter=lfs diff=lfs merge=lfs -text
+assets/cars/chevy-c10-1963.glb filter=lfs diff=lfs merge=lfs -text
 assets/locations/gas-station/pump.glb filter=lfs diff=lfs merge=lfs -text
 assets/locations/gas-station/pump-super-color.png filter=lfs diff=lfs merge=lfs -text
 assets/locations/gas-station/pump-super-normal.png filter=lfs diff=lfs merge=lfs -text
