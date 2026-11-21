@@ -158,16 +158,18 @@ SEAM_FROM = (1.0, -1.85)
 GREENHOUSE = {'WindShield', 'WindShieldChrome', 'BackWindow', 'BackWindowChrome', 'DoorGlass',
               'DoorGlassSmall', 'SideWindowSplitter', 'RoofChromeBack', 'RoofChromeSide',
               'RoofIsolationSide'}
-## The chop, game frame: everything above CHOP_TOP comes down CHOP (3 in); between the
-## beltline and CHOP_TOP in step with height, so the pillars and glass get shorter. The beltline
-## is CHOP_BELT[0] along the doors, rising to CHOP_BELT[1] over CHOP_BELT_Z (z) to where
-## the sail panels and back window sit on the body. The drop eases in and out over
-## CHOP_EASE of the band at each end (chop_ramp).
+## The chop, game frame: everything above CHOP_TOP comes down CHOP (3 in). From the
+## beltline to CHOP_EVEN it comes down in step with height, so each pillar and pane is
+## evenly shorter and stays straight; from CHOP_EVEN, above the tops of the pillars and
+## windows, the rest of the drop eases out over the roof's crown so the roof doesn't
+## crease (chop_ramp). The beltline is CHOP_BELT[0] at the front, the foot of the
+## windshield pillars at the cowl, rising to CHOP_BELT[1] over CHOP_BELT_Z (z) to where
+## the sail panels and back window sit on the body.
 CHOP = 3 * 0.0254
-CHOP_TOP = 0.99
-CHOP_BELT = (0.76, 0.835)
+CHOP_EVEN = 1.04
+CHOP_TOP = 1.10
+CHOP_BELT = (0.70, 0.835)
 CHOP_BELT_Z = (-0.85, -1.15)
-CHOP_EASE = 0.35
 ## The buckets sit this much lower under the chopped roof, as a chop needs: their
 ## headrests would reach the headliner (the car file's model.roof.seat_drop).
 SEAT_DROP = 0.04
@@ -705,18 +707,18 @@ def chop(points):
     p = np.array(points, float)
     t = np.clip((p[..., 2] - CHOP_BELT_Z[0]) / (CHOP_BELT_Z[1] - CHOP_BELT_Z[0]), 0.0, 1.0)
     belt = CHOP_BELT[0] + (CHOP_BELT[1] - CHOP_BELT[0]) * t * t * (3 - 2 * t)
-    p[..., 1] -= CHOP * chop_ramp(np.clip((p[..., 1] - belt) / (CHOP_TOP - belt), 0.0, 1.0))
+    p[..., 1] -= CHOP * chop_ramp(p[..., 1], belt)
     return p
 
 
-def chop_ramp(t):
-    """How far through its drop the chop moves a point t of the way from the beltline to
-    CHOP_TOP: even in the middle, eased in and out over CHOP_EASE at each end so the
-    surfaces don't fold where it starts and stops."""
-    w = CHOP_EASE
-    k = 1.0 / (1.0 - w)
-    return np.where(t < w, k * t * t / (2 * w),
-                    np.where(t > 1 - w, 1 - k * (1 - t) ** 2 / (2 * w), k * (t - w / 2)))
+def chop_ramp(y, belt):
+    """How much of its drop the chop gives a point at height y over a beltline at `belt`:
+    in step with height up to CHOP_EVEN, then easing to all of it at CHOP_TOP."""
+    ease = CHOP_TOP - CHOP_EVEN
+    span = (CHOP_EVEN - belt) + ease / 2
+    over = np.clip(y - CHOP_EVEN, 0.0, ease)
+    rise = np.clip(y, belt, CHOP_EVEN) - belt + over - over * over / (2 * ease)
+    return rise / span
 
 
 def chop_normals(points, normals):
