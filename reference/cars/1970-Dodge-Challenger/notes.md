@@ -47,3 +47,17 @@ The game's body is built from it by `tools/challenger_to_glb.py` (it runs Blende
 - auto-data.net, Challenger 5.6 V8: https://auto-data.net/en/dodge-challenger-5.6-v8-275hp-42831
 - autoevolution, Challenger 1969-70: https://www.autoevolution.com/engine/dodge-challenger-1969-70-v8-4mt-425-hp.html
 - Challenger specification page: https://www.dodgechallenger.lotusespritturbo.com/Specification.htm
+
+## Interior references
+
+| File | What it is |
+| --- | --- |
+| `photos/1970-cuda-interior-6336878902.jpg` | 1970 Plymouth 'Cuda 440 Six Pack interior from the passenger door (the Challenger's E-body twin: same buckets, wheel, shifter and door panels; its dash is the 'Cuda's own), by sv1ambo, CC BY 2.0, https://commons.wikimedia.org/wiki/File:1970_Plymouth_%27Cuda_coupe_(6336878902).jpg |
+| `photos/1970-cuda-interior-6336116475.jpg` | The same car from the driver's door, by sv1ambo, CC BY 2.0, https://commons.wikimedia.org/wiki/File:1970_Plymouth_%27Cuda_coupe_(6336116475).jpg |
+
+What the R/T's Rallye dash holds (four large round pods: 150 mph speedometer, 8000 rpm tachometer, clock, and a pod of four small gauges for oil pressure, temperature, fuel and ammeter; standard on the R/T, optional on other Challengers), from web searches on 2026-11-21:
+
+- Classic Industries, Dakota Digital gauges for the 1970-74 E-body Rallye dash: https://news.classicindustries.com/dakota-digital-vhx-gauge-system-for-1970-1974-mopar-e-body-rallye-dash
+- JEGS, OER RM4127 in-dash Rallye gauge set for 1970-71 Barracuda, 'Cuda and Challenger (seven gauges): https://jegs.com/i/OER/691/RM4127/10002/-1
+- Hagerty, the five best dashboards of the muscle-car era: https://hagerty.com/media/?p=8162
+- Bucket seats (C55) and the center console (C16) were options; listings show three-spoke Rim-Blow, Tuff and simulated-wood wheels: https://www.autoevolution.com/news/red-on-red-1970-dodge-challenger-is-a-true-js23-r-t-with-original-sheet-metal-275403.html
