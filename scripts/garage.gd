@@ -147,10 +147,10 @@ var _nav := _MenuNav.new()
 var _spray_zones: HBoxContainer
 var _spray_body_btn: Button
 var _spray_cove_btn: Button
-## The accent's finish, beside the zones while Accent is chosen: Paint, Vinyl, Matte
-## (CarFile.ACCENT_FINISHES).
+## The accent's finish, a list on its own line above Apply while Accent is chosen:
+## Paint, Vinyl, Matte (CarFile.ACCENT_FINISHES).
 var _spray_finishes: HBoxContainer
-var _spray_finish_btns: Array[Button] = []
+var _spray_finish_pick: OptionButton
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
@@ -1115,7 +1115,7 @@ func _sync_menu_nav() -> void:
 		if _spray_zones.visible:
 			spray_buttons = [_spray_body_btn, _spray_cove_btn]
 		if _spray_finishes.visible:
-			spray_buttons.append_array(_spray_finish_btns)
+			spray_buttons.append(_spray_finish_pick)
 		spray_buttons.append_array([
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
@@ -1618,7 +1618,7 @@ func _build_spray_zones() -> void:
 	for btn: Button in [_spray_body_btn, _spray_cove_btn]:
 		btn.toggle_mode = true
 		btn.button_group = group
-		btn.custom_minimum_size = Vector2(90, 0)
+		btn.custom_minimum_size = Vector2(110, 0)
 		_spray_zones.add_child(btn)
 	_spray_body_btn.button_pressed = true
 	_spray_body_btn.pressed.connect(_on_spray_zone_pressed)
@@ -1626,39 +1626,38 @@ func _build_spray_zones() -> void:
 	vbox.add_child(_spray_zones)
 	vbox.move_child(_spray_zones, 1)
 	_spray_zones.visible = false
-	# On the zones' row, so the menu is no taller.
 	_spray_finishes = HBoxContainer.new()
-	_spray_finishes.add_child(VSeparator.new())
-	var finish_group := ButtonGroup.new()
+	_spray_finishes.alignment = BoxContainer.ALIGNMENT_CENTER
+	var label := Label.new()
+	label.text = "Finish"
+	_spray_finishes.add_child(label)
+	_spray_finish_pick = OptionButton.new()
 	for finish: String in CarFile.ACCENT_FINISHES:
-		var btn := Button.new()
-		btn.text = finish.capitalize()
-		btn.toggle_mode = true
-		btn.button_group = finish_group
-		btn.custom_minimum_size = Vector2(72, 0)
-		_spray_finishes.add_child(btn)
-		_spray_finish_btns.append(btn)
-	_spray_zones.add_child(_spray_finishes)
+		_spray_finish_pick.add_item(finish.capitalize())
+	_spray_finish_pick.custom_minimum_size = Vector2(140, 0)
+	_spray_finishes.add_child(_spray_finish_pick)
+	var buttons := $GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox
+	vbox.add_child(_spray_finishes)
+	vbox.move_child(_spray_finishes, buttons.get_index())
 	_spray_finishes.visible = false
 
 
-## The finish buttons show while Accent is chosen, set to the car's present finish.
+## The finish list shows while Accent is chosen, set to the car's present finish.
 func _show_spray_finish() -> void:
 	var shown := _spray_zones.visible and _spray_cove_btn.button_pressed
 	var changed := shown != _spray_finishes.visible
 	_spray_finishes.visible = shown
 	if shown:
-		var at := maxi(0, CarFile.ACCENT_FINISHES.find(GameState.car_accent_finish_now()))
-		_spray_finish_btns[at].button_pressed = true
+		_spray_finish_pick.select(maxi(0, CarFile.ACCENT_FINISHES.find(GameState.car_accent_finish_now())))
 	if changed and _spray_menu.visible:
 		_sync_menu_nav()
 
 
 func _chosen_spray_finish() -> String:
-	for i in _spray_finish_btns.size():
-		if _spray_finish_btns[i].button_pressed:
-			return CarFile.ACCENT_FINISHES[i]
-	return GameState.car_accent_finish_now()
+	var at := _spray_finish_pick.selected
+	if at < 0 or at >= CarFile.ACCENT_FINISHES.size():
+		return GameState.car_accent_finish_now()
+	return CarFile.ACCENT_FINISHES[at]
 
 
 ## The picker shows the chosen zone's paint; an unpainted cove shows the body's, an
