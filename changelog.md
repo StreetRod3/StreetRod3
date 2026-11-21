@@ -526,3 +526,5 @@ The 1970 Challenger's roof can be chopped in the garage: click the roof and it o
 
 The Challenger's roof now changes with the accent's finish. With Vinyl it is the vinyl top, with its seam along each side and down the sail panels and the grain of the leather image that came with the model, as a normal map; with Paint or Matte it is a smooth roof, the same shape with the seam's extra loops merged so the shoulder rounds off. The shader's own grain stays for accents without a grain of their own. The car file holds the four roofs (stock or chopped, vinyl or smooth), 6.3 MB and 160,000 triangles in all, of which it still draws 135,000.
 
+
+The Challenger no longer has black blocks sticking out at the foot of each windshield pillar. They were the ends of the new dash pad and of the padded caps on the door trim, which reached past the body's beltline where it dips at the corner of the windshield; `tools/challenger_to_glb.py` now keeps every point of the interior just under the beltline's sheet metal, on the stock and the chopped body alike.

@@ -134,6 +134,12 @@ ACCENT_PARTS = {('Roof', 'Leather'), ('RoofSmooth', 'Leather'), ('BackPlate', 'B
 ## the lid, the block seats and the ring, and are left out; the underbody stays.
 INSIDE = 'Inside'
 INSIDE_DROP_Y = 0.6
+## The new interior stays under the shell: where the topmost outside surface is lower
+## than SHELL_BELT (the beltline's sheet metal, not glass or roof), no interior point may
+## come within SHELL_MARGIN of it. The dash pad's ends and the door caps reached past
+## the shell at the foot of the windshield pillars.
+SHELL_BELT = 0.75
+SHELL_MARGIN = 0.004
 ## The headliner: a grid HEADLINER_GAP under the lowest of these parts' surfaces higher
 ## than HEADLINER_ABOVE, over the roof between the windshield's and back window's tops
 ## and the side glass (game frame).
@@ -603,6 +609,32 @@ def headliner(under, interior):
     return interior._part('Headliner', cells, crease=60.0, closed=False)
 
 
+def shell_top(tris):
+    """The height of the topmost of `tris` (game frame) over points (x, z); -inf where
+    there is none."""
+    frame = (np.array([0.0, 1.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+
+    def top(x, z):
+        y = surface_depth(tris, frame, np.asarray(x, float), np.asarray(z, float), 10.0)
+        return np.where(np.isnan(y), -np.inf, y)
+    return top
+
+
+def under_shell(parts, tops):
+    """Interior parts with every point kept SHELL_MARGIN under the beltline wherever the
+    lowest of `tops` (shell_top functions) is beltline sheet metal (under SHELL_BELT)."""
+    out = []
+    for mat, tris, nrm, uv in parts:
+        p = np.array(tris, float).reshape(-1, 3)
+        near = (np.abs(p[:, 0]) > 0.5) & (p[:, 1] > SHELL_BELT - 0.15)
+        if near.any():
+            top = np.min([t(p[near, 0], p[near, 2]) for t in tops], 0)
+            cap = np.where(top < SHELL_BELT, top - SHELL_MARGIN, np.inf)
+            p[near, 1] = np.minimum(p[near, 1], cap)
+        out.append((mat, p.reshape(np.shape(tris)), nrm, uv))
+    return out
+
+
 def above(tris, y):
     """Which triangles belong to connected pieces lying wholly above height y."""
     keys = np.round(tris.reshape(-1, 3) * 1e5).astype(np.int64)
@@ -840,7 +872,12 @@ def build(src, dst):
             + interior.front_seats(),
             'roof_chopped': interior.roof_interior(under['roof_chopped'], chop)
             + [headliner(under['roof_chopped'], interior)] + interior.front_seats(SEAT_DROP)}
-    inside_parts = interior.interior_parts()
+    shell = [to_game(p['pos']).reshape(-1, 3, 3) for (nm, _), p in kept.items() if nm != INSIDE]
+    shell_chopped = [chop(t) if nm in GREENHOUSE or nm in (ROOF_VINYL, SMOOTH_ROOF) else t
+                     for (nm, _), t in zip([k for k in kept if k[0] != INSIDE], shell)]
+    tops = [shell_top(np.concatenate(shell)), shell_top(np.concatenate(shell_chopped))]
+    hung = {k: under_shell(v, tops) for k, v in hung.items()}
+    inside_parts = under_shell(interior.interior_parts(), tops)
     looks = sorted({mat for _, mat in kept if mat in LOOKS} | {m for m, *_ in inside_parts + hung['roof_stock'] if m in looks_all})
     grid = math.ceil(math.sqrt(len(looks)))
     size = grid * CELL
