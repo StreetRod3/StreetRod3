@@ -46,7 +46,11 @@ The GLB is laid out like the Studebaker's (tools/studebaker_to_glb.py):
     shader never touches them; the lenses frosted, with the scene's prism pattern (a grid
     of vertical flutes over horizontal bands, LENS_*) as a repeating normal map
     projected from the front;
-  * the bumpers as `bumper_front` and `bumper_rear` nodes so the game can strip them.
+  * the bumpers as `bumper_front` and `bumper_rear` nodes so the game can strip them;
+  * an interior (tools/challenger_interior.py) in place of the model's stand-in (the lid
+    at the window line, the block seats and the ring of `Inside` are left out, its
+    underbody kept): the Rallye dash with working speedometer, tachometer and gas gauge
+    under `dash_` nodes, the steering wheel as `driving_wheel`, seats, carpet, trim.
 
 The numbers the .car file needs are printed at the end.
 """
@@ -108,6 +112,18 @@ BUMPERS = {
     'bumper_rear': {'BackBumper', 'BackBumperDetail', 'BackBumperSupp'},
 }
 BODY = 'Body'
+## The model's stand-in interior: its pieces wholly above INSIDE_DROP_Y (game frame) are
+## the lid, the block seats and the ring, and are left out; the underbody stays.
+INSIDE = 'Inside'
+INSIDE_DROP_Y = 0.6
+## The headliner: a grid HEADLINER_GAP under the lowest of these parts' surfaces higher
+## than HEADLINER_ABOVE, over the roof between the windshield's and back window's tops
+## and the side glass (game frame).
+ROOF_PARTS = {'Body', 'Roof'}
+HEADLINER_ABOVE = 0.95
+HEADLINER_GAP = 0.012
+HEADLINER_SPAN = ((-0.70, 0.70), (-1.12, 0.29))
+HEADLINER_GRID = (29, 37)
 GRILLE_MATERIAL = 'Grille'
 GLASS = 'Glass'
 LENS = 'Lens'
@@ -499,6 +515,56 @@ def lens_tile():
             png_bytes(Image.fromarray(np.round((n * 0.5 + 0.5) * 255).astype(np.uint8), 'RGB')))
 
 
+def headliner(roof_tris, interior):
+    """The headliner under the model's roof: a grid over HEADLINER_SPAN, each point
+    HEADLINER_GAP under the lowest roof surface above HEADLINER_ABOVE straight over it;
+    cells with a corner under no roof are left out."""
+    tris = np.concatenate(roof_tris)
+    tris = tris[tris[:, :, 1].min(1) > HEADLINER_ABOVE]
+    xs = np.linspace(*HEADLINER_SPAN[0], HEADLINER_GRID[0])
+    zs = np.linspace(*HEADLINER_SPAN[1], HEADLINER_GRID[1])
+    X, Z = np.meshgrid(xs, zs)
+    # Looking up: depth along -Y is -y, so the front-most is the lowest.
+    frame = (np.array([0.0, -1.0, 0.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 0.0, 1.0]))
+    depth = surface_depth(tris, frame, X, Z, 0.0)
+    Y = -depth - HEADLINER_GAP
+    pts = np.stack([X, Y, Z], -1)
+    cells = interior.grid_tris(pts)
+    ok = np.isfinite(cells).all(axis=(1, 2))
+    cells = cells[ok]
+    fn = np.cross(cells[:, 1] - cells[:, 0], cells[:, 2] - cells[:, 0])
+    down = fn[:, 1] > 0
+    cells[down] = cells[down][:, ::-1]
+    return interior._part('Headliner', cells, crease=60.0, closed=False)
+
+
+def above(tris, y):
+    """Which triangles belong to connected pieces lying wholly above height y."""
+    keys = np.round(tris.reshape(-1, 3) * 1e5).astype(np.int64)
+    _, inverse = np.unique(keys, axis=0, return_inverse=True)
+    inverse = inverse.reshape(-1, 3)
+    parent = list(range(len(tris)))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    owner = {}
+    for t, corners in enumerate(inverse):
+        for v in corners:
+            if v in owner:
+                parent[find(t)] = find(owner[v])
+            else:
+                owner[v] = t
+    roots = np.array([find(t) for t in range(len(tris))])
+    low = {}
+    for t, r in enumerate(roots):
+        low[r] = min(low.get(r, np.inf), tris[t, :, 1].min())
+    return np.array([low[r] > y for r in roots])
+
+
 def load_pieces(path):
     data = np.load(path)
     pieces = {}
@@ -528,6 +594,9 @@ def build(src, dst):
     from PIL import Image
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from studebaker_to_glb import Gltf, png_bytes, share_corners
+    from studebaker_dash import MATERIALS, quaternion
+    import challenger_interior as interior
+    looks_all = dict(LOOKS, **{k: v for k, v in interior.LOOKS.items() if k not in LOOKS})
 
     with tempfile.TemporaryDirectory() as tmp:
         npz = os.path.join(tmp, 'pieces.npz')
@@ -560,14 +629,24 @@ def build(src, dst):
     def to_game(q):
         return (q - origin) * scale
 
-    looks = sorted({mat for _, mat in kept if mat in LOOKS})
+    # The stand-in interior's lid, block seats and ring.
+    for key in [k for k in kept if k[0] == INSIDE]:
+        p = kept[key]
+        keep = ~above(to_game(p['pos']).reshape(-1, 3, 3), INSIDE_DROP_Y)
+        for k in ('pos', 'nrm', 'uv'):
+            p[k] = p[k].reshape(len(keep), 3, -1)[keep].reshape(-1, p[k].shape[-1])
+
+    inside_parts = interior.interior_parts()
+    inside_parts.append(headliner([to_game(p['pos']).reshape(-1, 3, 3) for (nm, _), p in kept.items()
+                                   if nm in ROOF_PARTS], interior))
+    looks = sorted({mat for _, mat in kept if mat in LOOKS} | {m for m, *_ in inside_parts if m in looks_all})
     grid = math.ceil(math.sqrt(len(looks)))
     size = grid * CELL
     albedo = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     orm = Image.new('RGB', (size, size), PLAIN)
     cells = {}
     for i, mat in enumerate(looks):
-        color, paint, finish = LOOKS[mat]
+        color, paint, finish = looks_all[mat]
         cx, cy = i % grid, i // grid
         box = (cx * CELL, cy * CELL, cx * CELL + CELL, cy * CELL + CELL)
         albedo.paste(color + ((255,) if paint else (0,)), box)
@@ -655,6 +734,51 @@ def build(src, dst):
     for pos, nrm, uv in decal_meshes:
         groups['body'].setdefault(slot['decals'], []).append((pos, nrm, uv))
 
+    # The interior: its plain parts on the palette, the woodgrain on its own texture
+    # (alpha 0, so the game leaves it unpainted).
+    wood_albedo, wood_orm = interior.wood_texture()
+    first = len(out.images)
+    out.images += [wood_albedo, wood_orm]
+    out.textures += [first, first + 1]
+    slot['wood'] = len(out.materials)
+    out.materials.append({'name': 'woodgrain', 'doubleSided': True,
+                          'pbrMetallicRoughness': {'baseColorTexture': {'index': first},
+                                                   'metallicRoughnessTexture': {'index': first + 1},
+                                                   'metallicFactor': 1.0, 'roughnessFactor': 1.0}})
+
+    def interior_entry(mat, tris, nrm, uv):
+        if mat in looks_all:
+            return 0, (tris.reshape(-1, 3), nrm.reshape(-1, 3), np.tile(np.array(cells[mat]), (tris.size // 3, 1)))
+        return slot[mat], (tris.reshape(-1, 3), nrm.reshape(-1, 3), np.asarray(uv).reshape(-1, 2))
+
+    for mat, tris, nrm, uv in inside_parts:
+        material, entry = interior_entry(mat, tris, nrm, uv)
+        groups['body'].setdefault(material, []).append(entry)
+    wheel_groups = {}
+    for mat, tris, nrm, uv in interior.wheel_parts():
+        material, entry = interior_entry(mat, tris, nrm, uv)
+        wheel_groups.setdefault(material, []).append(entry)
+    groups['wheel'] = wheel_groups
+
+    # The cluster, under `dash_` nodes: its dial faces lit, its own bezel, cup and needle
+    # materials.
+    dial_png, _ = interior.dial_texture()
+    dial_tex = len(out.textures)
+    out.images.append(dial_png)
+    out.textures.append(len(out.images) - 1)
+    dmat = {'face': len(out.materials)}
+    out.materials.append({'name': 'challenger_dials', 'doubleSided': True,
+                          'emissiveFactor': [0.55, 0.55, 0.55], 'emissiveTexture': {'index': dial_tex},
+                          'pbrMetallicRoughness': {'baseColorTexture': {'index': dial_tex},
+                                                   'metallicFactor': 0.0, 'roughnessFactor': 0.45}})
+    dmat['cup'] = len(out.materials)
+    out.materials.append({'name': 'challenger_cups', 'doubleSided': True,
+                          'pbrMetallicRoughness': {'baseColorFactor': [0.035, 0.03, 0.028, 1.0],
+                                                   'metallicFactor': 0.1, 'roughnessFactor': 0.6}})
+    for key in ('bezel', 'needle', 'pointer', 'cap'):
+        dmat[key] = len(out.materials)
+        out.materials.append(MATERIALS[key])
+
     def primitives(group):
         prims = []
         for material, parts in sorted(groups[group].items()):
@@ -669,10 +793,47 @@ def build(src, dst):
     roots = [out.node(name, mesh=out.mesh(name, primitives('body')))]
     for group in BUMPERS:
         roots.append(out.node(group, mesh=out.mesh(group, primitives(group))))
+
+    # The steering wheel, turned by the game about its +Z (down the column).
+    hub, wheel_basis = interior.wheel_frame()
+    wheel_mesh = out.mesh('driving_wheel_mesh', primitives('wheel'))
+    roots.append(out.node('driving_wheel', translation=hub, rotation=quaternion(wheel_basis),
+                          children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
+
+    def dash_mesh(mesh_name, parts):
+        by_mat = {}
+        for mat, tris, nrm, uv in parts:
+            uv = np.zeros(tris.shape[:2] + (2,)) if uv is None else np.asarray(uv)
+            by_mat.setdefault(dmat[mat], []).append((tris.reshape(-1, 3), np.asarray(nrm).reshape(-1, 3),
+                                                     uv.reshape(-1, 2)))
+        prims = []
+        for material, entries in sorted(by_mat.items()):
+            p, n, u, index = share_corners(np.concatenate([e[0] for e in entries]).astype(np.float32),
+                                           np.concatenate([e[1] for e in entries]).astype(np.float32),
+                                           np.concatenate([e[2] for e in entries]).astype(np.float32))
+            prims.append(out.primitive(p, n, index, material, u))
+        return out.mesh(mesh_name, prims)
+
+    cl = interior.cluster_parts()
+    c_origin, c_basis = np.asarray(interior.CLUSTER_AT, float), interior.cluster_basis()
+    roots.append(out.node('dash_rallye_cluster', translation=c_origin, rotation=quaternion(c_basis),
+                          mesh=dash_mesh('dash_rallye_cluster', cl['fixed'])))
+    faces = [('face', tris, np.zeros_like(tris) + 0.0, uv) for _, tris, uv in interior.lower_face_quads()]
+    faces = [(m, t, np.repeat(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])[:, None], 3, 1), uv)
+             for m, t, _, uv in faces]
+    roots.append(out.node('dash_radio_heater', mesh=dash_mesh('dash_radio_heater', faces)))
+    pods = (('dash_speedo_arch_270_mph_150_pod', 'speedo_needle', cl['speedo'], 0),
+            ('dash_tach_pod', 'tach_needle', cl['tach'], 1),
+            ('dash_fuel_arch_70_pod', 'fuel_needle', cl['fuel'], 2))
+    for pod, needle_name, (tris, nrm), k in pods:
+        cx, cz = cl['centers'][k]
+        at = c_origin + c_basis @ np.array([cx, 0.0, cz])
+        needle = out.node(needle_name, mesh=dash_mesh(needle_name, [('needle', tris, nrm, None)]))
+        roots.append(out.node(pod, translation=at, rotation=quaternion(c_basis), children=[needle]))
     out.write(dst, roots)
 
     size_m = (hi - lo) * scale
-    tris = sum(len(p['pos']) // 3 for p in kept.values()) + sum(len(m[0]) // 3 for m in decal_meshes)
+    tris = sum(len(p) for g in groups.values() for parts in g.values() for p, _, _ in parts) // 3
     print(f'{dst}: {tris} tris, {os.path.getsize(dst) / 1e6:.1f} MB, '
           f'size {size_m.round(3)} m ({(size_m / 0.0254).round(1)} in), scale {scale.round(4)}')
     for g, names in BUMPERS.items():
