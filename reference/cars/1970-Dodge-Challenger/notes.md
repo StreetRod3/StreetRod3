@@ -19,6 +19,8 @@ Provenance checked 2026-11-21: the scene's image paths are under `C:/Users/temp0
 
 The game's body is built from it by `tools/challenger_to_glb.py` (it runs Blender to open the scene).
 
+In the game it is `assets/cars/dodge-challenger-1970.car`: make GM for parts until there are Chrysler engines (stock 327 V8 standing in for the R/T's 383, four-speed manual), 1,590 kg (the R/T hardtop's curb weight is about 3,500 lb), 56% on the front wheels, wheels drawn 1.026 times their size to fill the wells.
+
 ## Changes from the download
 
 | Change | Why |
