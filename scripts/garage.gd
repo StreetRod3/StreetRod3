@@ -143,7 +143,7 @@ const SALE_PRICE_STEP := 50
 const SALE_PRICE_MAX := 99999
 
 var _nav := _MenuNav.new()
-## The paint menu's Body and Accent choice; Accent paints the cove, on a car with one (car file model.cove).
+## The paint menu's Body and Accent choice; Accent paints the cove or the accent parts, on a car with them (car file model.cove or model.accent).
 var _spray_zones: HBoxContainer
 var _spray_body_btn: Button
 var _spray_cove_btn: Button
@@ -1621,13 +1621,16 @@ func _build_spray_zones() -> void:
 	_spray_zones.visible = false
 
 
-## The picker shows the chosen zone's paint; an unpainted cove shows the body's.
+## The picker shows the chosen zone's paint; an unpainted cove shows the body's, an
+## unpainted accent the car file's accent color.
 func _on_spray_zone_pressed() -> void:
 	var cove := GameState.car_cove_color
-	if _spray_cove_btn.button_pressed and cove.a > 0.5:
+	if not _spray_cove_btn.button_pressed:
+		_spray_color_picker.color = GameState.car_color
+	elif cove.a > 0.5:
 		_spray_color_picker.color = cove
 	else:
-		_spray_color_picker.color = GameState.car_color
+		_spray_color_picker.color = GameState.car_unpainted_accent()
 
 
 func _on_spray_confirm_pressed() -> void:

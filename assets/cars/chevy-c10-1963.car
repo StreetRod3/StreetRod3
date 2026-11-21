@@ -1,0 +1,83 @@
+{
+  "id": "chevy-c10-1963",
+  "name": "Chevy C10 1963",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/chevy-c10-1963.glb",
+    "position": [0.0, 0.302, 0.0],
+    "height": 1.5073,
+    "ground_clearance": 0.302,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02},
+    "accent": {
+      "nodes": ["grille", "bumper_front", "bumper_rear"],
+      "color": [0.9, 0.89, 0.84]
+    }
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "size": 1.081,
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.755, 0.365, 1.59],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.755, 0.365, 1.59],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.755, 0.365, -1.223],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.755, 0.365, -1.223],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "chevy-235",
+    "transmission": "gb_man3",
+    "wheels": "wheel-c1"
+  },
+  "driver": {
+    "position": [0.4, 1.56, 0.0]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.65, -10.4],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.98, -6.2],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.4, 1.58, -0.02],
+      "pitch": -5.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.62, 2.48],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 18.0},
+    "rear": {"node": "bumper_rear", "mass": 16.0}
+  },
+  "chassis": {
+    "mass": 1500,
+    "wheelbase": 2.813,
+    "cg_height": 0.62,
+    "front_axle_fraction": 0.56,
+    "max_steer_deg": 30
+  }
+}

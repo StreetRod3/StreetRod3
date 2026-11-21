@@ -246,8 +246,9 @@ var driving_camera: int = 0
 var car_name: String = "Corvette 1956"
 ## Current paint color for the active car.
 var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
-## The cove's own paint, on a car with a cove (car file model.cove). Until the cove is
-## painted on its own it is NO_COVE_PAINT and takes the body color.
+## The cove's own paint, on a car with a cove (car file model.cove), or the accent's, on a
+## car with an accent (model.accent). Until it is painted on its own it is NO_COVE_PAINT,
+## and a cove takes the body color, an accent the car file's accent color.
 const NO_COVE_PAINT := Color(0, 0, 0, 0)
 var car_cove_color: Color = NO_COVE_PAINT
 ## The active car's stripped bumpers, by end ("front", "rear"; car file `bumpers`).
@@ -3249,10 +3250,21 @@ func set_car_cove_color(next: Color) -> void:
 	_sync_record_from_active()
 
 
-## Whether the active car has a cove to paint on its own.
+## Whether the active car has a cove or an accent to paint on its own.
 func car_has_cove() -> bool:
 	var model: Variant = car_spec.get("model", {})
-	return typeof(model) == TYPE_DICTIONARY and (model as Dictionary).has("cove")
+	return typeof(model) == TYPE_DICTIONARY and ((model as Dictionary).has("cove") or (model as Dictionary).has("accent"))
+
+
+## The paint the active car's cove or accent shows until it is painted on its own: the
+## body color for a cove, the car file's accent color for an accent.
+func car_unpainted_accent() -> Color:
+	var model: Variant = car_spec.get("model", {})
+	if typeof(model) == TYPE_DICTIONARY:
+		var accent: Variant = (model as Dictionary).get("accent", {})
+		if typeof(accent) == TYPE_DICTIONARY and (accent as Dictionary).get("color", null) is Color:
+			return (accent as Dictionary)["color"]
+	return car_color
 
 
 ## False when the active car's colors are fixed in the model, as on the police Fairlane.

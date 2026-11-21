@@ -38,6 +38,8 @@ var _speedo_needle: Node3D
 var _speedo_rest := Transform3D.IDENTITY
 var _speedo_angle := 0.0
 var _speedo_sweep_rad := _GAUGE_SWEEP_RAD
+## The speed at the end of the speedometer's sweep: 160 mph, or the pod name's "_mph_N".
+var _speedo_max_mph := _GAUGE_MAX_MPH
 var _speedo_linear_travel := 0.0
 var _tach_needle: Node3D
 var _tach_rest := Transform3D.IDENTITY
@@ -187,6 +189,7 @@ func _refresh_steering_wheel() -> void:
 		_steering_rest = _steering_wheel.transform
 	_speedo_needle = model_root.find_child("speedo_needle", true, false) as Node3D if model_root != null else null
 	_speedo_sweep_rad = _GAUGE_SWEEP_RAD
+	_speedo_max_mph = _GAUGE_MAX_MPH
 	_speedo_linear_travel = 0.0
 	if _speedo_needle != null:
 		_speedo_rest = _speedo_needle.transform
@@ -199,10 +202,16 @@ func _refresh_steering_wheel() -> void:
 					var num_str := parts[1].replace("_pod", "").replace("_", ".")
 					_speedo_linear_travel = maxf(num_str.to_float(), 0.0)
 			elif pod_name.contains("arch_"):
-				# A pod named "dash_speedo_arch_270_pod" sweeps 270 degrees from 0 to full range.
+				# A pod named "dash_speedo_arch_270_pod" sweeps 270 degrees from 0 to full range,
+				# 160 mph; "dash_speedo_arch_240_mph_100_pod" sweeps 240 degrees for 0-100 mph,
+				# and its needle stops at 100.
 				var sweep_deg := pod_name.split("arch_")[1].get_slice("_", 0).to_float()
 				if sweep_deg > 0.0:
 					_speedo_sweep_rad = deg_to_rad(sweep_deg)
+				if pod_name.contains("_mph_"):
+					var top_mph := pod_name.split("_mph_")[1].get_slice("_", 0).to_float()
+					if top_mph > 0.0:
+						_speedo_max_mph = top_mph
 	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
 	if _tach_needle != null:
 		_tach_rest = _tach_needle.transform
@@ -250,7 +259,7 @@ func _pose_steering_wheel(dt: float, shown_steer: float) -> void:
 func _pose_gauges(dt: float, speed: float, rpm: float) -> void:
 	var blend := 1.0 if dt <= 0.0 else 1.0 - exp(-_GAUGE_NEEDLE_RESPONSE * dt)
 	var mph := absf(speed) * _MPS_TO_MPH
-	var speedo_norm := clampf(mph / _GAUGE_MAX_MPH, 0.0, 1.0)
+	var speedo_norm := clampf(mph / _speedo_max_mph, 0.0, 1.0)
 	if _speedo_linear_travel > 0.0:
 		var target_pos := speedo_norm * _speedo_linear_travel
 		_speedo_angle = lerpf(_speedo_angle, target_pos, blend)

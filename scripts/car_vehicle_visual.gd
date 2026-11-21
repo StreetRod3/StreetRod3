@@ -535,6 +535,25 @@ func _has_cove() -> bool:
 	return not _cove().is_empty()
 
 
+## The car file's model.accent (the C10's grille and bumpers): its nodes and their paint.
+func _accent() -> Dictionary:
+	var model: Variant = _active_spec().get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return {}
+	var accent: Variant = (model as Dictionary).get("accent", {})
+	return accent if typeof(accent) == TYPE_DICTIONARY else {}
+
+
+## The accent's paint: its own once it has been painted (the cove paint), else the car
+## file's accent color.
+func _accent_color() -> Color:
+	var own := _active_cove_color()
+	if own.a > 0.5:
+		return Color(own.r, own.g, own.b, 1.0)
+	var color: Variant = _accent().get("color", Color.WHITE)
+	return color if color is Color else Color.WHITE
+
+
 ## A car file can set model.paintable to false, and then its own colors stay.
 func _body_paintable() -> bool:
 	var model: Variant = _active_spec().get("model", {})
@@ -551,6 +570,9 @@ func _is_dash_gauge(node: Node) -> bool:
 func _paint_masked_meshes(node: Node, color: Color) -> void:
 	if _is_dash_gauge(node):
 		return
+	var accent_nodes: PackedStringArray = _accent().get("nodes", PackedStringArray())
+	if accent_nodes.has(String(node.name)):
+		color = _accent_color()
 	if node is MeshInstance3D:
 		var mesh_instance := node as MeshInstance3D
 		if mesh_instance.mesh != null and mesh_instance.visible and not _is_baked_wheel(mesh_instance):
