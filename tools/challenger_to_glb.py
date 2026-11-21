@@ -38,7 +38,9 @@ The GLB is laid out like the Studebaker's (tools/studebaker_to_glb.py):
   * real size in meters, each axis on its own: 191.3 in long, 76.1 in wide and 50.9 in
     from the bottom of the model's tires to the roof;
   * a palette texture, CELL px per color: the red paint is white with alpha 1, which
-    car_paint_mask.gdshader multiplies by the car's paint, everything else alpha 0;
+    car_paint_mask.gdshader multiplies by the car's paint, the vinyl roof and the black
+    tail panel yellow with alpha 1, which it paints with the accent (ACCENT_PARTS; the
+    car file gives the accent's color and finish), everything else alpha 0;
   * an ORM palette in the same layout (R = AO, G = roughness, B = metallic);
   * the plates on their own material with the download's plate image, its
     registration painted out (PLATE_RECT);
@@ -46,7 +48,8 @@ The GLB is laid out like the Studebaker's (tools/studebaker_to_glb.py):
     shader never touches them; the lenses frosted, with the scene's prism pattern (a grid
     of vertical flutes over horizontal bands, LENS_*) as a repeating normal map
     projected from the front;
-  * the bumpers as `bumper_front` and `bumper_rear` nodes so the game can strip them;
+  * the bumpers as `bumper_front` and `bumper_rear` nodes so the game can strip them,
+    with a panel of body paint behind each where the body is open (BACKING_*);
   * an interior (tools/challenger_interior.py) in place of the model's stand-in (the lid
     at the window line, the block seats and the ring of `Inside` are left out, its
     underbody kept): the Rallye dash with working speedometer, tachometer and gas gauge
@@ -112,6 +115,17 @@ BUMPERS = {
     'bumper_rear': {'BackBumper', 'BackBumperDetail', 'BackBumperSupp'},
 }
 BODY = 'Body'
+## Behind each bumper the body is open: its panels stop at the bumper's edges. A panel of
+## body paint closes the gap, a grid BACKING_CELL (x, y) m that follows the bumper's
+## rearmost surface seen from straight ahead (or behind), BACKING_INSET further in, so
+## the bumper hides it.
+BACKING_CELL = (0.02, 0.01)
+BACKING_INSET = 0.004
+## The second paint (the car file's model.accent): the vinyl roof and the black tail
+## panel round the taillights, by (object, material). Their palette cell is yellow, paint
+## (alpha 1) with no blue, which car_paint_mask.gdshader paints with the accent.
+ACCENT = 'Accent'
+ACCENT_PARTS = {('Roof', 'Leather'), ('BackPlate', 'BlackMetal')}
 ## The model's stand-in interior: its pieces wholly above INSIDE_DROP_Y (game frame) are
 ## the lid, the block seats and the ring, and are left out; the underbody stays.
 INSIDE = 'Inside'
@@ -152,6 +166,7 @@ LOOKS = {
     'OrangeGlass': ((225, 110, 30), False, (255, 20, 0)),
     'WhitePlastic': ((240, 232, 232), False, (255, 20, 0)),
     'FrontLight': ((235, 233, 200), False, (255, 30, 0)),
+    ACCENT: ((255, 255, 0), True, (255, 140, 0)),
 }
 GLASS_MATERIAL = {
     'name': 'glass',
@@ -565,6 +580,50 @@ def above(tris, y):
     return np.array([low[r] > y for r in roots])
 
 
+def bumper_backing(tris, sign):
+    """A panel behind a bumper (triangles, game frame; sign +1 at the front, -1 at the
+    rear): over the cells the bumper covers seen along Z, at its rearmost surface there,
+    BACKING_INSET further into the car. Returns positions and normals, by corner."""
+    cx, cy = BACKING_CELL
+    x0, y0 = tris[..., 0].min() - cx, tris[..., 1].min() - cy
+    nx = int(np.ceil((tris[..., 0].max() - x0) / cx)) + 2
+    ny = int(np.ceil((tris[..., 1].max() - y0) / cy)) + 2
+    deep = np.full((ny, nx), np.inf)
+    for t in tris:
+        a, b, c = t[:, :2]
+        det = (b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])
+        if abs(det) < 1e-12:
+            continue
+        i0, i1 = int((t[:, 0].min() - x0) / cx), int((t[:, 0].max() - x0) / cx) + 1
+        j0, j1 = int((t[:, 1].min() - y0) / cy), int((t[:, 1].max() - y0) / cy) + 1
+        px, py = np.meshgrid(x0 + (np.arange(i0, i1 + 1) + 0.5) * cx, y0 + (np.arange(j0, j1 + 1) + 0.5) * cy)
+        u = ((b[0] - px) * (c[1] - py) - (c[0] - px) * (b[1] - py)) / det
+        v = ((c[0] - px) * (a[1] - py) - (a[0] - px) * (c[1] - py)) / det
+        w = 1 - u - v
+        inside = (u >= -1e-9) & (v >= -1e-9) & (w >= -1e-9)
+        if not inside.any():
+            continue
+        d = sign * (u * t[0, 2] + v * t[1, 2] + w * t[2, 2])
+        block = deep[j0:j1 + 1, i0:i1 + 1]
+        block[inside] = np.minimum(block[inside], d[inside])
+    covered = np.isfinite(deep)
+    # Each grid corner at the rearmost of the covered cells round it.
+    padded = np.pad(deep, 1, constant_values=np.inf)
+    corner = np.minimum(np.minimum(padded[:-1, :-1], padded[:-1, 1:]), np.minimum(padded[1:, :-1], padded[1:, 1:]))
+    z = sign * (corner - BACKING_INSET)
+    gx = x0 + np.arange(nx + 1) * cx
+    gy = y0 + np.arange(ny + 1) * cy
+    pos = []
+    for j, i in zip(*np.nonzero(covered)):
+        q = [np.array([gx[ii], gy[jj], z[jj, ii]]) for jj, ii in ((j, i), (j, i + 1), (j + 1, i + 1), (j + 1, i))]
+        pos += [q[0], q[1], q[2], q[0], q[2], q[3]] if sign > 0 else [q[0], q[2], q[1], q[0], q[3], q[2]]
+    pos = np.array(pos)
+    t = pos.reshape(-1, 3, 3)
+    n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+    return pos, np.repeat(n, 3, axis=0)
+
+
 def load_pieces(path):
     data = np.load(path)
     pieces = {}
@@ -614,6 +673,8 @@ def build(src, dst):
         p['nrm'] = to_yup(p['nrm'])
     wheel = np.concatenate([p['pos'] for k, p in pieces.items() if k[0].startswith(WHEEL_PREFIX)])
     kept = {k: p for k, p in pieces.items() if not k[0].startswith(WHEEL_PREFIX) and k[0] not in DROP}
+    for name, mat in [k for k in kept if k in ACCENT_PARTS]:
+        kept[(name, ACCENT)] = kept.pop((name, mat))
     unknown = {mat for _, mat in kept} - set(LOOKS) - {GLASS, LENS, PLATE, GRILLE_MATERIAL}
     if unknown:
         raise SystemExit(f'no look for materials {sorted(unknown)}')
@@ -733,6 +794,10 @@ def build(src, dst):
         groups.setdefault(group, {}).setdefault(slot.get(mat, 0), []).append((pos, nrm, uv))
     for pos, nrm, uv in decal_meshes:
         groups['body'].setdefault(slot['decals'], []).append((pos, nrm, uv))
+    for group, sign in (('bumper_front', 1), ('bumper_rear', -1)):
+        tris = np.concatenate([q for parts in groups[group].values() for q, _, _ in parts]).reshape(-1, 3, 3)
+        pos, nrm = bumper_backing(tris, sign)
+        groups['body'][0].append((pos, nrm, np.tile(np.array(cells[BODY]), (len(pos), 1))))
 
     # The interior: its plain parts on the palette, the woodgrain on its own texture
     # (alpha 0, so the game leaves it unpainted).

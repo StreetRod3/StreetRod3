@@ -19,7 +19,7 @@ Provenance checked 2026-11-21: the scene's image paths are under `C:/Users/temp0
 
 The game's body is built from it by `tools/challenger_to_glb.py` (it runs Blender to open the scene).
 
-In the game it is `assets/cars/dodge-challenger-1970.car`: make GM for parts until there are Chrysler engines (stock 327 V8 standing in for the R/T's 383, four-speed manual), 1,590 kg (the R/T hardtop's curb weight is about 3,500 lb), 56% on the front wheels, wheels drawn 1.026 times their size to fill the wells.
+In the game it is `assets/cars/dodge-challenger-1970.car`: make GM for parts until there are Chrysler engines (stock 327 V8 standing in for the R/T's 383, four-speed manual), 1,590 kg (the R/T hardtop's curb weight is about 3,500 lb), 56% on the front wheels, wheels drawn 1.026 times their size to fill the wells, the cockpit camera at the driver's eyes with a 60 degree view.
 
 ## Changes from the download
 
@@ -33,6 +33,8 @@ In the game it is `assets/cars/dodge-challenger-1970.car`: make GM for parts unt
 | Every badge (the Challenger scripts and R/Ts on the grille, trunk lid and both front fenders, DODGE on the hood lip and tail panel, FUEL on the cap) baked into decals: colors, finish and a normal map of the letters' relief, seen straight on along each badge's plane, in one 1024 px atlas with an alpha mask, on small grids that follow the surface behind each badge 2 mm out | About 23,000 triangles to about 600, one material; from the front, side and below they look like the modeled badges, short of the raised letters' tiny shadows |
 | Headlights: bulbs (`FrontLight`) left out; the lenses drawn once (no solidify skin), frosted, with the scene's prism pattern (two brick textures on object coordinates: flutes 0.3/15.2 model units apart, bands 0.8/15.2) baked as a repeating normal map and seam color | The scene gets its sealed-beam look from a lit bulb seen through refracting, bump-patterned glass; with plain clear glass the game showed a bare bulb in a bowl |
 | Interior replaced: the scene's `Inside` lid at the window line, block seats and ring wheel left out (its underbody pan kept); a new cabin built by `tools/challenger_interior.py` from the photos below: Rallye dash with woodgrain cluster panel, four pods (working 150 mph speedometer, 8000 rpm tachometer and fuel needle; oil, temperature, ammeter and clock fixed), knob panel, radio and heater faces; three-spoke wood-rim wheel on a ribbed column (`driving_wheel`); high-back buckets and rear bench with modeled pleats, no console; pistol-grip four-speed in a boot; pedals, carpet, door and quarter trim, package shelf, visors, mirror; a headliner shaped from the roof | The scene's interior is a placeholder; about 37k triangles, the car about 131k in all. Not modeled: glovebox and ashtray doors, seat belts, window cranks, the indicator lights between the pods |
+| The vinyl roof (`Roof`) and the black tail panel round the taillights (`BackPlate`) made the accent paint, black vinyl in the car file | Like the R/T's options, the player paints them with the garage's Accent choice and picks paint, vinyl or matte |
+| A panel of body paint behind each bumper (`BACKING_*`), at the bumper's rearmost surface seen from straight ahead or behind | The body's panels stop at the bumpers' edges, so with a bumper stripped you looked into the hollow shell |
 | Each axis scaled to the real car | Width 0.3527, height 0.37, length 0.3554 of the model's size: the model is about 4% tall for its length |
 
 ## Dimensions

@@ -103,6 +103,14 @@ func _active_cove_color() -> Color:
 	return GameState.car_cove_color
 
 
+## The cove's or accent's finish: a preview shows its car file's, the player's car the
+## one chosen in the garage.
+func _active_accent_finish() -> String:
+	if _previewing:
+		return GameState.spec_accent_finish(_active_spec())
+	return GameState.car_accent_finish_now()
+
+
 func _active_bumpers_off() -> Array[String]:
 	if _previewing:
 		return _preview_bumpers_off
@@ -523,6 +531,7 @@ func _set_paint_params(shader_mat: ShaderMaterial, color: Color, mesh_instance: 
 	shader_mat.set_shader_parameter("cove_min_x", float(cove.get("min_x", 0.0)))
 	shader_mat.set_shader_parameter("use_accent", 0.0 if _accent().is_empty() else 1.0)
 	shader_mat.set_shader_parameter("accent_color", _accent_color())
+	shader_mat.set_shader_parameter("accent_finish", maxi(0, _CarFile.ACCENT_FINISHES.find(_active_accent_finish())))
 
 
 func _cove() -> Dictionary:
