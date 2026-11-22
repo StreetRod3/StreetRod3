@@ -99,6 +99,14 @@ CARS = {
                             ((-0.4, 2.2, 0.0), (0.4, 2.6, 0.66))],
         },
         'steer': ('Metal_painted', (0.36, -0.305, 1.055)),
+        # Just above the side strip (z 0.75) the rear quarter's front edge reaches 6 mm
+        # forward over the door's back edge (y 0.26) and stands 6 mm proud of it, tapering
+        # out 14 cm back; it cast a shadow onto the door. It is trimmed in under the door
+        # skin there (both sides).
+        'trim': [{'panel': 'red_paint_metallic',
+                  'region': ((0.85, 0.24, 0.70), (1.05, 0.42, 0.80)),
+                  'full': ((0.24, 0.72), (0.30, 0.785)),
+                  'ref': ((0.85, 0.245, 0.68), (1.05, 0.268, 0.82))}],
     },
 }
 
@@ -125,6 +133,9 @@ PIPE_BEHIND = 0.6
 ## The length scale eases from the wheelbase's to the overhangs' over this far either
 ## side of each axle (m).
 BLEND = 0.35
+## A trimmed panel edge ends up this far inside the skin it meets (m), so where the two
+## overlap the neighbor is drawn and they don't flicker.
+TRIM_UNDER = 0.001
 ## Clear glass with a faint green tint, as on the Studebaker.
 GLASS_MATERIAL = {
     'name': 'glass',
@@ -286,6 +297,79 @@ def length_map(z, front, rear, length, wheelbase, lo, hi):
     return np.interp(z, grid, mapped), np.interp(z, grid, local), (s_mid, s_over)
 
 
+def trim_lip(pos, nrm, panel, part, trim):
+    """Bring a panel's edge in flush with the panel it meets at a seam, on both sides of
+    the car (model frame, |x| outward). The panel being trimmed is the part with the
+    most of `panel`'s outward faces in the `region` box; the `ref` box holds the
+    neighbor's edge, and the neighbor's outermost |x| there at each height, on each side,
+    is its skin.
+    Every point of the trimmed panel's outward skin in the region that stands out past
+    that skin comes in to TRIM_UNDER below it, fully inside the `full` (y, z) span and
+    easing to nothing at the region's edges. Each corner's normal turns by as much as
+    the surface around it turned, so nothing outside the change shades differently.
+    Changes pos and nrm."""
+    import numpy as np
+    (rx0, ry0, rz0), (rx1, ry1, rz1) = trim['region']
+    (fy0, fz0), (fy1, fz1) = trim['full']
+    (ax0, ay0, az0), (ax1, ay1, az1) = trim['ref']
+    flat = pos.reshape(-1, 3)
+    ax = np.abs(flat[:, 0])
+
+    def in_box(lo, hi):
+        return (ax >= lo[0]) & (ax <= hi[0]) & (flat[:, 1] >= lo[1]) & (flat[:, 1] <= hi[1]) \
+            & (flat[:, 2] >= lo[2]) & (flat[:, 2] <= hi[2])
+    # Outward by the model's own normals: the mirrored side's faces are wound the other
+    # way round.
+    outward = panel & (np.sign(pos.mean(1)[:, 0]) * nrm.mean(1)[:, 0] > 0.2)
+    region = in_box((rx0, ry0, rz0), (rx1, ry1, rz1))
+    hits = outward & region.reshape(-1, 3).all(1)
+    trimmed = np.bincount(part[hits]).argmax()
+    corner_part = np.repeat(part, 3)
+    ref = in_box((ax0, ay0, az0), (ax1, ay1, az1)) & (corner_part != trimmed) & np.repeat(panel, 3)
+    # Each side its own level: the model is not quite centered on X.
+    bins = np.arange(az0, az1 + 0.005, 0.005)
+    target = np.zeros(len(flat))
+    for side in (1.0, -1.0):
+        here = np.sign(flat[:, 0]) == side
+        level = np.array([ax[ref & here & (np.abs(flat[:, 2] - z) < 0.006)].max(initial=-1.0) for z in bins])
+        ok = level > 0
+        target[here] = np.interp(flat[here, 2], bins[ok], level[ok]) - TRIM_UNDER
+    skin = region & np.repeat(outward & (part == trimmed), 3)
+
+    def ease(v, a0, a1, b0, b1):
+        up = np.clip((v - a0) / max(a1 - a0, 1e-9), 0, 1)
+        down = np.clip((b1 - v) / max(b1 - b0, 1e-9), 0, 1)
+        t = np.minimum(up, down)
+        return t * t * (3 - 2 * t)
+    weight = ease(flat[:, 1], ry0 - 1.0, ry0, fy1, ry1) * ease(flat[:, 2], rz0, fz0, fz1, rz1)
+    cut = np.where(skin, np.minimum(target - ax, 0.0) * weight, 0.0)
+    # Every corner at a point that moves moves with it, whatever part it belongs to.
+    _, vid = np.unique(np.round(flat, 5), axis=0, return_inverse=True)
+    vid = vid.reshape(-1)
+    nv = vid.max() + 1
+    vcut = np.zeros(nv)
+    np.minimum.at(vcut, vid, cut)
+
+    def vertex_normals(points):
+        tri = points.reshape(-1, 3, 3)
+        f = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+        g = np.zeros((nv, 3))
+        for c in range(3):
+            np.add.at(g, vid[c::3], f)
+        return g / np.maximum(np.linalg.norm(g, axis=1, keepdims=True), 1e-12)
+    before = vertex_normals(flat)
+    flat[:, 0] += np.sign(flat[:, 0]) * vcut[vid]
+    pos[:] = flat.reshape(pos.shape)
+    after = vertex_normals(flat)
+    turned = np.linalg.norm(after - before, axis=1) > 1e-6
+    corners = turned[vid]
+    n = nrm.reshape(-1, 3)
+    n[corners] += (after - before)[vid[corners]]
+    n[corners] /= np.maximum(np.linalg.norm(n[corners], axis=1, keepdims=True), 1e-12)
+    nrm[:] = n.reshape(nrm.shape)
+    return float(-vcut.min())
+
+
 def plate_quad(tris, facing):
     """A plate face over the pack's plate (its triangles, game frame): in the plane of the
     plate, its long side level, covering the plate's extent, PLATE_OUT in front of it,
@@ -374,6 +458,9 @@ def build(car, dst):
              and phi[p][1] > rear_axle + PIPE_BEHIND}
     dropped = wheel_parts | pipes
     keep = ~np.isin(part, list(dropped))
+
+    for trim in cfg.get('trim', []):
+        trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim)
 
     steer_mat, steer_at = cfg['steer']
     near = [p for p in np.unique(part[mat == names.index(steer_mat)])

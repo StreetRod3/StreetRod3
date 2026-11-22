@@ -57,6 +57,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | Tailpipes left out | They stuck out behind the car once the rear bumper came off (user, 2026-11-22) |
 | Bumpers, with their guards, brackets and plates, as `bumper_front` and `bumper_rear` | So the game can strip them |
 | Plates replaced by the blank plate (`assets/cars/plate-blank.png`, from the Impala's, `tools/make_blank_plate.py`) on a material named `plate` | The pack's plates read "LIBAU"; the player is to make their own plates later (user, 2026-11-22) |
+| Buick: the rear quarters' front edge trimmed in flush with the doors just above the side strip | The pack's quarter panel reaches 6 mm forward over the door's back edge there and stands 6 mm proud of it, so it cast a shadow onto the door (user, 2026-11-22); `trim` in the converter's `CARS` table |
 | Front lamps in the tail-light material made clear | The pack gives the Buick red parking lamps; the real ones were clear |
 | Colors from the material settings in one palette, the paint as the mask | Most of the images the materials used are not in the download |
 | Length scaled in two parts | The wheelbase to the real one between the axles, the overhangs to the rest of the real length, easing from one to the other around each axle, so the car is neither too long nor short in the wheelbase (user, 2026-11-22) |
