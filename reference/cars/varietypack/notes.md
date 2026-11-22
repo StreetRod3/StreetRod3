@@ -47,14 +47,26 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 
 ## Converting a car
 
-`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` and `buick-1952-coupe`.
+`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` and `buick-1952-coupe`.
+
+## Changes from the download
+
+| Change | Why |
+| --- | --- |
+| Wheels, hubcaps, brake backing plates and spring hangers left out | The game mounts its own wheels and draws its own suspension |
+| Tailpipes left out | They stuck out behind the car once the rear bumper came off (user, 2026-11-22) |
+| Bumpers, with their guards, brackets and plates, as `bumper_front` and `bumper_rear` | So the game can strip them |
+| Plates replaced by the blank plate (`assets/cars/plate-blank.png`, from the Impala's, `tools/make_blank_plate.py`) on a material named `plate` | The pack's plates read "LIBAU"; the player is to make their own plates later (user, 2026-11-22) |
+| Front lamps in the tail-light material made clear | The pack gives the Buick red parking lamps; the real ones were clear |
+| Colors from the material settings in one palette, the paint as the mask | Most of the images the materials used are not in the download |
+| Length scaled in two parts | The wheelbase to the real one between the axles, the overhangs to the rest of the real length, easing from one to the other around each axle, so the car is neither too long nor short in the wheelbase (user, 2026-11-22) |
 
 ## Dimensions
 
 | Car | Real car | Model as built |
 | --- | --- | --- |
-| 1951 Hudson Hornet club coupe | 208.5 in long, 77.4 in wide, 60.4 in high, 124 in wheelbase, 7.10-15 tires | Scaled per axis to the real length, width and height; the model's overhangs are long, so its wheelbase comes out at 118.3 in |
-| 1952 Buick Special 48D | 204 in long, 76.7 in wide, 63.4 in high, 121.5 in wheelbase | Scaled per axis to the real length, width and height; wheelbase 122.2 in |
+| 1951 Hudson Hornet club coupe | 208.5 in long, 77.4 in wide, 60.4 in high, 124 in wheelbase, 7.10-15 tires | Real length, width, height and wheelbase; the model's overhangs (95 in together) shortened to the real 84.5 in (scale 0.883), the wheelbase kept (1.000) |
+| 1952 Buick Special 48D | 204 in long, 76.7 in wide, 63.4 in high, 121.5 in wheelbase | Real length, width, height and wheelbase; the model's 115 in wheelbase stretched by 1.057, its overhangs by 1.075 |
 
 - Conceptcarz, Hudson Hornet Series 7A club coupe: https://www.conceptcarz.com/w9330/hudson-hornet-series-7a.aspx
 - Wikipedia, Hudson Hornet: https://en.wikipedia.org/wiki/Hudson_Hornet

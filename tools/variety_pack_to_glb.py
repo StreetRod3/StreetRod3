@@ -17,9 +17,11 @@ taken out) the nose points along -Y, Z is up and the driver's side is +X.
 
 What goes where is found by loose part:
 
-  * the wheels are left out (the game mounts its own): the tires are the parts of the
-    tire material that reach the floor, and every part inside a tire's box is a wheel
-    part (rim, hubcap, whitewall);
+  * the wheels are left out (the game mounts its own wheels and suspension): the tires
+    are the parts of the tire material that reach the floor, and every part inside a
+    tire's box, or inboard of it by up to WELL_IN or centered on the hub and outboard by up to WELL_OUT, is a wheel part (rim, hubcap,
+    whitewall, brake backing plate, spring hangers);
+  * the tailpipes are left out: long, low parts that run out behind the rear axle;
   * the bumpers are every part that lies wholly inside the car's BUMPER boxes, so the
     game can strip them;
   * the steering wheel is the rim part (the biggest part of its material near STEER_AT)
@@ -30,13 +32,20 @@ The GLB is laid out like the Studebaker's (tools/studebaker_to_glb.py):
 
   * Y up, nose along +Z, driver's side +X;
   * centered on X and Z, lowest point of the body at Y = 0;
-  * real size in meters, each axis on its own: the car's overall length, its width over
-    the painted body, and its height from the bottom of the model's tires to the roof;
+  * real size in meters: the width over the painted body and the height from the bottom
+    of the model's tires to the roof each scaled on their own; along the car, the stretch
+    between the axles is scaled to the real wheelbase and the overhangs to what is left
+    of the real overall length, easing from one scale to the other around each axle
+    (BLEND), so the car is neither too long nor too short in the wheelbase;
+  * the front lamps the model gives its tail-light material are clear parking lamps;
   * a palette texture, CELL px per color: the body paint is white with alpha 1, which
     car_paint_mask.gdshader multiplies by the car's paint; everything else alpha 0;
   * an ORM palette in the same layout (R = AO, G = roughness, B = metallic);
   * the glass as its own see-through material (GLASS_MATERIAL), so the paint shader
-    never touches it, and the plates on their own material with the pack's plate image.
+    never touches it;
+  * the pack's plates (they read "LIBAU") replaced by the blank plate,
+    assets/cars/plate-blank.png, laid over each one in its own plane on a material
+    named `plate`, so a plate of the player's own can go there later.
 
 The numbers the .car file needs are printed at the end.
 """
@@ -51,14 +60,15 @@ PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reference
 CELL = 16
 IN = 0.0254
 
-## Per car: the real car's size (inches), its paint material, the boxes that hold its
-## bumpers (any number of boxes each) and where its steering wheel's rim is, all in the model's frame (meters,
-## nose -Y, Z up, driver's side +X).
+## Per car: the real car's size and wheelbase (inches), its paint material, the boxes
+## that hold its bumpers (any number of boxes each) and where its steering wheel's rim
+## is, all in the model's frame (meters, nose -Y, Z up, driver's side +X).
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
     'hudson-1951': {
         'size_in': (208.5, 77.4, 60.4),
+        'wheelbase_in': 124.0,
         'paint': {'green_metallic'},
         'bumpers': {
             # The bar with its guards and plate; the two arms that hold it to the frame;
@@ -78,6 +88,7 @@ CARS = {
     # 63.4 in high on a 121.5 in wheelbase (Hometown Buick, model 48D).
     'buick-1952-coupe': {
         'size_in': (204.0, 76.7, 63.4),
+        'wheelbase_in': 121.5,
         'paint': {'red_paint_metallic'},
         'bumpers': {
             'bumper_front': [((-1.1, -2.6, 0.0), (1.1, -2.05, 0.62)),
@@ -93,7 +104,27 @@ CARS = {
 
 TIRE = 'tyre'
 GLASS = {'Glass', 'glass.001', 'Glass_Window_Neutral', 'Glass_Window_Neutral.001'}
-PLATE = {'number plate diffuse': 'number_plate_diffuse.png', 'numberplate': 'number_plates.png'}
+## The pack's plates, which give way to the blank plate (tools/make_blank_plate.py) on a
+## material named `plate`, so the game can later put the player's own plate there.
+PLATE = {'number plate diffuse', 'numberplate'}
+PLATE_IMAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'assets', 'cars', 'plate-blank.png')
+## How far in front of the pack's plate the blank one sits (m, model scale).
+PLATE_OUT = 0.002
+## The wheel zone reaches this far inboard of each tire (m): the brake backing plates and
+## the spring hangers go with the wheels.
+WELL_IN = 0.25
+## ... and this far outboard: the Hudson's hubcaps stand 2 cm proud of its tires.
+WELL_OUT = 0.05
+## A part out there is a wheel part only if its middle is this close to the hub (m).
+HUB_CENTERED = 0.1
+## Tailpipes: parts longer than PIPE_LONG (m) whose top is below PIPE_TOP and whose
+## back end is more than PIPE_BEHIND behind the rear axle.
+PIPE_LONG = 1.5
+PIPE_TOP = 0.45
+PIPE_BEHIND = 0.6
+## The length scale eases from the wheelbase's to the overhangs' over this far either
+## side of each axle (m).
+BLEND = 0.35
 ## Clear glass with a faint green tint, as on the Studebaker.
 GLASS_MATERIAL = {
     'name': 'glass',
@@ -104,6 +135,9 @@ GLASS_MATERIAL = {
 }
 PLAIN = (255, round(0.82 * 255), round(0.05 * 255))
 CHROME = ((240, 240, 244), (255, 15, 255))
+## The model's front lamps in its tail-light material: the real cars' parking lamps were
+## clear glass.
+PARKING_LAMP = ((240, 232, 210), (255, 40, 30))
 ## (color, (AO, roughness, metallic)) by the pack's material names; any other material
 ## takes its color, roughness and metallic from its own settings (or the mean of its
 ## image, where the image is in the download).
@@ -225,6 +259,60 @@ def look(info):
     return color, (255, rough, metal)
 
 
+def length_map(z, front, rear, length, wheelbase, lo, hi):
+    """The game's Z for each model Z: the stretch between the axles scales the model's
+    wheelbase to the real one, the overhangs beyond them take what is left of the real
+    length, and the scale eases from one to the other over BLEND either side of each
+    axle, so no panel gets a crease. Returns (mapped z, the local scale at each z)."""
+    import numpy as np
+    grid = np.linspace(lo - 0.05, hi + 0.05, 8001)
+
+    def ease(t):
+        t = np.clip(t, 0.0, 1.0)
+        return t * t * (3.0 - 2.0 * t)
+    over = np.maximum(ease((grid - front + BLEND) / (2 * BLEND)), ease((rear + BLEND - grid) / (2 * BLEND)))
+    step = grid[1] - grid[0]
+    inner = np.concatenate([[0.0], np.cumsum((1.0 - over[1:] + 1.0 - over[:-1]) / 2 * step)])
+    outer = np.concatenate([[0.0], np.cumsum((over[1:] + over[:-1]) / 2 * step)])
+
+    def at(a, v):
+        return np.interp(v, grid, a)
+    rows = np.array([[at(inner, front) - at(inner, rear), at(outer, front) - at(outer, rear)],
+                     [at(inner, hi) - at(inner, lo), at(outer, hi) - at(outer, lo)]])
+    s_mid, s_over = np.linalg.solve(rows, [wheelbase, length])
+    mapped = s_mid * inner + s_over * outer
+    mapped -= (at(mapped, lo) + at(mapped, hi)) / 2
+    local = s_mid * (1.0 - over) + s_over * over
+    return np.interp(z, grid, mapped), np.interp(z, grid, local), (s_mid, s_over)
+
+
+def plate_quad(tris, facing):
+    """A plate face over the pack's plate (its triangles, game frame): in the plane of the
+    plate, its long side level, covering the plate's extent, PLATE_OUT in front of it,
+    with UVs over the whole plate image seen from in front."""
+    import numpy as np
+    pts = tris.reshape(-1, 3)
+    mid = (pts.min(0) + pts.max(0)) / 2
+    _, _, vt = np.linalg.svd(pts - pts.mean(0))
+    normal = vt[2] * (1.0 if vt[2][2] * facing > 0 else -1.0)
+    up = np.array([0.0, 1.0, 0.0]) - normal[1] * normal
+    up /= np.linalg.norm(up)
+    right = np.cross(up, normal)
+    q = pts - mid
+    half_w = np.abs(q @ right).max()
+    half_h = np.abs(q @ up).max()
+    front_face = (q @ normal).max()
+    c = mid + normal * (front_face + PLATE_OUT)
+    corners = [c - right * half_w - up * half_h, c + right * half_w - up * half_h,
+               c + right * half_w + up * half_h, c - right * half_w + up * half_h]
+    uv = np.array([[0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]])
+    order = [(0, 1, 2), (0, 2, 3)]
+    pos = np.array([[corners[i] for i in t] for t in order])
+    uvs = np.array([[uv[i] for i in t] for t in order])
+    nrm = np.zeros_like(pos) + normal
+    return pos, nrm, uvs, (half_w * 2, half_h * 2)
+
+
 def build(car, dst):
     import numpy as np
     from PIL import Image
@@ -241,7 +329,7 @@ def build(car, dst):
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         data = dict(np.load(npz))
         info = json.load(open(npz + '.json'))
-    pos, nrm, uv, mat, part = data['pos'], data['nrm'], data['uv'], data['mat'], data['part']
+    pos, nrm, mat, part = data['pos'], data['nrm'], data['mat'], data['part']
     names = [d['name'] for d in info]
     nparts = part.max() + 1
     plo = np.full((nparts, 3), np.inf)
@@ -250,14 +338,42 @@ def build(car, dst):
     np.minimum.at(plo, np.repeat(part, 3), flat)
     np.maximum.at(phi, np.repeat(part, 3), flat)
 
-    def inside(p, lo, hi, margin=0.0):
-        return bool(np.all(plo[p] >= np.asarray(lo) - margin) and np.all(phi[p] <= np.asarray(hi) + margin))
+    # Loose vertices with no faces make empty parts; they hold nothing.
+    has_faces = np.bincount(part, minlength=nparts) > 0
 
+    def inside(p, lo, hi, margin=0.0):
+        return bool(has_faces[p] and np.all(plo[p] >= np.asarray(lo) - margin)
+                    and np.all(phi[p] <= np.asarray(hi) + margin))
+
+    # The wheels: everything in a tire's box, widened inboard by WELL_IN (the brake
+    # backing plates and the spring hangers, which the game's own wheels and suspension
+    # replace) and, for parts centered on the hub, outboard by WELL_OUT (hubcaps that
+    # stand proud of the tire).
     floor = flat[:, 2].min()
     tire_mat = names.index(TIRE)
     tires = [p for p in np.unique(part[mat == tire_mat]) if plo[p][2] < floor + 0.01]
-    wheel_parts = {p for p in range(nparts) for t in tires if inside(p, plo[t], phi[t], 0.01)}
-    keep = ~np.isin(part, list(wheel_parts))
+    wheel_parts = set()
+    for t in tires:
+        lo, hi = plo[t].copy(), phi[t].copy()
+        hub = (plo[t][1:] + phi[t][1:]) / 2
+        out_lo, out_hi = lo.copy(), hi.copy()
+        if lo[0] > 0:
+            lo[0] -= WELL_IN
+            out_hi[0] += WELL_OUT
+        else:
+            hi[0] += WELL_IN
+            out_lo[0] -= WELL_OUT
+        wheel_parts |= {p for p in range(nparts) if inside(p, lo, hi, 0.01)}
+        # Outboard only what is centered on the hub: the hubcaps, not the script on a
+        # fender skirt beside the tire.
+        wheel_parts |= {p for p in range(nparts) if inside(p, out_lo, out_hi, 0.01)
+                        and np.linalg.norm((plo[p][1:] + phi[p][1:]) / 2 - hub) < HUB_CENTERED}
+    # The tailpipes: long, low parts that run out behind the rear axle.
+    rear_axle = max((plo[t][1] + phi[t][1]) / 2 for t in tires)
+    pipes = {p for p in range(nparts) if phi[p][1] - plo[p][1] > PIPE_LONG and phi[p][2] < PIPE_TOP
+             and phi[p][1] > rear_axle + PIPE_BEHIND}
+    dropped = wheel_parts | pipes
+    keep = ~np.isin(part, list(dropped))
 
     steer_mat, steer_at = cfg['steer']
     near = [p for p in np.unique(part[mat == names.index(steer_mat)])
@@ -268,7 +384,7 @@ def build(car, dst):
     for g, boxes in cfg['bumpers'].items():
         for lo, hi in boxes:
             for p in range(nparts):
-                if inside(p, lo, hi) and p not in wheel_parts:
+                if inside(p, lo, hi) and p not in dropped:
                     group_of[p] = g
     for p in steer_parts:
         group_of[p] = 'driving_wheel'
@@ -279,50 +395,77 @@ def build(car, dst):
 
     pos, nrm = to_yup(pos), to_yup(nrm)
     kept = pos[keep].reshape(-1, 3)
-    paint = np.isin(mat, [names.index(n) for n in cfg['paint']])
-    body = pos[keep & paint].reshape(-1, 3)
+    paint_ids = [names.index(n) for n in cfg['paint']]
+    body = pos[keep & np.isin(mat, paint_ids)].reshape(-1, 3)
     tire_pos = pos[np.isin(part, tires)].reshape(-1, 3)
     lo, hi = kept.min(0), kept.max(0)
     length_in, width_in, height_in = cfg['size_in']
-    scale = np.array([width_in * IN / (body[:, 0].max() - body[:, 0].min()),
-                      height_in * IN / (hi[1] - tire_pos[:, 1].min()),
-                      length_in * IN / (hi[2] - lo[2])])
-    origin = np.array([(body[:, 0].min() + body[:, 0].max()) / 2, lo[1], (lo[2] + hi[2]) / 2])
+    front_z = np.mean([(-(plo[t][1] + phi[t][1]) / 2) for t in tires if (plo[t][1] + phi[t][1]) / 2 < 0])
+    rear_z = np.mean([(-(plo[t][1] + phi[t][1]) / 2) for t in tires if (plo[t][1] + phi[t][1]) / 2 >= 0])
+    scale_x = width_in * IN / (body[:, 0].max() - body[:, 0].min())
+    scale_y = height_in * IN / (hi[1] - tire_pos[:, 1].min())
+    origin_xy = np.array([(body[:, 0].min() + body[:, 0].max()) / 2, lo[1]])
 
     def to_game(q):
-        return (q - origin) * scale
+        q = np.asarray(q, np.float64)
+        z, _, _ = length_map(q[..., 2], front_z, rear_z, length_in * IN, cfg['wheelbase_in'] * IN, lo[2], hi[2])
+        return np.stack([(q[..., 0] - origin_xy[0]) * scale_x, (q[..., 1] - origin_xy[1]) * scale_y, z], -1)
 
-    even = scale.mean()
+    def normals_to_game(q, n):
+        _, local, _ = length_map(q[..., 2], front_z, rear_z, length_in * IN, cfg['wheelbase_in'] * IN, lo[2], hi[2])
+        n = np.stack([n[..., 0] / scale_x, n[..., 1] / scale_y, n[..., 2] / local], -1)
+        return n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
+
+    _, _, (s_mid, s_over) = length_map(np.zeros(1), front_z, rear_z, length_in * IN, cfg['wheelbase_in'] * IN, lo[2], hi[2])
     rim = pos[part == rim_part].reshape(-1, 3)
-    rim_mid = to_game((rim.min(0) + rim.max(0)) / 2)
+    rim_mid_src = (rim.min(0) + rim.max(0)) / 2
+    rim_mid = to_game(rim_mid_src)
+    even = (scale_x + scale_y + s_mid) / 3
 
+    # Each kept triangle's look: the paint, glass, the plate, or a palette color; the
+    # front lamps in the tail-light material are parking lamps.
+    tri_z = pos[..., 2].mean(1)
     looks = []
-    plates = {}
     groups = {}
+    plate_parts = []
     for m in np.unique(mat[keep]):
         name = names[m]
-        sel_m = keep & (mat == m)
-        for g in np.unique(group_of[part[sel_m]]):
-            sel = sel_m & (group_of[part] == g)
-            if g == 'driving_wheel':
-                p = rim_mid + (pos[sel] - origin - rim_mid / scale) * even
-                n = nrm[sel]
-            else:
-                p = to_game(pos[sel])
-                n = nrm[sel] / scale
-                n /= np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
-            gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': {}})
-            if name in GLASS:
-                gp['glass'].append((p, n))
-                continue
+        base = name.split('.')[0]
+        for g in np.unique(group_of[part[keep & (mat == m)]]):
+            sel_g = keep & (mat == m) & (group_of[part] == g)
             if name in PLATE:
-                gp['plate'].setdefault(name, []).append((p, n, uv[sel]))
-                plates[name] = PLATE[name]
+                plate_parts += [(g, p) for p in np.unique(part[sel_g])]
                 continue
-            lk = (((255, 255, 255), PLAIN), True) if m in [names.index(x) for x in cfg['paint']] else (look(info[m]), False)
-            if lk not in looks:
-                looks.append(lk)
-            gp['palette'].append((p, n, looks.index(lk)))
+            for front_lamp in (False, True):
+                sel = sel_g & ((tri_z > 0) == front_lamp) if base == 'tail light' else (sel_g if not front_lamp else None)
+                if sel is None or not sel.any():
+                    continue
+                if g == 'driving_wheel':
+                    p = rim_mid + (pos[sel] - rim_mid_src) * even
+                    n = nrm[sel]
+                else:
+                    p = to_game(pos[sel])
+                    n = normals_to_game(pos[sel], nrm[sel])
+                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': []})
+                if name in GLASS:
+                    gp['glass'].append((p, n))
+                    continue
+                if m in paint_ids:
+                    lk = (((255, 255, 255), PLAIN), True)
+                elif front_lamp:
+                    lk = (PARKING_LAMP, False)
+                else:
+                    lk = (look(info[m]), False)
+                if lk not in looks:
+                    looks.append(lk)
+                gp['palette'].append((p, n, looks.index(lk)))
+    plate_sizes = []
+    for g, p in plate_parts:
+        t = to_game(pos[part == p])
+        facing = 1 if t[..., 2].mean() > 0 else -1
+        qp, qn, qu, size_m = plate_quad(t, facing)
+        groups.setdefault(g, {'palette': [], 'glass': [], 'plate': []})['plate'].append((qp, qn, qu))
+        plate_sizes.append(size_m)
 
     grid = math.ceil(math.sqrt(len(looks)))
     size = grid * CELL
@@ -337,23 +480,18 @@ def build(car, dst):
         cells.append(((cx + 0.5) / grid, (cy + 0.5) / grid))
 
     out = Gltf()
-    out.images = [png_bytes(albedo), png_bytes(orm)]
-    out.textures = [0, 1]
+    plate_im = Image.open(PLATE_IMAGE).convert('RGB')
+    plate_im.putalpha(0)
+    out.images = [png_bytes(albedo), png_bytes(orm), png_bytes(plate_im)]
+    out.textures = [0, 1, 2]
     out.materials = [{
         'name': car + '_palette',
         'pbrMetallicRoughness': {'baseColorTexture': {'index': 0},
                                  'metallicRoughnessTexture': {'index': 1},
                                  'metallicFactor': 1.0, 'roughnessFactor': 1.0},
-        'alphaMode': 'OPAQUE', 'doubleSided': True}, GLASS_MATERIAL]
-    plate_mat = {}
-    for name, image in sorted(plates.items()):
-        im = Image.open(os.path.join(PACK, 'textures', image)).convert('RGB')
-        out.images.append(png_bytes(im))
-        out.textures.append(len(out.images) - 1)
-        plate_mat[name] = len(out.materials)
-        out.materials.append({'name': 'plate', 'pbrMetallicRoughness': {
-            'baseColorTexture': {'index': len(out.textures) - 1}, 'metallicFactor': 0.3, 'roughnessFactor': 0.5},
-            'alphaMode': 'OPAQUE', 'doubleSided': True})
+        'alphaMode': 'OPAQUE', 'doubleSided': True}, GLASS_MATERIAL,
+        {'name': 'plate', 'doubleSided': True,
+         'pbrMetallicRoughness': {'baseColorTexture': {'index': 2}, 'metallicFactor': 0.3, 'roughnessFactor': 0.5}}]
 
     def primitives(g, frame=None):
         gp = groups.get(g)
@@ -376,12 +514,11 @@ def build(car, dst):
             p, n = place(np.concatenate([a for a, _ in gp['glass']]), np.concatenate([b for _, b in gp['glass']]))
             p, n, u, idx = share_corners(p, n, np.zeros((len(p), 2), np.float32))
             prims.append(out.primitive(p, n, idx, 1))
-        for name, parts in gp['plate'].items():
-            p, n = place(np.concatenate([a for a, _, _ in parts]), np.concatenate([b for _, b, _ in parts]))
-            u = np.concatenate([c for _, _, c in parts]).reshape(-1, 2).astype(np.float32).copy()
-            u[:, 1] = 1.0 - u[:, 1]
+        if gp['plate']:
+            p, n = place(np.concatenate([a for a, _, _ in gp['plate']]), np.concatenate([b for _, b, _ in gp['plate']]))
+            u = np.concatenate([c for _, _, c in gp['plate']]).reshape(-1, 2).astype(np.float32)
             p, n, u, idx = share_corners(p, n, u)
-            prims.append(out.primitive(p, n, idx, plate_mat[name], u))
+            prims.append(out.primitive(p, n, idx, 2, u))
         return prims
 
     steer = np.concatenate([a for a, _, _ in groups['driving_wheel']['palette']]).reshape(-1, 3)
@@ -399,16 +536,21 @@ def build(car, dst):
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
     out.write(dst, roots)
 
-    size_m = (hi - lo) * scale
+    game = to_game(kept)
+    size_m = game.max(0) - game.min(0)
     print(f'{dst}: {int(keep.sum())} tris, {len(looks)} colors, {os.path.getsize(dst) / 1e6:.1f} MB, '
-          f'size {size_m.round(3)} m ({(size_m / IN).round(1)} in), scale {scale.round(3)}')
+          f'size {size_m.round(3)} m ({(size_m / IN).round(1)} in), scale x {scale_x:.3f} y {scale_y:.3f} '
+          f'z {s_mid:.3f} between the axles, {s_over:.3f} on the overhangs')
     print('bumper parts:', {g: int(np.sum(group_of == g)) for g in cfg['bumpers']},
-          'steering parts:', len(steer_parts), 'wheel parts:', len(wheel_parts))
+          'steering parts:', len(steer_parts), 'wheel parts:', len(wheel_parts), 'tailpipes:', len(pipes),
+          'plates (in):', [tuple(round(float(v) / IN, 1) for v in s) for s in plate_sizes])
     w = to_game(tire_pos)
     front, rear = w[w[:, 2] > 0], w[w[:, 2] <= 0]
     radius = (w[:, 1].max() - w[:, 1].min()) / 2
-    fz = (front[:, 2].min() + front[:, 2].max()) / 2
-    rz = (rear[:, 2].min() + rear[:, 2].max()) / 2
+    # The axles where the length map put them (the tires' own outlines lean toward the
+    # overhangs, whose scale differs).
+    fz = to_game(np.array([0.0, 0.0, front_z]))[2]
+    rz = to_game(np.array([0.0, 0.0, rear_z]))[2]
     right = front[front[:, 0] > 0]
     track = (right[:, 0].min() + right[:, 0].max()) / 2
     wheel_y = (w[:, 1].min() + w[:, 1].max()) / 2
@@ -417,7 +559,6 @@ def build(car, dst):
           % (track, wheel_y, fz, rz, (fz - rz) / IN))
     print('ground clearance in the model %.3f m' % (-w[:, 1].min()))
     print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
-
 
 if __name__ == '__main__':
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]

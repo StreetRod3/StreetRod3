@@ -86,3 +86,4 @@ assets/locations/garage/us_jerry_can.glb filter=lfs diff=lfs merge=lfs -text
 assets/locations/garage/us_jerry_can_*.png filter=lfs diff=lfs merge=lfs -text
 reference/**/*.blend filter=lfs diff=lfs merge=lfs -text
 reference/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+assets/cars/plate-blank.png filter=lfs diff=lfs merge=lfs -text
