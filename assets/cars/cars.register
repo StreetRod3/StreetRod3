@@ -89,6 +89,24 @@
       "hp": 350.0,
       "color": [0.85, 0.42, 0.1, 1.0],
       "car_file": "res://assets/cars/dodge-challenger-1970.car"
+    },
+    {
+      "id": "hudson-hornet-1951",
+      "name": "1951 Hudson Hornet",
+      "price": 1000,
+      "vmax": 175.0,
+      "hp": 155.0,
+      "color": [0.04, 0.36, 0.2, 1.0],
+      "car_file": "res://assets/cars/hudson-hornet-1951.car"
+    },
+    {
+      "id": "buick-special-1952",
+      "name": "1952 Buick Special",
+      "price": 950,
+      "vmax": 170.0,
+      "hp": 155.0,
+      "color": [0.55, 0.06, 0.05, 1.0],
+      "car_file": "res://assets/cars/buick-special-1952.car"
     }
   ]
 }
