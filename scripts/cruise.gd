@@ -6,7 +6,7 @@ extends Node3D
 ## and the camera hangs back. Free roam uses the same city and the race car's own driving.
 ## Other cars drive the streets in a lane and turn off at random. In a free roam, police
 ## drive with the heat: two cars with none, five when it is full. A cop sees 150 m, a
-## crash calls them in from anywhere, and hitting a cop fills the heat.
+## crash calls them in from anywhere, and hitting a cop jumps the heat to 150%.
 
 const CITY_MAP := "res://assets/maps/city.trk"
 const _KING_CAR_TEXTURE := preload("res://assets/locations/city/king.png")
@@ -25,6 +25,7 @@ const _TouchControls := preload("res://scripts/race_touch_controls.gd")
 const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _StreetLamp := preload("res://scripts/street_lamp.gd")
 const _CruiseTraffic := preload("res://scripts/cruise_traffic.gd")
+const _Zones := preload("res://scripts/speed_zones.gd")
 const _CruiseMinimap := preload("res://scripts/cruise_minimap.gd")
 const _CarFile := preload("res://scripts/car_file.gd")
 const _RearMirror := preload("res://scripts/rear_mirror.gd")
@@ -35,6 +36,7 @@ const _GroundMaterial := preload("res://scripts/ground_material.gd")
 const _Skies := preload("res://scripts/skies.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _Ticket := preload("res://scripts/speeding_ticket.gd")
+const _SpeedSign := preload("res://scripts/speed_sign.gd")
 ## The sky over the city at night (GameState.night).
 const _NIGHT_SKY := "night-stars"
 ## The scenery buildings are merged into one mesh per square of this size, in meters, so
@@ -79,6 +81,11 @@ const _CURB_HALF := 0.12
 const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
 const _BUSH_DARK := Color(0.14, 0.32, 0.13)
 const _BUSH_MID := Color(0.24, 0.42, 0.17)
+## A speed sign stands this far past the crossing street, on the sidewalk.
+const _SPEED_SIGN_M := 3.0
+## Past this street's curb. The board reaches back toward the road, so the post sits
+## far enough out that the whole sign is on the sidewalk.
+const _SPEED_SIGN_OUT := 1.4
 ## Past the curb, in meters. The lamp head reaches back over the gutter.
 const _LAMP_SETBACK := 0.95
 ## The pole's base must sit at least this far off every paved edge.
@@ -1127,6 +1134,7 @@ func _build_city(track: Dictionary) -> void:
 	_build_places(track)
 	_build_blocks(track)
 	_build_streetscape(track)
+	_build_speed_signs(track)
 	_floor = ground
 
 
@@ -1225,6 +1233,93 @@ func _road_meshes(track: Dictionary) -> Array:
 	marks.generate_normals()
 	lanes.generate_normals()
 	return [asphalt.commit(), marks.commit(), lanes.commit()]
+
+
+## A speed-limit sign on the right, just past a junction. A junction is a node where
+## three or more streets meet.
+func _build_speed_signs(track: Dictionary) -> void:
+	var nodes: Dictionary = track["nodes"]
+	var streets: Array[Dictionary] = []
+	var seen := {}
+	for road: Dictionary in track["roads"]:
+		var a_id := int(road["from"])
+		var b_id := int(road["to"])
+		var key := "%d-%d" % [mini(a_id, b_id), maxi(a_id, b_id)]
+		if seen.has(key) or not nodes.has(a_id) or not nodes.has(b_id):
+			continue
+		seen[key] = true
+		var a := TrackFile.world_position(nodes[a_id])
+		var b := TrackFile.world_position(nodes[b_id])
+		var span := Vector3(b.x - a.x, 0.0, b.z - a.z)
+		if span.length_squared() < 1.0:
+			continue
+		var half := maxf(float(road.get("width", 16.0)) * 0.5, 1.0)
+		var mph := _Zones.mph_of(road)
+		streets.append({"a": a, "b": b, "a_id": a_id, "b_id": b_id, "mph": mph, "half": half})
+	var joined := _segment_counts(streets)
+	for street: Dictionary in streets:
+		_speed_sign_from(streets, joined, street, true)
+		_speed_sign_from(streets, joined, street, false)
+
+
+func _segment_counts(streets: Array[Dictionary]) -> Dictionary:
+	var counts: Dictionary = {}
+	for street: Dictionary in streets:
+		for end_id: int in [int(street["a_id"]), int(street["b_id"])]:
+			counts[end_id] = int(counts.get(end_id, 0)) + 1
+	return counts
+
+
+func _speed_sign_from(streets: Array[Dictionary], joined: Dictionary, street: Dictionary, from_a: bool) -> void:
+	var from_id := int(street["a_id"] if from_a else street["b_id"])
+	if int(joined.get(from_id, 0)) < 3:
+		return
+	var from: Vector3 = street["a"] if from_a else street["b"]
+	var to: Vector3 = street["b"] if from_a else street["a"]
+	var span := Vector3(to.x - from.x, 0.0, to.z - from.z)
+	var length := span.length()
+	if length < _SPEED_SIGN_M + 1.0:
+		return
+	var dir := span / length
+	var right := dir.cross(Vector3.UP)
+	if right.length_squared() < 0.001:
+		return
+	right = right.normalized()
+	var along := _crossing_half(streets, from_id, dir) + _SPEED_SIGN_M
+	if along > length * 0.5:
+		along = length * 0.5
+	var spot := from + dir * along + right * (float(street["half"]) + _SPEED_SIGN_OUT)
+	spot.y = 0.0
+	_add_speed_sign(spot, atan2(dir.x, dir.z), int(street["mph"]))
+
+
+## How far a crossing street's pavement reaches along `travel` from this corner.
+func _crossing_half(streets: Array[Dictionary], node_id: int, travel: Vector3) -> float:
+	var widest := 0.0
+	for other: Dictionary in streets:
+		var a_id := int(other["a_id"])
+		var b_id := int(other["b_id"])
+		if a_id != node_id and b_id != node_id:
+			continue
+		var a: Vector3 = other["a"]
+		var b: Vector3 = other["b"]
+		var away := (b - a) if a_id == node_id else (a - b)
+		away.y = 0.0
+		if away.length_squared() < 0.01:
+			continue
+		away = away.normalized()
+		if absf(away.dot(travel)) > 0.85:
+			continue
+		widest = maxf(widest, float(other["half"]))
+	return widest
+
+
+func _add_speed_sign(at: Vector3, yaw: float, mph: int) -> void:
+	var sign := Node3D.new()
+	sign.set_script(_SpeedSign)
+	sign.name = "SpeedLimit%d" % get_child_count()
+	add_child(sign)
+	sign.call(&"setup", at, yaw, mph)
 
 
 func _add_street(segments: Array[Dictionary], links: Dictionary, a_id: int, b_id: int, a: Vector3, b: Vector3, half: float) -> void:

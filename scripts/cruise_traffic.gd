@@ -14,6 +14,7 @@ const _TrackFile := preload("res://scripts/track_file.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _Police := preload("res://scripts/cruise_police.gd")
+const _Zones := preload("res://scripts/speed_zones.gd")
 
 const _COUNT := 24
 const _COP_COUNT := 5
@@ -51,6 +52,8 @@ const _JAM_MPS := 1.6
 const _PARK_REACH := 48.0
 const _PARK_GAP := 3.6
 const _PARK_STOP := 1.8
+## Another police car this close, while one is already chasing, joins that chase.
+const _JOIN_M := 12.0
 ## Straight at the player only while that line stays on a street. Past this, it is a block.
 const _CORRIDOR := 14.0
 ## Extra meters around a building so the body stops at the wall, not inside it.
@@ -92,6 +95,8 @@ var _station_size := Vector2.ZERO
 var _have_station := false
 ## Building footprints from the city map. x is world X, y is world Z, h is the half size.
 var _blocks: Array[Dictionary] = []
+## Police cars that have joined a chase already under way. They stay on it until the heat is gone.
+var _joined: Dictionary = {}
 
 
 func setup(track: Dictionary, avoid: Vector3, floor_mesh: MeshInstance3D, car_files: Array[String], with_police := false) -> void:
@@ -171,7 +176,22 @@ func heat_amount() -> float:
 
 
 func pace_limit() -> float:
-	return _Police.LIMIT_MPS
+	var player := _player()
+	if player == null:
+		return _Zones.DEFAULT_MPS
+	return limit_at(_player_center(player))
+
+
+func limit_at(pos: Vector3) -> float:
+	var best := _Zones.DEFAULT_MPS
+	var best_gap := INF
+	for i in _edges.size():
+		var edge: Dictionary = _edges[i]
+		var gap := _gap(pos, edge)
+		if gap < best_gap:
+			best_gap = gap
+			best = float(edge.get("limit", _Zones.DEFAULT_MPS))
+	return best
 
 
 func _physics_process(delta: float) -> void:
@@ -221,7 +241,7 @@ func tick(delta: float, player: Node3D) -> void:
 	if _police_on and player != null and not _player_wrecked(player):
 		_note_odd_cars(delta)
 		_police.tick_scenes(delta, _sitting())
-		_police.tick(delta, _player_speed(player), _cop_within(player, _Police.SIGHT_M), _cop_within(player, _Police.PULL_RANGE_M))
+		_police.tick(delta, _player_speed(player), _cop_within(player, _Police.SIGHT_M), _cop_within(player, _Police.PULL_RANGE_M), limit_at(_player_center(player)))
 
 
 func _player() -> Node3D:
@@ -330,6 +350,8 @@ func _drive(car: _TrafficCar, delta: float, blockers: Array[Dictionary]) -> void
 	elif _police_on and not _working(car) and car.held <= 0.0 and _near_scene(center, 22.0):
 		curb_target = maxf(curb_target, 1.6)
 		desired = minf(desired, 7.0)
+	if car.edge_i >= 0 and car.edge_i < _edges.size() and not _hunting(car):
+		desired = minf(desired, float(_edges[car.edge_i].get("limit", _Zones.DEFAULT_MPS)))
 	car.curb = lerpf(car.curb, curb_target, 1.0 - exp(-2.6 * delta))
 	var aim := _ahead(car.edge_i, car.along, car.next_i, _LOOK, car.lane_bias + car.curb)
 	if car.aiming:
@@ -1159,6 +1181,7 @@ func _build_graph(track: Dictionary) -> void:
 			"length": length,
 			"half": half,
 			"lane": lane,
+			"limit": _Zones.mps_of(road),
 		})
 		if not _out.has(from_id):
 			var fresh: Array[int] = []
@@ -1454,6 +1477,8 @@ func _consume_harm() -> void:
 ## The two traffic cars stay out. Extra heat sends the nearest parked car, which
 ## drives from the curb or the station instead of appearing beside the player.
 func _match_roster(player: Node3D) -> void:
+	if _police.heat <= 0.0:
+		_joined.clear()
 	var wanted := _police.cops_for(_police.heat)
 	var origin := _player_center(player) if player != null else Vector3.ZERO
 	var traffic: Array[_TrafficCar] = []
@@ -1480,7 +1505,7 @@ func _match_roster(player: Node3D) -> void:
 		if i < extra:
 			if not car.on_duty:
 				_dispatch(car)
-		elif car.on_duty:
+		elif car.on_duty and not bool(_joined.get(car.get_instance_id(), false)):
 			_recall(car)
 
 
@@ -1544,6 +1569,8 @@ func _direct_cops(player: Node3D, delta: float) -> void:
 		if _drop_near(cops[far_i], scene_pos, player_pos):
 			_police.mark_dropped()
 			spots[far_i] = cops[far_i].center()
+	if player != null:
+		_join_passed(cops, plan, spots, player_pos)
 	for i in cops.size():
 		var car := cops[i]
 		car.duty = plan[i]
@@ -1568,6 +1595,40 @@ func _direct_cops(player: Node3D, delta: float) -> void:
 		var hunting := car.duty == _Police.PURSUE or car.duty == _Police.STOP
 		var goal := player_pos if hunting else scene_pos
 		_retarget(car, goal)
+
+
+## A chase is already going. A police car the player drives past joins it, and stays on it.
+func _join_passed(cops: Array[_TrafficCar], plan: Array[int], spots: Array[Vector3], player_pos: Vector3) -> void:
+	if _police.heat <= 0.0:
+		_joined.clear()
+		return
+	var chase := -1
+	for duty: int in plan:
+		if duty == _Police.PURSUE or duty == _Police.STOP:
+			chase = duty
+			break
+	if chase < 0:
+		return
+	for i in cops.size():
+		var id := cops[i].get_instance_id()
+		if plan[i] == chase or _flat_dist(spots[i], player_pos) <= _JOIN_M:
+			_joined[id] = true
+		if bool(_joined.get(id, false)):
+			plan[i] = chase
+	var extra: Array[_TrafficCar] = []
+	for body: CharacterBody3D in _cars:
+		var car := body as _TrafficCar
+		if car == null or not car.cop or car.on_duty:
+			continue
+		if _flat_dist(car.center(), player_pos) > _JOIN_M:
+			continue
+		_dispatch(car)
+		_joined[car.get_instance_id()] = true
+		extra.append(car)
+	for car: _TrafficCar in extra:
+		cops.append(car)
+		plan.append(chase)
+		spots.append(car.center())
 
 
 func _retarget(car: _TrafficCar, goal_pos: Vector3) -> void:

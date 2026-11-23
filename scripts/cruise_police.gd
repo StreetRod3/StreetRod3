@@ -2,10 +2,14 @@ extends RefCounted
 
 ## Heat and crash scenes for a free roam. The traffic cars do the driving.
 ## A cop sees SIGHT_M. Speeding counts only while one can see the car. A crash
-## counts from anywhere, and a hit on a cop fills the heat.
+## counts from anywhere, and a hit on a cop jumps the heat to 150%.
 
 const SIGHT_M := 150.0
 const LIMIT_MPS := 11.0
+## About 10 mph over the posted limit still counts as legal.
+const TOLERANCE_MPH := 10.0
+const _MPH := 2.2369362920544
+const TOLERANCE_MPS := TOLERANCE_MPH / _MPH
 const NOTICE_MPS := 1.5
 const SPEED_HOLD_S := 1.0
 ## Time that used to clear the heat. It now takes that long to lose LOSE_DROP.
@@ -65,13 +69,14 @@ var _rampage := false
 
 
 ## `cop_seen` is a cop inside SIGHT_M. `cop_close` is one inside PULL_RANGE_M.
-func tick(delta: float, speed: float, cop_seen: bool, cop_close: bool) -> void:
+## `limit_mps` is the limit of the street the car is on.
+func tick(delta: float, speed: float, cop_seen: bool, cop_close: bool, limit_mps: float = LIMIT_MPS) -> void:
 	if delta <= 0.0:
 		return
 	if grace > 0.0:
 		grace = maxf(grace - delta, 0.0)
 		_over_s = 0.0
-	elif speed > LIMIT_MPS:
+	elif speed > limit_mps + TOLERANCE_MPS:
 		_over_s += delta
 		if _over_s >= SPEED_HOLD_S and cop_seen and heat < _heat_cap():
 			heat = minf(heat + HEAT_PER_S * delta, _heat_cap())
@@ -104,15 +109,17 @@ func cops_for(amount: float) -> int:
 	return COPS_MIN + extra
 
 
-## A real hit on the player, or any new contact with a cop when `on_cop`.
+## A real hit on the player. Contact with a cop jumps the heat to 150%.
 func note_hit(amount: float, on_cop: bool) -> void:
 	if on_cop:
-		heat = maxf(heat, HEAT_CAP)
+		heat = maxf(heat, HEAT_RAMPAGE)
 		_crash = true
 		return
 	if amount <= NOTICE_MPS:
 		return
-	heat = minf(heat + HIT_HEAT, _heat_cap())
+	# A hit never pulls the meter down. Heat already past the cap, from a cop,
+	# stays there until the usual cool-down.
+	heat = minf(heat + HIT_HEAT, maxf(heat, _heat_cap()))
 	_crash = true
 
 
@@ -228,10 +235,14 @@ func mark_dropped() -> void:
 	scene["dropped"] = true
 
 
-## The fine for this much heat, in dollars, held between FINE_MIN and FINE_MAX.
+## The fine for this much heat, in dollars. Up to a full meter it runs from FINE_MIN
+## to FINE_MAX. A full meter, or the hard chase past it, doubles that.
 static func fine_for(guilt: float) -> int:
 	var t := clampf(guilt, 0.0, 1.0)
-	return clampi(roundi(lerpf(float(FINE_MIN), float(FINE_MAX), t)), FINE_MIN, FINE_MAX)
+	var amount := clampi(roundi(lerpf(float(FINE_MIN), float(FINE_MAX), t)), FINE_MIN, FINE_MAX)
+	if guilt >= 1.0:
+		amount *= 2
+	return amount
 
 
 ## Empties the pull-over, clears the heat, and starts the grace.

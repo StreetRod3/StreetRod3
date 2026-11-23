@@ -68,3 +68,4 @@ assets/skies/*.exr filter=lfs diff=lfs merge=lfs -text
 reference/**/*.exr filter=lfs diff=lfs merge=lfs -text
 reference/**/*.bin filter=lfs diff=lfs merge=lfs -text
 assets/cars/police-fairlane-1957.glb filter=lfs diff=lfs merge=lfs -text
+assets/locations/common/us_speed_limit_1970_blank.glb filter=lfs diff=lfs merge=lfs -text

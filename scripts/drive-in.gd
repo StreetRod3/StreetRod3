@@ -1690,6 +1690,8 @@ func _popup_open() -> bool:
 
 
 func _on_cancel() -> void:
+
+
 	if _fuel_root.visible:
 		_hide_fuel()
 		return

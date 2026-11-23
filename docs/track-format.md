@@ -82,6 +82,7 @@ Roads are **directed**. `from` and `to` must name existing nodes and must differ
 | `from` | yes | — | Start node id. |
 | `to` | yes | — | End node id. |
 | `width` | no | `8` | Full road width in meters (not half-width). |
+| `speed` | no | — | Speed limit in mph. The city streets each carry one. A road without one is not a marked zone. |
 | `type` | no | `"regular"` | Width / shoulder variant. |
 | `surface` | no | `"regular"` | Surface material. |
 
