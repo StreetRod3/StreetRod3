@@ -80,6 +80,9 @@ const _LANE_GAP := 2.6
 ## White line sits this far inside the pavement edge. Its half-width is `_CURB_HALF`.
 const _CURB_FROM_EDGE := 0.28
 const _CURB_HALF := 0.12
+## Joined outer edges meet within this many half-widths of the node. A sharper bend
+## is cut straight across the notch.
+const _BEND_MITER := 2.5
 const _BLOCK_COLOR := Color(0.45, 0.42, 0.38, 1)
 const _BUSH_DARK := Color(0.14, 0.32, 0.13)
 const _BUSH_MID := Color(0.24, 0.42, 0.17)
@@ -149,6 +152,9 @@ var _fade: float = 1.0
 var _phase: int = 0
 var _destination: String = ""
 var _streets: Array[Dictionary] = []
+## Pavement added where two streets meet, so the corner outside the two ribbons still counts
+## as road: each is `poly` in the XZ plane and `y`, how far that asphalt sits over the ground.
+var _bends: Array[Dictionary] = []
 ## Every building's footprint, for placing dumpsters clear of them: {"xform": its Transform3D,
 ## "center": the footprint's middle in its own space, "half": half its width (X) and depth (Z),
 ## "faces": the faces (as `_face_pos()`) a dumpster may stand against, empty for none}.
@@ -1265,6 +1271,7 @@ func _road_meshes(track: Dictionary) -> Array:
 	asphalt.begin(Mesh.PRIMITIVE_TRIANGLES)
 	marks.begin(Mesh.PRIMITIVE_TRIANGLES)
 	lanes.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_bends.clear()
 	var segments: Array[Dictionary] = []
 	var links: Dictionary = {}
 	var seen := {}
@@ -1312,6 +1319,7 @@ func _road_meshes(track: Dictionary) -> Array:
 			var stop_a := _junction_half(links, a_node, dir)
 			var stop_b := _junction_half(links, b_node, -dir)
 			_add_lane_dashes(lanes, a, b, stop_a, stop_b)
+	_join_bends(asphalt, marks, links)
 	_streets = segments
 	asphalt.generate_normals()
 	marks.generate_normals()
@@ -1418,8 +1426,9 @@ func _add_street(segments: Array[Dictionary], links: Dictionary, a_id: int, b_id
 		"a_node": a_id,
 		"b_node": b_id,
 	})
-	_note_link(links, a_id, dir, half)
-	_note_link(links, b_id, -dir, half)
+	var lift := _street_lift(segments[segments.size() - 1])
+	_note_link(links, a_id, dir, half, a, lift)
+	_note_link(links, b_id, -dir, half, b, lift)
 
 
 ## Poles just outside the curb, shrubs on the grass, and the street drag's trees behind those.
@@ -1581,6 +1590,10 @@ func paved_height(world: Vector3) -> float:
 		var b: Vector3 = segment["b"]
 		if _gap_to_segment(point, Vector2(a.x, a.z), Vector2(b.x, b.z)) <= float(segment["half"]):
 			top = maxf(top, _street_lift(segment))
+	for bend: Dictionary in _bends:
+		var poly: PackedVector2Array = bend["poly"]
+		if Geometry2D.is_point_in_polygon(point, poly):
+			top = maxf(top, float(bend["y"]))
 	return top
 
 
@@ -1591,6 +1604,10 @@ func _on_pavement(point: Vector2, clearance: float) -> bool:
 		var b: Vector3 = segment["b"]
 		var gap := _gap_to_segment(point, Vector2(a.x, a.z), Vector2(b.x, b.z))
 		if gap < float(segment["half"]) + clearance:
+			return true
+	for bend: Dictionary in _bends:
+		var poly: PackedVector2Array = bend["poly"]
+		if _gap_to_poly(point, poly) <= clearance:
 			return true
 	return false
 
@@ -1657,12 +1674,17 @@ func _add_multimesh_cell(parent: Node3D, mesh: Mesh, mat: Material, xforms: Arra
 	parent.add_child(node)
 
 
-func _note_link(links: Dictionary, node_id: int, dir: Vector3, half: float) -> void:
+func _note_link(links: Dictionary, node_id: int, dir: Vector3, half: float, at: Vector3, lift: float) -> void:
 	if node_id < 0:
 		return
 	if not links.has(node_id):
 		links[node_id] = []
-	(links[node_id] as Array).append({"dir": dir, "half": half})
+	(links[node_id] as Array).append({
+		"dir": dir,
+		"half": half,
+		"at": at,
+		"lift": lift,
+	})
 
 
 ## Distance along a road before its curb meets the curb of a street on `side_dir`.
@@ -1737,6 +1759,165 @@ func _add_ribbon(st: SurfaceTool, a: Vector3, b: Vector3, half_w: float, lift: f
 	st.add_vertex(b_r)
 	st.set_uv(Vector2(0.0, 1.0))
 	st.add_vertex(b_l)
+
+
+## Two streets meeting at a node leave a notch between their outer edges. Those edges are
+## run out to where they meet, and the white line is carried around that corner. Three or
+## more streets already cover the crossing, and a straight pair already shares an edge.
+func _join_bends(asphalt: SurfaceTool, marks: SurfaceTool, links: Dictionary) -> void:
+	for node_id: int in links:
+		var entries: Array = links[node_id]
+		if entries.size() != 2:
+			continue
+		var first: Dictionary = entries[0]
+		var second: Dictionary = entries[1]
+		_join_bend(asphalt, marks, first, second)
+
+
+func _join_bend(asphalt: SurfaceTool, marks: SurfaceTool, first: Dictionary, second: Dictionary) -> void:
+	var d0: Vector3 = first["dir"]
+	var d1: Vector3 = second["dir"]
+	var h0 := float(first["half"])
+	var h1 := float(second["half"])
+	var at: Vector3 = first["at"]
+	var n0 := d0.cross(Vector3.UP)
+	var n1 := d1.cross(Vector3.UP)
+	if n0.length_squared() < 0.0001 or n1.length_squared() < 0.0001:
+		return
+	n0 = n0.normalized()
+	n1 = n1.normalized()
+	var lift := maxf(float(first["lift"]), float(second["lift"]))
+	var limit := maxf(h0, h1) * _BEND_MITER
+	# Left of one street against right of the other. The pair that meets behind both
+	# end caps is the outside of the bend; the other pair meets on the overlap.
+	for sign_i in 2:
+		var sign0 := -1.0 if sign_i == 0 else 1.0
+		var sign1 := -sign0
+		var edge0 := at + n0 * (sign0 * h0)
+		var edge1 := at + n1 * (sign1 * h1)
+		var hit := _line_meet(edge0, d0, edge1, d1)
+		if hit.is_empty():
+			continue
+		if float(hit["t0"]) >= -0.02 or float(hit["t1"]) >= -0.02:
+			continue
+		var meet: Vector3 = hit["point"]
+		var inset0 := maxf(h0 - _CURB_FROM_EDGE, _CURB_HALF * 2.0)
+		var inset1 := maxf(h1 - _CURB_FROM_EDGE, _CURB_HALF * 2.0)
+		var curb0 := at + n0 * (sign0 * inset0)
+		var curb1 := at + n1 * (sign1 * inset1)
+		if meet.distance_to(at) > limit:
+			_add_up_tri(asphalt, edge0, at, edge1, lift)
+			_remember_bend(edge0, at, edge1, lift)
+			_add_ribbon(marks, curb0, curb1, _CURB_HALF, 0.05)
+			return
+		# The miter triangle is only the part past the two end caps. The wedge from those
+		# caps back to the node is the rest of the corner.
+		_add_up_tri(asphalt, edge0, meet, edge1, lift)
+		_add_up_tri(asphalt, edge0, at, edge1, lift)
+		_remember_bend(edge0, meet, edge1, lift)
+		_remember_bend(edge0, at, edge1, lift)
+		var curb_hit := _line_meet(curb0, d0, curb1, d1)
+		if curb_hit.is_empty() or float(curb_hit["t0"]) >= -0.02 or float(curb_hit["t1"]) >= -0.02:
+			_add_ribbon(marks, curb0, curb1, _CURB_HALF, 0.05)
+			return
+		var curb_meet: Vector3 = curb_hit["point"]
+		if curb_meet.distance_to(at) > limit:
+			_add_ribbon(marks, curb0, curb1, _CURB_HALF, 0.05)
+			return
+		_add_edge_corner(marks, curb0, curb_meet, curb1)
+		return
+
+
+func _remember_bend(a: Vector3, b: Vector3, c: Vector3, y: float) -> void:
+	_bends.append({
+		"poly": PackedVector2Array([Vector2(a.x, a.z), Vector2(b.x, b.z), Vector2(c.x, c.z)]),
+		"y": y,
+	})
+
+
+## Where `origin0 + dir0 * t0` meets `origin1 + dir1 * t1` in the XZ plane. Empty when the
+## lines are parallel. A negative `t` is behind that edge's end, back past the node.
+func _line_meet(origin0: Vector3, dir0: Vector3, origin1: Vector3, dir1: Vector3) -> Dictionary:
+	var cross := dir0.x * dir1.z - dir0.z * dir1.x
+	if absf(cross) < 0.0001:
+		return {}
+	var dx := origin1.x - origin0.x
+	var dz := origin1.z - origin0.z
+	var t0 := (dx * dir1.z - dz * dir1.x) / cross
+	var t1 := (dx * dir0.z - dz * dir0.x) / cross
+	return {"t0": t0, "t1": t1, "point": origin0 + dir0 * t0}
+
+
+func _add_up_tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, y: float) -> void:
+	var p0 := Vector3(a.x, y, a.z)
+	var p1 := Vector3(b.x, y, b.z)
+	var p2 := Vector3(c.x, y, c.z)
+	var span := (p1 - p0).cross(p2 - p0)
+	if span.length_squared() < 0.0000001:
+		return
+	if span.y < 0.0:
+		var swap := p1
+		p1 = p2
+		p2 = swap
+	st.set_uv(Vector2(0.0, 0.0))
+	st.add_vertex(p0)
+	st.set_uv(Vector2(1.0, 0.0))
+	st.add_vertex(p1)
+	st.set_uv(Vector2(0.5, 1.0))
+	st.add_vertex(p2)
+
+
+## The white line around a bend, from `a` through the corner `b` to `c`, kept at `_CURB_HALF`.
+func _add_edge_corner(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3) -> void:
+	var ab := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var bc := Vector3(c.x - b.x, 0.0, c.z - b.z)
+	if ab.length_squared() < 0.0001 or bc.length_squared() < 0.0001:
+		return
+	ab = ab.normalized()
+	bc = bc.normalized()
+	var left_ab := ab.cross(Vector3.UP)
+	var left_bc := bc.cross(Vector3.UP)
+	var half := _CURB_HALF
+	var y := 0.05
+	var a_l := Vector3(a.x, y, a.z) + left_ab * half
+	var a_r := Vector3(a.x, y, a.z) - left_ab * half
+	var c_l := Vector3(c.x, y, c.z) + left_bc * half
+	var c_r := Vector3(c.x, y, c.z) - left_bc * half
+	var left_hit := _line_meet(a_l, ab, c_l, bc)
+	var right_hit := _line_meet(a_r, ab, c_r, bc)
+	var b_l := Vector3.ZERO
+	var b_r := Vector3.ZERO
+	var sharp := left_hit.is_empty() or right_hit.is_empty()
+	if not sharp:
+		var left_pt: Vector3 = left_hit["point"]
+		var right_pt: Vector3 = right_hit["point"]
+		b_l = Vector3(left_pt.x, y, left_pt.z)
+		b_r = Vector3(right_pt.x, y, right_pt.z)
+		if b_l.distance_squared_to(Vector3(b.x, y, b.z)) > half * half * 16.0:
+			sharp = true
+	if sharp:
+		var left_sum := left_ab + left_bc
+		if left_sum.length_squared() < 0.01:
+			_add_ribbon(st, a, c, half, y)
+			return
+		var left := left_sum.normalized()
+		b_l = Vector3(b.x, y, b.z) + left * half
+		b_r = Vector3(b.x, y, b.z) - left * half
+	_add_up_tri(st, a_l, a_r, b_r, y)
+	_add_up_tri(st, a_l, b_r, b_l, y)
+	_add_up_tri(st, b_l, b_r, c_r, y)
+	_add_up_tri(st, b_l, c_r, c_l, y)
+
+
+func _gap_to_poly(point: Vector2, poly: PackedVector2Array) -> float:
+	if Geometry2D.is_point_in_polygon(point, poly):
+		return 0.0
+	var best := INF
+	for i in poly.size():
+		var a := poly[i]
+		var b := poly[(i + 1) % poly.size()]
+		best = minf(best, _gap_to_segment(point, a, b))
+	return best
 
 
 func _build_places(track: Dictionary) -> void:
@@ -2451,6 +2632,9 @@ func _nearest_curb(point: Vector2) -> float:
 		var gap := _gap_to_segment(point, Vector2(a.x, a.z), Vector2(b.x, b.z)) - float(segment["half"])
 		if gap < best:
 			best = gap
+	for bend: Dictionary in _bends:
+		var poly: PackedVector2Array = bend["poly"]
+		best = minf(best, _gap_to_poly(point, poly))
 	return best
 
 
