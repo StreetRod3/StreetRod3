@@ -77,18 +77,23 @@ func _build() -> void:
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	help.text = HELP
 	box.add_child(help)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	box.add_child(scroll)
 	var grid := GridContainer.new()
+	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.columns = 1 + SLOTS * 2
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 4)
-	box.add_child(grid)
+	scroll.add_child(grid)
 	for heading: String in ["", "Keyboard", "", "Gamepad", ""]:
 		var label := Label.new()
 		label.text = heading
 		grid.add_child(label)
 	for action: String in _Controller.control_actions():
 		var name_label := Label.new()
-		name_label.custom_minimum_size = Vector2(110.0, 0.0)
+		name_label.custom_minimum_size = Vector2(140.0, 0.0)
 		name_label.text = _Controller.control_label(action)
 		grid.add_child(name_label)
 		for keys: bool in [true, false]:

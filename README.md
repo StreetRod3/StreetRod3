@@ -13,11 +13,13 @@ Pushes to `main` export a Web build and deploy it with GitHub Pages on [StreetRo
 | Throttle | W or Up |
 | Brake | S or Down |
 | Steer | A/D or Left/Right |
-| Shift | Q / E |
-| Neutral | Q from first gear (or drive); the engine revs free on the gas |
-| Reverse | Q from neutral with the car stopped |
+| Shift | , / . |
+| Neutral | , from first gear (or drive); the engine revs free on the gas |
+| Reverse | , from neutral with the car stopped |
+| Look left / right | Q / E, held, about 80° |
+| Look far left / right | Z / C, held, about 165° |
 | Hand brake | Space |
-| Camera | C |
+| Camera | F1 far, F2 close, F3 inside, F4 bumper |
 | Pause | Esc |
 | Burnout | W and S with the car stopped in gear, steering to swing the back round |
 

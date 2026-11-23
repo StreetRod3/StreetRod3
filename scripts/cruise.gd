@@ -18,6 +18,7 @@ const _EngineSound := preload("res://scripts/engine_sound.gd")
 const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
+const _HeadLook := preload("res://scripts/head_look.gd")
 const _PlayerCar := preload("res://scripts/player_race_car.gd")
 const _Dumpster := preload("res://scripts/dumpster.gd")
 const _GasPump := preload("res://scripts/gas_pump.gd")
@@ -133,7 +134,10 @@ var _cam_rest := Transform3D.IDENTITY
 var _cam_mode: int = _PlayerCar.CAM_FAR
 var _camera_held: bool = false
 var _tapped_camera: bool = false
+## A view key that went down between steps. Far is 0. -1 is none.
+var _tapped_view: int = -1
 var _chase_cam: _ChaseCamera = _ChaseCamera.new()
+var _head_look: _HeadLook = _HeadLook.new()
 var _dynamics: _VehicleDynamics
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _engine: AudioStreamPlayer
@@ -312,6 +316,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if cam_vp != null:
 			cam_vp.set_input_as_handled()
 		return
+	var view := _Controller.camera_view_for_key(int(key.keycode))
+	if view >= 0:
+		_tapped_view = view
+		var view_vp := get_viewport()
+		if view_vp != null:
+			view_vp.set_input_as_handled()
+		return
 	if key.keycode != KEY_SPACE and key.keycode != KEY_ENTER:
 		return
 	var skip_vp := get_viewport()
@@ -446,12 +457,22 @@ func _ride(delta: float) -> void:
 
 func _poll_auto_camera() -> void:
 	var held := _Controller.action_down(_Controller.CAMERA)
-	if (held and not _camera_held) or _tapped_camera:
-		_cam_mode = (_cam_mode + 1) % 4
-		GameState.driving_camera = _cam_mode
-		_apply_auto_camera_mode()
+	var view := _Controller.camera_view(_tapped_view)
+	_tapped_view = -1
+	if view >= 0:
+		_set_auto_camera_mode(view)
+	elif (held and not _camera_held) or _tapped_camera:
+		_set_auto_camera_mode((_cam_mode + 1) % 4)
 	_camera_held = held
 	_tapped_camera = false
+
+
+func _set_auto_camera_mode(mode: int) -> void:
+	if mode == _cam_mode:
+		return
+	_cam_mode = mode
+	GameState.driving_camera = _cam_mode
+	_apply_auto_camera_mode()
 
 
 func _auto_camera_slot() -> String:
@@ -498,12 +519,14 @@ func _apply_auto_camera_mode() -> void:
 func _place_auto_camera(delta: float) -> void:
 	if _camera == null or _car == null or _pivot == null:
 		return
+	_head_look.update(delta)
+	var rest := _head_look.apply(_cam_rest)
 	if _cam_mode == _PlayerCar.CAM_COCKPIT or _cam_mode == _PlayerCar.CAM_BUMPER:
-		_camera.global_transform = _car.global_transform * _body_motion.lean_in_car_space() * _cam_rest
+		_camera.global_transform = _car.global_transform * _body_motion.lean_in_car_space() * rest
 		return
 	var yaw := _car.rotation.y
 	var velocity := Vector3(sin(yaw), 0.0, cos(yaw)) * _speed
-	_chase_cam.place(_camera, _car, _pivot.position, _cam_rest, velocity, delta)
+	_chase_cam.place(_camera, _car, _pivot.position, rest, velocity, delta)
 
 
 func _start_roam(from_poi: String) -> void:
