@@ -320,6 +320,10 @@ func _find_named(node: Node, want: String) -> Node:
 	return null
 
 
+static func siren_stream() -> AudioStreamWAV:
+	return _siren_stream()
+
+
 static func _siren_stream() -> AudioStreamWAV:
 	if _siren_wav != null:
 		return _siren_wav

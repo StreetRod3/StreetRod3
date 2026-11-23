@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://wdadsqk5glmk"
-path="res://.godot/imported/dumpster_T_PAD_Dumpster_4096_N.png-762362eafd3f8a723c40946890ffd989.ctex"
+path.s3tc="res://.godot/imported/dumpster_T_PAD_Dumpster_4096_N.png-762362eafd3f8a723c40946890ffd989.s3tc.ctex"
+path.etc2="res://.godot/imported/dumpster_T_PAD_Dumpster_4096_N.png-762362eafd3f8a723c40946890ffd989.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "7178fc70beb95531d9f4183752c1d0df"
@@ -14,22 +16,22 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/locations/city/dumpster_T_PAD_Dumpster_4096_N.png"
-dest_files=["res://.godot/imported/dumpster_T_PAD_Dumpster_4096_N.png-762362eafd3f8a723c40946890ffd989.ctex"]
+dest_files=["res://.godot/imported/dumpster_T_PAD_Dumpster_4096_N.png-762362eafd3f8a723c40946890ffd989.s3tc.ctex", "res://.godot/imported/dumpster_T_PAD_Dumpster_4096_N.png-762362eafd3f8a723c40946890ffd989.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
 compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
-compress/normal_map=0
+compress/normal_map=1
 compress/channel_pack=0
 mipmaps/generate=true
 mipmaps/limit=-1
-roughness/mode=0
-roughness/src_normal=""
+roughness/mode=1
+roughness/src_normal="res://assets/locations/city/dumpster_T_PAD_Dumpster_4096_N.png"
 process/channel_remap/red=0
 process/channel_remap/green=1
 process/channel_remap/blue=2
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0
