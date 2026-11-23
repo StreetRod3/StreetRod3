@@ -34,12 +34,14 @@ A road from `(0, 0)` to `(0, 100)` runs along world `+Z`. A road from `(0, 0)` t
 | `roads` | yes | — | Directed edges between street nodes. |
 | `pois` | no | none | Points of interest. Each one is its own node, attached to a street node. |
 | `buildings` | no | none | Scenery boxes. They are not part of the road graph. |
-| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. Its grass runs out from each side of the road at the road's height, sloping where another part of the course passes at another height to meet that road's grass halfway, and a car off the road drives on that same grass. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. `mountain` is Mulholland: no grass grid, hillsides and drops from each node's `left` and `right`, a guard rail, and truss bridges. `aqueduct` is a concrete channel with sloped banks, where the road's width takes in the floor and both banks. |
+| `style` | no | `"circuit"` | `circuit` builds curbs, barriers, narrow-road signs, and a checkered finish gantry. Its grass runs out from each side of the road at the road's height, sloping where another part of the course passes at another height to meet that road's grass halfway, and a car off the road drives on that same grass. `street` builds none of those. It uses the `scenery` list instead, greener grass, a gravel shoulder down each side, and pavement that runs back behind the start. `mountain` is Mulholland: no grass grid, hillsides and drops from each node's `left` and `right`, a guard rail, and truss bridges. `aqueduct` is a concrete channel with sloped banks, always the same width: a car is on the road anywhere out to the tops of its sides, whatever the roads' `width` (Street Rod 2's 11.73 m puts the edges just there). |
 | `jumps` | no | `false` | Cars can leave the road. Where it drops away faster than a car can fall, at a lip or over a crest taken fast, the car flies until it lands. Only on a `circuit` track for now. It also keeps the grass flat under the road, so a car that leaves a ramp's side drops to the grass, builds the ramps' sides down to it as walls a car on the grass runs into, paints yellow and black bands up to each lip, and leaves out the curbs. Off on every other track, so their rises and dips drive as they did. |
+| `auto_bank` | no | `false` | Every corner banks into its turn by how tight it is, in place of the nodes' own `bank`, which are kept but not used. See [Banking](#banking). |
 | `loop` | no | `false` | The course comes back round to its start, which is also the finish line. The last node needs a road back to the start, and no node is a `finish`. The road runs round once with no pavement behind the start or past the finish, and the race counts laps by how far the car has gone round, so backing over the line doesn't count. The last road may come into the start at any angle: the race turns it onto the start straight round a corner set back behind the line, so the lap joins up and the cars still start on the straight. Only test drives use loops so far; a rival can't race one yet. |
 | `sky` | no | `"day"` | The photographed sky over the course in races and test drives: `day`, `dusk`, `evening-orange`, `sunset-pink` or `night-stars`, from `scripts/skies.gd`. A sky whose file isn't in the game yet, or an unknown name, is the day sky. Street Rod 2's cruise races are at night: a course for one that leaves this out, or says `day`, gets their plain black sky, and any other sky replaces it (the street drag says `night-stars`). |
 | `laps` | no | `1` | Times round a `loop`. The race shows the lap and, at the end of a test drive, the best lap. |
 | `scenery` | no | none | What stands on and beside a `street`, `mountain`, or `aqueduct` track. See [Scenery](#scenery). |
+| `terrain` | no | none | Painted ground: the ground's height wherever it has been painted, on any style. See [Painted ground](#painted-ground). |
 | `left_out` | no | none | Things baked from Street Rod 2 but not put on the track, with where they were and why. The game does not read this. No track has one at the moment. |
 
 Unknown root fields are ignored. A race course can leave `pois` out.
@@ -57,9 +59,10 @@ Unknown root fields are ignored. A race course can leave `pois` out.
 | `y` | yes | — | Planar Y in meters (world Z). |
 | `z` | no | `0` | Height in meters (world Y). Leave it out to stay on the ground. |
 | `type` | no | `"regular"` | `start`, `finish`, or `regular`. |
-| `left`, `right` | no | `0` | On a `mountain` track, the full height of a hillside (above 0) or drop (below 0) on the driver's left or right, in meters. It runs straight from node to node. |
+| `left`, `right` | no | `0` | On a `mountain` track, the full height of a hillside (above 0) or drop (below 0) on the driver's left or right, in meters. It runs straight from node to node. On an `aqueduct` track, how high the channel's side stands on that side, in meters, up to 8; 0, or anything up to Street Rod 2's 1.51, is Street Rod 2's side. See [Raised Aqueduct sides](#raised-aqueduct-sides). |
 | `rail` | no | `false` | On a `mountain` track, a guard rail on the driver's right from this node to the next. |
 | `sharp` | no | `false` | The road's grade changes here at once, instead of rounding through the node. Two sharp nodes together make a straight ramp. A sharp node where the road then falls away more steeply than it came up is a lip. |
+| `bank` | no | `0` | How far the road leans across at this node, in degrees, up to 45 either way. Above 0 the driver's left edge is higher, which leans into a bend to the right; below 0 the right edge is higher. See [Banking](#banking). |
 
 ### Node types
 
@@ -125,6 +128,54 @@ A closing road from finish back to start is allowed and is **not** followed, unl
 
 If the walk cannot leave start, loading fails.
 
+## Banking
+
+A node's `bank` tilts the road across, on any style. The road's low edge stays at the node's height and the other edge rises, so a 14 m road banked 25° is 6.5 m higher on its outside. On the Aqueduct the whole channel tilts, its sides included, about the tops of its sides.
+
+| Where | What the bank does |
+| --- | --- |
+| Round a corner | The node's bank holds all the way round its curve, from where the curve begins to where it ends. |
+| With `auto_bank` | Each corner leans into its turn as steeply as a car at 108 km/h needs to go round it with no grip, up to 30°, from the curve the race makes there (`TrackFile.auto_bank_deg()`). A 90° corner on long roads gets 30°, a 45° one about 25°, a gentle 20° bend about 11°. The start and finish of a course that isn't a loop, and any node on a straight, stay flat. |
+| Between nodes | It eases from one node's bank to the next over the straight between their curves, so a car turns in on a road already banked. Past the finish it holds. |
+| Beside the raised edge | On a `circuit`, the grass starts at the edge and falls 1 m for every 2 m out back to the ground, or by the halfway line to the next part of the course. On a `jumps` track it does the same from the flat grass there, and only a ramp's own height over the grass is a wall. On a `street` the gravel shoulder and then the grass fall the same way. On a `mountain` the verge stays at the edge's height and the hillside or drop rises or falls from there, then goes over to the far ground as it always does. On the `aqueduct` the concrete past a raised top falls the same 1 in 2. |
+| Jumps | A ramp can be banked, and its lip bands tilt with it. A car leaves a banked lip leaning with the road and, in the air, eases to the lean of the ground under it, so it comes down square to where it lands. On a jump track the lean and the bank's pull are read from the ground the car is on, the road or the grass, so a car beside a ramp's side doesn't read the drop as a lean. |
+| What stands on it | Curbs, barriers, signs and lip bands sit on the banked road, and on Mulholland the walls, guard rail and truss bridges stand on the raised edge. The circuit's finish line leans with the road, and its gantry stands as much higher as the raised edge. Scenery placed by height (trees, posts, rocks) stands on the ground where it is. The Street Rod 2 pieces made for one straight, flat course (the street drag's overhead sign, the Aqueduct's seams, drains and gutter) don't follow a bank. |
+| Cars | They lean with the road. Both driving models feel it: the bank pulls a car toward its low side, which takes it round on its own at the bank's own speed, and turning toward the low side presses the tires harder, so they hold more. With both, a banked corner can be taken much faster than a flat one, as on a real banked track. The sums are in `scripts/road_bank.gd`. On a circuit or street they go by the ground's slope, the raised edge's grass included; on Mulholland and the Aqueduct by the road's bank alone, since their hillsides are walls and the Aqueduct's sides already push a car back down. A raised Aqueduct side counts as a bank too (see [Raised Aqueduct sides](#raised-aqueduct-sides)). |
+
+## Raised Aqueduct sides
+
+On an `aqueduct` track a node's `left` and `right` can stand that side of the channel higher than Street Rod 2's 1.51 m, while the floor stays flat and as wide. A raised side is a corner's high outside wall, for riding round it.
+
+| What | How |
+| --- | --- |
+| Shape | Street Rod 2's side is a straight slope 1.78 m across. A higher side reaches 1.25 m farther out for each meter higher, and curves up from the floor like a bowl, flat at the bottom and steepest at its top, about 58°. It goes over from the straight slope to the bowl between 1.51 m and 3 m, so a side only a little higher is only a little curved. A 5 m side reaches 6.1 m out past the floor. |
+| Along the course | As a bank does: a node's sides hold all round its corner and ease to the next node's over the straight between. Past the finish they hold. |
+| Past the top | The yellow line runs along the top, and the concrete falls back from there 1 m for every 2 m out to Street Rod 2's height, as it does beside a banked top. The wall that keeps a car in the channel stands at the top. |
+| With a bank | The bank tilts the channel about Street Rod 2's tops as before, and a wider bowl goes on tilting the same way, so it stands higher still on the bank's high side. |
+| Cars | A car is on the road all the way to a raised side's top. Street Rod 2's sides push a car back to the floor. A raised side pushes less the more it curves, and not at all from 3 m up. Instead its slope counts as a bank (`race_track.gd`'s `bank_slope()`), so a car can run up it and be held round the corner. |
+| What doesn't follow | Street Rod 2's seams and drains are drawn for its own sides, so on a raised side they don't follow it. |
+
+## Painted ground
+
+`terrain` holds ground painted in the track maker, so a course can climb a mountain or run down a holler between ridges rather than over flat ground. It works on every style. A track without it builds exactly as before.
+
+```json
+"terrain": [
+  {"x": 0, "y": 0, "h": "eJzt..."},
+  {"x": 1, "y": 0, "h": "eJzt..."}
+]
+```
+
+| What | How |
+| --- | --- |
+| The grid | Heights on a square grid 4 m apart, in track meters, kept in chunks of 32 by 32 points (128 m a side). A chunk's `x` and `y` are its place counted in chunks, so chunk 1, 0 starts at track x 128, y 0. |
+| `h` | The chunk's 1024 heights row by row along x, each a whole number of centimeters as a 32-bit little-endian integer, deflated and written in base64. -2147483648 marks a point that isn't painted. A chunk with nothing painted in it is left out of the file. Decoding is in `scripts/track_terrain.gd`. |
+| Between points | The height is the painted points' around it, weighted by nearness, and it counts only as much as those points are painted. Where some of them aren't, the painted ground eases back to the style's own ground over the last 4 m. |
+| Meeting the road | The road keeps its nodes' heights. Past the road's own edge, painted ground is cut down to meet it at no steeper than 45°, or built up to it at no steeper than about 31°, as a road cut through a hill or carried over a hollow on an embankment. A `bridge` stands over whatever is painted under it. The edge is a circuit's road edge, a street's gravel shoulder, Mulholland's gravel verge, and on the Aqueduct the top of a side and 1 m of concrete past its yellow line. |
+| Unpainted ground | Keeps the style's own shape: a circuit's grass, a street's banks, Mulholland's hillsides and drops from each node's `left` and `right`, the Aqueduct's concrete. |
+| How it's drawn | On a track with any painting, all the ground past the road's edge is drawn from the paint and the style's own ground together (`race_track.gd`'s `_build_painted_ground()`), unpainted parts included. A strip down each side of the road follows its edge exactly, from the road's edge out 12 m, and behind a course's start, where there is no road, from its center line out as far, and a grid covers the rest: every 4 m in painted chunks and in unpainted ones near the road, 32 m away from it. Where the strip covers the ground the grid leaves it to the strip. It is grass, turning to dirt where it is steeper than about 35°, and on Mulholland its unpainted hillsides turn to dirt as they rise, as before. |
+| Driving on it | A car can leave the road and drive over painted ground. Where it is painted, Mulholland's hillside walls and the Aqueduct's side walls are left out and Mulholland's drops don't send the car over an edge. Uphill slows the car and downhill speeds it up, in both driving models, and a slope across it leans and pulls it as a bank does. Ground steeper than about 37° (a rise of 0.75 m a meter) can't be climbed: the engine stops helping, so the car runs up it only as far as its speed carries it, against gravity, with its rear wheels spinning and the engine revving, then slides back down to where the grass holds it. A car stuck on the gas facing uphill anywhere spins its wheels the same way. Ground steeper than about 50° (1.2 m a meter) is a cliff and stops the car at once, as a wall would, without damage (`player_race_car.gd`'s `_hold_off_steep()`). On the road nothing changes, so the road drives as it did. |
+
 ## Points of interest
 
 A point of interest is not a street intersection. It lives in `pois`, has its own id, and names the street node its driveway joins.
@@ -164,7 +215,7 @@ Optional boxes for the city view. They do not affect the road graph or the cruis
 
 ## Scenery
 
-A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. Height comes from the ground at that spot. On a `street` track nothing has collision. The kinds marked solid below stop a car, and a rival steers around them.
+A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. Height comes from the ground at that spot. On a `street` track nothing has collision except dumpsters. The kinds marked solid below stop a car, and a rival steers around them. A plain track builds only its dumpsters from the list.
 
 ```json
 { "kind": "tree", "x": 5.78, "y": 120 }
@@ -197,6 +248,7 @@ A `street`, `mountain`, or `aqueduct` track lists what stands on and beside it. 
 | `stain` | A black patch on the floor. |
 | `slab` | Solid. A low block 5.4 m wide and 5 m long across the middle of the floor. |
 | `fin` | Solid. A wall 1.5 m high and 5 m long, standing along the floor. |
+| `dumpster` | A steel dumpster, on any style of track, with its long side along the road and its front to it, standing on its casters tilted to the ground's slope and bank. A car shoves it, sending it sliding and spinning by how hard it hits, and a knock throws its lids open. A rival steers around the spot it was put. |
 
 ## Street drag
 

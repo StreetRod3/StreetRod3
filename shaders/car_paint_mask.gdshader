@@ -8,6 +8,10 @@ uniform sampler2D normal_tex : hint_default_black, filter_linear_mipmap, repeat_
 uniform float metallic : hint_range(0.0, 1.0) = 0.35;
 uniform float roughness : hint_range(0.0, 1.0) = 0.42;
 uniform float use_orm : hint_range(0.0, 1.0) = 0.0;
+// A clear coat over the paint (not over the trim, glass or interior), for cars whose
+// .car file gives model.paint.clearcoat: a second, glossier highlight on top.
+uniform float clearcoat : hint_range(0.0, 1.0) = 0.0;
+uniform float clearcoat_roughness : hint_range(0.0, 1.0) = 0.1;
 uniform float use_normal : hint_range(0.0, 1.0) = 0.0;
 uniform float normal_scale = 1.0;
 // An EGA-style checkerboard dither in the paint, like the 1956 Corvette's texture, for
@@ -36,6 +40,21 @@ uniform vec4 cove_color = vec4(0.0);
 uniform int cove_count = 0;
 uniform vec2 cove_outline[24];
 uniform float cove_min_x = 0.0;
+// A second paint marked in the texture, for cars whose .car file gives model.accent (the
+// 1963 C10's grille and its frame, bumpers and tailgate lettering): of the paint's texels
+// (alpha 1), the body's are grey (blue as bright as red) and the accent's have no blue.
+// The paint's shade is then the texel's red.
+uniform float use_accent = 0.0;
+uniform vec4 accent_color : source_color = vec4(1.0);
+// The finish of the accent or cove, chosen in the garage's paint menu: 0 paint (the
+// body's finish), 1 vinyl (satin, no clear coat, a fine leather grain in the light),
+// 2 matte (flat, no clear coat).
+uniform int accent_finish = 0;
+const float VINYL_ROUGHNESS = 0.55;
+const float MATTE_ROUGHNESS = 0.78;
+// Vinyl grain: cells this many to the meter, tipping the surface by up to this much.
+const float GRAIN_SCALE = 450.0;
+const float GRAIN_DEPTH = 0.18;
 
 varying vec3 model_pos;
 varying vec3 model_normal;
@@ -90,25 +109,64 @@ bool in_cove() {
 	return inside;
 }
 
+float grain_hash(vec3 p) {
+	return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+}
+
+// Smooth value noise, 0 to 1.
+float grain_noise(vec3 p) {
+	vec3 i = floor(p);
+	vec3 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	float a = mix(mix(grain_hash(i), grain_hash(i + vec3(1, 0, 0)), f.x), mix(grain_hash(i + vec3(0, 1, 0)), grain_hash(i + vec3(1, 1, 0)), f.x), f.y);
+	float b = mix(mix(grain_hash(i + vec3(0, 0, 1)), grain_hash(i + vec3(1, 0, 1)), f.x), mix(grain_hash(i + vec3(0, 1, 1)), grain_hash(i + vec3(1, 1, 1)), f.x), f.y);
+	return mix(a, b, f.z);
+}
+
 void fragment() {
 	vec4 tex = texture(albedo_tex, UV);
-	vec3 paint = in_cove() ? cove_color.rgb : paint_color.rgb;
+	bool cove = in_cove();
+	vec3 paint = cove ? cove_color.rgb : paint_color.rgb;
 	vec3 painted = paint * tex.rgb;
+	// How much of this texel is the accent (or cove), for its finish.
+	float zone = cove ? 1.0 : 0.0;
+	if (use_accent > 0.5) {
+		float accent = clamp(1.0 - tex.b / max(tex.r, 0.004), 0.0, 1.0);
+		painted = mix(paint, accent_color.rgb, accent) * tex.r;
+		zone = max(zone, accent);
+	}
+	zone *= tex.a * (accent_finish > 0 ? 1.0 : 0.0);
 	if (dither_cell > 0.0) {
 		painted *= paint_tone();
 	}
 	ALBEDO = mix(tex.rgb, painted, tex.a);
+	float metal;
+	float rough;
 	if (use_orm > 0.5) {
 		vec3 orm = texture(orm_tex, UV).rgb;
-		METALLIC = mix(orm.b, metallic, tex.a);
-		ROUGHNESS = mix(orm.g, roughness, tex.a);
+		metal = mix(orm.b, metallic, tex.a);
+		rough = mix(orm.g, roughness, tex.a);
 		AO = orm.r;
 	} else {
-		METALLIC = mix(0.05, metallic, tex.a);
-		ROUGHNESS = mix(0.82, roughness, tex.a);
+		metal = mix(0.05, metallic, tex.a);
+		rough = mix(0.82, roughness, tex.a);
 	}
+	METALLIC = mix(metal, 0.0, zone);
+	ROUGHNESS = mix(rough, accent_finish == 1 ? VINYL_ROUGHNESS : MATTE_ROUGHNESS, zone);
+	CLEARCOAT = clearcoat * tex.a * (1.0 - zone);
+	CLEARCOAT_ROUGHNESS = clearcoat_roughness;
 	if (use_normal > 0.5) {
 		NORMAL_MAP = texture(normal_tex, UV).rgb;
 		NORMAL_MAP_DEPTH = normal_scale;
+	}
+	if (accent_finish == 1 && zone > 0.0 && use_normal < 0.5) {
+		// Vinyl's grain, fixed to the car, fading out where a cell is smaller than a pixel;
+		// a material with its own normal map (the Challenger's vinyl top) has its own grain.
+		vec3 p = model_pos * GRAIN_SCALE;
+		float fade = 1.0 - smoothstep(0.4, 1.0, length(fwidth(p)));
+		vec3 g = vec3(grain_noise(p), grain_noise(p + 17.3), grain_noise(p + 41.9)) - 0.5;
+		g = mat3(VIEW_MATRIX) * (mat3(MODEL_MATRIX) * (inverse(mat3(car_from_mesh)) * g));
+		g -= dot(g, NORMAL) * NORMAL;
+		NORMAL = normalize(NORMAL + g * (2.0 * GRAIN_DEPTH * zone * fade));
 	}
 }

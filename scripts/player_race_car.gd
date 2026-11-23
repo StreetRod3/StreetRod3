@@ -77,6 +77,28 @@ const REVERSE_ENGAGE_SPEED := 2.0
 ## Reverse tops out at this share of first gear, and never slower than a brisk walk.
 const REVERSE_TOP_FRACTION := 0.38
 const REVERSE_TOP_MIN := 7.0
+## An automatic under throttle that is losing at least this much speed, in m/s², drops to a lower
+## gear that pulls this many times harder, as a kickdown does on a climb, rather than lug.
+const AUTO_KICKDOWN_LOSS := 0.3
+const AUTO_KICKDOWN_PULL := 1.1
+## Over how long, in seconds, the car's gain in speed is watched for that (`_track_speed()`).
+const AUTO_TREND_TIME := 0.4
+## Painted ground steeper than this rise a meter, about 50 degrees, is a cliff that stops the car
+## at once (`_hold_off_steep()`). Grass holds a stopped car on a slope up to `STEEP_GRIP`, its grip,
+## and past it the car slides down, to at most `STEEP_SLIDE_MAX` m/s.
+const CLIFF_SLOPE := 1.2
+const STEEP_GRIP := 0.6
+const STEEP_SLIDE_MAX := 6.0
+## How fast the wheels stop spinning once off that ground, a share a second; slow, so the revs hold
+## where the car sits on its edge.
+const STEEP_SPIN_FALL := 1.5
+## On the gas in a forward gear, a car slower than this, in m/s, or losing speed in first, facing
+## up ground rising more than `STUCK_GRADE` a meter, is held back by the hill and spins its wheels.
+const STUCK_SPEED := 1.0
+const STUCK_GRADE := 0.15
+## An automatic's torque converter lets the engine run up to this on the gas while the car is held
+## still or crawling, as against a slope, instead of dragging it down to idle.
+const AUTO_STALL_RPM := 2200.0
 ## Share of how hard a landing is that comes off the car's speed.
 const LANDING_SPEED_LOSS := 0.15
 ## A blown tire pulls the car towards its side, as in Street Rod 2. The pull is steering input,
@@ -116,6 +138,14 @@ var _touch: Node = null
 var _gearbox: Dictionary = {}
 var _gear: int = 0
 var _shift_timer: float = 0.0
+## How fast the car is gaining speed, in m/s², smoothed, for the automatic and wheel spin.
+var _speed_trend: float = 0.0
+var _trend_from: float = 0.0
+## On ground too steep to climb: how fast the car still climbs it, in m/s (below 0 off it), how fast
+## it slides back down, and how far its rear wheels spin, 0 to 1, for the revs.
+var _steep_climb: float = -1.0
+var _steep_slide: float = 0.0
+var _steep_spin: float = 0.0
 ## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
 var _shifter_gear: int = _Controller.POSITION_NONE
 var _rumble := _Rumble.new()
@@ -178,6 +208,7 @@ func _ready() -> void:
 		_dynamics = _VehicleDynamics.new()
 		_dynamics.name = "VehicleDynamics"
 		add_child(_dynamics)
+	_dynamics.ride_base = _road_base_y
 	motion_mode = MOTION_MODE_FLOATING
 	# Layer 2 is cars. Only the road and its barriers stop this body. Contact with the other
 	# car is all in `car_bump.gd`, or on a slope the bodies touch before it sees a hit.
@@ -285,6 +316,8 @@ func _apply_camera_mode() -> void:
 				pos = raw_pos
 			pitch_deg = float(cam_dict.get("pitch", pitch_deg))
 			fov_deg = float(cam_dict.get("fov", fov_deg))
+	if slot == "cockpit":
+		pos.y -= GameState.car_seat_drop()
 	var local_pos := Vector3(_car_center.x + pos.x, pos.y - _road_base_y, _car_center.z + pos.z)
 	_cam_rest = _camera_pose(local_pos, pitch_deg)
 	_cam.fov = fov_deg
@@ -487,7 +520,10 @@ func get_rpm() -> float:
 	if _engine_blown:
 		return 0.0
 	var rpm := _road_rpm()
+	if _is_automatic() and _gear != GEAR_NEUTRAL and _throttle_down():
+		rpm = maxf(rpm, lerpf(RPM_IDLE, AUTO_STALL_RPM, _throttle_amount()))
 	rpm = lerpf(rpm, maxf(rpm, BURNOUT_RPM), _burnout)
+	rpm = lerpf(rpm, maxf(rpm, lerpf(RPM_IDLE, BURNOUT_RPM, _throttle_amount())), _steep_spin)
 	rpm = maxf(rpm, _clutch_rpm)
 	return clampf(rpm, RPM_IDLE_MIN, RPM_METER_MAX)
 
@@ -817,15 +853,19 @@ func _physics_process(delta: float) -> void:
 	if _shift_timer > 0.0:
 		_shift_timer = maxf(0.0, _shift_timer - delta)
 	_update_clutch(delta)
+	_track_speed(delta)
 	_ride_on_flat(delta)
+	var from := global_position
 	if _air.airborne:
 		_physics_air(delta)
 	elif GameState.arcade_drive:
 		_physics_arcade(delta)
+		_hold_off_steep(from, delta)
 		_dynamics.sample_surfaces(_race_track(), global_transform)
 		_body_motion.ride_from_motion(delta, _arcade.planar_velocity(), heading_yaw)
 	else:
 		_physics_simulation(delta)
+		_hold_off_steep(from, delta)
 		_body_motion.note_velocity(_dynamics.cg_velocity)
 	_update_burnout(delta)
 	_update_rumble(delta)
@@ -843,7 +883,7 @@ func _pose_body(delta: float) -> void:
 	var on_arcade := GameState.arcade_drive and not _parking
 	var steer: float = _arcade.steer_angle if on_arcade else _dynamics.steer_angle()
 	var steer_input: float = _arcade.steer_input() if on_arcade else _dynamics.steer_input()
-	_body_motion.pose(delta, forward_speed, steer, steer_input, _burnout * BURNOUT_WHEEL_SPEED, get_rpm())
+	_body_motion.pose(delta, forward_speed, steer, steer_input, maxf(_burnout, _steep_spin) * BURNOUT_WHEEL_SPEED, get_rpm())
 	_place_camera(delta)
 
 
@@ -1044,6 +1084,21 @@ func _signed_gear_accel() -> float:
 	return pull * GameState.weight_accel() * _damage.power_left()
 
 
+## Keeps `_speed_trend`, how fast the car has been gaining speed.
+func _track_speed(delta: float) -> void:
+	var gained := (forward_speed - _trend_from) / maxf(delta, 0.0001)
+	_trend_from = forward_speed
+	_speed_trend = lerpf(_speed_trend, gained, clampf(delta / AUTO_TREND_TIME, 0.0, 1.0))
+
+
+## How hard a forward gear pulls at the car's speed, for comparing gears: both driving models
+## push by the ratio, less as the gear runs out of revs (`gear_acceleration()`, `drive_force()`).
+func _gear_pull(gear_index: int) -> float:
+	var ratios := _ratios()
+	var ratio := float(ratios[clampi(gear_index, 0, ratios.size() - 1)])
+	return _ArcadeDrive.gear_acceleration(ratio, _gear_top_mps(gear_index), maxf(forward_speed, 0.0), GameState.engine_power_hp)
+
+
 ## Lowest and highest speed this gear allows, in m/s. Neutral coasts either way.
 func _speed_limits() -> Vector2:
 	var vmax := GameState.get_effective_vmax_kmh() / 3.6
@@ -1127,7 +1182,9 @@ func _auto_shift(throttle: bool, brake: bool) -> void:
 	if _gear <= 0:
 		return
 	var prev_top := _gear_top_mps(_gear - 1)
-	if forward_speed < prev_top * 0.38:
+	var kickdown := throttle and _speed_trend < -AUTO_KICKDOWN_LOSS and forward_speed < prev_top * 0.85 \
+		and _gear_pull(_gear - 1) > _gear_pull(_gear) * AUTO_KICKDOWN_PULL
+	if forward_speed < prev_top * 0.38 or kickdown:
 		_request_shift(-1)
 	elif (brake or not throttle) and forward_speed < prev_top * 0.62:
 		_request_shift(-1)
@@ -1271,6 +1328,8 @@ func _stick_to_road() -> void:
 		if _air.airborne:
 			global_position.y = _road_base_y + here
 			rotation.x = _air.flight_pitch(rotation.x, speed, delta)
+			if track.has_method(&"surface_roll"):
+				rotation.z = _air.flight_roll(rotation.z, track.surface_roll(global_position, rotation.y), delta)
 			return
 		if _air.impact > LANDING_FELT_MPS:
 			_land(_air.impact)
@@ -1309,15 +1368,72 @@ func _escape_obstacle(track: Node) -> bool:
 	return true
 
 
+## Painted ground too steep to climb (race_track.gd's `too_steep_uphill()`): the engine can't take
+## the car up it, so the rear wheels spin and gravity takes the speed it climbs with (from `from`,
+## where it was before this step), and once it has stopped climbing it slides back down. A cliff,
+## past `CLIFF_SLOPE`, stops it at once as a wall would, without harm.
+func _hold_off_steep(from: Vector3, delta: float) -> void:
+	var track := _race_track()
+	var rise := Vector3.ZERO
+	if track != null and track.has_method(&"too_steep_uphill"):
+		rise = track.too_steep_uphill(global_position)
+	var spinning := false
+	if rise == Vector3.ZERO:
+		_steep_climb = -1.0
+		_steep_slide = 0.0
+		# A hill the tires can't pull the car up spins them too: one it is stuck on, or still
+		# losing speed on in first.
+		var losing := absf(forward_speed) < STUCK_SPEED or (_gear == 0 and _speed_trend < -AUTO_KICKDOWN_LOSS)
+		if losing and _throttle_down() and _gear >= 0 and track != null and track.has_method(&"ground_grade"):
+			spinning = float(track.ground_grade(global_position, heading_yaw)) > STUCK_GRADE
+	else:
+		_climb_steep(from, delta, rise)
+		spinning = _throttle_down()
+	_steep_spin = move_toward(_steep_spin, 1.0 if spinning else 0.0, (BURNOUT_RISE if spinning else STEEP_SPIN_FALL) * delta)
+
+
+## One step on ground rising `rise` (uphill, as long as its rise a meter) that is too steep to climb.
+func _climb_steep(from: Vector3, delta: float, rise: Vector3) -> void:
+	var slope := rise.length()
+	var up := rise / slope
+	var planar := Vector3(velocity.x, 0.0, velocity.z)
+	var into := planar.dot(up)
+	var lean := 1.0 / sqrt(1.0 + slope * slope)
+	var allowed := 0.0
+	if slope <= CLIFF_SLOPE:
+		var climbing := into if _steep_climb < 0.0 else _steep_climb
+		allowed = maxf(climbing - _ArcadeDrive.GRAVITY * slope * lean * delta, 0.0)
+	if into > allowed:
+		var over := Vector3(global_position.x - from.x, 0.0, global_position.z - from.z).dot(up) - allowed * delta
+		if over > 0.0:
+			global_position -= up * over
+		var after := planar - up * (into - allowed)
+		if GameState.arcade_drive:
+			_arcade.apply_planar_velocity(self, after, _car_center)
+		else:
+			_dynamics.cg_velocity = after
+			velocity = after
+			_sync_motion_state()
+		into = allowed
+	_steep_climb = maxf(into, 0.0)
+	if allowed > 0.0:
+		_steep_slide = 0.0
+		return
+	# Stopped, it slides down where the grass can't hold it.
+	var slide := _ArcadeDrive.GRAVITY * maxf(slope - STEEP_GRIP, 0.0) * lean
+	_steep_slide = minf(_steep_slide + slide * delta, STEEP_SLIDE_MAX)
+	global_position -= up * _steep_slide * delta
+
+
 ## Applies touching a barrier to the driving model. True when one was touched.
 func _scrape_barrier(before: Vector3, delta: float) -> bool:
 	var hit := _WallScrape.resolve(self, before, delta)
 	if hit.is_empty():
 		return false
 	var after: Vector3 = hit["velocity"]
-	if hit.has("snapped"):
-		# Through a tree: it gave way, so the car keeps its heading.
-		take_hit(float(hit["snapped"]))
+	if hit.has("gave_way"):
+		# Through a tree, or shoving a dumpster: it gave way, so the car keeps its heading.
+		take_hit(float(hit["gave_way"]))
 		if GameState.arcade_drive:
 			_arcade.apply_planar_velocity(self, after, _car_center)
 		else:

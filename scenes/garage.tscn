@@ -5,6 +5,8 @@
 [ext_resource type="Texture2D" uid="uid://b243jaowc1hjq" path="res://assets/icon.png" id="3"]
 [ext_resource type="PackedScene" uid="uid://ck08a73hu26r1" path="res://assets/locations/garage/us_jerry_can.glb" id="4"]
 [ext_resource type="Script" path="res://scripts/garage_view_controls.gd" id="5"]
+[ext_resource type="PackedScene" path="res://assets/locations/garage/jack.glb" id="6"]
+[ext_resource type="Script" path="res://scripts/floor_jack.gd" id="7"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.2, 0.25, 0.35, 1)
@@ -337,52 +339,10 @@ roughness = 0.4
 size = Vector3(0.18, 0.38, 0.08)
 
 [sub_resource type="BoxShape3D" id="FuelCanShape"]
-size = Vector3(0.36, 0.528, 0.186)
-
-[sub_resource type="StandardMaterial3D" id="LiftMetalMat"]
-albedo_color = Color(0.18, 0.18, 0.2, 1)
-metallic = 0.74
-roughness = 0.36
-
-[sub_resource type="StandardMaterial3D" id="LiftRedMat"]
-albedo_color = Color(0.72, 0.14, 0.1, 1)
-roughness = 0.48
-
-[sub_resource type="BoxMesh" id="LiftBaseMesh"]
-material = SubResource("LiftRedMat")
-size = Vector3(0.9, 0.12, 0.36)
-
-[sub_resource type="BoxMesh" id="LiftHandleMesh"]
-material = SubResource("LiftRedMat")
-size = Vector3(1.1, 0.04, 0.04)
-
-[sub_resource type="CylinderMesh" id="LiftGripMesh"]
-material = SubResource("LiftMetalMat")
-top_radius = 0.028
-bottom_radius = 0.028
-height = 0.22
-radial_segments = 12
-
-[sub_resource type="BoxMesh" id="LiftArmMesh"]
-material = SubResource("LiftMetalMat")
-size = Vector3(0.1, 0.5, 0.1)
-
-[sub_resource type="CylinderMesh" id="LiftPadMesh"]
-material = SubResource("LiftMetalMat")
-top_radius = 0.09
-bottom_radius = 0.09
-height = 0.05
-radial_segments = 16
-
-[sub_resource type="CylinderMesh" id="LiftCasterMesh"]
-material = SubResource("LiftMetalMat")
-top_radius = 0.055
-bottom_radius = 0.055
-height = 0.045
-radial_segments = 12
+size = Vector3(0.347, 0.47, 0.165)
 
 [sub_resource type="BoxShape3D" id="LiftShape"]
-size = Vector3(1.6, 0.6, 0.45)
+size = Vector3(1.14, 0.48, 0.3)
 
 [sub_resource type="StandardMaterial3D" id="VodkaGlassMat"]
 transparency = 1
@@ -1096,52 +1056,18 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.08, 0, 2.5)
 [node name="Model" parent="InteractFuelCan" instance=ExtResource("4")]
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractFuelCan" unique_id=135487322]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.264, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.235, 0)
 shape = SubResource("FuelCanShape")
 
 [node name="InteractLift" type="StaticBody3D" parent="." unique_id=210050001]
 transform = Transform3D(0.8525245, 0, 0.52268726, 0, 1, 0, -0.52268726, 0, 0.8525245, -2, 0.06, -0.15)
 
-[node name="Chassis" type="MeshInstance3D" parent="InteractLift" unique_id=210050002]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.09, 0)
-mesh = SubResource("LiftBaseMesh")
-
-[node name="Handle" type="MeshInstance3D" parent="InteractLift" unique_id=210050005]
-transform = Transform3D(0.819, 0.574, 0, -0.574, 0.819, 0, 0, 0, 1, -0.9, 0.43, 0)
-mesh = SubResource("LiftHandleMesh")
-
-[node name="Grip" type="MeshInstance3D" parent="InteractLift" unique_id=210050006]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -1.35, 0.745, 0)
-mesh = SubResource("LiftGripMesh")
-
-[node name="LiftArm" type="Node3D" parent="InteractLift" unique_id=210050010]
-
-[node name="Beam" type="MeshInstance3D" parent="InteractLift/LiftArm" unique_id=210050011]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, -0.07, 0)
-mesh = SubResource("LiftArmMesh")
-
-[node name="Pad" type="MeshInstance3D" parent="InteractLift/LiftArm" unique_id=210050012]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.36, 0.2, 0)
-mesh = SubResource("LiftPadMesh")
-
-[node name="CasterFL" type="MeshInstance3D" parent="InteractLift" unique_id=210050020]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0.36, -0.005, 0.2)
-mesh = SubResource("LiftCasterMesh")
-
-[node name="CasterFR" type="MeshInstance3D" parent="InteractLift" unique_id=210050021]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, 0.36, -0.005, -0.2)
-mesh = SubResource("LiftCasterMesh")
-
-[node name="CasterRL" type="MeshInstance3D" parent="InteractLift" unique_id=210050022]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.36, -0.005, 0.2)
-mesh = SubResource("LiftCasterMesh")
-
-[node name="CasterRR" type="MeshInstance3D" parent="InteractLift" unique_id=210050023]
-transform = Transform3D(1, 0, 0, 0, 0, -1, 0, 1, 0, -0.36, -0.005, -0.2)
-mesh = SubResource("LiftCasterMesh")
+[node name="Jack" parent="InteractLift" instance=ExtResource("6")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06, 0)
+script = ExtResource("7")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractLift" unique_id=210050030]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.3, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.235, 0.18, 0)
 shape = SubResource("LiftShape")
 
 [node name="CameraPivot" type="Node3D" parent="." unique_id=82855066]

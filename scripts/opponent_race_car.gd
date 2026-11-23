@@ -137,6 +137,7 @@ func _ready() -> void:
 		_dynamics = _VehicleDynamics.new()
 		_dynamics.name = "VehicleDynamics"
 		add_child(_dynamics)
+	_dynamics.ride_base = _road_base_y
 	motion_mode = MOTION_MODE_FLOATING
 	# Layer 2 is cars. Only the road and its barriers stop this body. Contact with the other
 	# car is all in `car_bump.gd`, or on a slope the bodies touch before it sees a hit.
@@ -548,6 +549,8 @@ func _stick_to_road() -> void:
 				_flight_velocity = moving
 			global_position.y = _road_base_y + here
 			rotation.x = _air.flight_pitch(rotation.x, speed, delta)
+			if track.has_method(&"surface_roll"):
+				rotation.z = _air.flight_roll(rotation.z, track.surface_roll(global_position, rotation.y), delta)
 			return
 		if was_flying:
 			_rejoin_line(track)
@@ -920,9 +923,9 @@ func _scrape_barrier(before: Vector3, track: Node, delta: float) -> bool:
 	if hit.is_empty():
 		return false
 	var after: Vector3 = hit["velocity"]
-	if hit.has("snapped"):
-		# Through a tree: it gave way, so the car keeps its heading.
-		take_hit(float(hit["snapped"]))
+	if hit.has("gave_way"):
+		# Through a tree, or shoving a dumpster: it gave way, so the car keeps its heading.
+		take_hit(float(hit["gave_way"]))
 		_dynamics.cg_velocity = after
 		velocity = after
 		_sync_motion_state()

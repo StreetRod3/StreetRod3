@@ -19,6 +19,8 @@ const _VehicleDynamics := preload("res://scripts/vehicle_dynamics.gd")
 const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
 const _PlayerCar := preload("res://scripts/player_race_car.gd")
+const _Dumpster := preload("res://scripts/dumpster.gd")
+const _GasPump := preload("res://scripts/gas_pump.gd")
 const _RpmMeter := preload("res://scripts/rpm_meter.gd")
 const _Controller := preload("res://scripts/controller.gd")
 const _TouchControls := preload("res://scripts/race_touch_controls.gd")
@@ -147,6 +149,10 @@ var _fade: float = 1.0
 var _phase: int = 0
 var _destination: String = ""
 var _streets: Array[Dictionary] = []
+## Every building's footprint, for placing dumpsters clear of them: {"xform": its Transform3D,
+## "center": the footprint's middle in its own space, "half": half its width (X) and depth (Z),
+## "faces": the faces (as `_face_pos()`) a dumpster may stand against, empty for none}.
+var _lots: Array[Dictionary] = []
 var _garage_left: Node3D
 var _garage_right: Node3D
 var _leaving_garage := false
@@ -185,6 +191,12 @@ var _console: Control
 var _console_layer: CanvasLayer
 ## While true, `_add_box()` and the like add to `_batches` instead of making nodes.
 var _batching := false
+## A dumpster stands this far off its wall, this far in from the corner, and keeps this much room
+## round it and its corners this far from a curb.
+const _DUMPSTER_WALL_GAP := 0.12
+const _DUMPSTER_CORNER := 0.6
+const _DUMPSTER_ROOM := 0.1
+const _DUMPSTER_CURB_GAP := 1.0
 ## Merged scenery, keyed by cell x, cell z, and 1 for the pieces that cast shadows.
 var _batches: Dictionary = {}
 ## One StandardMaterial3D per look, shared by every unmerged box that has it.
@@ -466,6 +478,8 @@ func _apply_auto_camera_mode() -> void:
 				pos = raw_pos
 			pitch_deg = float(cam_dict.get("pitch", pitch_deg))
 			fov_deg = float(cam_dict.get("fov", fov_deg))
+	if slot == "cockpit":
+		pos.y -= GameState.car_seat_drop()
 	var local_pos := Vector3(_pivot.position.x + pos.x, pos.y - _BODY_Y, _pivot.position.z + pos.z)
 	_cam_rest = Transform3D(Basis.from_euler(Vector3(deg_to_rad(pitch_deg), PI, 0.0)), local_pos)
 	_camera.fov = fov_deg
@@ -1060,6 +1074,75 @@ func _leave_after_wreck() -> void:
 	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
 
 
+func _add_lot(root: Node3D, center: Vector3, size: Vector2, faces: Array[int]) -> void:
+	_lots.append({"xform": root.transform, "center": center, "half": size * 0.5, "faces": faces})
+
+
+## A dumpster (dumpster.gd) by each building that wants one, against the wall of those it may
+## stand by that is farthest from a street, back to the wall near a corner, where it is clear
+## of every building, the streets and the other dumpsters.
+func _build_dumpsters() -> void:
+	var placed: Array[Transform3D] = []
+	var bin_half := Vector2(_Dumpster.SIZE.x, _Dumpster.SIZE.z) * 0.5
+	for lot: Dictionary in _lots:
+		var faces: Array[int] = []
+		faces.assign(lot["faces"])
+		if faces.is_empty():
+			continue
+		var xform: Transform3D = lot["xform"]
+		var center: Vector3 = lot["center"]
+		var half: Vector2 = lot["half"]
+		var spots: Array[Transform3D] = []
+		for face in faces:
+			var length := half.y * 2.0 if face < 2 else half.x * 2.0
+			var reach := maxf(length * 0.5 - bin_half.x - _DUMPSTER_CORNER, 0.0)
+			for along: float in [reach, -reach]:
+				var spot := center + _face_pos(half.x * 2.0, half.y * 2.0, face, along, 0.0, bin_half.y + _DUMPSTER_WALL_GAP)
+				var outward := _face_pos(2.0, 2.0, face, 0.0, 0.0, 0.0)
+				spots.append(xform * Transform3D(Basis(Vector3.UP, atan2(outward.x, outward.z)), spot))
+		spots.sort_custom(func(a: Transform3D, b: Transform3D) -> bool: return _nearest_curb(Vector2(a.origin.x, a.origin.z)) > _nearest_curb(Vector2(b.origin.x, b.origin.z)))
+		for spot in spots:
+			if _dumpster_fits(spot, bin_half, placed):
+				placed.append(spot)
+				var bin := _Dumpster.new()
+				bin.name = "Dumpster%d" % placed.size()
+				bin.transform = spot
+				add_child(bin)
+				break
+
+
+func _dumpster_fits(spot: Transform3D, bin_half: Vector2, placed: Array[Transform3D]) -> bool:
+	var room := bin_half + Vector2.ONE * _DUMPSTER_ROOM
+	for x: float in [-1.0, 1.0]:
+		for z: float in [-1.0, 1.0]:
+			var corner := spot * Vector3(x * room.x, 0.0, z * room.y)
+			if _nearest_curb(Vector2(corner.x, corner.z)) < _DUMPSTER_CURB_GAP:
+				return false
+	for lot: Dictionary in _lots:
+		var xform: Transform3D = lot["xform"]
+		var box := Transform3D(xform.basis, xform * (lot["center"] as Vector3))
+		if _boxes_overlap(spot, room, box, lot["half"] as Vector2):
+			return false
+	for other in placed:
+		if _boxes_overlap(spot, room, other, bin_half):
+			return false
+	return true
+
+
+## Whether two boxes on the ground overlap, each turned only about Y with `half` its half width
+## along its X and half depth along its Z (separating axes).
+static func _boxes_overlap(a: Transform3D, a_half: Vector2, b: Transform3D, b_half: Vector2) -> bool:
+	var axes: Array[Vector3] = [a.basis.x, a.basis.z, b.basis.x, b.basis.z]
+	var gap := b.origin - a.origin
+	for axis in axes:
+		var n := Vector3(axis.x, 0.0, axis.z).normalized()
+		var reach_a := absf(n.dot(a.basis.x.normalized())) * a_half.x + absf(n.dot(a.basis.z.normalized())) * a_half.y
+		var reach_b := absf(n.dot(b.basis.x.normalized())) * b_half.x + absf(n.dot(b.basis.z.normalized())) * b_half.y
+		if absf(n.dot(gap)) > reach_a + reach_b:
+			return false
+	return true
+
+
 func _add_solid(parent: Node3D, size: Vector3, pos: Vector3, barrier := false) -> void:
 	var body := StaticBody3D.new()
 	body.collision_layer = 1
@@ -1134,6 +1217,7 @@ func _build_city(track: Dictionary) -> void:
 	_build_places(track)
 	_build_blocks(track)
 	_build_streetscape(track)
+	_build_dumpsters()
 	_build_speed_signs(track)
 	_floor = ground
 
@@ -1680,14 +1764,20 @@ func _build_places(track: Dictionary) -> void:
 		match place_id:
 			"garage":
 				_build_garage(root)
+				_add_lot(root, Vector3(-0.4, 0.0, 4.5), Vector2(11.5, 9.0), [0, 1, 2])
 			"drive-in":
 				_build_drive_in(root)
+				_add_lot(root, Vector3(0.0, 0.0, 3.2), Vector2(16.4, 6.4), [0, 1, 2])
 			"gas-station":
 				_build_gas_station(root)
+				_add_lot(root, Vector3(0.0, 0.0, 2.8), Vector2(10.4, 5.6), [0, 1, 2])
 			GameState.POI_ROYAL_RODS:
 				_build_royal_rods(root)
+				# Its murals are on the sides.
+				_add_lot(root, Vector3(0.0, 0.0, 4.2), Vector2(11.6, 8.2), [2])
 			_:
 				_add_box(root, Vector3(9.0, 4.2, 7.0), Vector3(0.0, 2.1, 3.5), Color(0.35, 0.35, 0.38))
+				_add_lot(root, Vector3(0.0, 0.0, 3.5), Vector2(9.0, 7.0), [])
 
 
 ## The front faces the lane. Local +X runs with the car, left to right across that front.
@@ -1880,17 +1970,21 @@ func _build_gas_station(root: Node3D) -> void:
 		var sx := 5.28 * side
 		_add_box(root, Vector3(0.1, 0.7, 3.0), Vector3(sx, 4.15, 1.45), _GAS_BLUE, 0.5, 0.0, Color.BLACK, 0.0, Vector3(-0.7, 0.0, 0.0))
 		_add_box(root, Vector3(0.1, 0.7, 3.0), Vector3(sx, 4.15, 3.95), _GAS_BLUE, 0.5, 0.0, Color.BLACK, 0.0, Vector3(0.7, 0.0, 0.0))
-	_gas_pump(root, Vector3(-1.5, 0.08, -2.3))
-	_gas_pump(root, Vector3(0.7, 0.08, -2.3))
+	_gas_pump(root, Vector3(-1.5, 0.08, -2.3), "regular")
+	_gas_pump(root, Vector3(0.7, 0.08, -2.3), "super")
 	_gas_sign(root)
 
 
-func _gas_pump(root: Node3D, pos: Vector3) -> void:
-	var red := Color(0.62, 0.1, 0.1)
-	_add_box(root, Vector3(0.7, 0.1, 0.5), pos + Vector3(0.0, 0.05, 0.0), Color(0.78, 0.76, 0.72), 0.55)
-	_add_box(root, Vector3(0.55, 1.2, 0.38), pos + Vector3(0.0, 0.7, 0.0), red, 0.42)
-	_add_box(root, Vector3(0.48, 0.07, 0.04), pos + Vector3(0.0, 1.05, -0.2), _GAS_YELLOW, 0.35, 0.0, _GAS_YELLOW, 0.45)
-	_add_sphere(root, 0.16, pos + Vector3(0.0, 1.48, 0.0), Color(0.75, 0.88, 0.95), 0.18, 0.08, Color(0.8, 0.92, 1.0), 0.3)
+## The gas station scene's pump (gas_pump.gd) on a concrete island, its front to the street.
+func _gas_pump(root: Node3D, pos: Vector3, id: String) -> void:
+	_add_box(root, Vector3(1.1, 0.1, 0.8), pos + Vector3(0.0, 0.05, 0.0), Color(0.78, 0.76, 0.72), 0.55)
+	var model := _GasPump.make(id)
+	if model == null:
+		return
+	model.name = "Pump" + id.capitalize()
+	model.position = pos + Vector3(0.0, 0.1, 0.0)
+	model.rotation.y = PI
+	root.add_child(model)
 
 
 func _gas_sign(root: Node3D) -> void:
@@ -2111,6 +2205,7 @@ func _build_police_station(block: Dictionary) -> void:
 	root.name = "PoliceStation"
 	root.position = Vector3(float(block["x"]), 0.0, float(block["y"]))
 	add_child(root)
+	_add_lot(root, Vector3.ZERO, Vector2(wide, deep), [])
 	_add_solid(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), true)
 	_add_box(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), stone, 0.88)
 	_add_box(root, Vector3(wide + 0.3, 0.35, deep + 0.3), Vector3(0.0, tall + 0.16, 0.0), stone.darkened(0.28), 0.9)
@@ -2140,6 +2235,14 @@ func _build_city_building(block: Dictionary, index: int, glass: Material, lit: M
 	var root := Node3D.new()
 	root.position = Vector3(float(block["x"]), 0.0, float(block["y"]))
 	add_child(root)
+	var entrances := _entrance_faces(Vector2(root.position.x, root.position.z), wide * 0.5, deep * 0.5, index)
+	# Shops put out their trash, and so does every third of the rest, never by a door.
+	var bins: Array[int] = []
+	if not sign.is_empty() or index % 3 == 0:
+		for face in 4:
+			if not entrances.has(face):
+				bins.append(face)
+	_add_lot(root, Vector3.ZERO, Vector2(wide, deep), bins)
 	_add_solid(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), true)
 	_add_box(root, Vector3(wide, tall, deep), Vector3(0.0, tall * 0.5, 0.0), wall, 0.9)
 	_add_box(root, Vector3(wide + 0.08, 0.72, deep + 0.08), Vector3(0.0, 0.36, 0.0), wall.darkened(0.24), 0.92)
@@ -2150,7 +2253,6 @@ func _build_city_building(block: Dictionary, index: int, glass: Material, lit: M
 			var sz := -1.0 if side_z == 0 else 1.0
 			_add_facade_box(root, Vector3(0.22, tall, 0.22), Vector3(sx * wide * 0.5, tall * 0.5, sz * deep * 0.5), board, 0.88)
 	_add_city_roof(root, wide, deep, tall, wall, index, glass, frame)
-	var entrances := _entrance_faces(Vector2(root.position.x, root.position.z), wide * 0.5, deep * 0.5, index)
 	for face in 4:
 		_dress_facade(root, wide, deep, tall, face, entrances.has(face), index, sign, wall, glass, lit, frame, doors, signs)
 

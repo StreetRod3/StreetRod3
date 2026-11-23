@@ -23,10 +23,31 @@ extends RefCounted
 ## `model.paintable` is false when the body's colors are fixed, as on the police Fairlane.
 ## Left out, a car can be painted.
 ##
+## `model.paint` sets the paint's finish (car_paint_mask.gdshader): any of `metallic`,
+## `roughness`, `clearcoat` and `clearcoat_roughness`, 0 to 1. Left out, the shader's own
+## (metallic 0.35, roughness 0.42, no clear coat), or on a dithered body its model's.
+##
 ## `model.cove` is a second paint zone, like the side coves of the 1956-62 Corvettes:
 ## `outline` is its shape seen from the side, [z, y] points in meters in the body's
 ## space (the model's CarBody, Y up, +Z forward), and `min_x` how far from the middle
 ## its faces are. It is the same on both sides.
+##
+## `model.accent` is a second paint marked in the model's texture, like the 1963 C10's
+## grille, bumpers and tailgate lettering, which were painted off-white: of the texels
+## that are paint (alpha 1), the accent's have no blue (car_paint_mask.gdshader). `color`
+## ([r, g, b], 0 to 1) is its paint until it is painted on its own. A car has a cove or
+## an accent, not both; either is painted with the garage paint menu's Accent choice.
+##
+## A cove or accent can give its `finish` until the player picks one in the garage:
+## "paint" (the body's finish, the default), "vinyl" or "matte" (ACCENT_FINISHES).
+##
+## `model.roof` is for a model whose roof the garage can chop: it has nodes `roof_stock`
+## and `roof_chopped` (the roof's glass, trim and what hangs inside from it), each with
+## `<that>_vinyl` and `<that>_smooth` under it, the vinyl top and a smooth painted roof.
+## The game shows the stock or chopped one, and under it the vinyl top while the accent's
+## finish is vinyl. `chop_in` is how far down a chop takes the roof, in inches, and
+## `seat_drop` how far the chopped roof's seats sit lower, in meters, which the cockpit
+## camera and driver come down by too.
 ##
 ## `bumpers` names the bumpers that can be stripped, `front` and `rear`: `node` is the
 ## mesh in the model that is the bumper with its brackets, and `mass` what it weighs in
@@ -40,12 +61,28 @@ const COVE_POINTS_MAX := 24
 ## The two ends a bumper can be on.
 const BUMPER_ENDS: Array[String] = ["front", "rear"]
 const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
+## The paint finish a car file can set in model.paint: shader parameters of the same names.
+const PAINT_FINISH_KEYS: Array[String] = ["metallic", "roughness", "clearcoat", "clearcoat_roughness"]
+## A cove's or accent's finishes, in the garage paint menu's order; car_paint_mask.gdshader's
+## accent_finish is the index.
+const ACCENT_FINISHES: Array[String] = ["paint", "vinyl", "matte"]
 const DEFAULT_CAMERAS: Dictionary = {
 	"far": {"position": Vector3(0.0, 2.55, -10.4), "pitch": -14.0, "fov": 68.0},
 	"close": {"position": Vector3(0.0, 1.8, -6.1), "pitch": -10.0, "fov": 70.0},
 	"cockpit": {"position": Vector3(0.42, 1.23, -0.38), "pitch": -2.0, "fov": 72.0},
 	"bumper": {"position": Vector3(0.0, 0.51, 2.95), "pitch": -1.0, "fov": 72.0},
 }
+
+
+## The paint finish keys a car file gave, as floats clamped to 0-1; the rest left out.
+static func _paint_finish(value: Variant) -> Dictionary:
+	var finish := {}
+	if typeof(value) != TYPE_DICTIONARY:
+		return finish
+	for key: String in PAINT_FINISH_KEYS:
+		if (value as Dictionary).has(key):
+			finish[key] = clampf(float((value as Dictionary)[key]), 0.0, 1.0)
+	return finish
 
 
 static func load_path(path: String) -> Dictionary:
@@ -114,6 +151,7 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 		# Size of the paint's EGA-style dither squares in meters (car_paint_mask.gdshader); 0 is none.
 		"dither_cell": float(body.get("dither_cell", 0.0)),
 		"paintable": bool(body.get("paintable", true)),
+		"paint": _paint_finish(body.get("paint", {})),
 	}
 	# A second paint zone (the Corvettes' side coves): a side-view outline of [z, y] points
 	# in meters, in the car's space, and how far out from the middle its faces lie.
@@ -131,7 +169,36 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 			result.model["cove"] = {
 				"outline": outline,
 				"min_x": float((cove as Dictionary).get("min_x", 0.0)),
+				"finish": _accent_finish(cove as Dictionary, result),
 			}
+	var roof: Variant = body.get("roof", null)
+	if typeof(roof) == TYPE_DICTIONARY:
+		result.model["roof"] = {
+			"chop_in": float((roof as Dictionary).get("chop_in", 3.0)),
+			"seat_drop": float((roof as Dictionary).get("seat_drop", 0.0)),
+		}
+	# A second paint marked in the texture (the C10's grille, bumpers and lettering), and
+	# its paint until the accent is painted.
+	var accent: Variant = body.get("accent", null)
+	if typeof(accent) == TYPE_DICTIONARY:
+		var rgb: Variant = (accent as Dictionary).get("color", [1.0, 1.0, 1.0])
+		if typeof(rgb) != TYPE_ARRAY or (rgb as Array).size() < 3:
+			result.errors.append("Car model accent color must be [r, g, b].")
+		else:
+			result.model["accent"] = {
+				"color": Color(float(rgb[0]), float(rgb[1]), float(rgb[2]), 1.0),
+				"finish": _accent_finish(accent as Dictionary, result),
+			}
+
+
+## A cove's or accent's `finish` until one is chosen in the garage: "paint" (the body's
+## finish, the default), "vinyl" or "matte".
+static func _accent_finish(block: Dictionary, result: Dictionary) -> String:
+	var finish := str(block.get("finish", ACCENT_FINISHES[0]))
+	if not ACCENT_FINISHES.has(finish):
+		result.errors.append("Car model accent finish must be one of %s." % ", ".join(ACCENT_FINISHES))
+		return ACCENT_FINISHES[0]
+	return finish
 
 
 static func _parse_wheels(root: Dictionary, result: Dictionary) -> void:

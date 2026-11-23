@@ -4,8 +4,10 @@ extends Node3D
 
 const _StreetScenery := preload("res://scripts/street_scenery.gd")
 const _CourseScenery := preload("res://scripts/course_scenery.gd")
+const _Dumpster := preload("res://scripts/dumpster.gd")
 const _TrackSides := preload("res://scripts/track_sides.gd")
 const _GroundMaterial := preload("res://scripts/ground_material.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 @export_file("*.trk") var track_path: String = "res://assets/tracks/track1.trk"
 
@@ -54,6 +56,51 @@ const POST_COLOR := Color(0.12, 0.12, 0.13, 1)
 const _RAMP_SIDE_COLOR := Color(0.42, 0.33, 0.22, 1)
 ## Road this high or less over the grass has no ramp side.
 const _RAMP_SIDE_MIN_M := 0.02
+## Painted ground is cut down to the road's edge at this rise a meter (45 degrees), and built up to
+## it at this fall (about 31 degrees), as a road cut through a hill or carried over a hollow.
+const _CUT_SLOPE := 1.0
+const _FILL_SLOPE := 0.6
+## On the Aqueduct the painted ground starts this far past the yellow line at the top of a side.
+const _AQUEDUCT_LIP_M := 1.22
+## The steepest painted ground a car can drive up, as a rise a meter: about 37 degrees. Past it the
+## car can't climb on (player_race_car.gd's `_hold_off_steep()`).
+const CLIMB_MAX := 0.75
+## How far past the road's edge the walls of Mulholland and the Aqueduct look for painted ground.
+const _PAINT_WALL_LOOK_M := 1.5
+## The strip of painted ground along each side of the road (`_build_ground_strip()`): how far out
+## it reaches past where it starts, and where its columns are.
+const _STRIP_W := 12.0
+const _STRIP_OFFSETS := [0.0, 0.5, 1.0, 1.5, 2.25, 3.0, 4.0, 5.0, 6.5, 8.0, 10.0, 12.0]
+## Unpainted chunks of the grid away from the road are drawn with points this many cells apart.
+## Near it they are drawn at the grid's own spacing, so a triangle reaching in under the strip from
+## past it reaches no nearer the road than Mulholland's hillsides and drops, which it can't follow.
+const _COARSE_STEP := 8
+## Looking for the road near a chunk of the grid, it looks at every so many samples near the road,
+## and far from it at fewer, then finely round the best.
+const _NEAR_SAMPLE_STEP := 4
+## Points a side of the blocks a fine chunk looks for the road in (`_samples_near()`).
+const _NEAR_BLOCK := 6
+const _FAR_SAMPLE_STEP := 8
+## How much farther under its height than the strip the grid is drawn at a point the strip or the
+## road covers. More left a lip at the strip's edge that showed as a dark line.
+const _COVERED_SINK := 0.04
+## How far the curtain under the strip's outer edge hangs down (`_add_curtain()`).
+const _CURTAIN_M := 1.0
+## How far in under the road the curtains along its edges and ends hang: right at its edge, the
+## screen could leave a crack a pixel wide between them.
+const _LIP_UNDER_M := 0.1
+## How far the skirt round each chunk of the grid hangs down.
+const _SKIRT_M := 3.0
+const _SKIRT_OUT_M := 0.6
+## Painted ground turns from grass to dirt between these steepnesses, as the cosine of its slope
+## (about 35 and 45 degrees, the ground shader's own), and the UV.x that gives none and all of it
+## (shaders/vertex_ground.gdshader's `dirt_from_m` and `dirt_over_m`).
+const _DIRT_STEEP_FROM := 0.82
+const _DIRT_STEEP_FULL := 0.7
+const _DIRT_UV_FROM := 0.15
+const _DIRT_UV_OVER := 0.5
+## The ground shader's distance from the road's edge for ground well clear of the verge.
+const _FAR_OUT_UV := 100.0
 ## Which ground `_height_on()` reads: whatever is there, or a plain track's road or grass alone.
 const _ANY_GROUND := 0
 const _ROAD_ONLY := 1
@@ -68,6 +115,8 @@ const _RAMP_STRADDLE_M := 0.15
 const _LIP_YELLOW := Color(0.95, 0.76, 0.08, 1)
 const _LIP_BAND_LONG := 1.6
 const _LIP_BAND_ACROSS := 1.0
+## The grass beside a banked road's raised edge falls this much a meter out, back to the road's foot.
+const _BANK_EMBANK_SLOPE := 0.5
 ## A rival holds to this over gravel: Street Rod 2's 59 mph.
 const GRAVEL_RIVAL_MPS := 59.0 * 0.44704
 ## A car this close to the middle of a flat rock on the road has hit it.
@@ -124,12 +173,19 @@ var _laps: int = 1
 var _lips: PackedFloat32Array = PackedFloat32Array()
 var _scenery: Array[Dictionary] = []
 ## Each sample's hillside (up) or drop (down) on the driver's left and right, and whether the right
-## has a guard rail. Only Mulholland has these.
+## has a guard rail, on Mulholland. On the Aqueduct the sides' heights (`_TrackSides.aqueduct_side()`),
+## and `_raised` when any stands higher than Street Rod 2's.
 var _left_sides: PackedFloat32Array = PackedFloat32Array()
 var _right_sides: PackedFloat32Array = PackedFloat32Array()
 var _rails: PackedByteArray = PackedByteArray()
+var _raised: bool = false
 ## The road's height with its rises and dips averaged out, which ground far from it follows.
 var _far_ys: PackedFloat32Array = PackedFloat32Array()
+## Each sample's bank: how much the road rises a meter across toward its `lateral` side (the
+## driver's left), below 0 falling. The edge at the bottom stays at the road's height. All 0 but
+## on a track whose nodes bank it (`_banked`).
+var _banks: PackedFloat32Array = PackedFloat32Array()
+var _banked: bool = false
 ## Where each node falls along the path.
 var _node_s: PackedFloat32Array = PackedFloat32Array()
 ## What a rival steers around, from the start: {s, to, low, high}, sorted by s.
@@ -138,6 +194,8 @@ var _dynamic_blocks: Array[Dictionary] = []
 var _road_rocks: Array[Vector3] = []
 ## Squared distance from the last grass point to the road's middle, set by `_grass_height`.
 var _grass_dist_sq: float = 0.0
+## The track's painted ground (track_terrain.gd), or null where nothing is painted.
+var _terrain: _TrackTerrain = null
 
 
 func is_road_course() -> bool:
@@ -231,12 +289,106 @@ func ground_for(world: Vector3, off_road: bool) -> float:
 	return _height_on(world, _GRASS_ONLY if off_road else _ROAD_ONLY)
 
 
-## `surface_height()`, where `ground` can hold a plain track to its road or its grass alone.
-func _height_on(world: Vector3, ground: int) -> float:
+## `surface_height()`, where `ground` can hold a plain track to its road or its grass alone. Where
+## the track has painted ground (`_terrain`), past the road's own edge the ground is the painted
+## height, cut down or built up to meet the edge (`_cut_to_road()`), as much as it is painted.
+func _height_on(world: Vector3, ground: int, near: int = -1) -> float:
 	if _pts.is_empty():
 		return 0.0
+	var i := near if near >= 0 else _nearest_index(world)
+	var style_y := _style_height_on(world, ground, i)
+	if _terrain == null or ground == _ROAD_ONLY:
+		return style_y
+	var paint := _terrain.sample(Vector2(world.x, world.z))
+	if paint.y <= 0.0:
+		return style_y
+	var lateral := _lateral_at(i, world)
+	var edge := _terrain_edge(i, lateral >= 0.0)
+	var past := absf(lateral) - edge
+	if past <= 0.0 and ground != _GRASS_ONLY:
+		return style_y
+	return lerpf(style_y, _cut_to_road(i, lateral, edge, maxf(past, 0.0), paint.x), paint.y)
+
+
+## The painted height `painted`, `past` meters beyond the road's edge at sample `i` (`edge` out on
+## the side `lateral` is on): no higher than a cut rising from the ground at the edge at
+## `_CUT_SLOPE`, nor lower than a fill falling at `_FILL_SLOPE`. A bridge stands over whatever is
+## painted under it.
+func _cut_to_road(i: int, lateral: float, edge: float, past: float, painted: float) -> float:
+	if _road_types[i] == TrackFile.ROAD_BRIDGE:
+		return painted
+	var right := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+	var at_edge := _style_height_on(_pts[i] + right * signf(lateral) * (edge + 0.01), _ANY_GROUND, i)
+	return clampf(painted, at_edge - _FILL_SLOPE * past, at_edge + _CUT_SLOPE * past)
+
+
+## Where the road's own build ends on the left (`left`, `lateral` above 0) or right of sample `i`,
+## in meters from the middle, and the painted ground may begin: a circuit's road edge, a street's
+## shoulder, Mulholland's gravel verge (a bridge's edge), the Aqueduct's top and a lip past it.
+func _terrain_edge(i: int, left: bool) -> float:
+	match _style:
+		TrackFile.STYLE_MOUNTAIN:
+			if _road_types[i] == TrackFile.ROAD_BRIDGE:
+				return _half_ws[i]
+			return _half_ws[i] + _TrackSides.MOUNTAIN_VERGE
+		TrackFile.STYLE_AQUEDUCT:
+			var top := _channel_extents(i)
+			return (top.y if left else top.x) + _AQUEDUCT_LIP_M
+		TrackFile.STYLE_STREET:
+			return _half_ws[i] + _STREET_SHOULDER_W
+	var ext := _sample_extents(i)
+	return ext.y if left else ext.x
+
+
+## How much the ground at `world` is painted, where it lies past the road's own edge: 0 on the
+## road, and where nothing is painted.
+func painted_off_road(world: Vector3) -> float:
+	if _terrain == null or _pts.is_empty():
+		return 0.0
+	var paint := _terrain.sample(Vector2(world.x, world.z))
+	if paint.y <= 0.0:
+		return 0.0
 	var i := _nearest_index(world)
+	var lateral := _lateral_at(i, world)
+	return paint.y if absf(lateral) > _terrain_edge(i, lateral >= 0.0) else 0.0
+
+
+## How steeply the ground rises at `world`, a meter toward world +X (x) and +Z (y).
+func ground_gradient(world: Vector3) -> Vector2:
+	const STEP := 0.8
+	var dx := surface_height(world + Vector3(STEP, 0.0, 0.0)) - surface_height(world - Vector3(STEP, 0.0, 0.0))
+	var dz := surface_height(world + Vector3(0.0, 0.0, STEP)) - surface_height(world - Vector3(0.0, 0.0, STEP))
+	return Vector2(dx, dz) / (2.0 * STEP)
+
+
+## On painted ground off the road, how steeply it rises ahead of a car heading `yaw`: the rise a
+## meter forward. 0 elsewhere, where the driving models keep their flat ground as before.
+func ground_grade(world: Vector3, yaw: float) -> float:
+	if painted_off_road(world) <= 0.0:
+		return 0.0
+	return ground_gradient(world).dot(Vector2(sin(yaw), cos(yaw)))
+
+
+## On painted ground off the road that is too steep to climb (`CLIMB_MAX`), which way is uphill,
+## flat and as long as the ground's rise a meter; otherwise zero. The car can't drive up it.
+func too_steep_uphill(world: Vector3) -> Vector3:
+	if painted_off_road(world) <= 0.0:
+		return Vector3.ZERO
+	var rise := ground_gradient(world)
+	if rise.length() <= CLIMB_MAX:
+		return Vector3.ZERO
+	return Vector3(rise.x, 0.0, rise.y)
+
+
+## The track's own ground, as it is with nothing painted. `near`, when given, is the sample nearest
+## `world`, already found.
+func _style_height_on(world: Vector3, ground: int, near: int = -1) -> float:
+	if _pts.is_empty():
+		return 0.0
+	var i := near if near >= 0 else _nearest_index(world)
 	var height := _pts[i].y
+	var bank := _banks[i] if _banked else 0.0
+	var half_w := _bank_half(i)
 	var best_d := INF
 	for j: int in [i - 1, i]:
 		if j < 0 or j + 1 >= _pts.size():
@@ -253,21 +405,70 @@ func _height_on(world: Vector3, ground: int) -> float:
 		if d < best_d:
 			best_d = d
 			height = lerpf(a.y, b.y, t)
+			if _banked:
+				bank = lerpf(_banks[j], _banks[j + 1], t)
+				half_w = lerpf(_bank_half(j), _bank_half(j + 1), t)
 	if not _street and _grass_sides.size() == 4 and _grass_sides[0].size() == _pts.size():
 		var lateral := _lateral_at(i, world)
 		var ext := _sample_extents(i)
 		var off := lateral > ext.y or lateral < -ext.x
 		if ground == _GRASS_ONLY or (ground == _ANY_GROUND and off):
 			if lateral >= 0.0:
-				return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], maxf(lateral, ext.y))
-			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], maxf(-lateral, ext.x))
-	return _side_ground_at(i, world, height)
+				return _side_grass_height(height, ext.y, _grass_sides[0][i], _grass_sides[2][i], maxf(lateral, ext.y), _lift_for(bank, half_w, ext.y))
+			return _side_grass_height(height, ext.x, _grass_sides[1][i], _grass_sides[3][i], maxf(-lateral, ext.x), _lift_for(bank, half_w, -ext.x))
+	if not _banked:
+		return _side_ground_at(i, world, height)
+	var lateral := _lateral_at(i, world)
+	if _style == TrackFile.STYLE_CIRCUIT:
+		return height + _lift_for(bank, half_w, lateral)
+	return _banked_ground(i, lateral, height, bank, half_w)
+
+
+## The ground of a banked street, mountain or Aqueduct track `lateral` across from sample `i`, where
+## the road's own height is `road_y` and it banks by `bank` over `half_w` each side. On the road, or
+## the Aqueduct's whole channel, the bank tilts it. Past that the ground starts at the edge's height:
+## Mulholland's hillsides and drops rise or fall from there, and a street's or the Aqueduct's ground
+## falls back from a raised edge at `_BANK_EMBANK_SLOPE`.
+func _banked_ground(i: int, lateral: float, road_y: float, bank: float, half_w: float) -> float:
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		return _aqueduct_ground(i, lateral, road_y, bank, half_w)
+	if absf(lateral) <= half_w:
+		return road_y + _lift_for(bank, half_w, lateral)
+	var edge_lift := _lift_for(bank, half_w, signf(lateral) * half_w)
+	if _style == TrackFile.STYLE_MOUNTAIN:
+		var side := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+		return _TrackSides.mountain_ground(lateral, _half_ws[i], side, road_y + edge_lift, _far_ys[i])
+	return road_y + edge_lift * _embank_keep(edge_lift, absf(lateral) - half_w)
+
+
+## The Aqueduct's concrete `lateral` across from sample `i`, where its floor's middle is at `road_y`
+## and it tilts by `bank` about Street Rod 2's tops, `half_w` out. A raised side's wider bowl goes
+## on tilting the same way. Past the top of a side that stands higher, by the tilt or its own
+## height, the concrete falls back to the flat top as beside a banked street.
+func _aqueduct_ground(i: int, lateral: float, road_y: float, bank: float, half_w: float) -> float:
+	var high := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+	var top := _TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.aqueduct_run(high)
+	var shape := _TrackSides.aqueduct_height(lateral, high)
+	if absf(lateral) <= top:
+		return road_y + _lift_for(bank, half_w, lateral) + shape
+	var raise := _lift_for(bank, half_w, signf(lateral) * top) + high - _TrackSides.AQUEDUCT_BANK_HIGH
+	return road_y + raise * _embank_keep(raise, absf(lateral) - top) + _TrackSides.AQUEDUCT_BANK_HIGH
+
+
+## On the Aqueduct the road is the whole channel, out to the tops of its sides, whatever width the
+## file gives it: Street Rod 2's own is 11.73 m, which is where its tops are, and a raised side
+## reaches farther. As `driveable_extents()`: `x` the side at `lateral` below 0, `y` above.
+func _channel_extents(i: int) -> Vector2:
+	return Vector2(
+		_TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.aqueduct_run(_right_sides[i]),
+		_TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.aqueduct_run(_left_sides[i])
+	)
 
 
 ## The ground's height at `world`, at sample `i`, with `road_y` the road's beside it.
 func _side_ground_at(i: int, world: Vector3, road_y: float) -> float:
 	if _style == TrackFile.STYLE_AQUEDUCT:
-		return road_y + _TrackSides.aqueduct_height(_lateral_at(i, world))
+		return _aqueduct_ground(i, _lateral_at(i, world), road_y, 0.0, _bank_half(i))
 	if _style != TrackFile.STYLE_MOUNTAIN:
 		return road_y
 	var lateral := _lateral_at(i, world)
@@ -280,19 +481,64 @@ func _lateral_at(i: int, world: Vector3) -> float:
 
 ## How far a car at `world` leans across the road, by the height either side of it, in radians.
 func surface_roll(world: Vector3, yaw: float) -> float:
-	if _style != TrackFile.STYLE_AQUEDUCT and _style != TrackFile.STYLE_MOUNTAIN:
+	var painted := painted_off_road(world) > 0.0
+	if _style != TrackFile.STYLE_AQUEDUCT and _style != TrackFile.STYLE_MOUNTAIN and not _banked and not painted:
 		return 0.0
 	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
+	if _jumps and _banked and not painted:
+		return atan(_rise_on_own_ground(world, across))
 	return atan2(surface_height(world + across) - surface_height(world - across), 1.6)
+
+
+## On a jump track, how much the ground rises a meter toward `across` (flat, either way of
+## `world`), on the ground a car at `world` is on: the road, or the grass beside it, never both. A car
+## beside a ramp's side would otherwise read the drop as a lean, and the bank's pull with it.
+func _rise_on_own_ground(world: Vector3, across: Vector3) -> float:
+	var i := _nearest_index(world)
+	var lateral := _lateral_at(i, world)
+	var ext := _sample_extents(i)
+	var ground := _GRASS_ONLY if lateral > ext.y or lateral < -ext.x else _ROAD_ONLY
+	return (_height_on(world + across, ground) - _height_on(world - across, ground)) / (2.0 * across.length())
+
+
+## How steeply the ground rises across a car at `world` heading `yaw`: the rise a meter toward the
+## car's +X, on a banked road or the ground beside it. 0 on a track with no bank, so the driving
+## models keep their flat ground. On Mulholland and the Aqueduct only the road's own bank counts:
+## their hillsides are walls, and the Aqueduct's sides push a car back with `bank_push()`. A raised
+## Aqueduct side counts too, as much as it curves (`_TrackSides.aqueduct_curve()`), and pushes back
+## that much less, so a car rides up a bowl as up a banked corner. Painted ground off the road
+## leans a car as much as it slopes across it.
+func bank_slope(world: Vector3, yaw: float) -> float:
+	if painted_off_road(world) > 0.0:
+		return ground_gradient(world).dot(Vector2(cos(yaw), -sin(yaw)))
+	if _raised:
+		var i := _nearest_index(world)
+		var road_across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+		var lateral := _lateral_at(i, world)
+		var high := _left_sides[i] if lateral > 0.0 else _right_sides[i]
+		var side := signf(lateral) * _TrackSides.aqueduct_rise(lateral, high) * _TrackSides.aqueduct_curve(high)
+		var bank := _banks[i] if _banked else 0.0
+		return (bank + side) * road_across.dot(Vector3(cos(yaw), 0.0, -sin(yaw)))
+	if not _banked:
+		return 0.0
+	if _style == TrackFile.STYLE_MOUNTAIN or _style == TrackFile.STYLE_AQUEDUCT:
+		var i := _nearest_index(world)
+		var road_across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+		return _banks[i] * road_across.dot(Vector3(cos(yaw), 0.0, -sin(yaw)))
+	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * 0.8
+	if _jumps:
+		return _rise_on_own_ground(world, across)
+	return (surface_height(world + across) - surface_height(world - across)) / 1.6
 
 
 ## What the Aqueduct's banks do to a car at `world`: sideways, toward the floor, in m/s.
 func bank_push(world: Vector3) -> Vector3:
-	if _style != TrackFile.STYLE_AQUEDUCT or _pts.is_empty():
+	if _style != TrackFile.STYLE_AQUEDUCT or _pts.is_empty() or painted_off_road(world) > 0.0:
 		return Vector3.ZERO
 	var i := _nearest_index(world)
 	var across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
-	return across * _TrackSides.aqueduct_push(_lateral_at(i, world))
+	var lateral := _lateral_at(i, world)
+	return across * _TrackSides.aqueduct_push(lateral, _left_sides[i] if lateral > 0.0 else _right_sides[i])
 
 
 ## Whether a car is off a jump track's road, on the grass beside it: its collision box, `half` its
@@ -316,12 +562,37 @@ func car_off_road(middle: Vector3, yaw: float, half: Vector2) -> bool:
 func over_the_edge(world: Vector3) -> bool:
 	if _style != TrackFile.STYLE_MOUNTAIN or _pts.is_empty():
 		return false
+	# Painted ground goes on past the edge.
+	if _terrain != null and _terrain.sample(Vector2(world.x, world.z)).y >= 0.5:
+		return false
 	var i := _nearest_index(world)
 	var lateral := _lateral_at(i, world)
 	var side := _left_sides[i] if lateral > 0.0 else _right_sides[i]
 	if side > -_TrackSides.DROP_MIN:
 		return false
 	return absf(lateral) > _half_ws[i] + _TrackSides.MOUNTAIN_VERGE + _TrackSides.OVER_EDGE_PAST_VERGE
+
+
+## The scenery list's dumpsters (dumpster.gd), on every style of track: long side along the road
+## and front to it, standing on the ground there. Rivals steer round the spot each was put, as
+## round a sawhorse; one shoved somewhere else is just a solid thing to them.
+func _build_dumpsters() -> void:
+	for item: Dictionary in _scenery:
+		if str(item["kind"]) != "dumpster":
+			continue
+		var at := Vector3(float(item["x"]), 0.0, float(item["y"]))
+		var here := closest_sample(at)
+		var yaw := float(here["yaw"])
+		var lateral := float(here["lateral"])
+		var along := Vector3(sin(yaw), 0.0, cos(yaw))
+		var s := float(here["s"]) + (at - (here["position"] as Vector3)).dot(along)
+		var bin := _Dumpster.new()
+		bin.ground = self
+		var turn := yaw - PI * 0.5 if lateral >= 0.0 else yaw + PI * 0.5
+		bin.transform = Transform3D(Basis(Vector3.UP, turn), Vector3(at.x, surface_height(at), at.z))
+		add_child(bin)
+		var half := _Dumpster.SIZE * 0.5
+		add_block({"s": s - half.x, "to": s + half.x, "low": lateral - half.z, "high": lateral + half.z, "soft": true})
 
 
 ## Something new on the road for rivals to steer round for the rest of the race, such as a fallen
@@ -541,22 +812,41 @@ func build_road_course() -> void:
 		return
 	var back_dir := -Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0]))
 	_run_in_m = 0.0 if _loop else _clear_run(_pts[0], back_dir, _STREET_RUN_IN_M, 0.0, -1.0, _half_ws[0])
+	var painted := _terrain != null
 	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
 		var reaches := _side_reaches()
 		var back_reach := _reach_at(_pts[0] + back_dir * _run_in_m, _yaws[0], -_run_in_m)
+		var lifts := _edge_lifts()
+		# With painted ground the ground beyond the road is all `_build_painted_ground()`'s, and
+		# where it is painted the sides stop no one.
+		var open_sides: Array[PackedByteArray] = []
+		if painted:
+			open_sides = _painted_sides()
+		var floor_y := _terrain.height_range().x if painted else INF
 		if _style == TrackFile.STYLE_AQUEDUCT:
-			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach)
+			var highs: Array = [_left_sides, _right_sides] if _raised else []
+			if painted:
+				for k in 2:
+					for i in reaches[k].size():
+						reaches[k][i] = _terrain_edge(i, k == 0)
+				back_reach = Vector2(_terrain_edge(0, true), _terrain_edge(0, false))
+			_TrackSides.build_aqueduct(self, _pts, _yaws, _run_in_m, reaches, back_reach, lifts if _banked else [], highs, open_sides, floor_y)
 		else:
-			_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _run_in_m, reaches, back_reach)
+			_TrackSides.build_mountain(self, _pts, _yaws, _half_ws, _road_types, _left_sides, _right_sides, _rails, _far_ys, _run_in_m, reaches, back_reach, lifts if _banked else [], open_sides, floor_y)
 			_build_road_mesh()
 	else:
-		_build_terrain()
 		if not _street:
-			_build_side_grass()
+			_grass_sides = _side_reaches(true)
+		if not painted:
+			_build_terrain()
+			if not _street:
+				_build_side_grass()
 		_build_road_mesh()
 		if _jumps:
 			_build_ramp_sides()
 			_build_lip_bands()
+	if painted:
+		_build_painted_ground()
 	if _style == TrackFile.STYLE_AQUEDUCT or _style == TrackFile.STYLE_MOUNTAIN:
 		_StreetScenery.build(self, _scenery, _half_ws[0] * 2.0)
 		var found: Dictionary = _CourseScenery.build(self, _scenery)
@@ -572,6 +862,7 @@ func build_road_course() -> void:
 		_build_obstacles()
 		_build_narrow_signs()
 		_build_finish_line()
+	_build_dumpsters()
 	_built = true
 
 
@@ -593,11 +884,16 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 	var hw := ROAD_HALF_W
 	var surface := TrackFile.SURFACE_REGULAR
 	var rtype := TrackFile.ROAD_REGULAR
+	var bank := 0.0
 	if index >= 0 and index < _half_ws.size():
 		hw = _half_ws[index]
 		surface = _surfaces[index]
 		rtype = _road_types[index]
+	if index >= 0 and index < _banks.size():
+		bank = _banks[index]
 	var extents := TrackFile.driveable_extents(hw * 2.0, rtype)
+	if _style == TrackFile.STYLE_AQUEDUCT and index >= 0 and index < _left_sides.size():
+		extents = _channel_extents(index)
 	return {
 		"position": pos,
 		"forward": forward,
@@ -613,6 +909,7 @@ func _make_sample(pos: Vector3, yaw: float, s: float, lateral: float, index: int
 		"gravel": rtype == TrackFile.ROAD_GRAVEL,
 		"obstacle_left": TrackFile.obstacle_left(rtype),
 		"obstacle_right": TrackFile.obstacle_right(rtype),
+		"bank": bank,
 	}
 
 
@@ -642,6 +939,10 @@ func _build_path() -> void:
 	_laps = int(data.laps)
 	_street = _style != TrackFile.STYLE_CIRCUIT
 	_scenery.assign(data.scenery)
+	_terrain = null
+	var painted: _TrackTerrain = data.terrain
+	if painted != null and not painted.is_empty():
+		_terrain = painted
 	var path_ids: Array = data.path_ids
 	if path_ids.size() < 2:
 		push_error("[track] Race path is too short.")
@@ -649,13 +950,21 @@ func _build_path() -> void:
 	var n := path_ids.size()
 	var pts: Array[Vector3] = []
 	var sharp := PackedByteArray()
+	var bank_degs := PackedFloat32Array()
+	var lefts := PackedFloat32Array()
+	var rights := PackedFloat32Array()
 	var roads: Array[Dictionary] = []
 	for i in n:
 		var node: Dictionary = data.nodes[int(path_ids[i])]
 		pts.append(TrackFile.world_position(node))
 		sharp.append(1 if bool(node.get("sharp", false)) else 0)
+		bank_degs.append(float(node.get("bank", 0.0)))
+		lefts.append(_TrackSides.aqueduct_side(float(node.get("left", 0.0))))
+		rights.append(_TrackSides.aqueduct_side(float(node.get("right", 0.0))))
 	for i in range(n - 1):
 		roads.append(TrackFile.find_road(data, int(path_ids[i]), int(path_ids[i + 1])))
+	if bool(data.get("auto_bank", false)):
+		_auto_banks(pts, bank_degs)
 	# Heights follow the nodes themselves, not the corner a loop adds below.
 	var nodes: Array[Vector3] = pts.duplicate()
 	# A loop comes back into its start already on the start straight: when the start node is a
@@ -668,6 +977,10 @@ func _build_path() -> void:
 		if set_back_cut >= 0.05:
 			var out_dir := Vector3(pts[1].x - pts[0].x, 0.0, pts[1].z - pts[0].z).normalized()
 			pts.insert(n - 1, pts[0] - out_dir * set_back_cut)
+			# The corner is the start's, so it banks as the start does.
+			bank_degs.insert(n - 1, bank_degs[n - 1])
+			lefts.insert(n - 1, lefts[n - 1])
+			rights.insert(n - 1, rights[n - 1])
 			roads.append(roads[n - 2])
 			n += 1
 			set_back = true
@@ -683,6 +996,9 @@ func _build_path() -> void:
 	_pos = pts[0]
 	_yaw = atan2(pts[1].x - pts[0].x, pts[1].z - pts[0].z)
 	_push_sample()
+	# Where each point's corner begins and ends along the path; a point with no corner is both.
+	var curve_from := PackedFloat32Array([0.0])
+	var curve_to := PackedFloat32Array([0.0])
 	for i in range(1, n - 1):
 		var in_dir := (pts[i] - pts[i - 1])
 		in_dir.y = 0.0
@@ -696,6 +1012,8 @@ func _build_path() -> void:
 		_apply_road(roads[i - 1])
 		if cut < 0.05:
 			_append_to(pts[i])
+			curve_from.append(_length)
+			curve_to.append(_length)
 			continue
 		var p0 := pts[i] - in_dir * cut
 		var p2 := pts[i] + out_dir * cut
@@ -706,9 +1024,13 @@ func _build_path() -> void:
 		if out_span > 0.0001:
 			p2.y = lerpf(pts[i].y, pts[i + 1].y, cut / out_span)
 		_append_to(p0)
+		curve_from.append(_length)
 		_append_bezier(p0, pts[i], p2, roads[i - 1], roads[i])
+		curve_to.append(_length)
 	_apply_road(roads[n - 2])
 	_append_to(pts[n - 1])
+	curve_from.append(_length)
+	curve_to.append(_length)
 	if _loop:
 		# Exactly where the lap began, heading the same way.
 		_pts[_pts.size() - 1] = _pts[0]
@@ -717,8 +1039,126 @@ func _build_path() -> void:
 	_race_length = _length
 	if not _loop:
 		_append_runoff()
+	_fill_banks(curve_from, curve_to, bank_degs)
 	_fill_sides(data, path_ids)
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		_fill_aqueduct_sides(curve_from, curve_to, lefts, rights)
 	_build_bins()
+
+
+## With `auto_bank`, each node's bank from how tight its corner is (TrackFile.auto_bank_deg()), in
+## place of its own. A loop's start, at both ends of `pts`, turns from the last node to the second.
+func _auto_banks(pts: Array[Vector3], degs: PackedFloat32Array) -> void:
+	var n := pts.size()
+	for i in n:
+		var before := i - 1
+		var after := i + 1
+		if _loop and (i == 0 or i == n - 1):
+			before = n - 2
+			after = 1
+		if before < 0 or after >= n:
+			degs[i] = 0.0
+			continue
+		degs[i] = TrackFile.auto_bank_deg(
+			Vector2(pts[before].x, pts[before].z), Vector2(pts[i].x, pts[i].z), Vector2(pts[after].x, pts[after].z)
+		)
+
+
+## Each sample's bank from its nodes'. A node's bank holds all round its corner, from where the
+## curve begins to where it ends, and eases to the next node's over the straight between, so a
+## car turns in on a road already banked. Past the finish it holds.
+func _fill_banks(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, degs: PackedFloat32Array) -> void:
+	_banks.resize(_pts.size())
+	_banks.fill(0.0)
+	_banked = false
+	for deg: float in degs:
+		if not is_zero_approx(deg):
+			_banked = true
+	if not _banked:
+		return
+	var per_sample := _round_corners(curve_from, curve_to, degs)
+	for i in _pts.size():
+		_banks[i] = tan(deg_to_rad(per_sample[i]))
+
+
+## Each sample's value from its nodes' `values`, as a bank goes: a node's holds all round its
+## corner, from where the curve begins to where it ends, and eases to the next node's over the
+## straight between. Past the finish it holds.
+func _round_corners(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, values: PackedFloat32Array) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(_pts.size())
+	var last := mini(values.size(), curve_from.size()) - 1
+	var k := 0
+	for i in _pts.size():
+		var s := _dists[i]
+		while k < last and curve_from[k + 1] <= s:
+			k += 1
+		var value := values[k]
+		if s > curve_to[k] and k < last:
+			var t := smoothstep(curve_to[k], curve_from[k + 1], s)
+			value = lerpf(values[k], values[k + 1], t)
+		out[i] = value
+	return out
+
+
+## The Aqueduct's side heights, from its nodes' `left` and `right` (`_TrackSides.aqueduct_side()`).
+## They go as a bank does, so a corner's raised side stands all the way round it.
+func _fill_aqueduct_sides(curve_from: PackedFloat32Array, curve_to: PackedFloat32Array, lefts: PackedFloat32Array, rights: PackedFloat32Array) -> void:
+	_raised = false
+	for high: float in lefts + rights:
+		# Held in 32 bits, Street Rod 2's height comes back a hair over itself.
+		if high > _TrackSides.AQUEDUCT_BANK_HIGH + 0.01:
+			_raised = true
+	if not _raised:
+		_left_sides.fill(_TrackSides.AQUEDUCT_BANK_HIGH)
+		_right_sides.fill(_TrackSides.AQUEDUCT_BANK_HIGH)
+		return
+	_left_sides = _round_corners(curve_from, curve_to, lefts)
+	_right_sides = _round_corners(curve_from, curve_to, rights)
+
+
+## How far the road at sample `i` stands over its middle's height, `lateral` meters from the middle
+## (above 0 toward the driver's left). The low edge of a banked road is at the road's height.
+func _bank_lift(i: int, lateral: float) -> float:
+	if not _banked or i < 0 or i >= _banks.size():
+		return 0.0
+	return _lift_for(_banks[i], _bank_half(i), lateral)
+
+
+## How far out from the middle the bank tilts the road at sample `i`: its half width, or on the
+## Aqueduct the whole channel's out to the tops of its sides.
+func _bank_half(i: int) -> float:
+	if _style == TrackFile.STYLE_AQUEDUCT:
+		return _TrackSides.AQUEDUCT_FLOOR_HALF + _TrackSides.AQUEDUCT_BANK_RUN
+	return _half_ws[i]
+
+
+## How far each sample's tilted edge stands over the road's height, on its left (0, `lateral` above
+## 0) and its right (1). Mulholland's and the Aqueduct's sides start from there.
+func _edge_lifts() -> Array[PackedFloat32Array]:
+	var lifts: Array[PackedFloat32Array] = [PackedFloat32Array(), PackedFloat32Array()]
+	for i in _pts.size():
+		lifts[0].append(_bank_lift(i, _bank_half(i)))
+		lifts[1].append(_bank_lift(i, -_bank_half(i)))
+	return lifts
+
+
+## How much of a raised edge's height the ground beside it keeps, `out` meters past the edge, as it
+## falls back at `_BANK_EMBANK_SLOPE`. A street or Aqueduct track's; a circuit's stops at halfway too.
+static func _embank_keep(lift: float, out: float) -> float:
+	if lift <= 0.0:
+		return 0.0
+	return clampf(1.0 - out * _BANK_EMBANK_SLOPE / lift, 0.0, 1.0)
+
+
+static func _lift_for(bank: float, half_w: float, lateral: float) -> float:
+	return lateral * bank + half_w * absf(bank)
+
+
+## The point on the road at sample `i`, `lateral` meters across from its middle.
+func _road_point(i: int, lateral: float) -> Vector3:
+	var right := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
+	return _pts[i] + right * lateral + Vector3.UP * _bank_lift(i, lateral)
 
 
 ## Each sample's side heights, running straight from node to node. Past the last node they hold.
@@ -1131,6 +1571,619 @@ func _make_mat(color: Color, roughness: float = 0.72) -> StandardMaterial3D:
 	return mat
 
 
+## Where the side walls stand on painted ground, at each sample on the left (0) and right (1): 1
+## where they would, and the car may drive off into it instead.
+func _painted_sides() -> Array[PackedByteArray]:
+	var out: Array[PackedByteArray] = [PackedByteArray(), PackedByteArray()]
+	for k in 2:
+		out[k].resize(_pts.size())
+		var side := 1.0 if k == 0 else -1.0
+		for i in _pts.size():
+			var across := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i])) * side
+			var at := _pts[i] + across * (_terrain_edge(i, k == 0) + _PAINT_WALL_LOOK_M)
+			out[k][i] = 1 if _terrain.sample(Vector2(at.x, at.z)).y >= 0.5 else 0
+	return out
+
+
+## Where the drawn ground starts beside sample `i`, on the left (`left`) or right: where the road's
+## own build ends (`_terrain_edge()`), but on Mulholland at the road's edge, so it draws the verge.
+func _strip_start(i: int, left: bool) -> float:
+	if _style == TrackFile.STYLE_MOUNTAIN:
+		return _half_ws[i]
+	return _terrain_edge(i, left)
+
+
+## The ground of a track with painted ground (track_terrain.gd): everything beyond the road's own
+## build, painted or not, so the two meet without a seam. A strip down each side of the road follows
+## its edge (`_build_ground_strip()`), and a grid in `_TrackTerrain.CHUNK_M` squares covers the rest
+## (`_build_ground_grid()`) where they don't cover it. Both are drawn
+## at `_height_on()`'s heights, so the car rides on what it sees.
+func _build_painted_ground() -> void:
+	var mat := _GroundMaterial.vertex_ground().duplicate() as ShaderMaterial
+	mat.set_shader_parameter(&"verge_m", _TrackSides.MOUNTAIN_VERGE if _style == TrackFile.STYLE_MOUNTAIN else 0.0)
+	# Steep ground turns to dirt by its points' steepness (`_steep_to_dirt()`), not each triangle's.
+	mat.set_shader_parameter(&"steep_from", -0.5)
+	mat.set_shader_parameter(&"steep_full", -1.0)
+	var covered: Dictionary = {}
+	_build_ground_strip(mat, covered)
+	_build_ground_grid(mat, covered)
+
+
+## Which ground the drawn painted ground follows: on a jump track the grass beside the ramps.
+func _drawn_ground() -> int:
+	return _GRASS_ONLY if _jumps and not _street else _ANY_GROUND
+
+
+## The UV the ground shader reads (shaders/vertex_ground.gdshader) for ground at `point`, `y` high,
+## `out` meters from the road's edge, where the road's middle is at `road_y`: on Mulholland the
+## unpainted hillsides turn to dirt as they rise, as its own sides do.
+func _ground_uv(point: Vector3, y: float, out: float, road_y: float) -> Vector2:
+	var above := 0.0
+	if _style == TrackFile.STYLE_MOUNTAIN:
+		var paint := _terrain.sample(Vector2(point.x, point.z)).y
+		above = maxf(y - road_y, 0.0) * (1.0 - paint)
+	return Vector2(above, out)
+
+
+func _build_ground_strip(mat: Material, covered: Dictionary) -> void:
+	var offsets: Array[float] = []
+	offsets.assign(_STRIP_OFFSETS)
+	if _style == TrackFile.STYLE_MOUNTAIN:
+		offsets.append_array([_TrackSides.MOUNTAIN_VERGE, _TrackSides.MOUNTAIN_VERGE + _TrackSides.MOUNTAIN_BANK_RUN])
+		offsets.sort()
+	var reaches: Array[PackedFloat32Array] = _grass_sides if _grass_sides.size() == 4 else _side_reaches(true)
+	var ground := _drawn_ground()
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	# Pairs of points along the strip's outer edges and its ends, where it meets the grid, and
+	# along its inner edges beside the road.
+	var rim := PackedInt32Array()
+	var inner := PackedInt32Array()
+	# The tops of the curtain along those, by the strip point each is at.
+	var lip_at: Dictionary = {}
+	for side: float in [1.0, -1.0]:
+		var k := 0 if side > 0.0 else 1
+		var caps := _inside_reach_caps(side)
+		# Each row: the point it is across from, its heading, where it starts and stops, how far
+		# the road's edge is out, and the road's height.
+		var rows: Array[Dictionary] = []
+		if _run_in_m > 0.0:
+			# Behind the start, a row every sample's length as along the course, so the strip
+			# follows painted ground there too.
+			var steps := maxi(ceili(_run_in_m / BAKE_STEP), 1)
+			var behind := Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0]))
+			# Behind a circuit's start there is no road: the ground runs across its line, out as
+			# far as beside the road, so its edge runs on straight past the start.
+			var from := 0.0 if not _street else _strip_start(0, side > 0.0)
+			var width := _STRIP_W + _strip_start(0, side > 0.0) - from
+			for r in steps:
+				var back_m := _run_in_m * float(steps - r) / float(steps)
+				var back := _pts[0] - behind * back_m
+				back.y = _pts[0].y
+				var back_reach := _reach_and_far_y_at(back, _yaws[0], -back_m, true)
+				var limit := back_reach.x if side > 0.0 else back_reach.y
+				rows.append({"at": back, "yaw": _yaws[0], "start": from, "width": width, "limit": limit, "edge": _half_ws[0] if _street else 0.0, "i": 0, "road": false})
+		for i in _pts.size():
+			var from := _strip_start(i, side > 0.0)
+			var width := _STRIP_W
+			var lip := from
+			if i == 0 and _run_in_m > 0.0 and not _street:
+				# The start line's row reaches in under the road as the rows behind it do, so no
+				# wedge is left between them under the road's end.
+				width += from
+				from = 0.0
+			var limit := minf(reaches[k][i], caps[i])
+			rows.append({"at": _pts[i], "yaw": _yaws[i], "start": from, "width": width, "limit": limit, "edge": _half_ws[i], "i": i, "road": true, "lip": lip})
+		var cols := offsets.size()
+		var count := verts.size()
+		for row: Dictionary in rows:
+			var at: Vector3 = row["at"]
+			var yaw: float = row["yaw"]
+			var from: float = row["start"]
+			var width: float = row["width"]
+			var limit := clampf(float(row["limit"]), from, from + width)
+			var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * side
+			for off: float in offsets:
+				var out := minf(from + off * width / _STRIP_W, limit)
+				var point := at + across * out
+				# The row's own sample is the nearest, as far out as the strip reaches.
+				var y := _height_on(point, ground, int(row["i"])) - _ground_sink()
+				if off == offsets[0] and bool(row["road"]):
+					var under := at + across * (float(row["lip"]) - _LIP_UNDER_M)
+					lip_at[verts.size()] = Vector3(under.x, _height_on(under, ground, int(row["i"])), under.z)
+				uvs.append(_ground_uv(point, y, out - float(row["edge"]), at.y))
+				verts.append(Vector3(point.x, y, point.z))
+		for r in rows.size() - 1:
+			var a := count + r * cols
+			var b := a + cols
+			for c in cols - 1:
+				# The road mesh's order, the point on the driver's right first, so it faces up.
+				var inner0 := a + c
+				var outer0 := a + c + 1
+				var inner1 := b + c
+				var outer1 := b + c + 1
+				var p0 := inner0 if side > 0.0 else outer0
+				var q0 := outer0 if side > 0.0 else inner0
+				var p1 := inner1 if side > 0.0 else outer1
+				var q1 := outer1 if side > 0.0 else inner1
+				indices.append_array(PackedInt32Array([p0, q0, q1, p0, q1, p1]))
+		# What the strip covers, for the grid under it.
+		for r in rows.size() - 1:
+			var ra: Dictionary = rows[r]
+			var rb: Dictionary = rows[r + 1]
+			var a0 := _strip_corner(ra, side, 0.0)
+			var a1 := _strip_corner(ra, side, _STRIP_W)
+			var b0 := _strip_corner(rb, side, 0.0)
+			var b1 := _strip_corner(rb, side, _STRIP_W)
+			_cover_triangle(covered, a0, a1, b1)
+			_cover_triangle(covered, a0, b1, b0)
+		for r in rows.size() - 1:
+			rim.append_array(PackedInt32Array([count + r * cols + cols - 1, count + (r + 1) * cols + cols - 1]))
+			if bool(rows[r]["road"]) and bool(rows[r + 1]["road"]):
+				inner.append_array(PackedInt32Array([count + r * cols, count + (r + 1) * cols]))
+		var last := count + (rows.size() - 1) * cols
+		for c in cols - 1:
+			rim.append_array(PackedInt32Array([count + c, count + c + 1, last + c, last + c + 1]))
+	# Where the strip meets the grid it takes the grid's own drawn height, so the two meet with no
+	# step: a step of a few centimeters showed as a thin dark line, the screen's shading darkening
+	# the crease. Its points there move a little from `_height_on()`'s height, no more than the
+	# grid does.
+	var grid_heights: Dictionary = {}
+	for index: int in rim:
+		var v := verts[index]
+		v.y = _grid_surface(Vector2(v.x, v.z), covered, ground, grid_heights)
+		verts[index] = v
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in verts.size():
+		st.set_uv(uvs[k])
+		st.add_vertex(verts[k])
+	for index: int in indices:
+		st.add_index(index)
+	st.generate_normals()
+	var mesh := _steep_to_dirt(st)
+	mesh.surface_set_material(0, mat)
+	# Down the strip's outer edge and across its two ends: under the strip the grid is left out,
+	# so low along the ground the eye could pass under the edge to the ground far below.
+	var curtain := PackedVector3Array()
+	for index: int in rim:
+		curtain.append(verts[index])
+	_add_curtain(mesh, curtain, mat)
+	# And down from the road's edges past the strip's inner edge, which lies `_ground_sink()` under
+	# them: low along the ground the eye passed between them under the road, to the sky.
+	if _ground_sink() > 0.0:
+		var lip := PackedVector3Array()
+		for index: int in inner:
+			lip.append(lip_at[index])
+		# And across the road's two ends, where the ground runs on past them.
+		if not _loop:
+			for i: int in [0, _pts.size() - 1]:
+				var ext := _sample_extents(i)
+				var into := Vector3(sin(_yaws[i]), 0.0, cos(_yaws[i])) * (_LIP_UNDER_M if i == 0 else -_LIP_UNDER_M)
+				lip.append_array(PackedVector3Array([_road_point(i, -ext.y) + into, _road_point(i, ext.x) + into]))
+		_add_curtain(mesh, lip, mat)
+	var mi := MeshInstance3D.new()
+	mi.name = "PaintedGroundStrip"
+	mi.mesh = mesh
+	# It lies over the grid, sunk under it, and its shadow fell on the grid where that showed.
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+## The height the grid (`_build_ground_patch()`, at the grid's own spacing) is drawn at `point`,
+## from its points' heights, kept in `cache` by grid point.
+func _grid_surface(point: Vector2, covered: Dictionary, ground: int, cache: Dictionary) -> float:
+	var cell := _TrackTerrain.CELL_M
+	var i := floori(point.x / cell)
+	var j := floori(point.y / cell)
+	var fx := point.x / cell - i
+	var fy := point.y / cell - j
+	var h00 := _grid_point_height(Vector2i(i, j), covered, ground, cache)
+	var h10 := _grid_point_height(Vector2i(i + 1, j), covered, ground, cache)
+	var h01 := _grid_point_height(Vector2i(i, j + 1), covered, ground, cache)
+	var h11 := _grid_point_height(Vector2i(i + 1, j + 1), covered, ground, cache)
+	# The grid's two triangles a cell, split from its low corner to its high one.
+	if fx >= fy:
+		return h00 + fx * (h10 - h00) + fy * (h11 - h10)
+	return h00 + fy * (h01 - h00) + fx * (h11 - h01)
+
+
+## The height a grid point is drawn at, as `_build_ground_patch()` draws it.
+func _grid_point_height(g: Vector2i, covered: Dictionary, ground: int, cache: Dictionary) -> float:
+	if cache.has(g):
+		return float(cache[g])
+	var world := Vector3(g.x * _TrackTerrain.CELL_M, 0.0, g.y * _TrackTerrain.CELL_M)
+	var near := _nearest_index(world)
+	var y := _height_on(world, ground, near) - _ground_sink()
+	if _under_road(world, near).x > 0.0 or covered.has(g):
+		y -= _COVERED_SINK
+	cache[g] = y
+	return y
+
+
+## The mesh `st` holds, with each point's steepness, from its normal, turned to dirt in its UV.x as
+## the ground shader turns ground above the road to dirt (`_ground_uv()`). The shader's own test,
+## by each triangle's slope, is off for this ground (`_build_painted_ground()`): on a grid it made
+## a checkerboard of grass and dirt triangles down a slope.
+func _steep_to_dirt(st: SurfaceTool) -> ArrayMesh:
+	var arrays := st.commit_to_arrays()
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	for k in uvs.size():
+		uvs[k] = _dirt_uv(uvs[k], normals[k])
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
+## A curtain hanging `_CURTAIN_M` down from each pair of points in `edges`, added to `mesh` as its
+## own surface. It is lit as flat ground, so where it shows through a crack it is the grass's color.
+func _add_curtain(mesh: ArrayMesh, edges: PackedVector3Array, mat: Material) -> void:
+	if edges.size() < 2:
+		return
+	var verts := PackedVector3Array()
+	var indices := PackedInt32Array()
+	var drop := Vector3.DOWN * _CURTAIN_M
+	for e in range(0, edges.size() - 1, 2):
+		var a := edges[e]
+		var b := edges[e + 1]
+		if a.is_equal_approx(b):
+			continue
+		var next := verts.size()
+		verts.append_array(PackedVector3Array([a, b, a + drop, b + drop]))
+		indices.append_array(PackedInt32Array([next, next + 1, next + 3, next, next + 3, next + 2]))
+	if indices.is_empty():
+		return
+	var normals := PackedVector3Array()
+	normals.resize(verts.size())
+	normals.fill(Vector3.UP)
+	var uvs := PackedVector2Array()
+	uvs.resize(verts.size())
+	uvs.fill(Vector2(0.0, _FAR_OUT_UV))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mat)
+
+
+## `uv` with ground as steep as `normal` says turned to dirt (`_steep_to_dirt()`).
+static func _dirt_uv(uv: Vector2, normal: Vector3) -> Vector2:
+	var steep := 1.0 - smoothstep(_DIRT_STEEP_FULL, _DIRT_STEEP_FROM, absf(normal.y))
+	if steep > 0.0:
+		uv.x = maxf(uv.x, _DIRT_UV_FROM + _DIRT_UV_OVER * steep)
+	return uv
+
+
+## How far under `_height_on()`'s height the drawn ground lies: a circuit's and street's grass a
+## little under the road's edge, as their own grass was; Mulholland's verge level with its road.
+func _ground_sink() -> float:
+	return 0.0 if _style == TrackFile.STYLE_MOUNTAIN else _TERRAIN_SINK
+
+
+## A row's point `off` meters out past its start (stretched with the row's width), toward its limit, flat.
+func _strip_corner(row: Dictionary, side: float, off: float) -> Vector2:
+	var at: Vector3 = row["at"]
+	var yaw: float = row["yaw"]
+	var from: float = row["start"]
+	var width: float = row["width"]
+	var out := clampf(from + off * width / _STRIP_W, from, maxf(from, minf(float(row["limit"]), from + width)))
+	var point := at + Vector3(cos(yaw), 0.0, -sin(yaw)) * side * out
+	return Vector2(point.x, point.z)
+
+
+## Marks the grid points inside the flat triangle `a`, `b`, `c` in `covered`.
+func _cover_triangle(covered: Dictionary, a: Vector2, b: Vector2, c: Vector2) -> void:
+	var area := (b - a).cross(c - a)
+	if absf(area) < 0.0001:
+		return
+	var cell := _TrackTerrain.CELL_M
+	var lo := Vector2i(ceili(minf(a.x, minf(b.x, c.x)) / cell), ceili(minf(a.y, minf(b.y, c.y)) / cell))
+	var hi := Vector2i(floori(maxf(a.x, maxf(b.x, c.x)) / cell), floori(maxf(a.y, maxf(b.y, c.y)) / cell))
+	for j in range(lo.y, hi.y + 1):
+		for i in range(lo.x, hi.x + 1):
+			var p := Vector2(i * cell, j * cell)
+			var w0 := (b - a).cross(p - a) / area
+			var w1 := (c - b).cross(p - b) / area
+			var w2 := (a - c).cross(p - c) / area
+			if w0 >= -0.001 and w1 >= -0.001 and w2 >= -0.001:
+				covered[Vector2i(i, j)] = true
+
+
+## Whether grid point `world`, nearest sample `i`, lies under the road itself, and the road's height there in y (x 1 if
+## it does).
+func _under_road(world: Vector3, i: int) -> Vector2:
+	var forward := Vector3(sin(_yaws[i]), 0.0, cos(_yaws[i]))
+	var along := (world - _pts[i]).dot(forward)
+	var behind := _run_in_m if _street else 0.0
+	if (i == 0 and along < -behind - 1.0) or (i == _pts.size() - 1 and along > 1.0):
+		return Vector2(0.0, _pts[i].y)
+	var lateral := _lateral_at(i, world)
+	return Vector2(1.0 if absf(lateral) <= _strip_start(i, lateral >= 0.0) else 0.0, _pts[i].y)
+
+
+func _build_ground_grid(mat: Material, covered: Dictionary) -> void:
+	var chunk_m := _TrackTerrain.CHUNK_M
+	var back := _pts[0] - Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0])) * _run_in_m
+	var low := Vector2(back.x, back.z)
+	var high := low
+	# Painted chunks are drawn at the grid's own spacing, and so are unpainted ones near the road,
+	# where the grid meets the strip and has to follow the ground's shape there; the rest coarsely.
+	var near: Dictionary = {}
+	var reach := _STRIP_W + ROAD_HALF_W + 2.0 * _TrackTerrain.CELL_M
+	for i in range(0, _pts.size(), 2):
+		var p := Vector2(_pts[i].x, _pts[i].z)
+		low = Vector2(minf(low.x, p.x), minf(low.y, p.y))
+		high = Vector2(maxf(high.x, p.x), maxf(high.y, p.y))
+		for cj in range(floori((p.y - reach) / chunk_m), floori((p.y + reach) / chunk_m) + 1):
+			for ci in range(floori((p.x - reach) / chunk_m), floori((p.x + reach) / chunk_m) + 1):
+				near[Vector2i(ci, cj)] = true
+	var pad := _TERRAIN_PAD if _style == TrackFile.STYLE_CIRCUIT else _STREET_TERRAIN_PAD
+	var region := Rect2(low, high - low).grow(pad).merge(_terrain.area())
+	var from := Vector2i(floori(region.position.x / chunk_m), floori(region.position.y / chunk_m))
+	var to := Vector2i(floori(region.end.x / chunk_m), floori(region.end.y / chunk_m))
+	var ground := _drawn_ground()
+	# Every eighth sample, for finding the road near a chunk far from it.
+	var sparse := PackedInt32Array()
+	for i in range(0, _pts.size(), _FAR_SAMPLE_STEP):
+		sparse.append(i)
+	for cj in range(from.y, to.y + 1):
+		for ci in range(from.x, to.x + 1):
+			var key := Vector2i(ci, cj)
+			var step := 1 if _terrain.chunks.has(key) or near.has(key) else _COARSE_STEP
+			_build_ground_patch(key * _TrackTerrain.CHUNK, _TrackTerrain.CHUNK, step, mat, covered, ground, sparse)
+
+
+## The samples that may be nearest some point within `half` meters (square) of `center`, every
+## `stride`th of them, so `_nearest_among()` need look at no others. `sparse` is every
+## `_FAR_SAMPLE_STEP`th sample.
+func _near_candidates(center: Vector2, half: float, sparse: PackedInt32Array) -> Dictionary:
+	var at := Vector3(center.x, 0.0, center.y)
+	var nearest := sqrt(_planar_distance_sq(at, _pts[_nearest_index(at)]))
+	var span := half * sqrt(2.0)
+	# Anything nearest a point in the square is within this of its middle.
+	var radius := nearest + 2.0 * span + 2.0 * BAKE_STEP * _FAR_SAMPLE_STEP
+	var list := PackedInt32Array()
+	var stride := _NEAR_SAMPLE_STEP
+	if radius > _BIN_CELL * 4.0:
+		stride = _FAR_SAMPLE_STEP
+		for i: int in sparse:
+			if _planar_distance_sq(at, _pts[i]) <= radius * radius:
+				list.append(i)
+	else:
+		var cells := ceili(radius / _BIN_CELL)
+		var home := _bin_key(at)
+		for dz in range(-cells, cells + 1):
+			for dx in range(-cells, cells + 1):
+				var key := Vector2i(home.x + dx, home.y + dz)
+				if not _bins.has(key):
+					continue
+				var packed: PackedInt32Array = _bins[key]
+				for i: int in packed:
+					if i % stride == 0 and _planar_distance_sq(at, _pts[i]) <= radius * radius:
+						list.append(i)
+	if list.is_empty():
+		list.append(_nearest_index(at))
+	return {"list": list, "stride": stride, "low": nearest - span}
+
+
+## The sample nearest `world` among `found` (`_near_candidates()`), looked for finely round every
+## candidate that could be beside it: where two parts of the course pass close, the nearest of every
+## few samples can be on the other part.
+func _nearest_among(world: Vector3, found: Dictionary) -> int:
+	var list: PackedInt32Array = found["list"]
+	var stride: int = found["stride"]
+	var nearest := INF
+	for i: int in list:
+		nearest = minf(nearest, _planar_distance_sq(world, _pts[i]))
+	# A sample between two candidates is at most half their spacing nearer than the nearer of them.
+	var slack := sqrt(nearest) + BAKE_STEP * stride
+	slack *= slack
+	var top := _pts.size() - 1
+	var best := list[0]
+	var best_d := INF
+	for c: int in list:
+		if _planar_distance_sq(world, _pts[c]) > slack:
+			continue
+		for i in range(maxi(c - stride, 0), mini(c + stride, top) + 1):
+			var d := _planar_distance_sq(world, _pts[i])
+			if d < best_d:
+				best_d = d
+				best = i
+	return best
+
+
+## Every sample that may be the nearest to some point within `half` meters (square) of `center`.
+func _samples_near(center: Vector2, half: float) -> PackedInt32Array:
+	var at := Vector3(center.x, 0.0, center.y)
+	var nearest := sqrt(_planar_distance_sq(at, _pts[_nearest_index(at)]))
+	# Anything nearest a point in the square is within this of its middle.
+	var radius := nearest + 2.0 * half * sqrt(2.0) + 0.01
+	var limit := radius * radius
+	var list := PackedInt32Array()
+	var cells := ceili(radius / _BIN_CELL)
+	var home := _bin_key(at)
+	for dz in range(-cells, cells + 1):
+		for dx in range(-cells, cells + 1):
+			var key := Vector2i(home.x + dx, home.y + dz)
+			if not _bins.has(key):
+				continue
+			var packed: PackedInt32Array = _bins[key]
+			for i: int in packed:
+				var p := _pts[i]
+				var ex := p.x - at.x
+				var ez := p.z - at.z
+				if ex * ex + ez * ez <= limit:
+					list.append(i)
+	if list.is_empty():
+		list.append(_nearest_index(at))
+	return list
+
+
+## The sample in `list` nearest `world`.
+func _nearest_in(world: Vector3, list: PackedInt32Array) -> int:
+	var best := list[0]
+	var best_d := INF
+	for i: int in list:
+		var p := _pts[i]
+		var ex := p.x - world.x
+		var ez := p.z - world.z
+		var d := ex * ex + ez * ez
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+## One square of `_build_ground_grid()`, `cells` grid cells a side from grid point `base`, its
+## points `step` cells apart.
+func _build_ground_patch(base: Vector2i, cells: int, step: int, mat: Material, covered: Dictionary, ground: int, sparse: PackedInt32Array) -> void:
+	var cell := _TrackTerrain.CELL_M
+	var n := int(cells / float(step)) + 1
+	var spacing := cell * step
+	var middle := (Vector2(base) + Vector2(cells, cells) * 0.5) * cell
+	var found := _near_candidates(middle, cells * cell * 0.5 + spacing, sparse)
+	# Far enough from the road that no cut or fill can reach, painted ground is simply its paint.
+	var clear := float(found["low"]) - ROAD_HALF_W - _STRIP_W - _TrackSides.MOUNTAIN_VERGE - _AQUEDUCT_LIP_M
+	var road_low := INF
+	var road_high := -INF
+	for i: int in found["list"]:
+		road_low = minf(road_low, _pts[i].y)
+		road_high = maxf(road_high, _pts[i].y)
+	var paint_lift := _TrackSides.AQUEDUCT_SIDE_MAX + absf(tan(deg_to_rad(TrackFile.BANK_MAX_DEG))) * ROAD_HALF_W
+	# Each point's height and whether the strip or the road covers it, with a ring of points round
+	# the chunk, so a point is sunk only where all the ground round it is covered.
+	var wide := n + 2
+	var heights := PackedFloat32Array()
+	heights.resize(wide * wide)
+	var cover := PackedByteArray()
+	cover.resize(wide * wide)
+	var road_ys := PackedFloat32Array()
+	road_ys.resize(wide * wide)
+	# Where the grid is fine, every sample that may be nearest a block of its points, so each point
+	# looks at few (`_NEAR_BLOCK` points a side).
+	var blocks: Dictionary = {}
+	if step < _COARSE_STEP:
+		var block_half := (_NEAR_BLOCK - 1) * 0.5 * spacing
+		for bj in range(0, wide, _NEAR_BLOCK):
+			for bi in range(0, wide, _NEAR_BLOCK):
+				var corner := Vector2((base.x + (bi - 1) * step) * cell, (base.y + (bj - 1) * step) * cell)
+				blocks[Vector2i(bi, bj)] = _samples_near(corner + Vector2(block_half, block_half), block_half)
+	for vj in wide:
+		for vi in wide:
+			var g := Vector2i(base.x + (vi - 1) * step, base.y + (vj - 1) * step)
+			var world := Vector3(g.x * cell, 0.0, g.y * cell)
+			var k := vj * wide + vi
+			var painted := _terrain.height(g.x, g.y)
+			if not is_nan(painted) and clear > 0.0 and _FILL_SLOPE * clear > maxf(painted - road_low, road_high - painted) + paint_lift:
+				heights[k] = painted
+				road_ys[k] = painted
+				continue
+			var near_i := 0
+			if blocks.is_empty():
+				near_i = _nearest_among(world, found)
+			else:
+				near_i = _nearest_in(world, blocks[Vector2i(vi - vi % _NEAR_BLOCK, vj - vj % _NEAR_BLOCK)])
+			var under := _under_road(world, near_i)
+			road_ys[k] = under.y
+			cover[k] = 1 if under.x > 0.0 or (step < _COARSE_STEP and covered.has(g)) else 0
+			heights[k] = _height_on(world, ground, near_i)
+	# The mesh's arrays are filled directly: a SurfaceTool call a point was most of the time here.
+	var verts := PackedVector3Array()
+	verts.resize(n * n)
+	var normals := PackedVector3Array()
+	normals.resize(n * n)
+	var uvs := PackedVector2Array()
+	uvs.resize(n * n)
+	var inside := PackedByteArray()
+	inside.resize(n * n)
+	for vj in n:
+		for vi in n:
+			var k := (vj + 1) * wide + vi + 1
+			var v := vj * n + vi
+			var y := heights[k]
+			inside[v] = cover[k]
+			# A point the strip or the road covers is only ever the corner of a triangle reaching
+			# out past them; a little low, so where the two disagree the strip stays on top.
+			var drawn := y - _ground_sink() - (_COVERED_SINK if cover[k] != 0 else 0.0)
+			var world := Vector3((base.x + vi * step) * cell, drawn, (base.y + vj * step) * cell)
+			verts[v] = world
+			# From the heights round it, the ring past the edge too, so chunks shade alike where
+			# they meet.
+			var normal := Vector3(heights[k - 1] - heights[k + 1], 2.0 * spacing, heights[k - wide] - heights[k + wide]).normalized()
+			normals[v] = normal
+			uvs[v] = _dirt_uv(_ground_uv(world, y, _FAR_OUT_UV, road_ys[k]), normal)
+	var indices := PackedInt32Array()
+	# Triangles reaching in under the strip from past it. They cast no shadow: lying just under the
+	# strip's edge, they shaded it in a thin dark line.
+	var edge_indices := PackedInt32Array()
+	# Ground the strip or the road covers all of is left to them: the grid there can't follow a
+	# hillside's foot or the drop under a bridge, and stood up through them or sank into pits.
+	for vj in n - 1:
+		for vi in n - 1:
+			var i00 := vj * n + vi
+			var i10 := i00 + 1
+			var i01 := i00 + n
+			var i11 := i01 + 1
+			for tri: PackedInt32Array in [PackedInt32Array([i00, i10, i11]), PackedInt32Array([i00, i11, i01])]:
+				var under := int(inside[tri[0]]) + int(inside[tri[1]]) + int(inside[tri[2]])
+				if under == 3:
+					continue
+				if under > 0:
+					edge_indices.append_array(tri)
+				else:
+					indices.append_array(tri)
+	# With no triangles there is nothing to draw.
+	if indices.is_empty() and edge_indices.is_empty():
+		return
+	# A skirt down each edge hides any crack where chunks drawn at different spacings meet. Each
+	# leans a little out under its neighbor, so a crack seen from above is covered too.
+	var edges: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array(), PackedInt32Array(), PackedInt32Array()]
+	for v in n:
+		edges[0].append(v)
+		edges[1].append((n - 1) * n + v)
+		edges[2].append(v * n)
+		edges[3].append(v * n + n - 1)
+	var outs: Array[Vector3] = [Vector3(0, 0, -1), Vector3(0, 0, 1), Vector3(-1, 0, 0), Vector3(1, 0, 0)]
+	for e in edges.size():
+		var edge := edges[e]
+		var hang := Vector3.DOWN * _SKIRT_M + outs[e] * _SKIRT_OUT_M
+		for v in edge.size() - 1:
+			if inside[edge[v]] != 0 and inside[edge[v + 1]] != 0:
+				continue
+			var next := verts.size()
+			var a := verts[edge[v]]
+			var b := verts[edge[v + 1]]
+			verts.append_array(PackedVector3Array([a, b, a + hang, b + hang]))
+			normals.append_array(PackedVector3Array([Vector3.UP, Vector3.UP, Vector3.UP, Vector3.UP]))
+			uvs.append_array(PackedVector2Array([Vector2(0.0, _FAR_OUT_UV), Vector2(0.0, _FAR_OUT_UV), Vector2(0.0, _FAR_OUT_UV), Vector2(0.0, _FAR_OUT_UV)]))
+			indices.append_array(PackedInt32Array([next, next + 1, next + 3, next, next + 3, next + 2]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	for part: Array in [[indices, "PaintedGround_%d_%d", true], [edge_indices, "PaintedGroundEdge_%d_%d", false]]:
+		var part_indices: PackedInt32Array = part[0]
+		if part_indices.is_empty():
+			continue
+		arrays[Mesh.ARRAY_INDEX] = part_indices
+		var mesh := ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		mesh.surface_set_material(0, mat)
+		var mi := MeshInstance3D.new()
+		mi.name = str(part[1]) % [base.x, base.y]
+		mi.mesh = mesh
+		if not bool(part[2]):
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+
+
 func _build_terrain() -> void:
 	if _pts.is_empty():
 		return
@@ -1220,7 +2273,6 @@ func _under_side_grass(heights: PackedFloat32Array, cols: int, rows: int) -> Pac
 ## grid under it shows only far off. Behind the start, where there is no pavement, it runs across
 ## the road's line too.
 func _build_side_grass() -> void:
-	_grass_sides = _side_reaches(true)
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for side: float in [1.0, -1.0]:
@@ -1233,10 +2285,13 @@ func _build_side_grass() -> void:
 		for i in range(_pts.size() - 1):
 			var e0 := _sample_extents(i)
 			var e1 := _sample_extents(i + 1)
+			var edge0 := e0.y if side > 0.0 else e0.x
+			var edge1 := e1.y if side > 0.0 else e1.x
 			_add_side_grass_span(
 				st, side,
-				_pts[i], _yaws[i], e0.y if side > 0.0 else e0.x, reach[i], far_y[i],
-				_pts[i + 1], _yaws[i + 1], e1.y if side > 0.0 else e1.x, reach[i + 1], far_y[i + 1]
+				_pts[i], _yaws[i], edge0, reach[i], far_y[i],
+				_pts[i + 1], _yaws[i + 1], edge1, reach[i + 1], far_y[i + 1],
+				_bank_lift(i, side * edge0), _bank_lift(i + 1, side * edge1)
 			)
 		if _run_in_m > 0.0:
 			var back := _pts[0] - Vector3(sin(_yaws[0]), 0.0, cos(_yaws[0])) * _run_in_m
@@ -1292,20 +2347,26 @@ func _add_side_grass_span(
 	st: SurfaceTool,
 	side: float,
 	p0: Vector3, yaw0: float, edge0: float, reach0: float, far_y0: float,
-	p1: Vector3, yaw1: float, edge1: float, reach1: float, far_y1: float
+	p1: Vector3, yaw1: float, edge1: float, reach1: float, far_y1: float,
+	lift0: float = 0.0, lift1: float = 0.0
 ) -> void:
 	var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0)) * side
 	var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1)) * side
 	var outs0: Array[float] = [edge0, maxf(reach0 - _SIDE_OVERLAP_M, edge0), maxf(reach0, edge0)]
 	var outs1: Array[float] = [edge1, maxf(reach1 - _SIDE_OVERLAP_M, edge1), maxf(reach1, edge1)]
-	for k in 2:
+	if _banked:
+		# Where the bank's grass comes back down to the ground. Both ends need it, so a stretch
+		# with no lift at one end has a narrow strip there.
+		outs0.insert(1, minf(edge0 + maxf(_embank_run(lift0, edge0, outs0[1]), 0.05), outs0[1]))
+		outs1.insert(1, minf(edge1 + maxf(_embank_run(lift1, edge1, outs1[1]), 0.05), outs1[1]))
+	for k in outs0.size() - 1:
 		var pts0: Array[Vector3] = []
 		var pts1: Array[Vector3] = []
 		for out: float in [outs0[k], outs0[k + 1]]:
-			var y := _side_grass_height(p0.y, edge0, reach0, far_y0, out) - _TERRAIN_SINK
+			var y := _side_grass_height(p0.y, edge0, reach0, far_y0, out, lift0) - _TERRAIN_SINK
 			pts0.append(Vector3(p0.x, y, p0.z) + r0 * out)
 		for out: float in [outs1[k], outs1[k + 1]]:
-			var y := _side_grass_height(p1.y, edge1, reach1, far_y1, out) - _TERRAIN_SINK
+			var y := _side_grass_height(p1.y, edge1, reach1, far_y1, out, lift1) - _TERRAIN_SINK
 			pts1.append(Vector3(p1.x, y, p1.z) + r1 * out)
 		# The road mesh's order, the point on the driver's right first, so the grass faces up.
 		var a0 := pts0[0] if side > 0.0 else pts0[1]
@@ -1321,15 +2382,31 @@ func _add_side_grass_span(
 ## it there at `far_y`. Flat at the road's height where nothing is near; otherwise it slopes to
 ## halfway between the two roads' heights at the halfway line, where the grass from the other road
 ## meets it at the same height, and stays there over the overlap. A jump track's ramps don't lift it.
-func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, out: float) -> float:
+## Beside a banked road's raised edge, `lift` over `road_y`, the grass starts that much up and falls
+## at `_BANK_EMBANK_SLOPE`, and by the halfway line at the latest, to where it would lie. On a jump
+## track it starts from the flat grass there, and a ramp's side comes down to it.
+func _side_grass_height(road_y: float, edge: float, reach: float, far_y: float, out: float, lift: float = 0.0) -> float:
 	var base := minf(road_y, 0.0) if _jumps else road_y
 	var meet := (base + (minf(far_y, 0.0) if _jumps else far_y)) * 0.5
 	var half := maxf(reach - _SIDE_OVERLAP_M, edge)
+	var bank_up := 0.0
+	var run := _embank_run(lift, edge, half)
+	if run > 0.0:
+		bank_up = lift * clampf(1.0 - (out - edge) / run, 0.0, 1.0)
 	if out >= half:
-		return meet
+		return meet + bank_up
 	if out <= edge:
-		return base
-	return lerpf(base, meet, (out - edge) / (half - edge))
+		return base + bank_up
+	return lerpf(base, meet, (out - edge) / (half - edge)) + bank_up
+
+
+## How far out from a banked road's raised edge, `lift` up, its grass comes back down, with the
+## halfway line at `half`. 0 where there is no lift. On a jump track too: the bank's rise has a slope
+## beside it, and only a ramp's own height over the grass is a wall.
+func _embank_run(lift: float, edge: float, half: float) -> float:
+	if lift <= 0.0:
+		return 0.0
+	return minf(lift / _BANK_EMBANK_SLOPE, maxf(half - edge, 0.5))
 
 
 ## Road height at a grass vertex. Coarser than the driving query, and local to the mesh build.
@@ -1397,10 +2474,10 @@ func _build_road_mesh() -> void:
 		var e1 := TrackFile.driveable_extents(hw1 * 2.0, t1)
 		var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0))
 		var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1))
-		var l0 := _pts[i] - r0 * e0.x
-		var rr0 := _pts[i] + r0 * e0.y
-		var l1 := _pts[i + 1] - r1 * e1.x
-		var rr1 := _pts[i + 1] + r1 * e1.y
+		var l0 := _pts[i] - r0 * e0.x + Vector3.UP * _bank_lift(i, -e0.x)
+		var rr0 := _pts[i] + r0 * e0.y + Vector3.UP * _bank_lift(i, e0.y)
+		var l1 := _pts[i + 1] - r1 * e1.x + Vector3.UP * _bank_lift(i + 1, -e1.x)
+		var rr1 := _pts[i + 1] + r1 * e1.y + Vector3.UP * _bank_lift(i + 1, e1.y)
 		var v := _dists[i] * 0.15
 		var v1 := _dists[i + 1] * 0.15
 		_add_tri(st, l0, rr0, rr1, Vector2(0, v), Vector2(1, v), Vector2(1, v1))
@@ -1423,21 +2500,27 @@ func _build_road_mesh() -> void:
 func _build_ramp_sides() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var foot := -_TERRAIN_SINK
 	var walls := 0
 	for i in range(_pts.size() - 1):
-		if _pts[i].y <= _RAMP_SIDE_MIN_M and _pts[i + 1].y <= _RAMP_SIDE_MIN_M:
-			continue
-		walls += 1
 		var e0 := _sample_extents(i)
 		var e1 := _sample_extents(i + 1)
 		var r0 := Vector3(cos(_yaws[i]), 0.0, -sin(_yaws[i]))
 		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1]))
 		for side: float in [-1.0, 1.0]:
-			var top0 := _pts[i] + r0 * side * (e0.y if side > 0.0 else e0.x)
-			var top1 := _pts[i + 1] + r1 * side * (e1.y if side > 0.0 else e1.x)
-			var foot0 := Vector3(top0.x, foot, top0.z)
-			var foot1 := Vector3(top1.x, foot, top1.z)
+			# A banked road's raised edge has a side even where the road is at the grass.
+			# Down to the grass, which beside a banked road's raised edge starts as high as the bank
+			# lifts it (`_side_grass_height()`): only the road's own height over the grass is a wall.
+			var lat0 := side * (e0.y if side > 0.0 else e0.x)
+			var lat1 := side * (e1.y if side > 0.0 else e1.x)
+			var top0 := _road_point(i, lat0)
+			var top1 := _road_point(i + 1, lat1)
+			var lift0 := _bank_lift(i, lat0)
+			var lift1 := _bank_lift(i + 1, lat1)
+			if top0.y - lift0 <= _RAMP_SIDE_MIN_M and top1.y - lift1 <= _RAMP_SIDE_MIN_M:
+				continue
+			walls += 1
+			var foot0 := Vector3(top0.x, lift0 - _TERRAIN_SINK, top0.z)
+			var foot1 := Vector3(top1.x, lift1 - _TERRAIN_SINK, top1.z)
 			var out := (r0 + r1).normalized() * side
 			_add_wall_tri(st, top0, foot0, top1, out)
 			_add_wall_tri(st, top1, foot0, foot1, out)
@@ -1479,15 +2562,17 @@ func _build_lip_bands() -> void:
 		var foot_p: Vector3 = foot["position"]
 		var yaw: float = top["yaw"]
 		var grade := atan2(top_p.y - foot_p.y, Vector2(top_p.x - foot_p.x, top_p.z - foot_p.z).length())
-		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.RIGHT, -grade)
+		var lip_i := _index_at_distance(lip_s)
+		var bank := _banks[lip_i] if _banked else 0.0
+		var basis := Basis(Vector3.UP, yaw) * Basis(Vector3.BACK, atan(bank)) * Basis(Vector3.RIGHT, -grade)
 		var middle := (top_p + foot_p) * 0.5 + Vector3.UP * 0.02
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-		var ext := _sample_extents(_index_at_distance(lip_s))
+		var ext := _sample_extents(lip_i)
 		var count := int(floor((ext.x + ext.y) / _LIP_BAND_ACROSS))
 		var from := -ext.x + ((ext.x + ext.y) - count * _LIP_BAND_ACROSS) * 0.5
 		for k in count:
 			var across := from + (float(k) + 0.5) * _LIP_BAND_ACROSS
-			var xform := Transform3D(basis, middle + right * across)
+			var xform := Transform3D(basis, middle + right * across + Vector3.UP * _bank_lift(lip_i, across))
 			if k % 2 == 0:
 				yellow_xforms.append(xform)
 			else:
@@ -1520,8 +2605,12 @@ func _build_gravel() -> void:
 		var r1 := Vector3(cos(_yaws[i + 1]), 0.0, -sin(_yaws[i + 1])) * _half_ws[i + 1]
 		var a := _pts[i] + lift
 		var b := _pts[i + 1] + lift
-		_add_tri(st, a - r0, a + r0, b + r1, Vector2.ZERO, Vector2.RIGHT, Vector2.ONE)
-		_add_tri(st, a - r0, b + r1, b - r1, Vector2.ZERO, Vector2.ONE, Vector2.UP)
+		var a_l := a - r0 + Vector3.UP * _bank_lift(i, -_half_ws[i])
+		var a_r := a + r0 + Vector3.UP * _bank_lift(i, _half_ws[i])
+		var b_l := b - r1 + Vector3.UP * _bank_lift(i + 1, -_half_ws[i + 1])
+		var b_r := b + r1 + Vector3.UP * _bank_lift(i + 1, _half_ws[i + 1])
+		_add_tri(st, a_l, a_r, b_r, Vector2.ZERO, Vector2.RIGHT, Vector2.ONE)
+		_add_tri(st, a_l, b_r, b_l, Vector2.ZERO, Vector2.ONE, Vector2.UP)
 	st.generate_normals()
 	var mesh := st.commit()
 	if mesh == null or mesh.get_surface_count() == 0:
@@ -1539,9 +2628,14 @@ func _build_street_shoulders() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var yaw: float = _yaws[0]
 	var run_in := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _run_in_m
-	_add_shoulder_span(st, run_in, yaw, _half_ws[0], _pts[0], yaw, _half_ws[0])
+	var lifts := _edge_lifts()
+	var start_lift := Vector2(lifts[0][0], lifts[1][0])
+	_add_shoulder_span(st, run_in, yaw, _half_ws[0], _pts[0], yaw, _half_ws[0], start_lift, start_lift)
 	for i in range(_pts.size() - 1):
-		_add_shoulder_span(st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1])
+		_add_shoulder_span(
+			st, _pts[i], _yaws[i], _half_ws[i], _pts[i + 1], _yaws[i + 1], _half_ws[i + 1],
+			Vector2(lifts[0][i], lifts[1][i]), Vector2(lifts[0][i + 1], lifts[1][i + 1])
+		)
 	st.generate_normals()
 	var mesh := st.commit()
 	mesh.surface_set_material(0, _GroundMaterial.shoulder_concrete())
@@ -1549,16 +2643,25 @@ func _build_street_shoulders() -> void:
 	mi.name = "Shoulders"
 	mi.mesh = mesh
 	add_child(mi)
+	if _banked and _terrain == null:
+		_build_street_banks(lifts)
 
 
-func _add_shoulder_span(st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p1: Vector3, yaw1: float, hw1: float) -> void:
+## `lift0` and `lift1` are how high each end's left (x) and right (y) edge stands over the road's
+## height on a banked road. The shoulder lies on the ground there, falling with it.
+func _add_shoulder_span(
+	st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p1: Vector3, yaw1: float, hw1: float,
+	lift0: Vector2 = Vector2.ZERO, lift1: Vector2 = Vector2.ZERO
+) -> void:
 	var r0 := Vector3(cos(yaw0), 0.0, -sin(yaw0))
 	var r1 := Vector3(cos(yaw1), 0.0, -sin(yaw1))
 	for side: float in [-1.0, 1.0]:
-		var inner0 := p0 + r0 * (side * hw0)
-		var outer0 := p0 + r0 * (side * (hw0 + _STREET_SHOULDER_W))
-		var inner1 := p1 + r1 * (side * hw1)
-		var outer1 := p1 + r1 * (side * (hw1 + _STREET_SHOULDER_W))
+		var up0 := lift0.x if side > 0.0 else lift0.y
+		var up1 := lift1.x if side > 0.0 else lift1.y
+		var inner0 := p0 + r0 * (side * hw0) + Vector3.UP * up0
+		var outer0 := p0 + r0 * (side * (hw0 + _STREET_SHOULDER_W)) + Vector3.UP * up0 * _embank_keep(up0, _STREET_SHOULDER_W)
+		var inner1 := p1 + r1 * (side * hw1) + Vector3.UP * up1
+		var outer1 := p1 + r1 * (side * (hw1 + _STREET_SHOULDER_W)) + Vector3.UP * up1 * _embank_keep(up1, _STREET_SHOULDER_W)
 		var a0 := inner0 if side > 0.0 else outer0
 		var b0 := outer0 if side > 0.0 else inner0
 		var a1 := inner1 if side > 0.0 else outer1
@@ -1569,11 +2672,52 @@ func _add_shoulder_span(st: SurfaceTool, p0: Vector3, yaw0: float, hw0: float, p
 
 func _add_run_in(st: SurfaceTool) -> void:
 	var yaw: float = _yaws[0]
-	var side := Vector3(cos(yaw), 0.0, -sin(yaw)) * _half_ws[0]
+	var across := Vector3(cos(yaw), 0.0, -sin(yaw)) * _half_ws[0]
+	# Banked as the start is.
+	var left := across + Vector3.UP * _bank_lift(0, _half_ws[0])
+	var right := -across + Vector3.UP * _bank_lift(0, -_half_ws[0])
 	var back := _pts[0] - Vector3(sin(yaw), 0.0, cos(yaw)) * _run_in_m
 	var v := -_run_in_m * 0.15
-	_add_tri(st, back - side, back + side, _pts[0] + side, Vector2(0, v), Vector2(1, v), Vector2(1, 0))
-	_add_tri(st, back - side, _pts[0] + side, _pts[0] - side, Vector2(0, v), Vector2(1, 0), Vector2(0, 0))
+	_add_tri(st, back + right, back + left, _pts[0] + left, Vector2(0, v), Vector2(1, v), Vector2(1, 0))
+	_add_tri(st, back + right, _pts[0] + left, _pts[0] + right, Vector2(0, v), Vector2(1, 0), Vector2(0, 0))
+
+
+## On a banked street track, the ground beside each raised edge, from the shoulder's outer edge down
+## to where it meets the ground again (`_embank_keep()`), so the road doesn't stand over a gap.
+func _build_street_banks(lifts: Array[PackedFloat32Array]) -> void:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var count := 0
+	for side: float in [1.0, -1.0]:
+		var up := lifts[0] if side > 0.0 else lifts[1]
+		for i in range(_pts.size() - 1):
+			if up[i] <= 0.01 and up[i + 1] <= 0.01:
+				continue
+			count += 1
+			var ends: Array[Vector3] = []
+			for k: int in [i, i + 1]:
+				var across := Vector3(cos(_yaws[k]), 0.0, -sin(_yaws[k])) * side
+				var from_out := _half_ws[k] + _STREET_SHOULDER_W
+				var foot_out := _half_ws[k] + maxf(up[k] / _BANK_EMBANK_SLOPE, _STREET_SHOULDER_W + 0.05)
+				ends.append(_pts[k] + across * from_out + Vector3.UP * up[k] * _embank_keep(up[k], _STREET_SHOULDER_W))
+				ends.append(_pts[k] + across * foot_out + Vector3.UP * -_TERRAIN_SINK)
+			# The road mesh's order, the point on the driver's right first, so it faces up.
+			var a0 := ends[0] if side > 0.0 else ends[1]
+			var b0 := ends[1] if side > 0.0 else ends[0]
+			var a1 := ends[2] if side > 0.0 else ends[3]
+			var b1 := ends[3] if side > 0.0 else ends[2]
+			_add_tri(st, a0, b0, b1, Vector2(0, 0), Vector2(1, 0), Vector2(1, 1))
+			_add_tri(st, a0, b1, a1, Vector2(0, 0), Vector2(1, 1), Vector2(0, 1))
+	if count == 0:
+		return
+	st.generate_normals()
+	var mesh := st.commit()
+	mesh.surface_set_material(0, _GroundMaterial.grass())
+	var mi := MeshInstance3D.new()
+	mi.name = "BankSides"
+	mi.mesh = mesh
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 func _add_tri(
@@ -1665,6 +2809,7 @@ func _add_curb_run(st: SurfaceTool, side: float, a: int, b: int, closed: bool, c
 		var yaw: float = _yaws[i]
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
 		var p := _pts[i] + right * side * _edge_extent(i, side)
+		p.y += _bank_lift(i, side * _edge_extent(i, side))
 		if not edge.is_empty():
 			var step := p - edge[edge.size() - 1]
 			if step.dot(Vector3(sin(yaw), 0.0, cos(yaw))) < 0.01:
@@ -1771,7 +2916,7 @@ func _add_perp_curbs(
 	var step := span / float(count)
 	for k in count:
 		var lat := a + (k + 0.5) * step
-		_add_curb_stone(red_xforms, white_xforms, stone_i, basis, _pts[index] + along * lat)
+		_add_curb_stone(red_xforms, white_xforms, stone_i, basis, _road_point(index, side * lat))
 		stone_i += 1
 	return stone_i
 
@@ -1800,12 +2945,12 @@ func _build_obstacles() -> void:
 		var right := Vector3(cos(yaw), 0.0, -sin(yaw))
 		if TrackFile.obstacle_left(rtype):
 			_place_edge_barrier(
-				body, body_xforms, stripe_xforms, _pts[i], basis, -right,
+				body, body_xforms, stripe_xforms, _pts[i] + Vector3.UP * _bank_lift(i, -(ext.x + BARRIER_W * 0.5)), basis, -right,
 				ext.x, BARRIER_L, BARRIER_H, BARRIER_W
 			)
 		if TrackFile.obstacle_right(rtype):
 			_place_edge_barrier(
-				body, body_xforms, stripe_xforms, _pts[i], basis, right,
+				body, body_xforms, stripe_xforms, _pts[i] + Vector3.UP * _bank_lift(i, ext.y + BARRIER_W * 0.5), basis, right,
 				ext.y, BARRIER_L, BARRIER_H, BARRIER_W
 			)
 		i += stride
@@ -1854,16 +2999,14 @@ func _build_narrow_signs() -> void:
 		var right_ext := float(sample["right_ext"])
 		var left_n := TrackFile.narrows_left(cur_t)
 		var right_n := TrackFile.narrows_right(cur_t)
-		_add_narrow_sign(
-			root, "NarrowSignL%d" % sign_i,
-			pos - right_v * (left_ext + OUTSET),
-			yaw + TOE, left_n, right_n
-		)
-		_add_narrow_sign(
-			root, "NarrowSignR%d" % sign_i,
-			pos + right_v * (right_ext + OUTSET),
-			yaw - TOE, left_n, right_n
-		)
+		var at_l := pos - right_v * (left_ext + OUTSET)
+		var at_r := pos + right_v * (right_ext + OUTSET)
+		# Beside a banked road, on the grass where it stands.
+		if _banked:
+			at_l.y = surface_height(at_l)
+			at_r.y = surface_height(at_r)
+		_add_narrow_sign(root, "NarrowSignL%d" % sign_i, at_l, yaw + TOE, left_n, right_n)
+		_add_narrow_sign(root, "NarrowSignR%d" % sign_i, at_r, yaw - TOE, left_n, right_n)
 		sign_i += 1
 
 
@@ -2061,8 +3204,7 @@ func _place_perp_barriers(
 	barrier_w: float
 ) -> void:
 	var yaw: float = _yaws[index]
-	var right := Vector3(cos(yaw), 0.0, -sin(yaw))
-	var along := right if on_right else -right
+	var side := 1.0 if on_right else -1.0
 	var basis := Basis(Vector3.UP, yaw + PI * 0.5)
 	var a := minf(ext_a, ext_b)
 	var b := maxf(ext_a, ext_b)
@@ -2071,7 +3213,7 @@ func _place_perp_barriers(
 	var step := span / float(count)
 	for k in count:
 		var lat := a + (k + 0.5) * step
-		var pos := _pts[index] + along * lat + Vector3(0.0, barrier_h * 0.5, 0.0)
+		var pos := _road_point(index, side * lat) + Vector3(0.0, barrier_h * 0.5, 0.0)
 		var xf := Transform3D(basis, pos)
 		body_xforms.append(xf)
 		stripe_xforms.append(Transform3D(basis, pos + Vector3(0.0, 0.18, 0.0)))
@@ -2080,7 +3222,7 @@ func _place_perp_barriers(
 	box.size = Vector3(barrier_w, barrier_h, span)
 	hit.shape = box
 	var mid := (a + b) * 0.5
-	hit.transform = Transform3D(basis, _pts[index] + along * mid + Vector3(0.0, barrier_h * 0.5, 0.0))
+	hit.transform = Transform3D(basis, _road_point(index, side * mid) + Vector3(0.0, barrier_h * 0.5, 0.0))
 	body.add_child(hit)
 
 
@@ -2094,8 +3236,23 @@ func _build_finish_line() -> void:
 	root.name = "FinishLineVisual"
 	root.transform = Transform3D(Basis(Vector3.UP, yaw), pos)
 	add_child(root)
-	_add_checkered_strip(root, float(sample["left_ext"]), float(sample["right_ext"]))
-	_add_finish_gantry(root)
+	var left_ext := float(sample["left_ext"])
+	var right_ext := float(sample["right_ext"])
+	var bank := float(sample["bank"])
+	if is_zero_approx(bank):
+		_add_checkered_strip(root, left_ext, right_ext)
+		_add_finish_gantry(root)
+		return
+	# On a banked road the line leans with the road, and the gantry stands as much higher as the
+	# road's raised edge, so the banner still clears a car there.
+	var lean := atan(bank)
+	var line := Node3D.new()
+	line.name = "BankedLine"
+	line.transform = Transform3D(Basis(Vector3.BACK, lean), Vector3.UP * _lift_for(bank, float(sample["half_width"]), 0.0))
+	root.add_child(line)
+	_add_checkered_strip(line, left_ext / cos(lean), right_ext / cos(lean))
+	var high := maxf(_lift_for(bank, float(sample["half_width"]), -left_ext), _lift_for(bank, float(sample["half_width"]), right_ext))
+	_add_finish_gantry(root, high)
 
 
 ## The checkered line across the road, 30 m at most and no wider than the road, so on a narrow
@@ -2132,21 +3289,22 @@ func _add_checkered_strip(parent: Node3D, left_ext: float, right_ext: float) -> 
 	_add_box_multimesh(parent, "CheckWhite", Vector3(square_w, 0.03, SQUARE), CHECK_WHITE, white_xforms)
 
 
-func _add_finish_gantry(parent: Node3D) -> void:
-	const POST_H := 4.4
+## `rise` stands it that much taller, for a banked road's raised edge.
+func _add_finish_gantry(parent: Node3D, rise: float = 0.0) -> void:
 	const POST_W := 0.22
 	const BANNER_W := 38.6
 	const BANNER_H := 0.9
+	var post_h := 4.4 + rise
 	var post_x := BANNER_W * 0.5
 	var post_mat := _make_mat(POST_COLOR, 0.45)
-	_add_box(parent, "PostL", Vector3(POST_W, POST_H, POST_W), post_mat, Vector3(-post_x, POST_H * 0.5, 0.0))
-	_add_box(parent, "PostR", Vector3(POST_W, POST_H, POST_W), post_mat, Vector3(post_x, POST_H * 0.5, 0.0))
-	_add_box(parent, "Crossbar", Vector3(BANNER_W, POST_W, POST_W), post_mat, Vector3(0.0, POST_H, 0.0))
+	_add_box(parent, "PostL", Vector3(POST_W, post_h, POST_W), post_mat, Vector3(-post_x, post_h * 0.5, 0.0))
+	_add_box(parent, "PostR", Vector3(POST_W, post_h, POST_W), post_mat, Vector3(post_x, post_h * 0.5, 0.0))
+	_add_box(parent, "Crossbar", Vector3(BANNER_W, POST_W, POST_W), post_mat, Vector3(0.0, post_h, 0.0))
 	const BCOLS := 16
 	const BROWS := 2
 	var cell_w := BANNER_W / float(BCOLS)
 	var cell_h := BANNER_H / float(BROWS)
-	var banner_y := POST_H - POST_W - BANNER_H * 0.5 - 0.04
+	var banner_y := post_h - POST_W - BANNER_H * 0.5 - 0.04
 	var black_xforms: Array[Transform3D] = []
 	var white_xforms: Array[Transform3D] = []
 	for row in BROWS:

@@ -47,7 +47,7 @@ var _view_port: SubViewport
 @onready var _hud_bottom: Control = $GarageUI/HudBottom
 @onready var _lift: StaticBody3D = $InteractLift
 @onready var _vodka: StaticBody3D = $InteractDesk/InteractVodka
-@onready var _lift_arm: Node3D = $InteractLift/LiftArm
+@onready var _jack: Node3D = $InteractLift/Jack
 @onready var _door_left: Node3D = $InteractDoors/DoorLeft
 @onready var _door_right: Node3D = $InteractDoors/DoorRight
 @onready var _clock_hour: Node3D = $InteractClock/Face/HourHand
@@ -67,6 +67,9 @@ const BUMPER_CLICK_MARGIN := 0.06
 ## How far in from the bumper's outer face its click box reaches: the bar, its ends and
 ## guards, but not the mounting irons that run back under the body to the frame.
 const BUMPER_CLICK_DEPTH := 0.45
+## How far down from the top of the roof its click box reaches: the roof, not the
+## windows and doors below it.
+const ROOF_CLICK_DEPTH := 0.12
 ## Height above the floor the camera aims at: about the car's beltline, so the whole
 ## car and the wall behind it, with its shelves and clock, are in the frame.
 const CAM_LOOK_HEIGHT := 1.2
@@ -119,7 +122,6 @@ var _offer_kind: String = ""
 var _offer_id: String = ""
 var _offer_amount: int = 0
 var _lift_home: Transform3D
-var _lift_arm_home: Vector3
 var _bay_busy: bool = false
 var _departing: bool = false
 var _departure_finished: bool = false
@@ -144,10 +146,14 @@ const SALE_PRICE_STEP := 50
 const SALE_PRICE_MAX := 99999
 
 var _nav := _MenuNav.new()
-## The paint menu's Body and Accent choice; Accent paints the cove, on a car with one (car file model.cove).
+## The paint menu's Body and Accent choice; Accent paints the cove or the accent parts, on a car with them (car file model.cove or model.accent).
 var _spray_zones: HBoxContainer
 var _spray_body_btn: Button
 var _spray_cove_btn: Button
+## The accent's finish, a list on its own line above Apply while Accent is chosen:
+## Paint, Vinyl, Matte (CarFile.ACCENT_FINISHES).
+var _spray_finishes: HBoxContainer
+var _spray_finish_pick: OptionButton
 var _car_list: Control
 var _car_list_rows: VBoxContainer
 var _car_list_count: Label
@@ -191,8 +197,10 @@ var _bumper_panel: Control
 var _bumper_label: Label
 var _bumper_do: Button
 var _bumper_forget: Button
-## The end whose bumper the box is about.
+## The end whose bumper the box is about, or "roof" when it offers a chop.
 var _bumper_end: String = ""
+## Click box on the roof of a car whose roof can be chopped (car file model.roof).
+var _roof_target: StaticBody3D
 var _creeper: StaticBody3D
 var _tire_machine: StaticBody3D
 ## Players for the jack, wheels, and tire machine, by sound name.
@@ -228,6 +236,7 @@ const _TOOLTIPS := {
 	&"vodka": "Wanna drink?",
 	&"bumper_front": "Front bumper",
 	&"bumper_rear": "Rear bumper",
+	&"roof": "Roof",
 }
 const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
@@ -312,6 +321,10 @@ const _T_WRENCH_GAP := 0.3
 const _T_WRENCH := 0.4
 const _T_TIRE_MOVE := 0.55
 const _T_JACK := 0.9
+## How far the jack's front wheels reach ahead of its origin, and how far short of the car's
+## side they stop.
+const _JACK_FRONT := 0.33
+const _JACK_GAP := 0.1
 const _T_LIFT := 1.0
 const _T_DROP := 0.4
 const _T_RISE := 0.4
@@ -356,12 +369,13 @@ func _ready() -> void:
 	_build_hood_target()
 	_build_under_car_target()
 	_build_bumper_targets()
+	_build_roof_target()
 	_build_bumper_panel()
 	_build_creeper()
 	_build_tire_machine()
 	_lift.set_meta(&"garage_interact", &"lift")
 	_lift_home = _lift.global_transform
-	_lift_arm_home = _lift_arm.position
+	_jack.global_position.y = _floor_top()
 	GameState.update_music()
 	_calendar.set_meta(&"garage_interact", &"calendar")
 	_calendar_home = _calendar.global_transform
@@ -410,6 +424,13 @@ func _on_carbody_stl_loaded(_mesh: Variant) -> void:
 	# When the CarBody's mesh is ready, re-align wheels to the floor.
 	_align_wheels_to_floor()
 	_place_bay_targets()
+
+
+## Height of the floor's drawn surface, which sits a little below its collision box.
+func _floor_top() -> float:
+	var floor_mesh := $Floor/MeshInstance3D as MeshInstance3D
+	var box := _transformed_aabb(floor_mesh.global_transform, floor_mesh.mesh.get_aabb())
+	return box.end.y
 
 
 func _align_wheels_to_floor() -> void:
@@ -1100,6 +1121,8 @@ func _sync_menu_nav() -> void:
 		var spray_buttons: Array = []
 		if _spray_zones.visible:
 			spray_buttons = [_spray_body_btn, _spray_cove_btn]
+		if _spray_finishes.visible:
+			spray_buttons.append(_spray_finish_pick)
 		spray_buttons.append_array([
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
 			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
@@ -1279,11 +1302,13 @@ func _handle_interact(kind: Variant) -> void:
 			_offer_bumper_job("front")
 		&"bumper_rear":
 			_offer_bumper_job("rear")
+		&"roof":
+			_offer_roof_job()
 
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear", &"roof":
 			return true
 	return false
 
@@ -1585,6 +1610,7 @@ func _show_spray_picker() -> void:
 	_spray_zones.visible = GameState.car_has_cove()
 	_spray_body_btn.button_pressed = true
 	_spray_color_picker.color = GameState.car_color
+	_show_spray_finish()
 	_spray_menu.visible = true
 	_sync_menu_nav()
 
@@ -1609,20 +1635,57 @@ func _build_spray_zones() -> void:
 	vbox.add_child(_spray_zones)
 	vbox.move_child(_spray_zones, 1)
 	_spray_zones.visible = false
+	_spray_finishes = HBoxContainer.new()
+	_spray_finishes.alignment = BoxContainer.ALIGNMENT_CENTER
+	var label := Label.new()
+	label.text = "Finish"
+	_spray_finishes.add_child(label)
+	_spray_finish_pick = OptionButton.new()
+	for finish: String in CarFile.ACCENT_FINISHES:
+		_spray_finish_pick.add_item(finish.capitalize())
+	_spray_finish_pick.custom_minimum_size = Vector2(140, 0)
+	_spray_finishes.add_child(_spray_finish_pick)
+	var buttons := $GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox
+	vbox.add_child(_spray_finishes)
+	vbox.move_child(_spray_finishes, buttons.get_index())
+	_spray_finishes.visible = false
 
 
-## The picker shows the chosen zone's paint; an unpainted cove shows the body's.
+## The finish list shows while Accent is chosen, set to the car's present finish.
+func _show_spray_finish() -> void:
+	var shown := _spray_zones.visible and _spray_cove_btn.button_pressed
+	var changed := shown != _spray_finishes.visible
+	_spray_finishes.visible = shown
+	if shown:
+		_spray_finish_pick.select(maxi(0, CarFile.ACCENT_FINISHES.find(GameState.car_accent_finish_now())))
+	if changed and _spray_menu.visible:
+		_sync_menu_nav()
+
+
+func _chosen_spray_finish() -> String:
+	var at := _spray_finish_pick.selected
+	if at < 0 or at >= CarFile.ACCENT_FINISHES.size():
+		return GameState.car_accent_finish_now()
+	return CarFile.ACCENT_FINISHES[at]
+
+
+## The picker shows the chosen zone's paint; an unpainted cove shows the body's, an
+## unpainted accent the car file's accent color.
 func _on_spray_zone_pressed() -> void:
 	var cove := GameState.car_cove_color
-	if _spray_cove_btn.button_pressed and cove.a > 0.5:
+	if not _spray_cove_btn.button_pressed:
+		_spray_color_picker.color = GameState.car_color
+	elif cove.a > 0.5:
 		_spray_color_picker.color = cove
 	else:
-		_spray_color_picker.color = GameState.car_color
+		_spray_color_picker.color = GameState.car_unpainted_accent()
+	_show_spray_finish()
 
 
 func _on_spray_confirm_pressed() -> void:
 	if _spray_zones.visible and _spray_cove_btn.button_pressed:
 		GameState.set_car_cove_color(_spray_color_picker.color)
+		GameState.set_car_accent_finish(_chosen_spray_finish())
 	else:
 		GameState.set_car_color(_spray_color_picker.color)
 	# Update the preview immediately.
@@ -3118,6 +3181,7 @@ func _place_bay_targets() -> void:
 	_hood.global_position = hood.get_center()
 	_hood_shape.size = hood.size
 	_place_bumper_targets(body)
+	_place_roof_target(body)
 	if _under_car == null or _under_car_shape == null:
 		return
 	# Low band between the axles, just behind the engine: where the gearbox sits.
@@ -3176,6 +3240,37 @@ func _place_bumper_targets(body: Node3D) -> void:
 		(col.shape as BoxShape3D).size = box.size + Vector3.ONE * BUMPER_CLICK_MARGIN
 
 
+func _build_roof_target() -> void:
+	_roof_target = StaticBody3D.new()
+	_roof_target.name = "InteractRoof"
+	var col := CollisionShape3D.new()
+	col.shape = BoxShape3D.new()
+	col.disabled = true
+	_roof_target.add_child(col)
+	_car_pivot.add_child(_roof_target)
+	_roof_target.set_meta(&"garage_interact", &"roof")
+
+
+## Fits the roof's click box over the top of the roof showing now (ROOF_CLICK_DEPTH deep),
+## on a car whose roof can be chopped; other cars have none.
+func _place_roof_target(body: Node3D) -> void:
+	var col := _roof_target.get_child(0) as CollisionShape3D
+	var skin: Node3D = null
+	if GameState.car_roof_choppable():
+		for node: Node in body.find_children("roof_*", "Node3D", true, false):
+			var shown := node as Node3D
+			if shown.is_visible_in_tree() and (shown.name.ends_with("_vinyl") or shown.name.ends_with("_smooth")):
+				skin = shown
+	var box: AABB = _world_mesh_aabb(skin) if skin != null else AABB()
+	col.disabled = box.size == Vector3.ZERO
+	if col.disabled:
+		return
+	box.position.y = box.end.y - ROOF_CLICK_DEPTH
+	box.size.y = ROOF_CLICK_DEPTH
+	_roof_target.global_position = box.get_center()
+	(col.shape as BoxShape3D).size = box.size + Vector3.ONE * BUMPER_CLICK_MARGIN
+
+
 func _build_bumper_panel() -> void:
 	var shade := ColorRect.new()
 	shade.name = "BumperPanel"
@@ -3232,9 +3327,29 @@ func _offer_bumper_job(end: String) -> void:
 	_bumper_do.grab_focus()
 
 
+## Offers to chop the roof, or says it is chopped: a chop is for good.
+func _offer_roof_job() -> void:
+	if not GameState.car_roof_choppable():
+		return
+	_bumper_end = "roof"
+	var inches := roundi(float(GameState.spec_roof(GameState.car_spec).get("chop_in", 3.0)))
+	_bumper_do.visible = not GameState.car_roof_chopped
+	if GameState.car_roof_chopped:
+		_bumper_label.text = "The roof is chopped %d inches." % inches
+	else:
+		_bumper_label.text = "Roof"
+		_bumper_do.text = "Chop roof %d in - $%d" % [inches, GameState.ROOF_CHOP_PRICE]
+	_bumper_panel.visible = true
+	_sync_menu_nav()
+	if _bumper_do.visible:
+		_bumper_do.grab_focus()
+	else:
+		_bumper_forget.grab_focus()
+
+
 ## Pays for the job; without the money the box says so and only Forget it is left.
 func _on_bumper_do() -> void:
-	var err := GameState.toggle_bumper(_bumper_end)
+	var err := GameState.chop_roof() if _bumper_end == "roof" else GameState.toggle_bumper(_bumper_end)
 	if not err.is_empty():
 		_bumper_label.text = err
 		_bumper_do.visible = false
@@ -3573,23 +3688,39 @@ func _shop_sound_stop(sound_name: String) -> void:
 
 ## The jack rolls in and raises the car.
 func _jack_up(car_start: Vector3) -> void:
-	var work := Vector3(-2.15, _lift_home.origin.y, 0.12)
-	await _tween_global_pos(_lift, work, _T_JACK)
+	await _tween_global_pos(_lift, _jack_work_spot(), _T_JACK)
 	if not is_instance_valid(self):
 		return
 	_shop_sound("jack_pump")
 	var lift_to := car_start + Vector3(0.0, _LIFT_HEIGHT, 0.0)
-	var arm_to := _lift_arm_home + Vector3(0.0, _LIFT_HEIGHT, 0.0)
-	await _tween_together(_car_pivot, lift_to, _lift_arm, arm_to, _T_LIFT)
+	await _tween_car_and_jack(lift_to, 1.0, _T_LIFT)
 	if not is_instance_valid(self):
 		return
 	await _pause(_T_PAUSE)
 
 
+## Where the jack stops: rolled straight ahead, saddle first, from its corner until its
+## front wheels are _JACK_GAP short of the car's side.
+func _jack_work_spot() -> Vector3:
+	var home := _lift_home.origin
+	var body := _car_pivot.get_node_or_null("CarBody") as Node3D
+	if body == null:
+		return home
+	var box := _world_mesh_aabb(body)
+	var ahead := _lift_home.basis.x
+	ahead.y = 0.0
+	ahead = ahead.normalized()
+	if box.size == Vector3.ZERO or ahead.x <= 0.01:
+		return home
+	var front := home + ahead * _JACK_FRONT
+	var travel := (box.position.x - _JACK_GAP - front.x) / ahead.x
+	return home + ahead * maxf(travel, 0.0)
+
+
 ## The jack lets the car down and rolls home.
 func _jack_down(car_start: Vector3) -> void:
 	_shop_sound("jack_release")
-	await _tween_together(_car_pivot, car_start, _lift_arm, _lift_arm_home, _T_LIFT)
+	await _tween_car_and_jack(car_start, 0.0, _T_LIFT)
 	if not is_instance_valid(self):
 		return
 	await _tween_global_xform(_lift, _lift_home, _T_JACK)
@@ -3862,12 +3993,13 @@ func _tween_global_pos(node: Node3D, to: Vector3, duration: float) -> void:
 	await tw.finished
 
 
-func _tween_together(car: Node3D, car_to: Vector3, arm: Node3D, arm_to: Vector3, duration: float) -> void:
+## Moves the car to `car_to` while the jack's arm goes to `raise_to` (0 down, 1 up).
+func _tween_car_and_jack(car_to: Vector3, raise_to: float, duration: float) -> void:
 	var tw := create_tween()
 	tw.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.set_parallel(true)
-	tw.tween_property(car, "position", car_to, duration)
-	tw.tween_property(arm, "position", arm_to, duration)
+	tw.tween_property(_car_pivot, "position", car_to, duration)
+	tw.tween_property(_jack, "raise", raise_to, duration)
 	await tw.finished
 
 

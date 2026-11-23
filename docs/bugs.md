@@ -113,3 +113,17 @@ To reproduce (as run headless, stock first car against the first rival met, the 
 GitHub issue #131.
 
 Not looked into yet: why the arcade rival is in the left lane where traffic meets it, whether it sees the traffic car in time to dodge it, and why the simulation rival runs into the wall in that corner.
+
+## Dark slivers beside the road on a curved street-style course
+
+GitHub issue #221.
+
+On a street-style track that curves round, thin dark slivers run along the edge of the road, where the grass beside it dips below the shoulder. They are there with or without banking. The street drag runs straight and doesn't show them.
+
+To reproduce:
+
+1. In the track maker, make the same loop as above.
+2. Set the style to street and test-drive it.
+3. Look across a corner at the far side of the road. The slivers run along the shoulder's outer edge.
+
+Likely cause, not confirmed: on a street track the grass grid's points under the road are sunk a meter (`_STREET_UNDER_ROAD_SINK` in `_build_terrain()`, `scripts/race_track.gd`), so that it stays under the road through dips. The grid is a 6 m square one, so on a curve its sunk points fall right beside the road as well as under it, and the grass slopes down into them past the shoulder.

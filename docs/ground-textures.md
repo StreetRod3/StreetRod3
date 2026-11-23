@@ -8,7 +8,8 @@ The ground, roads and day sky are photographed textures. Their materials are bui
 | --- | --- | --- |
 | Grass (Poliigon GrassPatchyGround 4585) | Ground around the race tracks and the city, Mulholland's flat ground and the foot of its banks | `GroundMaterial.grass()`, and the grass part of `vertex_ground()` |
 | Asphalt (Poliigon CityStreetAsphaltGenericClean001) | Race track roads and city streets; Mulholland's road darkened | `asphalt()`, `two_sided_asphalt()` (city), `dark_asphalt()` |
-| Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The Aqueduct's floor and banks, the street drag's shoulders | `vertex_colored_concrete()`, `shoulder_concrete()` |
+| Concrete (Leartes Cosmos CA Concrete Road) | The Aqueduct's floor, banks and the flat tops beside them, shaded by the mesh's vertex colors | `vertex_colored_concrete()` |
+| Concrete (Magnific photo, made to tile by `tools/make_concrete_texture.py`) | The street drag's shoulders | `shoulder_concrete()` |
 | Dirt (Poliigon GroundDirtWeedsPatchy004) | Mulholland's hills: ground standing more than a few inches over the road | The dirt part of `vertex_ground()` |
 | Gravel (Poly Haven Rocky Trail) | Mulholland's verge and its gravel stretches | `gravel()`, and the gravel part of `vertex_ground()` |
 | Tree bark (Poliigon BarkPoplar001, 1K) | Every tree's trunk, in the city and on street tracks, lit in hard bands to match the leaves | `_bark_material()` in `scripts/street_scenery.gd` and `shaders/tree_bark.gdshader`, with `BARK_LIGHT_STEPS` (`3`), `BARK_WARM` and `BARK_COOL` (the sun's color on the lit and part-lit bands), `BARK_CROWN_SHADE` (`0.6`) from `BARK_CROWN_FROM` (`0.45`) of the way up, `BARK_FOOT_SHADE` (`0.3`), `BARK_TILE_M` (`1`, meters of bark per tile) and `BARK_TINT` (`Color(0.74, 0.61, 0.5)`, a mid brown; white is the photo's own pale grey) |
@@ -28,7 +29,7 @@ All of these are constants in `scripts/ground_material.gd`.
 | `DIRT_DARKEN` | `0.8` | Multiplies the dirt's color after the tint. `1` is as bright as the photo; lower is darker. |
 | `DIRT_OLD_COLOR` | `Color(0.56, 0.3, 0.07)` | The brown the tint leans toward: the flat color Mulholland's hills had before. Only its hue is used, not its brightness. |
 | `GROUND_SPECULAR` | `0.1` | How much the grass, dirt and gravel reflect. Godot also scales the reflection at shallow angles with it, so raising it toward the default `0.5` makes the ground shine and turns ground in the distance pale with the sky in it. |
-| `GRASS_TILE_M`, `ASPHALT_TILE_M`, `CONCRETE_TILE_M`, `DIRT_TILE_M`, `GRAVEL_TILE_M` | `2`, `1`, `2`, `2`, `2` | Meters of ground one tile of each texture covers. |
+| `GRASS_TILE_M`, `ASPHALT_TILE_M`, `CONCRETE_TILE_M`, `CA_CONCRETE_TILE_M`, `DIRT_TILE_M`, `GRAVEL_TILE_M` | `2`, `1`, `2`, `4`, `2`, `2` | Meters of ground one tile of each texture covers. The Aqueduct's concrete repeated in bands across the floor at 2 m. |
 | `GRAVEL_TINT` | white | Multiplies the gravel's color. Lower is darker; a color tints it. |
 | `DARK_ASPHALT_TINT` | `0.3` grey | How dark Mulholland's road is, to keep Street Rod 2's black road. |
 | `GRASS_NORMAL_SCALE`, `ASPHALT_NORMAL_SCALE` | `1.8`, `1.4` | How far the normal map tilts the surface. `1` is the map as made, which looked flat. Higher is bumpier. |
@@ -39,10 +40,16 @@ All of these are constants in `scripts/ground_material.gd`.
 | `GRASS_MACRO_TINT`, `ASPHALT_MACRO_TINT` | dry yellow, light grey | The color a second, unrelated set of patches leans toward, as a multiplier in linear light: dry grass, and worn asphalt. |
 | `GRASS_MACRO_TINT_AMOUNT`, `ASPHALT_MACRO_TINT_AMOUNT` | `0.6`, `0.5` | How far those patches lean toward their color. `0` turns them off. |
 | `SHOULDER_TINT` | `0.6` grey | Shade of the street drag's concrete shoulders. |
+| `CA_CONCRETE_LINEAR_MEAN` | `0.257` | The Aqueduct concrete's mean color in linear light, measured from the file. Its color is multiplied by `CONCRETE_LINEAR_MEAN` over this, so it comes out as bright as the old photo the channel's vertex colors were worked out for. Measure it again if the texture changes. |
+| `CA_CONCRETE_AO_LIGHT_AFFECT` | `0.5` | How much the Aqueduct concrete's occlusion darkens sunlight too. |
 
 The grass and asphalt are tiled 2 m and 1 m, so from the car most of the ground is far off, where the texture's small versions (mipmaps) average the normal map's bumps out to flat. The large-scale patches are what keep it from looking flat there. They are value noise over the ground's place in the world (`shaders/ground_common.gdshaderinc`), so they need no texture and match wherever two meshes meet. The grass part of `vertex_ground()` gets the same normal strength, occlusion and patches as `grass()`; its dirt and gravel do not have them yet.
 
 `DIRT_MEAN` is the dirt photo's average color in linear light, measured from the file. The tint is worked out from it, so measure it again if the dirt texture changes. The dirt is also never smoother than `dirt_min_roughness` (`0.92`) in `shaders/vertex_ground.gdshader`; the photo's own roughness looked damp.
+
+The Aqueduct's concrete came with its roughness the wrong way round: its "R" map, and the green of its ORM map, average 0.1 and drew it glassy, like wet concrete. Its "G" map is the same inverted, averaging 0.9, and that is what the game uses as roughness. Its files say 4096 but are 2048 square. Its height and metal maps aren't used.
+
+The Aqueduct's seams across the channel and its dark middle are flat strips lying 1 cm over the concrete, built in `scripts/course_scenery.gd`. Their material multiplies whatever is under it, so the concrete's grain and cracks run on through them and they look cut into it rather than laid on top. Each darkens to `STRIP_CORE` (`0.3`) across its middle and fades back to the bare concrete at its edges. A seam is `SEAM_STRIP_W` (`0.1` m) wide, dark from `SEAM_FADE.y` (`0.42`) of the way in from each edge; the middle is `GUTTER_STRIP_W` (`0.54` m) wide, dark from `GUTTER_FADE.y` (`0.139`), about 0.39 m of it. The `x` of each fade is where it has darkened to 0.8. They used to be dark boxes 2 cm thick, which stood a centimeter off the concrete with lit sides and looked like loose pieces lying on it.
 
 Mulholland's dirt goes by how high the ground stands over the road, not by the hill height of the road beside it, so a field next to a hill stays grass and a hill is dirt almost from its foot. Ground starts to turn to dirt `dirt_from_m` (`0.15`) up and is all dirt `dirt_over_m` (`0.5`) higher, in `shaders/vertex_ground.gdshader`. Steep ground is dirt at any height, so a hill's face is dirt from its foot (and a drop's face too): it starts to turn at `steep_from` (`0.82`, about 35 degrees) and is all dirt by `steep_full` (`0.7`, about 45). The steepness comes from each face itself, not the mesh's smoothed normals, which leaned the foot of a cliff toward flat. The change is broken up by the dirt's height map, like the gravel's edge below, so it shows as clumps rather than a brown wash; `dirt_height_pull` (`0.9`) and `dirt_sharpness` (`0.08`) set how far and how crisply.
 

@@ -3,6 +3,8 @@ extends RefCounted
 ## The driving model used before the tire simulation: speed is integrated
 ## directly, and a bicycle chassis with a yaw cap turns the car.
 
+const _RoadBank := preload("res://scripts/road_bank.gd")
+
 const ACCELERATION := 24.0
 ## Hard stops, but ones the tires could plausibly do, with steering left to use.
 const BRAKING := 14.0
@@ -96,6 +98,13 @@ var ride_grip: float = 1.0
 var _swing: float = 0.0
 ## Sideways acceleration the tires can hold right now, in m/s².
 var _lateral_grip: float = MU_DRY * GRAVITY
+## How steeply a banked road rises across the car, toward its +X (see road_bank.gd).
+var bank_slope: float = 0.0
+## How steeply painted ground rises ahead of the car, a meter forward (race_track.gd's
+## `ground_grade()`); 0 on the road.
+var grade_slope: float = 0.0
+## Sideways acceleration last step, toward the car's +X, with the bank's pull in it.
+var _bank_lat: float = 0.0
 var _handbrake: bool = false
 var _slide_limit: float = SLIDE_LIMIT
 ## Turning the hand brake has allowed past what the tires can hold, in rad/s.
@@ -167,6 +176,7 @@ func _stop_slide() -> void:
 	_swing = 0.0
 	_slide_limit = SLIDE_LIMIT
 	_handbrake_yaw = 0.0
+	_bank_lat = 0.0
 
 
 ## Gear acceleration is already scaled by ratio, power, and headroom.
@@ -209,6 +219,8 @@ func step(
 			forward_speed = move_toward(forward_speed, offroad_max, OFFROAD_SLOWDOWN * delta)
 		elif forward_speed < -offroad_max:
 			forward_speed = move_toward(forward_speed, -offroad_max, OFFROAD_SLOWDOWN * delta)
+	# Up a hill the car slows, and down one it runs on, as the bank pulls it across.
+	forward_speed += _RoadBank.pull(grade_slope, forward_speed) * delta
 	_hold_speed_range(min_mps, max_mps, delta)
 
 	var longitudinal_accel := (forward_speed - speed_before) / maxf(delta, 0.0001)
@@ -231,10 +243,13 @@ func step(
 	var steered_yaw := absf(forward_speed * tan(steer_angle) / _wheelbase) * 1.2 * _grip_steer_scale() + 0.08
 	if absf(_yaw_rate) > steered_yaw:
 		_yaw_rate = move_toward(_yaw_rate, signf(_yaw_rate) * steered_yaw, YAW_SETTLE_RATE * delta)
-	var grip_yaw := YAW_GRIP_MARGIN * _lateral_grip / maxf(absf(forward_speed), GRIP_FADE_SPEED)
+	# A bank's pull turns the car too, toward its low side, and against it toward the high side.
+	var pull := _RoadBank.pull(bank_slope, forward_speed)
+	var yaw_speed := maxf(absf(forward_speed), GRIP_FADE_SPEED)
+	var grip_yaw_up := YAW_GRIP_MARGIN * maxf(_lateral_grip + pull, 0.1 * _lateral_grip) / yaw_speed
+	var grip_yaw_down := YAW_GRIP_MARGIN * maxf(_lateral_grip - pull, 0.1 * _lateral_grip) / yaw_speed
 	_handbrake_yaw = steered_yaw if handbrake else move_toward(_handbrake_yaw, 0.0, YAW_SETTLE_RATE * delta)
-	grip_yaw = maxf(grip_yaw, _handbrake_yaw)
-	_yaw_rate = clampf(_yaw_rate, -grip_yaw, grip_yaw)
+	_yaw_rate = clampf(_yaw_rate, -maxf(grip_yaw_down, _handbrake_yaw), maxf(grip_yaw_up, _handbrake_yaw))
 	_slide_limit = HANDBRAKE_SLIDE_LIMIT if handbrake else move_toward(_slide_limit, SLIDE_LIMIT, SLIDE_LIMIT_RETURN * delta)
 	# Past the usual slide the car really is going sideways, so turning trades forward speed for it.
 	if _slide_limit > SLIDE_LIMIT:
@@ -272,7 +287,9 @@ func _hold_speed_range(min_mps: float, max_mps: float, delta: float) -> void:
 ## The road-wheel angle full steering gives at this speed, never past the lock.
 func _steer_limit() -> float:
 	var speed := maxf(absf(forward_speed), 1.0)
-	return minf(_max_steer_rad, atan(STEER_FULL_LATERAL_ACCEL * ride_grip * _wheelbase / (speed * speed)) + STEER_SLIP_ALLOWANCE_RAD)
+	# On a bank the tires hold more, and the bank's pull turns the car as well.
+	var lateral := STEER_FULL_LATERAL_ACCEL * ride_grip * _RoadBank.load(bank_slope, _bank_lat) + absf(_RoadBank.pull(bank_slope, speed))
+	return minf(_max_steer_rad, atan(lateral * _wheelbase / (speed * speed)) + STEER_SLIP_ALLOWANCE_RAD)
 
 
 static func grip_accel_scale(grip_rating: float) -> float:
@@ -281,7 +298,9 @@ static func grip_accel_scale(grip_rating: float) -> float:
 
 ## How much of the engine's pull the tires can pass on while they are also cornering.
 func _corner_power() -> float:
-	return corner_power(absf(forward_speed * _yaw_rate) / maxf(_lateral_grip, 0.1))
+	# What the bank's pull does in a turn, the tires don't have to.
+	var tires := forward_speed * _yaw_rate - _RoadBank.pull(bank_slope, forward_speed)
+	return corner_power(absf(tires) / maxf(_lateral_grip, 0.1))
 
 
 ## The share of its pull a car keeps with this share of its sideways grip in use.
@@ -306,7 +325,7 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	var axle_front := _wheelbase * _front_axle_fraction
 	var axle_rear := _wheelbase - axle_front
 	var steer_grip := _grip_steer_scale()
-	var mu := (MU_OFFROAD if _off_road else MU_DRY) * ride_grip * steer_grip
+	var mu := (MU_OFFROAD if _off_road else MU_DRY) * ride_grip * steer_grip * _RoadBank.load(bank_slope, _bank_lat)
 	var weight := _mass_kg * GRAVITY
 	var transfer_accel := clampf(longitudinal_accel, -LOAD_TRANSFER_ACCEL_MAX, LOAD_TRANSFER_ACCEL_MAX)
 	var transfer := _mass_kg * transfer_accel * _cg_height / _wheelbase
@@ -339,7 +358,8 @@ func _step_chassis(delta: float, longitudinal_accel: float) -> void:
 	_lateral_grip = (_lateral_limit(fz_front, long_front, mu) + _lateral_limit(fz_rear, long_rear, rear_mu)) / _mass_kg
 	var steer_cos := cos(steer_angle)
 	var steer_sin := sin(steer_angle)
-	var lateral_force := front_force * steer_cos + rear_force
+	var lateral_force := front_force * steer_cos + rear_force + _mass_kg * _RoadBank.pull(bank_slope, forward_speed)
+	_bank_lat = lateral_force / _mass_kg
 	var yaw_moment := front_force * steer_cos * axle_front - rear_force * axle_rear
 	var inertia := _mass_kg * axle_front * axle_rear
 	_lateral_speed += (lateral_force / _mass_kg - _yaw_rate * forward_speed) * delta
@@ -389,8 +409,12 @@ func _update_surface(body: Node3D) -> void:
 			var left_ext := float(sample.get("left_ext", sample.get("half_width", half)))
 			var right_ext := float(sample.get("right_ext", sample.get("half_width", half)))
 			_off_road = lat < -(left_ext - 1.0) or lat > (right_ext - 1.0) or bool(sample.get("gravel", false))
+			bank_slope = float(track.bank_slope(body.global_position, heading_yaw)) if track.has_method(&"bank_slope") else 0.0
+			grade_slope = float(track.ground_grade(body.global_position, heading_yaw)) if track.has_method(&"ground_grade") else 0.0
 			return
 	_off_road = absf(body.global_position.x) > TRACK_X_LIMIT
+	bank_slope = 0.0
+	grade_slope = 0.0
 
 
 func _apply_heading(body: CharacterBody3D, car_center: Vector3) -> void:

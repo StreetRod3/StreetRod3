@@ -10,10 +10,12 @@ extends RefCounted
 ## stays there and the second node stays on the +Y axis.
 
 const _Self := preload("res://scripts/track_maker_doc.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 const DEFAULT_NAME := "New track"
 ## Root fields the maker edits itself. Anything else in a file rides along untouched.
-const _OWN_ROOT_KEYS := ["name", "style", "jumps", "loop", "laps", "sky", "nodes", "roads", "scenery"]
+const _OWN_ROOT_KEYS := ["name", "style", "jumps", "auto_bank", "loop", "laps", "sky", "nodes", "roads", "scenery", "terrain"]
 const MAX_LAPS := 99
 ## Fields in meters, written with a decimal point even when whole.
 const _METRIC_KEYS := ["x", "y", "z", "width", "left", "right", "to", "w", "d", "h"]
@@ -23,7 +25,10 @@ const _CARRIED_NODE_KEYS := ["left", "right", "rail"]
 var name: String = DEFAULT_NAME
 var style: String = TrackFile.STYLE_CIRCUIT
 var jumps: bool = false
-## In race order. Each holds its file fields: id, x, y, and z, sharp, left, right, rail when set.
+## Every corner banks by how tight it is (TrackFile.auto_bank_deg()). The nodes' own banks are
+## kept, unused, so unticking it brings them back.
+var auto_bank: bool = false
+## In race order. Each holds its file fields: id, x, y, and z, sharp, bank, left, right, rail when set.
 var nodes: Array[Dictionary] = []
 ## `roads[i]` runs from `nodes[i]` to `nodes[i + 1]`: width, type, surface when set.
 var roads: Array[Dictionary] = []
@@ -37,6 +42,8 @@ var laps: int = 1
 ## The sky over the course, an id in skies.gd.
 var sky: String = "day"
 var scenery: Array[Dictionary] = []
+## The painted ground (track_terrain.gd), empty when nothing is painted.
+var terrain: _TrackTerrain = _TrackTerrain.new()
 ## Root fields the maker does not edit, kept in file order.
 var extra: Dictionary = {}
 
@@ -54,6 +61,7 @@ func copy() -> _Self:
 	doc.name = name
 	doc.style = style
 	doc.jumps = jumps
+	doc.auto_bank = auto_bank
 	doc.loop = loop
 	doc.laps = laps
 	doc.sky = sky
@@ -61,6 +69,7 @@ func copy() -> _Self:
 	doc.roads = _copy_list(roads)
 	doc.loop_road = loop_road.duplicate(true)
 	doc.scenery = _copy_list(scenery)
+	doc.terrain = terrain.copy()
 	doc.extra = extra.duplicate(true)
 	return doc
 
@@ -104,6 +113,7 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 	doc.name = str(root.get("name", ""))
 	doc.style = str(parsed.style)
 	doc.jumps = bool(parsed.jumps)
+	doc.auto_bank = bool(parsed.auto_bank)
 	doc.loop = bool(parsed.loop)
 	doc.laps = int(parsed.laps)
 	doc.sky = str(parsed.sky)
@@ -141,6 +151,9 @@ static func from_text(text: String, source: String = "") -> Dictionary:
 		if typeof(item) == TYPE_DICTIONARY:
 			sights.append((item as Dictionary).duplicate(true))
 	doc.scenery = sights
+	var painted: _TrackTerrain = parsed.terrain
+	if painted != null:
+		doc.terrain = painted
 	var kept: Dictionary = {}
 	for key: Variant in root.keys():
 		if not _OWN_ROOT_KEYS.has(str(key)):
@@ -175,6 +188,8 @@ func to_text() -> String:
 		root["style"] = style
 	if jumps:
 		root["jumps"] = true
+	if auto_bank:
+		root["auto_bank"] = true
 	if loop:
 		root["loop"] = true
 		root["laps"] = laps
@@ -194,6 +209,8 @@ func to_text() -> String:
 		root[key] = extra[key]
 	if not scenery.is_empty():
 		root["scenery"] = scenery
+	if not terrain.is_empty():
+		root["terrain"] = terrain.to_file()
 	var entries: PackedStringArray = []
 	for key: Variant in root.keys():
 		entries.append("  %s: %s" % [JSON.stringify(str(key)), _block_text(root[key])])
@@ -290,6 +307,60 @@ func node_point(i: int) -> Vector2:
 
 func node_height(i: int) -> float:
 	return float(nodes[i].get("z", 0.0))
+
+
+## How the course turns at node `i`, as the sine of the angle: above 0 to the driver's right,
+## below 0 to the left, 0 on a straight and at the ends of a course that isn't a loop.
+func turn_at(i: int) -> float:
+	var last := nodes.size() - 1
+	var before := i - 1
+	var after := i + 1
+	if loop and last >= 2:
+		before = posmod(i - 1, last + 1)
+		after = posmod(i + 1, last + 1)
+	if before < 0 or after > last:
+		return 0.0
+	var into := node_point(i) - node_point(before)
+	var out := node_point(after) - node_point(i)
+	if into.is_zero_approx() or out.is_zero_approx():
+		return 0.0
+	# The map's +Y is ahead and -X the driver's right, so a right turn crosses positive.
+	return into.normalized().cross(out.normalized())
+
+
+## Node `i`'s bank in degrees: its own, or with `auto_bank` what its corner gives.
+func bank_at(i: int) -> float:
+	if not auto_bank:
+		return float(nodes[i].get("bank", 0.0))
+	var last := nodes.size() - 1
+	var before := i - 1
+	var after := i + 1
+	if loop and last >= 2:
+		before = posmod(i - 1, last + 1)
+		after = posmod(i + 1, last + 1)
+	if before < 0 or after > last:
+		return 0.0
+	return TrackFile.auto_bank_deg(node_point(before), node_point(i), node_point(after))
+
+
+## What node `i`'s bank does, for the panel: which edge is up and whether that leans into the bend.
+func bank_note(i: int) -> String:
+	var bank := bank_at(i)
+	if is_zero_approx(bank):
+		return "Flat across."
+	var edge := "Left edge up" if bank > 0.0 else "Right edge up"
+	var turn := turn_at(i)
+	if absf(turn) < 0.02:
+		return "%s, on a straight." % edge
+	var bend := "right-hand" if turn > 0.0 else "left-hand"
+	if (bank > 0.0) == (turn > 0.0):
+		return "%s: leans into this %s bend." % [edge, bend]
+	return "%s: leans out of this %s bend (off-camber)." % [edge, bend]
+
+
+## How high the Aqueduct's side on `key` ("left" or "right") stands at node `i`, in meters.
+func aqueduct_side_at(i: int, key: String) -> float:
+	return _TrackSides.aqueduct_side(float(nodes[i].get(key, 0.0)))
 
 
 ## Moves node `i`, held to where the race scene needs the start: the start stays at 0, 0
@@ -438,6 +509,56 @@ func remove_node(i: int) -> bool:
 	# The road into node `i` (roads[i - 1]) is kept; the one out of it goes.
 	roads.remove_at(mini(i, roads.size() - 1))
 	return true
+
+
+## The road's height nearest `point` (track x, y), along the straight lines between the nodes,
+## and on the Aqueduct the top of its sides: where painting starts from on unpainted ground, near
+## enough to what the game builds there that the paint meets it.
+func ground_base(point: Vector2) -> float:
+	var best := INF
+	var height := 0.0
+	var count := nodes.size()
+	var spans := count if loop and count > 2 else count - 1
+	for i in spans:
+		var j := (i + 1) % count
+		var a := node_point(i)
+		var b := node_point(j)
+		var on := Geometry2D.get_closest_point_to_segment(point, a, b)
+		var d := on.distance_squared_to(point)
+		if d < best:
+			best = d
+			var span := a.distance_to(b)
+			var t := a.distance_to(on) / span if span > 0.001 else 0.0
+			height = lerpf(node_height(i), node_height(j), t)
+	if count == 1:
+		height = node_height(0)
+	if style == TrackFile.STYLE_AQUEDUCT:
+		height += _TrackSides.AQUEDUCT_BANK_HIGH
+	return height
+
+
+## The ground at `point`: painted where it is painted, otherwise `ground_base()`.
+func ground_at(point: Vector2) -> float:
+	var paint := terrain.sample(point)
+	if paint.y <= 0.0:
+		return ground_base(point)
+	return lerpf(ground_base(point), paint.x, paint.y)
+
+
+## Sets every node on painted ground to the ground's height there, so the road follows it.
+## Returns how many changed.
+func road_follows_ground() -> int:
+	var changed := 0
+	for i in nodes.size():
+		var paint := terrain.sample(node_point(i))
+		if paint.y < 0.5:
+			continue
+		var z := cm(paint.x)
+		if is_equal_approx(z, node_height(i)):
+			continue
+		set_node_field(i, "z", z)
+		changed += 1
+	return changed
 
 
 ## Straight-line length from the start to the finish, or once round a loop. The game rounds

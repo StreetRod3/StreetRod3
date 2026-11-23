@@ -1,0 +1,78 @@
+{
+  "id": "hudson-hornet-1951",
+  "name": "Hudson Hornet 1951",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/hudson-hornet-1951.glb",
+    "position": [0.0, 0.223, 0.0],
+    "height": 1.3304,
+    "ground_clearance": 0.223,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.807, 0.335, 1.854],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.807, 0.335, 1.854],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.807, 0.335, -1.295],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.807, 0.335, -1.295],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "chevy-235",
+    "transmission": "gb_man3",
+    "wheels": "wheel-std"
+  },
+  "driver": {
+    "position": [0.36, 1.25, -0.05]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.62, -10.6],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.89, -6.3],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.36, 1.3, -0.05],
+      "pitch": -1.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.58, 2.76],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 30.0},
+    "rear": {"node": "bumper_rear", "mass": 26.0}
+  },
+  "chassis": {
+    "mass": 1600,
+    "wheelbase": 3.15,
+    "cg_height": 0.52,
+    "front_axle_fraction": 0.53,
+    "max_steer_deg": 30
+  }
+}

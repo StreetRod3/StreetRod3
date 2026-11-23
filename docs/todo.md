@@ -4,11 +4,15 @@ Ideas that are wanted but not built yet. Bugs go in [bugs.md](bugs.md). Remove a
 
 ## Track maker for players
 
-The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened from the main menu's ~ prompt, with a solo test drive. Wanted later: rivals on made tracks (how a rival drives a course it has never seen is the hard part), a way in for players and somewhere to race what they make, a 3D preview while editing, and drawing a curve that becomes nodes.
+The track maker ([track-maker.md](track-maker.md)) is a developer tool, opened from the main menu's ~ prompt, with a solo test drive. Wanted later: rivals on made tracks (GitHub issue #222; how a rival drives a course it has never seen is the hard part), and once they do, rivals that take banked corners as the player does, faster than flat ones, a way in for players and somewhere to race what they make, a 3D preview while editing, and drawing a curve that becomes nodes.
 
 - scenery available on all track types.
 - jumps available on all track types.
-- Track banking
+- painting the ground's surface as well as its height: gravel, dirt, rock, sand, snow, like the gravel at the edge of the mountain roads. Painted ground is grass, and dirt where it is steep, for now.
+- barriers to place anywhere, to keep cars out of where they shouldn't go now that they can drive off onto painted ground.
+- hills on the road itself: uphill slows a car and downhill speeds it up only off the road on painted ground so far. On the road a climb drives as it always has, so a hill climb up a painted mountain is no slower than the flat.
+- loading a course with painted ground takes longer, more the longer its road: about 5 s more for a Mulholland course, so a 20 km hill climb would add about 25 s. Most of it is finding the nearest road for each point of the 4 m grid near the road, point by point in GDScript (`race_track.gd`'s `_build_painted_ground()`).
+- on Mulholland and Aqueduct courses with painted ground, past the ends of the course (more than the run-in behind the start, or past the runoff) the unpainted hillsides, drops and sides carry on as a step the drawn ground only roughly follows, so a car driven out there can float or sink up to a few meters.
 
 ## Make burnouts do something
 
@@ -29,7 +33,7 @@ Bumpers can be stripped and put back as in Street Rod 2 on the Studebaker, the 1
 
 ## Chopped roofs
 
-Street Rod 2 also chopped roofs for $70. No car here has a roof that can be chopped yet, so it waits for one.
+Street Rod 2 also chopped roofs for $70. The 1970 Challenger's can be chopped now (3 inches, $70 in the garage, only how it looks); the other cars wait for roofs that can be.
 
 ## Time of day
 
@@ -67,6 +71,13 @@ The grass and asphalt got stronger normal maps, their occlusion maps and large-s
 - **Mulholland's dirt and gravel.** Wanted. Only the grass part of `shaders/vertex_ground.gdshader` has the new treatment, so the hillsides and the verge are as flat as the grass was. Give the dirt and gravel the same: a normal strength each (the shader sets one `NORMAL_MAP_DEPTH` for the blend, now mixed by the grass share, so weight it by all three), occlusion (the dirt's `AO_2K` is in `reference/tracks/dirt/` and needs copying to `assets/textures/dirt/`; the gravel's is already in the red channel of its ARM map), and large-scale patches from `ground_macro()` in `shaders/ground_common.gdshaderinc`. Do the same for `gravel()`, Mulholland's gravel stretches, which is still a StandardMaterial3D, so it matches the verge, as was done for the grass.
 - **Parallax from the height maps.** Real depth when looking along the ground, which is how the road is seen from the car, at some GPU cost. A StandardMaterial3D can't use a height map with triplanar mapping, which every ground material uses, so it goes in the ground shaders: `shaders/ground_surface.gdshaderinc` for the grass and asphalt, and `vertex_ground.gdshader` for Mulholland. The ground is near flat, so offsetting only the top-down sample (the one taken in the world's XZ) is probably enough. Height maps: the asphalt's `DISP_2K` and the grass's `Displacement.tiff` are in `reference/tracks/` and not copied yet; the dirt's `HEIGHT_2K` and the gravel's `disp_2k` are already in `assets/textures/`. Check the cost on the Compatibility renderer, as the web build uses it.
 
+## Gaps in the Aqueduct's dark middle
+
+The dark strip down the middle of the Aqueduct stops for 20 m in every 120 m (16 gaps, -25 m to 1795 m). That is Street Rod 2's: its strip table has bit 1 on four lines in every 24, the original leaves the middle out over those lines (SRDecomp `sr2/src/game/strip.c`, `strip_draw`), and `tools/make_sr2_courses.py` ends a `gutter` item there. On those lines SR2 also skips `strip_lanes`, which elsewhere turns a car whose side crosses the middle and takes a little speed off it, so the gaps look like where it lets a car cross the middle cleanly. SR3 has no such slowdown, so for now the gaps are only seen. Decide later:
+
+- **Keep them** and give the middle SR2's pull and slowdown, so the gaps mean something.
+- **Close them**, for a channel whose low-flow trough runs on unbroken, in the converter or `aqueduct.trk`'s `gutter` items.
+
 ## Free roam performance
 
 Measured on 2026-11-14 on branch city-performance, free roam from the garage with the Corvette 1960 under xvfb with Vulkan on lavapipe and a fixed random seed, so the counts are good but the frame rate is not. Before: about 8,400 draw calls, 2.2 million triangles, 9,800 MeshInstance3D nodes and 12,900 nodes. After: about 830 draw calls, 1.6 million triangles, 930 MeshInstance3D nodes and 4,200 nodes. Done there: the scenery buildings merged into one mesh per 40 m square with their look on the vertices (`box_batch.gd`), the street lamps drawn as one MultiMesh until one is hit, the bushes split into 40 m squares with one MultiMesh each, materials shared between the places' boxes, traffic not drawn past 150 m, and the sun's shadows capped at 60 m. Left, in order of likely gain:
@@ -74,3 +85,7 @@ Measured on 2026-11-14 on branch city-performance, free roam from the garage wit
 - **Lighter car models.** Traffic is 24 cars (`_COUNT` in `cruise_traffic.gd`). The SR1 bodies are 0.8 to 1.1 million triangles each (`sr1-c56` 1.03M, the 1932 coupe 819k, the Fairlane 752k) and the Styleline 387k, where the Corvette and F100 are 12k to 19k. Each wheel is 70k and each tire 43k, about 450k a car for the four corners. LODs are already generated on import. With traffic hidden the frame drops from 1.6 to 1.0 million triangles. Decimate those models, or give traffic a lighter wheel.
 - **Reduce Tire polycount**
 - **The places.** The garage, drive-in, gas station and Royal Rods are still built of separate boxes, now with shared materials. They are few, and the garage doors move, so they were not merged.
+
+## Paint screen
+
+The garage's paint menu needs changes; what they are is to be decided. Known so far: at 1280x720 the menu is taller than the screen, so its top row sits behind the car's name and the Finish list, Apply and Cancel are under the status bar. The color picker's Swatches and Recent Colors take the most room.

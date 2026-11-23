@@ -11,6 +11,8 @@ const _Doc := preload("res://scripts/track_maker_doc.gd")
 const _MapView := preload("res://scripts/track_maker_map.gd")
 const _ProfileView := preload("res://scripts/track_maker_profile.gd")
 const _Skies := preload("res://scripts/skies.gd")
+const _TrackSides := preload("res://scripts/track_sides.gd")
+const _TrackTerrain := preload("res://scripts/track_terrain.gd")
 
 const USER_TRACKS_DIR := "user://tracks"
 const GAME_TRACKS_DIR := "res://assets/tracks"
@@ -37,7 +39,7 @@ const _ROAD_TYPES := [
 	TrackFile.ROAD_GRAVEL,
 ]
 const _SURFACES := [TrackFile.SURFACE_REGULAR, TrackFile.SURFACE_DRY, TrackFile.SURFACE_WET, TrackFile.SURFACE_ICY]
-const HELP := "Left click: add a node, split a road, or drag · Right drag: move the map · Wheel: zoom · Del: delete · Ctrl+Z / Ctrl+Y: undo / redo · Ctrl+S: save · F: whole track · F5: test drive · Esc: menu"
+const HELP := "Left click: add a node, split a road, or drag; with Ground, hold to paint (Ctrl+click picks a height) · Right drag: move the map · Wheel: zoom · Del: delete · Ctrl+Z / Ctrl+Y: undo / redo · Ctrl+S: save · F: whole track · F5: test drive · Esc: menu"
 
 var doc: _Doc = _Doc.blank()
 ## The file the course was read from or last saved to, or "" for a new one.
@@ -60,6 +62,7 @@ var _status_label: Label
 var _name_edit: LineEdit
 var _style_option: OptionButton
 var _jumps_check: CheckBox
+var _auto_bank_check: CheckBox
 var _loop_check: CheckBox
 var _laps_spin: SpinBox
 var _laps_row: HBoxContainer
@@ -69,6 +72,14 @@ var _sky_ids: Array[String] = []
 var _length_label: Label
 var _road_tool: Button
 var _scenery_tool: Button
+var _ground_tool: Button
+var _ground_box: VBoxContainer
+var _brush_option: OptionButton
+var _brush_size_spin: SpinBox
+var _brush_strength_spin: SpinBox
+var _flatten_spin: SpinBox
+var _flatten_row: HBoxContainer
+var _ground_label: Label
 var _snap_check: CheckBox
 var _node_box: VBoxContainer
 var _node_heading: Label
@@ -76,10 +87,15 @@ var _x_spin: SpinBox
 var _y_spin: SpinBox
 var _z_spin: SpinBox
 var _sharp_check: CheckBox
+var _bank_spin: SpinBox
+var _bank_label: Label
 var _mountain_box: VBoxContainer
 var _left_spin: SpinBox
 var _right_spin: SpinBox
 var _rail_check: CheckBox
+var _aqueduct_box: VBoxContainer
+var _side_left_spin: SpinBox
+var _side_right_spin: SpinBox
 var _road_box: VBoxContainer
 var _width_spin: SpinBox
 var _type_option: OptionButton
@@ -133,6 +149,7 @@ func _build_ui() -> void:
 	_map.doc_edited.connect(_after_edit)
 	_map.edit_ended.connect(_end_edit)
 	_map.selection_changed.connect(_on_selection_changed)
+	_map.ground_picked.connect(_on_ground_picked)
 	left.add_child(_map)
 	_profile = _ProfileView.new()
 	_profile.custom_minimum_size = Vector2(0, 150)
@@ -171,6 +188,7 @@ func _build_ui() -> void:
 	_build_node_section(box)
 	_build_road_section(box)
 	_build_scenery_section(box)
+	_build_ground_section(box)
 	box.add_child(HSeparator.new())
 	_errors_label = _label("", 14, _ERROR)
 	box.add_child(_errors_label)
@@ -229,6 +247,10 @@ func _build_track_section(box: VBoxContainer) -> void:
 	_jumps_check.text = "Jumps (circuit only)"
 	_jumps_check.toggled.connect(_on_jumps_toggled)
 	box.add_child(_jumps_check)
+	_auto_bank_check = CheckBox.new()
+	_auto_bank_check.text = "Auto bank (each corner by how tight it is)"
+	_auto_bank_check.toggled.connect(_on_auto_bank_toggled)
+	box.add_child(_auto_bank_check)
 	_loop_check = CheckBox.new()
 	_loop_check.text = "Loop (the finish is the start)"
 	_loop_check.toggled.connect(_on_loop_toggled)
@@ -269,6 +291,11 @@ func _build_tool_section(box: VBoxContainer) -> void:
 	_scenery_tool.button_group = group
 	_scenery_tool.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	tools.add_child(_scenery_tool)
+	_ground_tool = _button("Ground", _set_tool.bind(_MapView.Tool.GROUND))
+	_ground_tool.toggle_mode = true
+	_ground_tool.button_group = group
+	_ground_tool.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	tools.add_child(_ground_tool)
 	box.add_child(tools)
 	var snaps := HBoxContainer.new()
 	_snap_check = CheckBox.new()
@@ -294,6 +321,11 @@ func _build_node_section(box: VBoxContainer) -> void:
 	_sharp_check.text = "Sharp (the grade changes here at once)"
 	_sharp_check.toggled.connect(_edit_node_flag.bind("sharp"))
 	_node_box.add_child(_sharp_check)
+	_bank_spin = _spin(-TrackFile.BANK_MAX_DEG, TrackFile.BANK_MAX_DEG, 1.0, "°", _edit_node.bind("bank"))
+	_bank_spin.custom_arrow_step = 1.0
+	_node_box.add_child(_row("Bank", _bank_spin))
+	_bank_label = _label("", 13, _DIM)
+	_node_box.add_child(_bank_label)
 	_mountain_box = VBoxContainer.new()
 	_node_box.add_child(_mountain_box)
 	_left_spin = _spin(-100.0, 100.0, 0.1, " m", _edit_node.bind("left"))
@@ -304,6 +336,15 @@ func _build_node_section(box: VBoxContainer) -> void:
 	_rail_check.text = "Guard rail on the right to the next node"
 	_rail_check.toggled.connect(_edit_node_flag.bind("rail"))
 	_mountain_box.add_child(_rail_check)
+	_aqueduct_box = VBoxContainer.new()
+	_node_box.add_child(_aqueduct_box)
+	var stock := snappedf(_TrackSides.AQUEDUCT_BANK_HIGH, 0.1)
+	_side_left_spin = _spin(stock, _TrackSides.AQUEDUCT_SIDE_MAX, 0.1, " m", _edit_aqueduct_side.bind("left"))
+	_aqueduct_box.add_child(_row("Left side", _side_left_spin))
+	_side_right_spin = _spin(stock, _TrackSides.AQUEDUCT_SIDE_MAX, 0.1, " m", _edit_aqueduct_side.bind("right"))
+	_aqueduct_box.add_child(_row("Right side", _side_right_spin))
+	var side_note := _label("%.1f m is Street Rod 2's side. Higher, it curves up from the floor into a wider bowl that a car can ride round a corner." % stock, 13, _DIM)
+	_aqueduct_box.add_child(side_note)
 	_node_box.add_child(_button("Delete node", _delete_selected))
 
 
@@ -332,6 +373,28 @@ func _build_scenery_section(box: VBoxContainer) -> void:
 	_scenery_box.add_child(_scenery_selected_label)
 	_scenery_delete = _button("Delete scenery", _delete_selected)
 	_scenery_box.add_child(_scenery_delete)
+
+
+func _build_ground_section(box: VBoxContainer) -> void:
+	_ground_box = VBoxContainer.new()
+	box.add_child(_ground_box)
+	_ground_box.add_child(_label("Ground", 18))
+	_brush_option = _option(["Raise", "Lower", "Smooth", "Flatten", "Erase"])
+	_brush_option.item_selected.connect(_on_brush_selected)
+	_ground_box.add_child(_row("Brush", _brush_option))
+	_brush_size_spin = _spin(_TrackTerrain.CELL_M, 500.0, 1.0, " m", _on_brush_size_changed)
+	_brush_size_spin.set_value_no_signal(_map.brush_radius)
+	_ground_box.add_child(_row("Size", _brush_size_spin))
+	_brush_strength_spin = _spin(1.0, 100.0, 1.0, " %", _on_brush_strength_changed)
+	_brush_strength_spin.set_value_no_signal(_map.brush_strength * 100.0)
+	_ground_box.add_child(_row("Strength", _brush_strength_spin))
+	_flatten_spin = _spin(-_TrackTerrain.HEIGHT_LIMIT, _TrackTerrain.HEIGHT_LIMIT, 0.1, " m", _on_flatten_changed)
+	_flatten_row = _row("Height", _flatten_spin)
+	_ground_box.add_child(_flatten_row)
+	_ground_label = _label("", 13, _DIM)
+	_ground_box.add_child(_ground_label)
+	_ground_box.add_child(_button("Road follows ground", _road_follows_ground))
+	_ground_box.add_child(_label("Sets each node on painted ground to the ground's height there.", 13, _DIM))
 
 
 func _label(text: String, font_size: int, color: Color = _CREAM) -> Label:
@@ -428,6 +491,7 @@ func _after_edit() -> void:
 
 func _end_edit() -> void:
 	_last_tag = ""
+	_refresh_ground_fields()
 
 
 func _undo_step() -> void:
@@ -479,6 +543,7 @@ func _refresh_track_fields() -> void:
 	_style_option.select(maxi(_STYLES.find(doc.style), 0))
 	_jumps_check.set_pressed_no_signal(doc.jumps)
 	_jumps_check.disabled = doc.style != TrackFile.STYLE_CIRCUIT and not doc.jumps
+	_auto_bank_check.set_pressed_no_signal(doc.auto_bank)
 	_loop_check.set_pressed_no_signal(doc.loop)
 	_laps_spin.set_value_no_signal(doc.laps)
 	_laps_row.visible = doc.loop
@@ -491,6 +556,8 @@ func _refresh_selection_fields() -> void:
 	_node_box.visible = on_node
 	_road_box.visible = on_node and i < doc.road_count()
 	_scenery_box.visible = _map.tool == _MapView.Tool.SCENERY or _map.selected_scenery >= 0
+	_ground_box.visible = _map.tool == _MapView.Tool.GROUND
+	_refresh_ground_fields()
 	if on_node:
 		var where := ""
 		if i == 0:
@@ -506,10 +573,17 @@ func _refresh_selection_fields() -> void:
 		_y_spin.editable = i > 0
 		_z_spin.set_value_no_signal(doc.node_height(i))
 		_sharp_check.set_pressed_no_signal(bool(doc.nodes[i].get("sharp", false)))
+		_bank_spin.set_value_no_signal(doc.bank_at(i))
+		# Auto bank sets it from the corner.
+		_bank_spin.editable = not doc.auto_bank
+		_bank_label.text = doc.bank_note(i)
 		_mountain_box.visible = doc.style == TrackFile.STYLE_MOUNTAIN
 		_left_spin.set_value_no_signal(float(doc.nodes[i].get("left", 0.0)))
 		_right_spin.set_value_no_signal(float(doc.nodes[i].get("right", 0.0)))
 		_rail_check.set_pressed_no_signal(bool(doc.nodes[i].get("rail", false)))
+		_aqueduct_box.visible = doc.style == TrackFile.STYLE_AQUEDUCT
+		_side_left_spin.set_value_no_signal(doc.aqueduct_side_at(i, "left"))
+		_side_right_spin.set_value_no_signal(doc.aqueduct_side_at(i, "right"))
 	if on_node and i < doc.road_count():
 		var road := doc.road_from(i)
 		_width_spin.set_value_no_signal(float(road.get("width", TrackFile.DEFAULT_WIDTH)))
@@ -538,12 +612,73 @@ func _on_profile_picked(index: int) -> void:
 
 func _set_tool(which: _MapView.Tool) -> void:
 	_map.tool = which
-	if which == _MapView.Tool.ROAD:
+	if which != _MapView.Tool.SCENERY:
 		_map.selected_scenery = -1
-	else:
+	if which != _MapView.Tool.ROAD:
 		_map.selected_node = -1
 	_on_selection_changed()
 	_map.queue_redraw()
+
+
+func _refresh_ground_fields() -> void:
+	var brush := _map.brush
+	_brush_option.select(int(brush))
+	_flatten_row.visible = brush == _TrackTerrain.Brush.FLATTEN
+	var help := {
+		_TrackTerrain.Brush.RAISE: "Hold the left button to raise the ground under the brush, most in its middle.",
+		_TrackTerrain.Brush.LOWER: "Hold the left button to lower the ground under the brush.",
+		_TrackTerrain.Brush.SMOOTH: "Hold the left button to even out painted ground.",
+		_TrackTerrain.Brush.FLATTEN: "Hold the left button to bring the ground to Height. Ctrl+click picks the height there.",
+		_TrackTerrain.Brush.ERASE: "Hold the left button to clear the paint, back to the style's own ground.",
+	}
+	var text := str(help[brush])
+	if _map.is_painting():
+		return
+	var painted := doc.terrain.area()
+	if doc.terrain.is_empty():
+		text += " Nothing is painted yet."
+	else:
+		var heights := doc.terrain.height_range()
+		text += " Painted from %.1f to %.1f m, over %s by %s." % [heights.x, heights.y, _meters(painted.size.x), _meters(painted.size.y)]
+	_ground_label.text = text
+
+
+func _on_brush_selected(index: int) -> void:
+	_map.brush = index as _TrackTerrain.Brush
+	_refresh_ground_fields()
+
+
+func _on_brush_size_changed(value: float) -> void:
+	_map.brush_radius = value
+	_map.queue_redraw()
+
+
+func _on_brush_strength_changed(value: float) -> void:
+	_map.brush_strength = value / 100.0
+
+
+func _on_flatten_changed(value: float) -> void:
+	_map.flatten_height = value
+
+
+func _on_ground_picked(height: float) -> void:
+	_map.flatten_height = snappedf(height, 0.1)
+	_flatten_spin.set_value_no_signal(_map.flatten_height)
+	if _map.brush != _TrackTerrain.Brush.FLATTEN:
+		_map.brush = _TrackTerrain.Brush.FLATTEN
+		_refresh_ground_fields()
+	_set_status("Flatten height %.1f m" % _map.flatten_height)
+
+
+func _road_follows_ground() -> void:
+	_begin_edit()
+	var changed := doc.road_follows_ground()
+	if changed == 0:
+		_undo.pop_back()
+		_set_status("No node is on painted ground at another height.")
+		return
+	_after_edit()
+	_set_status("%d nodes moved to the ground's height." % changed)
 
 
 func _on_snap_toggled(on: bool) -> void:
@@ -568,6 +703,12 @@ func _on_style_selected(index: int) -> void:
 func _on_jumps_toggled(on: bool) -> void:
 	_begin_edit()
 	doc.jumps = on
+	_after_edit()
+
+
+func _on_auto_bank_toggled(on: bool) -> void:
+	_begin_edit()
+	doc.auto_bank = on
 	_after_edit()
 
 
@@ -602,6 +743,16 @@ func _edit_node(value: float, key: String) -> void:
 			doc.move_node(i, Vector2(doc.node_point(i).x, value))
 		_:
 			doc.set_node_field(i, key, _Doc.cm(value))
+	_after_edit()
+
+
+## An Aqueduct side's height. Street Rod 2's, or near it, is left out of the file.
+func _edit_aqueduct_side(value: float, key: String) -> void:
+	var i := _map.selected_node
+	if i < 0 or i >= doc.nodes.size():
+		return
+	_begin_edit("node:%d:%s" % [i, key])
+	doc.set_node_field(i, key, 0.0 if value < _TrackSides.AQUEDUCT_BANK_HIGH + 0.05 else _Doc.cm(value))
 	_after_edit()
 
 

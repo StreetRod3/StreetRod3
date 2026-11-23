@@ -3,7 +3,8 @@ extends Control
 ## The track maker's height strip: each node's height along the course, start on the left.
 ## Click a node to select it, drag it up or down to set its height. Square nodes are sharp.
 ## The game rounds the road's grade through nodes that aren't sharp, so the real road is
-## smoother than these straight lines.
+## smoother than these straight lines. Under the road, a brown line is the painted ground beneath
+## its middle, where there is any.
 
 const _Doc := preload("res://scripts/track_maker_doc.gd")
 
@@ -18,6 +19,9 @@ const _PICK_PX := 9.0
 const _BACKGROUND := Color(0.09, 0.1, 0.11, 1)
 const _CREAM := Color(0.95, 0.9, 0.78, 1)
 const _SELECTED := Color(1.0, 0.85, 0.1, 1)
+const _GROUND := Color(0.7, 0.5, 0.3, 0.9)
+## The most points the ground line takes along the course.
+const _GROUND_POINTS := 400
 
 var doc: _Doc
 var selected_node: int = -1
@@ -47,12 +51,46 @@ func _distances() -> PackedFloat32Array:
 	return out
 
 
-func _fit_heights() -> void:
+## The painted ground under the road's middle: runs of (distance along, height), broken where
+## it isn't painted.
+func _ground_runs() -> Array[PackedVector2Array]:
+	var runs: Array[PackedVector2Array] = []
+	if doc.terrain.is_empty():
+		return runs
+	var dists := _distances()
+	var length := dists[dists.size() - 1]
+	var step := maxf(length / _GROUND_POINTS, 2.0)
+	var count := doc.nodes.size()
+	var run := PackedVector2Array()
+	for k in range(dists.size() - 1):
+		var a := doc.node_point(k)
+		var b := doc.node_point((k + 1) % count)
+		var span := dists[k + 1] - dists[k]
+		var s_at := 0.0
+		while s_at < span or (k == dists.size() - 2 and s_at <= span):
+			var point := a.lerp(b, s_at / span if span > 0.0 else 0.0)
+			var paint := doc.terrain.sample(point)
+			if paint.y > 0.0:
+				run.append(Vector2(dists[k] + s_at, paint.x))
+			elif run.size() > 0:
+				runs.append(run)
+				run = PackedVector2Array()
+			s_at += step
+	if run.size() > 0:
+		runs.append(run)
+	return runs
+
+
+func _fit_heights(ground: Array[PackedVector2Array] = []) -> void:
 	var lo := 0.0
 	var hi := 0.0
 	for i in doc.nodes.size():
 		lo = minf(lo, doc.node_height(i))
 		hi = maxf(hi, doc.node_height(i))
+	for run: PackedVector2Array in ground:
+		for p: Vector2 in run:
+			lo = minf(lo, p.y)
+			hi = maxf(hi, p.y)
 	var middle := (lo + hi) * 0.5
 	var half := maxf((hi - lo) * 0.5 + 1.0, 3.0)
 	_low = middle - half
@@ -120,11 +158,18 @@ func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), _BACKGROUND)
 	if doc == null or doc.nodes.size() < 2:
 		return
+	var ground := _ground_runs()
 	if _drag_index < 0:
-		_fit_heights()
+		_fit_heights(ground)
 	var font := get_theme_default_font()
 	var dists := _distances()
 	var length := dists[dists.size() - 1]
+	for run: PackedVector2Array in ground:
+		var drawn := PackedVector2Array()
+		for p: Vector2 in run:
+			drawn.append(_point(p.x, p.y, length))
+		if drawn.size() >= 2:
+			draw_polyline(drawn, _GROUND, 1.5)
 	var zero_y := _point(0.0, 0.0, length).y
 	draw_line(Vector2(_PAD_X, zero_y), Vector2(size.x - _PAD_X, zero_y), Color(_CREAM, 0.2))
 	draw_string(font, Vector2(4, _PAD_Y + 10), "%+.1f m" % _high, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(_CREAM, 0.6))

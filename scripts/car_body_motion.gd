@@ -38,6 +38,8 @@ var _speedo_needle: Node3D
 var _speedo_rest := Transform3D.IDENTITY
 var _speedo_angle := 0.0
 var _speedo_sweep_rad := _GAUGE_SWEEP_RAD
+## The speed at the end of the speedometer's sweep: 160 mph, or the pod name's "_mph_N".
+var _speedo_max_mph := _GAUGE_MAX_MPH
 var _speedo_linear_travel := 0.0
 var _tach_needle: Node3D
 var _tach_rest := Transform3D.IDENTITY
@@ -49,6 +51,8 @@ var _fuel_needle: Node3D
 var _fuel_rest := Transform3D.IDENTITY
 ## How far the pointer slides from F to E, in the model's units, from its pod's name.
 var _fuel_travel := 0.0
+## Or, for a round gas gauge, how far the needle turns back from F to E, in radians.
+var _fuel_sweep_rad := 0.0
 var _fuel_shown := -1.0
 var _captured := false
 ## A blown tire's corner sinks onto the rim: roll and pitch in radians on top of the springs',
@@ -185,6 +189,7 @@ func _refresh_steering_wheel() -> void:
 		_steering_rest = _steering_wheel.transform
 	_speedo_needle = model_root.find_child("speedo_needle", true, false) as Node3D if model_root != null else null
 	_speedo_sweep_rad = _GAUGE_SWEEP_RAD
+	_speedo_max_mph = _GAUGE_MAX_MPH
 	_speedo_linear_travel = 0.0
 	if _speedo_needle != null:
 		_speedo_rest = _speedo_needle.transform
@@ -197,17 +202,26 @@ func _refresh_steering_wheel() -> void:
 					var num_str := parts[1].replace("_pod", "").replace("_", ".")
 					_speedo_linear_travel = maxf(num_str.to_float(), 0.0)
 			elif pod_name.contains("arch_"):
-				# A pod named "dash_speedo_arch_270_pod" sweeps 270 degrees from 0 to full range.
+				# A pod named "dash_speedo_arch_270_pod" sweeps 270 degrees from 0 to full range,
+				# 160 mph; "dash_speedo_arch_240_mph_100_pod" sweeps 240 degrees for 0-100 mph,
+				# and its needle stops at 100.
 				var sweep_deg := pod_name.split("arch_")[1].get_slice("_", 0).to_float()
 				if sweep_deg > 0.0:
 					_speedo_sweep_rad = deg_to_rad(sweep_deg)
+				if pod_name.contains("_mph_"):
+					var top_mph := pod_name.split("_mph_")[1].get_slice("_", 0).to_float()
+					if top_mph > 0.0:
+						_speedo_max_mph = top_mph
 	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
 	if _tach_needle != null:
 		_tach_rest = _tach_needle.transform
 	# A gas gauge's pointer rests at F inside a pod named for its travel, as
-	# "dash_fuel_linear_0.0288_pod" (Godot turns the point into "_").
+	# "dash_fuel_linear_0.0288_pod" (Godot turns the point into "_"), or for a round
+	# gauge's sweep, as "dash_fuel_arch_90_pod", whose needle turns back toward E about
+	# the pod's +Y (counterclockwise as the driver sees it).
 	_fuel_needle = model_root.find_child("fuel_needle", true, false) as Node3D if model_root != null else null
 	_fuel_travel = 0.0
+	_fuel_sweep_rad = 0.0
 	_fuel_shown = -1.0
 	if _fuel_needle != null:
 		_fuel_rest = _fuel_needle.transform
@@ -215,6 +229,9 @@ func _refresh_steering_wheel() -> void:
 		if fuel_pod != null and String(fuel_pod.name).contains("linear_"):
 			var travel := String(fuel_pod.name).split("linear_")[1].replace("_pod", "").replace("_", ".")
 			_fuel_travel = maxf(travel.to_float(), 0.0)
+		elif fuel_pod != null and String(fuel_pod.name).contains("arch_"):
+			var sweep_deg := String(fuel_pod.name).split("arch_")[1].get_slice("_", 0).to_float()
+			_fuel_sweep_rad = deg_to_rad(maxf(sweep_deg, 0.0))
 
 
 func _find_steering_wheel(root: Node) -> Node3D:
@@ -242,7 +259,7 @@ func _pose_steering_wheel(dt: float, shown_steer: float) -> void:
 func _pose_gauges(dt: float, speed: float, rpm: float) -> void:
 	var blend := 1.0 if dt <= 0.0 else 1.0 - exp(-_GAUGE_NEEDLE_RESPONSE * dt)
 	var mph := absf(speed) * _MPS_TO_MPH
-	var speedo_norm := clampf(mph / _GAUGE_MAX_MPH, 0.0, 1.0)
+	var speedo_norm := clampf(mph / _speedo_max_mph, 0.0, 1.0)
 	if _speedo_linear_travel > 0.0:
 		var target_pos := speedo_norm * _speedo_linear_travel
 		_speedo_angle = lerpf(_speedo_angle, target_pos, blend)
@@ -257,11 +274,14 @@ func _pose_gauges(dt: float, speed: float, rpm: float) -> void:
 	_tach_angle = lerpf(_tach_angle, tach_target, blend)
 	if _tach_needle != null and is_instance_valid(_tach_needle):
 		_tach_needle.transform = _tach_rest * Transform3D(Basis(Vector3.UP, _tach_angle), Vector3.ZERO)
-	if shows_fuel and _fuel_travel > 0.0 and _fuel_needle != null and is_instance_valid(_fuel_needle):
+	if shows_fuel and (_fuel_travel > 0.0 or _fuel_sweep_rad > 0.0) and _fuel_needle != null and is_instance_valid(_fuel_needle):
 		var used := 1.0 - clampf(GameState.fuel / GameState.DEFAULT_TANK_L, 0.0, 1.0)
 		# It starts where the tank is, then follows it down, as at the green light.
 		_fuel_shown = used if _fuel_shown < 0.0 else lerpf(_fuel_shown, used, blend)
-		_fuel_needle.transform = _fuel_rest * Transform3D(Basis.IDENTITY, Vector3(-_fuel_shown * _fuel_travel, 0.0, 0.0))
+		if _fuel_sweep_rad > 0.0:
+			_fuel_needle.transform = _fuel_rest * Transform3D(Basis(Vector3.UP, -_fuel_shown * _fuel_sweep_rad), Vector3.ZERO)
+		else:
+			_fuel_needle.transform = _fuel_rest * Transform3D(Basis.IDENTITY, Vector3(-_fuel_shown * _fuel_travel, 0.0, 0.0))
 
 
 func _mesh_bounds(node: Node, to_space: Transform3D) -> AABB:

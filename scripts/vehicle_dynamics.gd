@@ -176,6 +176,15 @@ var cg_velocity: Vector3 = Vector3.ZERO
 ## Whether the car is on the grass beside a jump track's road rather than on the road; the car
 ## sets it (race_track.gd's `car_off_road()`), and each wheel reads that ground.
 var off_road: bool = false
+## How steeply a banked road rises across the car, toward its +X (see road_bank.gd).
+var bank_slope: float = 0.0
+## How steeply painted ground rises ahead of the car, a meter forward (race_track.gd's
+## `ground_grade()`); 0 on the road.
+var grade_slope: float = 0.0
+## Sideways acceleration last step, toward the car's +X, with the bank's pull in it.
+var _bank_lat: float = 0.0
+## How many times their flat grip the tires have on the bank this step.
+var _bank_load: float = 1.0
 var yaw: float = 0.0
 var yaw_rate: float = 0.0
 var yaw_inertia: float = 2000.0
@@ -207,6 +216,10 @@ var _roll_inertia: float = 600.0
 var _spring_rate: float = spring_stiffness
 var _shock_rate: float = damper_coefficient
 var _ride_lower: float = 0.0
+## How high the car's origin rides over the road when settled, set by the car that owns this: each
+## wheel's rest is its hub's height over that. 0 where no car sets it, and the rest is measured
+## from the road under each wheel, which is right only on level ground.
+var ride_base: float = 0.0
 var _ride_grip: float = 1.0
 ## The hand brake, 0 to 1, for whoever drives this car.
 var handbrake_input: float = 0.0
@@ -214,6 +227,7 @@ var handbrake_input: float = 0.0
 static var _road_noise: FastNoiseLite
 static var _swell_noise: FastNoiseLite
 
+const _RoadBank := preload("res://scripts/road_bank.gd")
 const _REFERENCE_MASS_KG := 1360.0
 ## Tallest bumps in the road, in meters. They are what the shocks work against.
 const _ROAD_ROUGHNESS_M := 0.009
@@ -302,7 +316,9 @@ func set_wheel_positions(local_positions: Array) -> void:
 	# Some car files mount a wheel by a point well above its axle. The hub has to be low
 	# enough for the suspension to find the road, or the tires never touch it.
 	var car := get_parent() as Node3D
-	var car_y := car.global_position.y if car != null else 0.0
+	var car_y := ride_base
+	if ride_base <= 0.0:
+		car_y = car.global_position.y if car != null else 0.0
 	for point: Vector3 in local_positions:
 		var hub := point as Vector3
 		if hub.y + car_y > _MAX_RIDE_DROP_M:
@@ -415,6 +431,7 @@ func reset_motion() -> void:
 	yaw_rate = 0.0
 	_long_accel = 0.0
 	_lat_accel = 0.0
+	_bank_lat = 0.0
 	_drive_filtered = 0.0
 	_brake_filtered = 0.0
 	_heave = 0.0
@@ -488,6 +505,12 @@ func sample_surfaces(track: Object, body: Transform3D) -> void:
 		wheel.road_bump = _road_bump_at(world, amount)
 		blends.append(amount)
 	set_surface_blends(blends)
+	bank_slope = 0.0
+	if track != null and track.has_method(&"bank_slope"):
+		bank_slope = float(track.bank_slope(body.origin, yaw))
+	grade_slope = 0.0
+	if track != null and track.has_method(&"ground_grade"):
+		grade_slope = float(track.ground_grade(body.origin, yaw))
 
 
 ## The road's surface under a wheel over its smooth height: a fine roughness and a slow
@@ -589,6 +612,7 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 			driven += 1
 	if driven > 0:
 		drive_each = drive_force_n / float(driven)
+	_bank_load = _RoadBank.load(bank_slope, _bank_lat)
 
 	var force_body := Vector3.ZERO
 	var torque := 0.0
@@ -598,13 +622,18 @@ func _integrate(dt: float, steer_input: float, drive_force_n: float, brake_input
 		# Yaw component of r × F. Positive yaw swings the nose toward body +X.
 		torque += wheel.offset.z * tire.x - wheel.offset.x * tire.z
 	force_body += _aero_force_body(basis)
+	# The body feels the tires; the bank's pull, square to the road for the car, it doesn't.
+	_long_accel = force_body.z / config.mass_kg
+	_lat_accel = force_body.x / config.mass_kg
+	force_body.x += config.mass_kg * _RoadBank.pull(bank_slope, Vector2(cg_velocity.x, cg_velocity.z).length())
+	# Up a hill the car slows, and down one it runs on.
+	force_body.z += config.mass_kg * _RoadBank.pull(grade_slope, Vector2(cg_velocity.x, cg_velocity.z).length())
+	_bank_lat = force_body.x / config.mass_kg
 
 	cg_velocity += basis * force_body * (dt / config.mass_kg)
 	cg_velocity.y = 0.0
 	yaw_rate += torque / yaw_inertia * dt
 	yaw = wrapf(yaw + yaw_rate * dt, -PI, PI)
-	_long_accel = force_body.z / config.mass_kg
-	_lat_accel = force_body.x / config.mass_kg
 	if use_spring_suspension:
 		_integrate_suspension(dt)
 	else:
@@ -641,6 +670,8 @@ func _steer_angle_limit() -> float:
 	if speed < 1.0:
 		return cap
 	var ay := maxf(config.steer_full_lateral_accel * _tire_grip / maxf(config.grip_mu, 0.01) * _ride_grip, 0.5)
+	# On a bank the tires hold more, and the bank's pull turns the car as well.
+	ay = ay * _bank_load + absf(_RoadBank.pull(bank_slope, speed))
 	var wheelbase := maxf(_wheelbase, 0.5)
 	return minf(cap, atan(ay * wheelbase / (speed * speed)))
 
@@ -706,7 +737,7 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 	var blend := wheel.surface_blend
 	var mu := _tire_grip * _blended(blend, config.asphalt.grip_multiplier, config.grass.grip_multiplier) * _ride_grip
 	wheel.grip = mu
-	var limit := mu * wheel.normal_load
+	var limit := mu * wheel.normal_load * _bank_load
 	var axle_share := config.brake_front_fraction if wheel.front else (1.0 - config.brake_front_fraction)
 	var brake_n := brake_input * config.brake_force_n * axle_share * 0.5
 	if not wheel.front:
@@ -908,7 +939,11 @@ func _update_suspension(dt: float) -> void:
 		var ground_y := _raycast_ground(space, car, origin, wheel.road_y)
 		var drop := origin.y - ground_y
 		if wheel.ride_recapture:
-			wheel.ride_drop = _ride_drop_sample(wheel.ride_drop, drop)
+			# Settled, a hub stands its own height over the car's base. Measured from the road
+			# instead, a car set down on a bank or a slope keeps the wrong rest on each wheel for
+			# the rest of the race: one hanging, another bottomed, even back on the level.
+			var settled := wheel.local_position.y + ride_base if ride_base > 0.0 else drop
+			wheel.ride_drop = _ride_drop_sample(wheel.ride_drop, settled)
 			wheel.ride_recapture = false
 		var sag := wheel.static_load / stiffness
 		wheel.rest_length = wheel.ride_drop + sag

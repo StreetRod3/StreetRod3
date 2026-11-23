@@ -1,0 +1,81 @@
+{
+  "id": "dodge-challenger-1970",
+  "name": "Dodge Challenger 1970",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/dodge-challenger-1970.glb",
+    "position": [0.0, 0.189, 0.0],
+    "height": 1.1036,
+    "ground_clearance": 0.189,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02},
+    "accent": {"color": [0.035, 0.035, 0.038], "finish": "vinyl"},
+    "roof": {"chop_in": 3, "seat_drop": 0.04}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "size": 1.026,
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.786, 0.346, 1.461],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.786, 0.346, 1.461],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.786, 0.346, -1.371],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.786, 0.346, -1.371],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "v8-327",
+    "transmission": "gb_man4",
+    "wheels": "wheel-c1"
+  },
+  "driver": {
+    "position": [0.4, 1.12, -0.45]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.5, -10.2],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.75, -6.0],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.4, 1.12, -0.45],
+      "pitch": -5.0,
+      "fov": 60.0
+    },
+    "bumper": {
+      "position": [0.0, 0.55, 2.5],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 25.0},
+    "rear": {"node": "bumper_rear", "mass": 22.0}
+  },
+  "chassis": {
+    "mass": 1590,
+    "wheelbase": 2.832,
+    "cg_height": 0.5,
+    "front_axle_fraction": 0.56,
+    "max_steer_deg": 30
+  }
+}
