@@ -308,13 +308,22 @@ static func _parse_roads(root: Dictionary, result: Dictionary) -> void:
 				"Road %d -> %d has non-positive width; using %.1f." % [from_id, to_id, DEFAULT_WIDTH]
 			)
 			width = DEFAULT_WIDTH
-		result.roads.append({
+		var parsed := {
 			"from": from_id,
 			"to": to_id,
 			"width": width,
 			"type": rtype,
 			"surface": surface,
-		})
+		}
+		if road.has("speed"):
+			var raw_speed: Variant = road["speed"]
+			if (typeof(raw_speed) != TYPE_INT and typeof(raw_speed) != TYPE_FLOAT) or int(raw_speed) <= 0:
+				result.warnings.append(
+					"Road %d -> %d has a bad speed limit; leaving it off." % [from_id, to_id]
+				)
+			else:
+				parsed["speed"] = int(raw_speed)
+		result.roads.append(parsed)
 
 
 static func _build_race_path(result: Dictionary) -> void:

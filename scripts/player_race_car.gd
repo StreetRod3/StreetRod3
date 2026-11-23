@@ -776,6 +776,10 @@ func cite() -> void:
 		return
 	_cited = true
 	_release_mouse_drive()
+	velocity = Vector3.ZERO
+	forward_speed = 0.0
+	_dynamics.cg_velocity = Vector3.ZERO
+	_arcade.apply_planar_velocity(self, Vector3.ZERO, _car_center)
 	_burnout = 0.0
 	_clutch_rpm = 0.0
 	_clutch_kicks = false

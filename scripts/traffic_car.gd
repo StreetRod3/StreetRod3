@@ -28,7 +28,7 @@ var spin: float = 0.0
 var loose: float = 0.0
 var speed: float = 0.0
 ## A patrol car. `on_duty` is the ones actually out; the rest of the pool drive as traffic
-## until the heat calls them. The cruise traffic director sets `duty`. A chase follows the lane.
+## until the heat calls them. The cruise traffic director sets `duty`. A chase leaves the lane.
 ## Where this car waits. Traffic drives the streets. The others sit until the heat calls them.
 const POST_TRAFFIC := 0
 const POST_CURB := 1
@@ -50,6 +50,16 @@ var aim_at := Vector3.ZERO
 var held := 0.0
 ## How long this car has been off the lane or spun across it.
 var odd_s := 0.0
+## A chase that has stopped across the road. Above zero the car is backing up.
+## Below zero it is creeping back onto the street.
+var stuck_s := 0.0
+var unstick := 0.0
+## How long this car has been stopped behind another, and when it gives up waiting.
+var wait_s := 0.0
+var wait_for := 0.0
+## Seconds left swinging out to pass a stopped car. `pass_side` is which way.
+var pass_s := 0.0
+var pass_side := 1.0
 var patrol_i := 0
 var retarget := 0.0
 ## Set on the first frame of a new contact with the player, so a cop beside the car
@@ -57,9 +67,14 @@ var retarget := 0.0
 var struck := false
 var _visual: Node3D
 var _roll: float = 0.0
+## Empty marker the ticket bubble follows.
 var _bar: Node3D
-var _red: MeshInstance3D
-var _blue: MeshInstance3D
+var _lightbar: MeshInstance3D
+var _red_domes: Array[StandardMaterial3D] = []
+var _blue_domes: Array[StandardMaterial3D] = []
+var _beacons := false
+## One full red-then-blue blink per second. Each color is on for half of that.
+const _BLINK_HZ := 2.5
 var _blink := 0.0
 var _siren: AudioStreamPlayer3D
 
@@ -162,7 +177,8 @@ func use_car(car_file: String) -> void:
 		_visual.call(&"preview_listing", car_file, Color.WHITE)
 
 
-## The roof bar is how a cop on duty reads at a distance. The Fairlane keeps its own paint.
+## The Fairlane keeps its own paint. Its two roof beacons are the chase signal.
+## RoofLight is only the point the ticket bubble sits on.
 func make_cop() -> void:
 	cop = true
 	cruise_mps = 11.0
@@ -170,11 +186,7 @@ func make_cop() -> void:
 	_bar.name = "RoofLight"
 	_bar.position = Vector3(0.0, 1.7, _CENTER_Z)
 	add_child(_bar)
-	_red = _lamp(Color(0.85, 0.08, 0.06), Vector3(-0.22, 0.0, 0.0))
-	_blue = _lamp(Color(0.12, 0.22, 0.82), Vector3(0.22, 0.0, 0.0))
-	_bar.add_child(_red)
-	_bar.add_child(_blue)
-	_bar.visible = false
+	_arm_beacons()
 	_siren = AudioStreamPlayer3D.new()
 	_siren.name = "Siren"
 	_siren.stream = _siren_stream()
@@ -185,7 +197,7 @@ func make_cop() -> void:
 	add_child(_siren)
 
 
-## Puts the car on the job, or back into ordinary traffic. The bar is the mark.
+## Puts the car on the job, or back into ordinary traffic. Off duty, the beacons go dark.
 func serve(on: bool) -> void:
 	on_duty = on
 	if on:
@@ -193,33 +205,19 @@ func serve(on: bool) -> void:
 	duty = 0
 	aiming = false
 	struck = false
-	if _bar != null:
-		_bar.visible = false
+	_set_beacons(false, 0.0)
 	if _siren != null and _siren.playing:
 		_siren.stop()
 
 
-## `lights` flashes the bar. `wail` is the siren, on a chase and on the way to a scene.
+## `lights` blinks the red and blue roof domes. `wail` is the siren.
 func show_call(lights: bool, wail: bool, delta: float) -> void:
 	if not on_duty:
-		if _bar != null:
-			_bar.visible = false
+		_set_beacons(false, 0.0)
 		if _siren != null and _siren.playing:
 			_siren.stop()
 		return
-	if _bar != null:
-		_bar.visible = true
-		if lights:
-			_blink = fmod(_blink + delta, 0.36)
-			if _red != null:
-				_red.visible = _blink < 0.18
-			if _blue != null:
-				_blue.visible = _blink >= 0.18
-		else:
-			if _red != null:
-				_red.visible = true
-			if _blue != null:
-				_blue.visible = true
+	_set_beacons(lights, delta)
 	if _siren == null:
 		return
 	if wail and not _siren.playing:
@@ -228,18 +226,98 @@ func show_call(lights: bool, wail: bool, delta: float) -> void:
 		_siren.stop()
 
 
-func _lamp(color: Color, at: Vector3) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.28, 0.12, 0.18)
-	var inst := MeshInstance3D.new()
-	inst.mesh = mesh
-	inst.position = at
-	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	inst.material_override = mat
-	return inst
+## The model is one light bar: a red dome, a blue dome, and a white tube between them.
+## The tube stays hidden. A chase blinks the two domes, and nothing on the bar spins.
+func _arm_beacons() -> void:
+	if _lightbar != null and not is_instance_valid(_lightbar):
+		_lightbar = null
+		_red_domes.clear()
+		_blue_domes.clear()
+		_beacons = false
+	if _beacons or _visual == null:
+		return
+	var bar := _find_named(_visual, "police_lightbar") as MeshInstance3D
+	if bar == null or bar.mesh == null:
+		return
+	var mesh := bar.mesh
+	var red_i := -1
+	var blue_i := -1
+	for i in mesh.get_surface_count():
+		var name := _surface_name(mesh, i)
+		if name.contains("dome_red"):
+			red_i = i
+			_red_domes.append(_dome_lamp(bar, i, Color(1.0, 0.04, 0.02)))
+		elif name.contains("dome_blue"):
+			blue_i = i
+			_blue_domes.append(_dome_lamp(bar, i, Color(0.08, 0.25, 1.0)))
+		elif name.contains("bulb"):
+			_hide_surface(bar, i)
+	if red_i < 0 and mesh.get_surface_count() >= 5:
+		_red_domes.append(_dome_lamp(bar, 2, Color(1.0, 0.04, 0.02)))
+		_blue_domes.append(_dome_lamp(bar, 3, Color(0.08, 0.25, 1.0)))
+		_hide_surface(bar, 4)
+	if _red_domes.is_empty() or _blue_domes.is_empty():
+		return
+	_lightbar = bar
+	_beacons = true
+	_glow(_red_domes, false)
+	_glow(_blue_domes, false)
+
+
+func _set_beacons(on: bool, delta: float) -> void:
+	_arm_beacons()
+	var period := 1.0 / _BLINK_HZ
+	if on:
+		_blink = fmod(_blink + delta, period)
+	var red_on := on and _blink < period * 0.5
+	_glow(_red_domes, red_on)
+	_glow(_blue_domes, on and not red_on)
+
+
+func _glow(domes: Array[StandardMaterial3D], on: bool) -> void:
+	for mat: StandardMaterial3D in domes:
+		var tint := Color(mat.emission.r, mat.emission.g, mat.emission.b)
+		mat.emission_energy_multiplier = 5.0 if on else 0.0
+		mat.albedo_color = tint if on else Color(tint.r * 0.12, tint.g * 0.12, tint.b * 0.12)
+
+
+## Flat color, so the dome reads as on or off without a scene light.
+func _dome_lamp(bar: MeshInstance3D, index: int, tint: Color) -> StandardMaterial3D:
+	var lamp := StandardMaterial3D.new()
+	lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lamp.emission_enabled = true
+	lamp.emission = tint
+	lamp.emission_energy_multiplier = 0.0
+	lamp.albedo_color = Color(tint.r * 0.12, tint.g * 0.12, tint.b * 0.12)
+	bar.set_surface_override_material(index, lamp)
+	return lamp
+
+
+func _hide_surface(bar: MeshInstance3D, index: int) -> void:
+	if index < 0:
+		return
+	var hide := StandardMaterial3D.new()
+	hide.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	hide.albedo_color = Color(0.0, 0.0, 0.0, 0.0)
+	hide.emission_enabled = false
+	bar.set_surface_override_material(index, hide)
+
+
+func _surface_name(mesh: Mesh, index: int) -> String:
+	var mat := mesh.surface_get_material(index)
+	if mat == null:
+		return ""
+	return mat.resource_name.to_lower()
+
+
+func _find_named(node: Node, want: String) -> Node:
+	if str(node.name).begins_with(want):
+		return node
+	for child in node.get_children():
+		var found := _find_named(child, want)
+		if found != null:
+			return found
+	return null
 
 
 static func _siren_stream() -> AudioStreamWAV:
