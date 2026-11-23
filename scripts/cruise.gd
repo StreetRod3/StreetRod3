@@ -7,6 +7,7 @@ extends Node3D
 ## Other cars drive the streets in a lane and turn off at random. In a free roam, police
 ## drive with the heat: two cars with none, five when it is full. A cop sees 150 m, a
 ## crash calls them in from anywhere, and hitting a cop jumps the heat to 150%.
+## Heat past a full meter is the hard chase, a couple of seconds after that hit.
 
 const CITY_MAP := "res://assets/maps/city.trk"
 const _KING_CAR_TEXTURE := preload("res://assets/locations/city/king.png")
