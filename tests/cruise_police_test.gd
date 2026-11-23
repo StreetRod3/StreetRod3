@@ -38,6 +38,7 @@ func _run() -> void:
 	_test_join()
 	_test_zones()
 	_test_sign_damage()
+	_test_bend_edges()
 	print("--- All Cruise Police Tests Passed! ---")
 	quit()
 
@@ -617,6 +618,96 @@ func _sign_pieces(sign: Node) -> int:
 		if child is MeshInstance3D:
 			bits += 1
 	return bits
+
+
+func _test_bend_edges() -> void:
+	print("Testing a bend's outer edges...")
+	var cruise_script: Script = load("res://scripts/cruise.gd")
+	var bend := cruise_script.new() as Node3D
+	var built: Array = bend.call(&"_road_meshes", _two_streets(0.0, 40.0, 16.0, 16.0))
+	var roads := built[0] as ArrayMesh
+	var edges := built[1] as ArrayMesh
+	var road_verts := _mesh_verts(roads)
+	var edge_verts := _mesh_verts(edges)
+	assert(_has_vertex(road_verts, Vector3(-8.0, 0.03, -8.0)), "The outer pavement edges meet past a right-angle bend")
+	assert(_has_tri(road_verts, Vector3(0.0, 0.03, 0.0), Vector3(0.0, 0.03, -8.0), Vector3(-8.0, 0.03, 0.0)), "Asphalt fills the wedge back to the node")
+	assert(_has_vertex(edge_verts, Vector3(-7.84, 0.05, -7.84)), "The white line follows that corner")
+	assert(not _has_vertex(road_verts, Vector3(8.0, 0.03, 8.0)), "The inside of the bend is left to the two streets")
+	assert(is_equal_approx(float(bend.call(&"paved_height", Vector3(-7.5, 0.0, -7.5))), 0.03), "The joined corner is paved")
+	assert(float(bend.call(&"_nearest_curb", Vector2(-7.5, -7.5))) <= 0.0, "The joined corner is inside the curb")
+	bend.free()
+	var uneven := cruise_script.new() as Node3D
+	var wide: Array = uneven.call(&"_road_meshes", _two_streets(0.0, 40.0, 16.0, 8.0))
+	var uneven_verts := _mesh_verts(wide[0] as ArrayMesh)
+	assert(_has_vertex(uneven_verts, Vector3(-4.0, 0.03, -8.0)), "Edges of different widths meet on the narrower street")
+	assert(_has_tri(uneven_verts, Vector3(0.0, 0.03, 0.0), Vector3(0.0, 0.03, -8.0), Vector3(-4.0, 0.03, 0.0)), "That corner is filled back to the node")
+	uneven.free()
+	var straight := cruise_script.new() as Node3D
+	var flat: Array = straight.call(&"_road_meshes", {
+		"nodes": {1: {"x": 0.0, "y": 0.0}, 2: {"x": 40.0, "y": 0.0}, 3: {"x": 80.0, "y": 0.0}},
+		"roads": [
+			{"from": 1, "to": 2, "width": 16.0},
+			{"from": 2, "to": 3, "width": 16.0},
+		],
+		"poi_order": [],
+		"pois": {},
+	})
+	for vert: Vector3 in _mesh_verts(flat[0] as ArrayMesh):
+		assert(absf(vert.z) <= 8.01, "A straight pair of streets grows no corner")
+	straight.free()
+	var junction := cruise_script.new() as Node3D
+	var tee: Array = junction.call(&"_road_meshes", {
+		"nodes": {
+			1: {"x": 0.0, "y": 0.0}, 2: {"x": 40.0, "y": 0.0},
+			3: {"x": 0.0, "y": 40.0}, 4: {"x": -40.0, "y": 0.0},
+		},
+		"roads": [
+			{"from": 1, "to": 2, "width": 16.0},
+			{"from": 1, "to": 3, "width": 16.0},
+			{"from": 1, "to": 4, "width": 16.0},
+		],
+		"poi_order": [],
+		"pois": {},
+	})
+	assert(not _has_vertex(_mesh_verts(tee[0] as ArrayMesh), Vector3(-8.0, 0.03, -8.0)), "A junction of three streets is left as it was")
+	junction.free()
+
+
+func _two_streets(ax: float, bx: float, width_a: float, width_b: float) -> Dictionary:
+	return {
+		"nodes": {1: {"x": 0.0, "y": 0.0}, 2: {"x": bx, "y": ax}, 3: {"x": ax, "y": bx}},
+		"roads": [
+			{"from": 1, "to": 2, "width": width_a},
+			{"from": 1, "to": 3, "width": width_b},
+		],
+		"poi_order": [],
+		"pois": {},
+	}
+
+
+func _mesh_verts(mesh: ArrayMesh) -> PackedVector3Array:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	return arrays[Mesh.ARRAY_VERTEX]
+
+
+func _has_vertex(verts: PackedVector3Array, want: Vector3) -> bool:
+	for vert: Vector3 in verts:
+		if vert.distance_squared_to(want) < 0.0001:
+			return true
+	return false
+
+
+func _has_tri(verts: PackedVector3Array, a: Vector3, b: Vector3, c: Vector3) -> bool:
+	var i := 0
+	while i + 2 < verts.size():
+		if _near_one(a, verts[i], verts[i + 1], verts[i + 2]) and _near_one(b, verts[i], verts[i + 1], verts[i + 2]) and _near_one(c, verts[i], verts[i + 1], verts[i + 2]):
+			return true
+		i += 3
+	return false
+
+
+func _near_one(want: Vector3, p: Vector3, q: Vector3, r: Vector3) -> bool:
+	return want.distance_squared_to(p) < 0.0001 or want.distance_squared_to(q) < 0.0001 or want.distance_squared_to(r) < 0.0001
 
 
 func _traffic_car(at: Vector3) -> CharacterBody3D:
