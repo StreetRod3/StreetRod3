@@ -3,11 +3,16 @@ extends Node3D
 ## Manages dynamic civilian traffic on Mulholland Drive during a race.
 ## Spawns cars dynamically in a horizon ahead of the racers, despawns them once
 ## passed, avoids spawning on bridges or near obstacles, and resolves multi-car bumps.
+## About one race in seven, the first car out is a police Fairlane. It drives the
+## same way as the others. A ticket from it ends the race.
 
 const _RaceTrafficCar := preload("res://scripts/race_traffic_car.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _ShopSounds := preload("res://scripts/shop_sounds.gd")
 const _TrackFile := preload("res://scripts/track_file.gd")
+const _Police := preload("res://scripts/race_police.gd")
+
+const _POLICE_CAR := "res://assets/cars/police-fairlane-1957.car"
 
 const _MAX_ACTIVE := 3
 const _MIN_SPAWN_AHEAD := 110.0
@@ -38,14 +43,35 @@ var _active_cars: Array[CharacterBody3D] = []
 var _bump: _CarBump = _CarBump.new()
 var _car_counter: int = 0
 var _spawn_cooldown: float = 0.0
+var _rules: _Police
+var _cop: _RaceTrafficCar
+var _cop_hit := 0.0
 
 
-func setup(track: Node3D, player: CharacterBody3D, opponent: CharacterBody3D, floor_mesh: MeshInstance3D, car_files: Array[String]) -> void:
+## `police_roll` below zero rolls whether this race has a cop. A roll under the
+## chance arms one. The car itself spawns with the rest of the traffic.
+func setup(track: Node3D, player: CharacterBody3D, opponent: CharacterBody3D, floor_mesh: MeshInstance3D, car_files: Array[String], police_roll: float = -1.0) -> void:
 	_track = track
 	_player = player
 	_opponent = opponent
 	_floor_mesh = floor_mesh
 	_car_files = car_files
+	_rules = _Police.new()
+	var roll := randf() if police_roll < 0.0 else police_roll
+	if _Police.rolled_in(roll):
+		_rules.arm_traffic()
+
+
+func police_due() -> bool:
+	return _rules != null and _rules.active
+
+
+func police_cop() -> _RaceTrafficCar:
+	return _cop
+
+
+func police_ticketed() -> bool:
+	return _rules != null and _rules.ticketed
 
 
 func _exit_tree() -> void:
@@ -113,6 +139,8 @@ func _check_despawn() -> void:
 				should_despawn = true
 
 		if should_despawn:
+			if car == _cop:
+				_cop = null
 			car.queue_free()
 		else:
 			kept.append(car)
@@ -160,15 +188,21 @@ func _update_spawner(delta: float) -> void:
 	var lane := 2.0 if is_oncoming else -2.0
 	var pace := randf_range(11.5, 15.5) if is_oncoming else randf_range(9.0, 12.5)
 	var bias := randf_range(-0.25, 0.25)
-	var paint: Color = _PAINTS[randi() % _PAINTS.size()]
-	var car_file: String = _car_files[randi() % _car_files.size()]
+	var as_cop := _rules != null and _rules.active and _cop == null
+	var paint: Color = Color.WHITE if as_cop else _PAINTS[randi() % _PAINTS.size()]
+	var car_file: String = _POLICE_CAR if as_cop else _car_files[randi() % _car_files.size()]
 
 	var car := _RaceTrafficCar.new()
 	_car_counter += 1
 	car.name = "MulhollandTrafficCar%d" % _car_counter
+	if as_cop:
+		car.name = "MulhollandPolice"
 	car.lane_bias = bias
+	car.cop = as_cop
 	add_child(car)
 	car.setup(car_file, paint, spawn_s, lane, pace, is_oncoming, _floor_mesh)
+	if as_cop:
+		_cop = car
 
 	# Set initial position
 	car.step(_track, 0.001)
@@ -184,16 +218,20 @@ func _resolve_collisions() -> void:
 			_bump.resolve(_active_cars[i], _active_cars[j])
 
 	# 2. Traffic vs Player
+	_cop_hit = 0.0
 	if _player != null and _player.has_method(&"apply_car_bump") and not _is_wrecked(_player):
 		var hardest_hit := 0.0
 		for car_body: CharacterBody3D in _active_cars:
 			var hit := _bump.resolve(_player, car_body)
+			if car_body == _cop:
+				_cop_hit = maxf(_cop_hit, hit.x)
 			if hit.x > 0.05:
 				hardest_hit = maxf(hardest_hit, hit.x)
 				if _player.has_method(&"take_hit"):
 					_player.call(&"take_hit", hit.x)
 		if hardest_hit > 1.2:
 			_crunch(hardest_hit)
+	_note_police()
 
 	# 3. Traffic vs Opponent Rival
 	if _opponent != null and _opponent.has_method(&"apply_car_bump") and not _is_wrecked(_opponent):
@@ -230,6 +268,20 @@ func _update_dynamic_blocks() -> void:
 		})
 
 	_track.set_dynamic_blocks(blocks)
+
+
+func _note_police() -> void:
+	if _cop == null or _rules == null or not _rules.active or _rules.ticketed or _player == null:
+		return
+	var gap := _gap(_cop.center(), _player.global_position)
+	var speed := 0.0
+	if _player.has_method(&"get_forward_speed"):
+		speed = absf(float(_player.call(&"get_forward_speed")))
+	_rules.note_beside(gap, speed, _cop_hit)
+
+
+func _gap(a: Vector3, b: Vector3) -> float:
+	return Vector2(a.x - b.x, a.z - b.z).length()
 
 
 func _is_wrecked(car: Node) -> bool:

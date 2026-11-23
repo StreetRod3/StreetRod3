@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://clsvwoilyx4m0"
-path="res://.godot/imported/jack_T_Jack_BC.png-e9e7b449b51c5f949db8707f63b60775.ctex"
+path.s3tc="res://.godot/imported/jack_T_Jack_BC.png-e9e7b449b51c5f949db8707f63b60775.s3tc.ctex"
+path.etc2="res://.godot/imported/jack_T_Jack_BC.png-e9e7b449b51c5f949db8707f63b60775.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "8e82b310b86332bddb6910926e46e864"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/locations/garage/jack_T_Jack_BC.png"
-dest_files=["res://.godot/imported/jack_T_Jack_BC.png-e9e7b449b51c5f949db8707f63b60775.ctex"]
+dest_files=["res://.godot/imported/jack_T_Jack_BC.png-e9e7b449b51c5f949db8707f63b60775.s3tc.ctex", "res://.godot/imported/jack_T_Jack_BC.png-e9e7b449b51c5f949db8707f63b60775.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

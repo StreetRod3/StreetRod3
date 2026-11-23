@@ -23,6 +23,12 @@ var shove: Vector3 = Vector3.ZERO
 var spin: float = 0.0
 var loose: float = 0.0
 var speed: float = 0.0
+## A police Fairlane in the traffic stream. It still drives with the other cars.
+var cop := false
+## Stay on `target_lane` instead of steering around blocks. The parked road-race cop uses this.
+var hold_lane := false
+## How fast the car changes lanes, in m/s.
+var lane_rate := 3.5
 var _visual: Node3D
 var _roll: float = 0.0
 
@@ -89,9 +95,9 @@ func step(track: Node3D, delta: float) -> void:
 	# Obstacle avoidance: steer towards clear lane
 	var look: float = -18.0 if is_oncoming else 18.0
 	var clear_lane := target_lane + lane_bias
-	if track.has_method(&"lane_around"):
+	if not hold_lane and track.has_method(&"lane_around"):
 		clear_lane = track.lane_around(s, target_lane + lane_bias, look)
-	lateral = move_toward(lateral, clear_lane, 3.5 * delta)
+	lateral = move_toward(lateral, clear_lane, lane_rate * delta)
 
 	# Progress along track distance s
 	var dist_step := speed_mps * delta

@@ -9,6 +9,7 @@ const _DrivingHud := preload("res://scripts/driving_hud.gd")
 const _CarBump := preload("res://scripts/car_bump.gd")
 const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _MulhollandTraffic := preload("res://scripts/mulholland_traffic.gd")
+const _RoadPolice := preload("res://scripts/road_race_police.gd")
 const _GearShiftPopup := preload("res://scripts/gear_shift_popup.gd")
 const _Console := preload("res://scripts/console.gd")
 const _Skies := preload("res://scripts/skies.gd")
@@ -222,20 +223,29 @@ func _setup_race_layout() -> void:
 		var box := BoxShape3D.new()
 		box.size = Vector3(42, 8, 5)
 		col.shape = box
-	if GameState.selected_race_type == GameState.RACE_MULHOLLAND:
-		var files: Array[String] = []
-		for car: Dictionary in GameState.USED_CARS:
-			var path := str(car.get("car_file", ""))
-			if not path.is_empty():
-				files.append(path)
-		if files.is_empty():
-			files.append("res://assets/cars/chevy-styleline-1950.car")
-		var traf := _MulhollandTraffic.new()
-		traf.name = "MulhollandTraffic"
-		add_child(traf)
+	if GameState.selected_race_type == GameState.RACE_MULHOLLAND or GameState.selected_race_type == GameState.RACE_ROAD:
 		var floor_mi: MeshInstance3D = $Ground/MeshInstance3D
-		traf.setup(_track, _player, _opponent, floor_mi, files)
-		_traffic_mgr = traf
+		if GameState.selected_race_type == GameState.RACE_MULHOLLAND:
+			var files: Array[String] = []
+			for car: Dictionary in GameState.USED_CARS:
+				var path := str(car.get("car_file", ""))
+				if not path.is_empty():
+					files.append(path)
+			if files.is_empty():
+				files.append("res://assets/cars/chevy-styleline-1950.car")
+			var traf := _MulhollandTraffic.new()
+			traf.name = "MulhollandTraffic"
+			add_child(traf)
+			traf.setup(_track, _player, _opponent, floor_mi, files)
+			_traffic_mgr = traf
+		else:
+			var cops := _RoadPolice.new()
+			cops.name = "RoadPolice"
+			add_child(cops)
+			if cops.setup(_track, _player, floor_mi):
+				_traffic_mgr = cops
+			else:
+				cops.queue_free()
 
 
 ## Every race runs under a photographed sky, the track's own (set in the track maker) or the day
@@ -302,6 +312,9 @@ func _physics_process(delta: float) -> void:
 			_play_crunch(maxf(hit.x, hit.y))
 	if _traffic_mgr != null and _traffic_mgr.has_method(&"tick"):
 		_traffic_mgr.tick(delta)
+	if _traffic_mgr != null and _traffic_mgr.has_method(&"police_ticketed") and bool(_traffic_mgr.call(&"police_ticketed")):
+		_show_ticket_loss()
+		return
 	_check_wrecks()
 
 
@@ -599,6 +612,26 @@ func _show_tire_blowout() -> void:
 		text += "\n" + _took_your_car()
 	text += _lost_bucks_line(payout)
 	_show_bubble(text, GameState.SCENE_GARAGE)
+
+
+## A cop wrote a ticket. The race is lost and the bet is paid, the same as losing at the line.
+func _show_ticket_loss() -> void:
+	if _race_over:
+		return
+	_race_over = true
+	_result_shown_ms = Time.get_ticks_msec()
+	_halt_cars()
+	_end_race_ui()
+	GameState.wear_parts_from_crashes(_player.damage_amount())
+	var payout := GameState.apply_race_stake(false)
+	var text := "You got a ticket!"
+	var next := GameState.SCENE_DRIVE_IN
+	if GameState.apply_pink_slips(false) == GameState.PINK_LOST:
+		text += "\n" + _took_your_car()
+		next = GameState.SCENE_GARAGE
+	elif payout >= 0:
+		text += "\nYou lost the race!"
+	_show_bubble(text + _lost_bucks_line(payout), next)
 
 
 func _show_wreck() -> void:
