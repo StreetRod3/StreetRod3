@@ -47,7 +47,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 
 ## Converting a car
 
-`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` and `buick-1952-coupe`.
+`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`) and `buick-1952-coupe` (in the game as `buick-special-1952`). The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
 
 ## Changes from the download
 
@@ -59,6 +59,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | Plates replaced by the blank plate (`assets/cars/plate-blank.png`, from the Impala's, `tools/make_blank_plate.py`) on a material named `plate` | The pack's plates read "LIBAU"; the player is to make their own plates later (user, 2026-11-22) |
 | Buick: the rear quarters' front edge trimmed in flush with the doors just above the side strip | The pack's quarter panel reaches 6 mm forward over the door's back edge there and stands 6 mm proud of it, so it cast a shadow onto the door (user, 2026-11-22); `trim` in the converter's `CARS` table |
 | Front lamps in the tail-light material made clear | The pack gives the Buick red parking lamps; the real ones were clear |
+| Gauge faces printed and needles added: the Hudson's speedometer and combination gauge (fuel works, temperature stays put), the Buick's speedometer with a small gas gauge | The pack's gauge image is not in the download and the dials have no needles; the small dial across the dash (a clock) keeps its plain face |
 | Colors from the material settings in one palette, the paint as the mask | Most of the images the materials used are not in the download |
 | Length scaled in two parts | The wheelbase to the real one between the axles, the overhangs to the rest of the real length, easing from one to the other around each axle, so the car is neither too long nor short in the wheelbase (user, 2026-11-22) |
 

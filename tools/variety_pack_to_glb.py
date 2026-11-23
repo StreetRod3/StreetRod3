@@ -43,6 +43,8 @@ The GLB is laid out like the Studebaker's (tools/studebaker_to_glb.py):
   * an ORM palette in the same layout (R = AO, G = roughness, B = metallic);
   * the glass as its own see-through material (GLASS_MATERIAL), so the paint shader
     never touches it;
+  * the dials (`dials` in CARS) as working gauges with printed faces and needles
+    (tools/variety_pack_dash.py);
   * the pack's plates (they read "LIBAU") replaced by the blank plate,
     assets/cars/plate-blank.png, laid over each one in its own plane on a material
     named `plate`, so a plate of the player's own can go there later.
@@ -83,6 +85,9 @@ CARS = {
                             ((-0.6, 2.58, 0.0), (0.6, 2.9, 0.72))],
         },
         'steer': ('paint_black', (0.40, -0.455, 1.12)),
+        # Two dials in front of the driver: from the middle out, the combination gauge
+        # and the speedometer (tools/variety_pack_dash.py).
+        'dials': ['combo', 'speedo'],
     },
     # 1952 Buick Special two-door Deluxe sedan (model 48D): 204 in long, 76.7 in wide,
     # 63.4 in high on a 121.5 in wheelbase (Hometown Buick, model 48D).
@@ -99,6 +104,8 @@ CARS = {
                             ((-0.4, 2.2, 0.0), (0.4, 2.6, 0.66))],
         },
         'steer': ('Metal_painted', (0.36, -0.305, 1.055)),
+        # One dial in front of the driver: the speedometer with the gas gauge in it.
+        'dials': ['speedo_fuel'],
         # Just above the side strip (z 0.75) the rear quarter's front edge reaches 6 mm
         # forward over the door's back edge (y 0.26) and stands 6 mm proud of it, tapering
         # out 14 cm back; it cast a shadow onto the door. It is trimmed in under the door
@@ -111,6 +118,9 @@ CARS = {
 }
 
 TIRE = 'tyre'
+## The dials' faces: one flat piece of this material in each dial (and in a small dial
+## across the dash on the passenger's side, which is left as it is).
+DIAL_FACE = 'textureford.001'
 GLASS = {'Glass', 'glass.001', 'Glass_Window_Neutral', 'Glass_Window_Neutral.001'}
 ## The pack's plates, which give way to the blank plate (tools/make_blank_plate.py) on a
 ## material named `plate`, so the game can later put the player's own plate there.
@@ -621,6 +631,35 @@ def build(car, dst):
     wheel_mesh = out.mesh('driving_wheel_mesh', primitives('driving_wheel', (hub, wheel_basis)))
     roots.append(out.node('driving_wheel', translation=hub, rotation=quaternion(wheel_basis),
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
+    pods = []
+    if cfg.get('dials'):
+        import variety_pack_dash as dash
+        face_mat = names.index(DIAL_FACE)
+        # The driver's dials only: the same face is on a small dial (a clock) across the dash.
+        dials = [dash.dial_frame(to_game(pos[keep & (mat == face_mat) & (part == p)]))
+                 for p in np.unique(part[keep & (mat == face_mat)])]
+        dials = [d for d in dials if d[0][0] > 0]
+        pods = dash.build(dials, cfg['dials'])
+        looks_mat = {}
+        for key, material in dash.NEEDLE_MATERIALS.items():
+            looks_mat[key] = len(out.materials)
+            out.materials.append(material)
+        for name, center, basis, kind, radius, parts in pods:
+            children = []
+            if kind:
+                out.images.append(dash.face_png(kind))
+                out.textures.append(len(out.images) - 1)
+                face_index = len(out.materials)
+                out.materials.append(dash.face_material(kind, len(out.textures) - 1))
+                ft, fn, fu = dash.disk(radius, dash.FACE_LIFT)
+                p, n, u, idx = share_corners(ft.reshape(-1, 3).astype(np.float32), fn.reshape(-1, 3).astype(np.float32),
+                                             fu.reshape(-1, 2).astype(np.float32))
+                children.append(out.node(f'{name}_face', mesh=out.mesh(f'{name}_face', [out.primitive(p, n, idx, face_index, u)])))
+            for node_name, key, tris, nrms in parts:
+                p, n, u, idx = share_corners(tris.reshape(-1, 3).astype(np.float32), nrms.reshape(-1, 3).astype(np.float32),
+                                             np.zeros((tris.size // 3, 2), np.float32))
+                children.append(out.node(node_name, mesh=out.mesh(node_name, [out.primitive(p, n, idx, looks_mat[key])])))
+            roots.append(out.node(name, translation=center, rotation=quaternion(basis), children=children))
     out.write(dst, roots)
 
     game = to_game(kept)
@@ -646,6 +685,8 @@ def build(car, dst):
           % (track, wheel_y, fz, rz, (fz - rz) / IN))
     print('ground clearance in the model %.3f m' % (-w[:, 1].min()))
     print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
+    for name, center, basis, kind, radius, _ in pods:
+        print(f'{name}: {kind or "needle"} at {center.round(3)}, face radius {radius:.4f}')
 
 if __name__ == '__main__':
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]
