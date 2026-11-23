@@ -128,13 +128,17 @@ var _head_scenes: Dictionary = {}
 var _chosen_index: int = 0
 var _auto_call_time: float = 0.0
 var _time: float = 0.0
+## Looking at this place from a cell. The only way out is the main menu.
+var _jailed: bool = false
 var _materials: Dictionary = {}
 var _box_meshes: Dictionary = {}
 var _sphere_meshes: Dictionary = {}
 
 
 func _ready() -> void:
-	GameState.current_scene_path = GameState.SCENE_DRIVE_IN
+	_jailed = GameState.jailed
+	GameState.jailed = false
+	GameState.current_scene_path = GameState.SCENE_GARAGE if _jailed else GameState.SCENE_DRIVE_IN
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_camera.fov = 54.0
@@ -153,6 +157,13 @@ func _ready() -> void:
 	_build_building(lot)
 	_build_cars(lot)
 	_build_man(lot)
+	if _jailed:
+		_seal_jail()
+		_build_jail_bars()
+		_build_jail_line()
+		_build_jail_menu()
+		_summon_jail_car()
+		return
 	_build_hud()
 	_build_opponent_popup()
 	_build_race_popup()
@@ -217,11 +228,17 @@ func _process(delta: float) -> void:
 	if _neon != null:
 		var pulse := 0.86 + sin(_time * 5.5) * 0.14
 		_neon.modulate = Color(2.5 * pulse, 1.55 * pulse, 1.65 * pulse)
+	if _jailed:
+		_advance_rival(delta)
+		_advance_jail_traffic(delta)
+		return
 	_advance_rival(delta)
 	_advance_auto_call(delta)
 
 
 func _input(event: InputEvent) -> void:
+	if _jailed:
+		return
 	var viewport := get_viewport()
 	if _try_shortcut(event) and viewport != null:
 		viewport.set_input_as_handled()
@@ -229,6 +246,12 @@ func _input(event: InputEvent) -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	var viewport := get_viewport()
+	if _jailed:
+		if event.is_action_pressed(&"ui_cancel") or event.is_action_pressed(&"ui_accept"):
+			if viewport != null:
+				viewport.set_input_as_handled()
+			_leave_jail()
+		return
 	if event.is_action_pressed(&"ui_cancel"):
 		# Mark the key first. Leaving drops this scene, and the viewport is gone after that.
 		if viewport != null:
@@ -276,6 +299,8 @@ func _rival_present() -> bool:
 
 
 func _engage_rival() -> void:
+	if _jailed:
+		return
 	_rival_engaged = true
 	# Coming back from under the rival's hood rebuilds this scene without choosing
 	# the rival again, so fill in the race lengths and the tank here every time.
@@ -711,6 +736,70 @@ func _material(albedo: Color, roughness: float, metallic: float, emission: Color
 	return mat
 
 
+## The diner stays as it is. Nothing in it can be clicked, and bars stand in front of the lens.
+func _seal_jail() -> void:
+	var man := find_child("Organizer", true, false) as StaticBody3D
+	if man != null:
+		man.input_ray_pickable = false
+
+
+func _build_jail_bars() -> void:
+	var bars := Node3D.new()
+	bars.name = "Bars"
+	_camera.add_child(bars)
+	var metal := Color(0.08, 0.08, 0.09)
+	var z := -0.7
+	var half_w := 0.92
+	var half_h := 0.56
+	_add_box(bars, Vector3(half_w * 2.0 + 0.08, 0.055, 0.045), Vector3(0.0, half_h, z), metal, 0.35, 0.72, Color.BLACK, 0.0, Vector3.ZERO, false)
+	_add_box(bars, Vector3(half_w * 2.0 + 0.08, 0.055, 0.045), Vector3(0.0, -half_h, z), metal, 0.35, 0.72, Color.BLACK, 0.0, Vector3.ZERO, false)
+	_add_box(bars, Vector3(0.055, half_h * 2.0, 0.045), Vector3(-half_w, 0.0, z), metal, 0.35, 0.72, Color.BLACK, 0.0, Vector3.ZERO, false)
+	_add_box(bars, Vector3(0.055, half_h * 2.0, 0.045), Vector3(half_w, 0.0, z), metal, 0.35, 0.72, Color.BLACK, 0.0, Vector3.ZERO, false)
+	var span := half_w * 2.0 - 0.1
+	var count := 8
+	for i in count:
+		var x := -span * 0.5 + span * (float(i) + 0.5) / float(count)
+		_add_box(bars, Vector3(0.028, half_h * 2.0 - 0.05, 0.028), Vector3(x, 0.0, z - 0.02), metal, 0.32, 0.8, Color.BLACK, 0.0, Vector3.ZERO, false)
+	_add_box(bars, Vector3(span, 0.028, 0.028), Vector3(0.0, 0.0, z - 0.03), metal, 0.32, 0.8, Color.BLACK, 0.0, Vector3.ZERO, false)
+
+
+func _build_jail_line() -> void:
+	var bubble := _SpeechBubble.instantiate() as Control
+	bubble.name = "Fine"
+	_ui.add_child(bubble)
+	bubble.call("set_line", "You can't pay the fine.", Vector2(420, 56), 26)
+	bubble.call("show_centered")
+	bubble.visible = true
+
+
+func _build_jail_menu() -> void:
+	var bar := Control.new()
+	bar.name = "JailMenu"
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_top = -58.0
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui.add_child(bar)
+	var btn := _menu_button("Main menu")
+	btn.name = "MainMenu"
+	btn.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	btn.offset_left = -200.0
+	btn.offset_right = 200.0
+	btn.offset_top = -50.0
+	btn.offset_bottom = -8.0
+	btn.pressed.connect(_leave_jail)
+	bar.add_child(btn)
+	_nav.setup([btn])
+	btn.grab_focus()
+
+
+func _leave_jail() -> void:
+	if not _jailed:
+		return
+	_jailed = false
+	GameState.current_scene_path = GameState.SCENE_MAIN_MENU
+	get_tree().change_scene_to_file(GameState.SCENE_MAIN_MENU)
+
+
 func _build_hud() -> void:
 	var bar := Control.new()
 	bar.name = "HudBottom"
@@ -962,7 +1051,7 @@ func _fit_panel(panel: Control) -> void:
 
 
 func _on_man_input(_camera: Node, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape: int) -> void:
-	if _popup_open() or _rival != null:
+	if _jailed or _popup_open() or _rival != null:
 		return
 	if not event is InputEventMouseButton:
 		return
@@ -974,6 +1063,9 @@ func _on_man_input(_camera: Node, event: InputEvent, _pos: Vector3, _normal: Vec
 
 
 func _on_man_hover(hovering: bool) -> void:
+	if _jailed or _hover_prompt == null:
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		return
 	if _popup_open() or _rival != null:
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		if _rival == null:
@@ -1053,6 +1145,42 @@ func _advance_auto_call(delta: float) -> void:
 	_on_opponent_chosen(index)
 
 
+## Cars drive in and leave. Nothing about them can be clicked, and the roster stays as it is.
+func _advance_jail_traffic(delta: float) -> void:
+	if _rival != null:
+		_auto_call_time = 0.0
+		return
+	_auto_call_time += delta
+	if _auto_call_time < _AUTO_CALL_SEC:
+		return
+	_auto_call_time = 0.0
+	_summon_jail_car()
+
+
+func _summon_jail_car() -> void:
+	var opp := _jail_passer()
+	if opp.is_empty():
+		return
+	_present_passer(opp)
+
+
+func _jail_passer() -> Dictionary:
+	var running: Array[int] = []
+	for i in GameState.opponents.size():
+		if not GameState.opponent_needs_engine(GameState.opponents[i]):
+			running.append(i)
+	if not running.is_empty():
+		return GameState.opponents[running[randi() % running.size()]]
+	var parked: Dictionary = _PARKED[randi() % _PARKED.size()]
+	return {
+		"name": "Driver",
+		"car_name": "Car",
+		"car_file": str(parked["file"]),
+		"color": parked["paint"],
+		"bumpers_off": [],
+	}
+
+
 func _resume_parked_rival() -> void:
 	var index := GameState.drive_in_rival_index
 	if index < 0 or index >= GameState.opponents.size():
@@ -1065,21 +1193,26 @@ func _resume_parked_rival() -> void:
 
 
 func _present_rival(parked: bool = false) -> void:
-	_drop_rival()
 	if _chosen_index < 0 or _chosen_index >= GameState.opponents.size():
+		_drop_rival()
 		return
-	var opp: Dictionary = GameState.opponents[_chosen_index]
+	_present_passer(GameState.opponents[_chosen_index], parked)
+
+
+func _present_passer(opp: Dictionary, parked: bool = false) -> void:
+	_drop_rival()
 	var path := str(opp.get("car_file", ""))
 	var car := _CAR_SCENE.instantiate() as Node3D
 	if not bool(car.call(&"prepare_preview", path, _opponent_color(opp), Color(0, 0, 0, 0), GameState.bumper_ends(opp.get("bumpers_off", [])))):
 		push_warning("Rival car failed to load: %s" % path)
 		car.free()
-		_show_opponents()
+		if not _jailed:
+			_show_opponents()
 		return
 	var root := StaticBody3D.new()
 	root.name = "RivalCar"
 	root.collision_mask = 0
-	root.input_ray_pickable = true
+	root.input_ray_pickable = not _jailed
 	root.rotation.y = PI * 0.5
 	root.position = Vector3(0.0, 0.0, 15.4)
 	get_node("DriveIn").add_child(root)
@@ -1111,15 +1244,17 @@ func _present_rival(parked: bool = false) -> void:
 	_collect_rival_wheels(car)
 	_measure_hood(car)
 	_start_rival_entrance()
-	if not parked:
-		GameState.drive_in_hood_seen = false
-	GameState.drive_in_rival_index = _chosen_index
+	if not _jailed:
+		if not parked:
+			GameState.drive_in_hood_seen = false
+		GameState.drive_in_rival_index = _chosen_index
 	if parked:
 		_rival.position.x = _rival_to_x
 		_begin_rival_wait()
 	_rival_caption = "%s — %s" % [str(opp.get("name", "Rival")), str(opp.get("car_name", "Car"))]
-	_hover_prompt.text = _rival_caption
-	_hover_prompt.visible = true
+	if _hover_prompt != null and not _jailed:
+		_hover_prompt.text = _rival_caption
+		_hover_prompt.visible = true
 	Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 
 
@@ -1170,7 +1305,10 @@ func _advance_rival(delta: float) -> void:
 	_rival.position.x = lerpf(_rival_from_x, _rival_to_x, eased_out)
 	_spin_rival_wheels(_rival.position.x - prev_x)
 	if t >= 1.0:
-		_clear_rival()
+		if _jailed:
+			_drop_rival()
+		else:
+			_clear_rival()
 
 
 func _begin_rival_wait() -> void:
@@ -1361,6 +1499,8 @@ func _side_fits(box: AABB) -> bool:
 
 
 func _on_rival_input(camera: Node, event: InputEvent, _pos: Vector3, _normal: Vector3, _shape: int) -> void:
+	if _jailed:
+		return
 	if event is InputEventMouseMotion:
 		_update_rival_prompt(camera, (event as InputEventMouseMotion).position)
 		return
@@ -1381,6 +1521,9 @@ func _on_rival_input(camera: Node, event: InputEvent, _pos: Vector3, _normal: Ve
 
 
 func _on_rival_hover(hovering: bool) -> void:
+	if _jailed:
+		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
+		return
 	if _popup_open() or _rival_phase == _RIVAL_LEAVE:
 		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
 		return

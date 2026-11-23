@@ -306,6 +306,8 @@ var hood_peek: Dictionary = {}
 var drive_in_rival_index: int = -1
 ## The player already closed one look under this rival's hood. Not saved.
 var drive_in_hood_seen: bool = false
+## Caught without the money for the fine. The next scene is the drive-in from a cell. Not saved.
+var jailed: bool = false
 ## The direct-speed driving model from before the tire simulation.
 var arcade_drive: bool = true
 ## Show speeds, fuel, weights, and distances in US units. They are always kept in metric.
@@ -1179,6 +1181,7 @@ func new_game() -> void:
 	hood_peek.clear()
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
+	jailed = false
 	money = 2500
 	uncles_dead = 0
 	_next_car_serial = 1
@@ -1354,6 +1357,7 @@ func load_game(slot: int) -> bool:
 	hood_peek.clear()
 	drive_in_rival_index = -1
 	drive_in_hood_seen = false
+	jailed = false
 	driver_name = str(d.get("driver_name", ""))
 	driver_traits = DRIVER_TRAITS_DEFAULT.merged(d.get("driver_traits", {}), true)
 	money = int(d.get("money", money))
