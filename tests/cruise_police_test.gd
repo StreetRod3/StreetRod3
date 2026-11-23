@@ -78,6 +78,12 @@ func _test_hits() -> void:
 	assert(is_equal_approx(police.heat, _Police.HIT_HEAT), "A real hit adds a chunk with no cop nearby")
 	police.note_hit(0.0, true)
 	assert(is_equal_approx(police.heat, _Police.HEAT_RAMPAGE), "Hitting a cop jumps the heat to 150%")
+	var cops: Array[Vector3] = [Vector3.ZERO]
+	assert(police.duties(cops, Vector3.ZERO)[0] == _Police.STOP, "The hard chase waits after a hit on a cop")
+	police.tick(_Police.RAMPAGE_AFTER_HIT_S - 0.1, 5.0, true, false)
+	assert(police.duties(cops, Vector3.ZERO)[0] == _Police.STOP, "A hit on a cop does not start the hard chase early")
+	police.tick(0.2, 5.0, true, false)
+	assert(police.duties(cops, Vector3.ZERO)[0] == _Police.PURSUE, "Heat past full starts the hard chase")
 	police.note_hit(4.0, false)
 	assert(is_equal_approx(police.heat, _Police.HEAT_RAMPAGE), "A later crash leaves the 150% in place")
 	police.tick(_Police.LOSE_S, 5.0, false, false)
@@ -95,7 +101,8 @@ func _test_pull_over() -> void:
 	var police := _Police.new()
 	assert(_Police.fine_for(0.0) == _Police.FINE_MIN, "No guilt is the small fine")
 	assert(_Police.fine_for(1.0) == _Police.FINE_MAX * 2, "A full meter doubles the fine")
-	assert(_Police.fine_for(_Police.HEAT_RAMPAGE) == _Police.FINE_MAX * 2, "Past a full meter the fine stays doubled")
+	assert(_Police.fine_for(1.2) == 240, "120% heat is a $240 fine")
+	assert(_Police.fine_for(_Police.HEAT_RAMPAGE) == 300, "150% heat is a $300 fine")
 	assert(_Police.fine_for(0.5) == 55, "Half the heat is halfway between the fines")
 	police.tick(_Police.SPEED_HOLD_S + 0.1, 20.0, true, false)
 	assert(police.heat > 0.0, "Speeding in sight is wanted")
@@ -116,7 +123,7 @@ func _test_pull_over() -> void:
 	var broke: Dictionary = police.take_stop(0)
 	assert(bool(broke["broke"]), "No cash is a tow")
 	assert(int(broke["paid"]) == 0, "A tow takes nothing")
-	assert(int(broke["amount"]) == _Police.fine_for(_Police.HEAT_RAMPAGE), "A cop hit takes the doubled full fine")
+	assert(int(broke["amount"]) == 300, "A cop hit at 150% heat is a $300 fine")
 
 	police.note_hit(3.0, false)
 	police.tick(0.05, 0.5, true, true)
@@ -164,6 +171,11 @@ func _test_duties() -> void:
 	police.heat = 1.0
 	var stop: Array[int] = police.duties(cops, Vector3.ZERO)
 	assert(stop[0] == _Police.STOP and stop[1] == _Police.STOP, "Full heat sends both cops to pull the car over")
+	var past := _Police.new()
+	past.heat = 1.2
+	past.tick(0.05, 5.0, true, false)
+	var hard: Array[int] = past.duties(cops, Vector3.ZERO)
+	assert(hard[0] == _Police.PURSUE and hard[1] == _Police.PURSUE, "Heat over a full meter is the hard chase")
 	police.tick(_Police.EVADE_S, 5.0, true, false)
 	assert(is_equal_approx(police.heat, _Police.HEAT_RAMPAGE), "A stop that fails for a few minutes raises the heat to 150%")
 	var chase: Array[int] = police.duties(cops, Vector3.ZERO)

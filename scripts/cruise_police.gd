@@ -2,7 +2,8 @@ extends RefCounted
 
 ## Heat and crash scenes for a free roam. The traffic cars do the driving.
 ## A cop sees SIGHT_M. Speeding counts only while one can see the car. A crash
-## counts from anywhere, and a hit on a cop jumps the heat to 150%.
+## counts from anywhere, and a hit on a cop jumps the heat to 150%. The hard chase
+## starts once the heat is past full, a couple of seconds after that hit.
 
 const SIGHT_M := 150.0
 const LIMIT_MPS := 11.0
@@ -21,7 +22,8 @@ const CRAWL_MPS := 3.0
 ## 3 mph. Under this, with a cop alongside, the car stops and the ticket is written.
 const TICKET_MPS := 1.341
 const GRACE_S := 20.0
-## The ticket follows the heat: $10 with barely any, $100 when it is full.
+## The ticket follows the heat: $10 with barely any, $100 just under a full meter.
+## At 100% and above it is $100 times twice the heat, so 150% is $300.
 const FINE_MIN := 10
 const FINE_MAX := 100
 ## Watched speeding fills the meter slowly. A couple of seconds over the pace is a
@@ -45,8 +47,10 @@ const STOP_MPS := 18.0
 ## The meter stops here until a stop has failed. Then it jumps to HEAT_RAMPAGE.
 const HEAT_CAP := 1.0
 const HEAT_RAMPAGE := 1.5
-## How long the pull-over has to fail before the hard chase.
+## How long the pull-over has to fail before the heat jumps past full.
 const EVADE_S := 180.0
+## A hit on a cop puts the heat past full at once. The hard chase waits this long.
+const RAMPAGE_AFTER_HIT_S := 2.0
 
 const PATROL := 0
 const PURSUE := 1
@@ -64,8 +68,10 @@ var _stop := false
 var _top_mps := 0.0
 ## Seconds the car has stayed wanted without pulling over.
 var _evade_s := 0.0
-## The pull-over failed. Cops use the hard chase until the heat is gone.
+## The pull-over failed, or the heat is past full. Cops use the hard chase until the heat is gone.
 var _rampage := false
+## Seconds left before heat past full becomes the hard chase. A cop hit sets it.
+var _rampage_in_s := 0.0
 
 
 ## `cop_seen` is a cop inside SIGHT_M. `cop_close` is one inside PULL_RANGE_M.
@@ -95,6 +101,13 @@ func tick(delta: float, speed: float, cop_seen: bool, cop_close: bool, limit_mps
 				heat = HEAT_RAMPAGE
 	else:
 		_evade_s = 0.0
+	if heat > HEAT_CAP and not _rampage:
+		if _rampage_in_s > 0.0:
+			_rampage_in_s = maxf(_rampage_in_s - delta, 0.0)
+		if _rampage_in_s <= 0.0:
+			_rampage = true
+	elif not _rampage:
+		_rampage_in_s = 0.0
 	if heat > 0.0 and speed <= TICKET_MPS and cop_close:
 		_stop = true
 
@@ -112,7 +125,10 @@ func cops_for(amount: float) -> int:
 ## A real hit on the player. Contact with a cop jumps the heat to 150%.
 func note_hit(amount: float, on_cop: bool) -> void:
 	if on_cop:
+		var crossed := heat <= HEAT_CAP
 		heat = maxf(heat, HEAT_RAMPAGE)
+		if crossed and not _rampage:
+			_rampage_in_s = RAMPAGE_AFTER_HIT_S
 		_crash = true
 		return
 	if amount <= NOTICE_MPS:
@@ -236,13 +252,12 @@ func mark_dropped() -> void:
 
 
 ## The fine for this much heat, in dollars. Up to a full meter it runs from FINE_MIN
-## to FINE_MAX. A full meter, or the hard chase past it, doubles that.
+## to FINE_MAX. At a full meter and past it, the fine is the full one times twice the heat.
 static func fine_for(guilt: float) -> int:
-	var t := clampf(guilt, 0.0, 1.0)
-	var amount := clampi(roundi(lerpf(float(FINE_MIN), float(FINE_MAX), t)), FINE_MIN, FINE_MAX)
 	if guilt >= 1.0:
-		amount *= 2
-	return amount
+		return roundi(float(FINE_MAX) * guilt * 2.0)
+	var t := clampf(guilt, 0.0, 1.0)
+	return clampi(roundi(lerpf(float(FINE_MIN), float(FINE_MAX), t)), FINE_MIN, FINE_MAX)
 
 
 ## Empties the pull-over, clears the heat, and starts the grace.
@@ -280,6 +295,7 @@ func _clear_want() -> void:
 	_top_mps = 0.0
 	_evade_s = 0.0
 	_rampage = false
+	_rampage_in_s = 0.0
 
 
 func _claim(out: Array[int], used: Dictionary, order: Array[int], duty: int, count: int) -> void:
