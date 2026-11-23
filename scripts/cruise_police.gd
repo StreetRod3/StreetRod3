@@ -260,14 +260,15 @@ static func fine_for(guilt: float) -> int:
 	return clampi(roundi(lerpf(float(FINE_MIN), float(FINE_MAX), t)), FINE_MIN, FINE_MAX)
 
 
-## Empties the pull-over, clears the heat, and starts the grace.
+## Empties the pull-over, clears the heat, and starts the grace. Short of the fine,
+## nothing is paid and `broke` is the jail.
 func take_stop(money: int) -> Dictionary:
 	if not _stop:
 		return {}
 	_stop = false
 	var amount := fine_for(heat)
-	var broke := money <= 0
-	var paid := 0 if broke else mini(money, amount)
+	var broke := money < amount
+	var paid := 0 if broke else amount
 	var top := _top_mps
 	var crashed := _crash
 	heat = 0.0

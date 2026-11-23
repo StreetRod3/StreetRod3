@@ -121,15 +121,16 @@ func _test_pull_over() -> void:
 	police.note_hit(0.0, true)
 	police.tick(0.05, 0.5, true, true)
 	var broke: Dictionary = police.take_stop(0)
-	assert(bool(broke["broke"]), "No cash is a tow")
-	assert(int(broke["paid"]) == 0, "A tow takes nothing")
+	assert(bool(broke["broke"]), "No cash is jail")
+	assert(int(broke["paid"]) == 0, "Jail takes nothing")
 	assert(int(broke["amount"]) == 300, "A cop hit at 150% heat is a $300 fine")
 
 	police.note_hit(3.0, false)
 	police.tick(0.05, 0.5, true, true)
 	var short: Dictionary = police.take_stop(20)
-	assert(int(short["paid"]) == 20, "A short wallet pays what it has")
-	assert(not bool(short["broke"]), "Some cash is not a tow")
+	assert(int(short["amount"]) > 20, "The fine is more than the cash on hand")
+	assert(int(short["paid"]) == 0, "A short wallet pays nothing")
+	assert(bool(short["broke"]), "Short of the fine is jail")
 
 
 func _test_scenes() -> void:

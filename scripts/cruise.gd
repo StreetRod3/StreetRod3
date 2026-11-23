@@ -304,7 +304,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _wrecked:
 				_leave_after_wreck()
 			else:
-				_leave_after_tow()
+				_open_jail()
 		return
 	if _roaming or _finished or not event is InputEventKey:
 		return
@@ -971,7 +971,7 @@ func _poll_police() -> void:
 	if traffic.has_method(&"halt_police"):
 		traffic.call(&"halt_police", true)
 	if bool(stop["broke"]):
-		_begin_tow()
+		_begin_jail()
 		return
 	_cite_fine = int(stop["amount"])
 	_cite_speed = float(stop["speed"])
@@ -1062,7 +1062,7 @@ func _show_cite_hint() -> void:
 	_cite_hint = label
 
 
-func _begin_tow() -> void:
+func _begin_jail() -> void:
 	_towed = true
 	_roam_done = true
 	if _roam_car != null:
@@ -1072,13 +1072,18 @@ func _begin_tow() -> void:
 		if engine != null:
 			engine.stop()
 	GameState.set_music_dimmed(false)
-	_screen_message("You can't pay the fine. The car goes back to the garage.", "TowLabel")
+	_open_jail()
 
 
-func _leave_after_tow() -> void:
-	GameState.drive_into_garage = true
-	GameState.current_scene_path = GameState.SCENE_GARAGE
-	get_tree().change_scene_to_file(GameState.SCENE_GARAGE)
+func _open_jail() -> void:
+	if GameState.jailed:
+		return
+	GameState.jailed = true
+	GameState.roam_from_poi = ""
+	GameState.cruise_from_poi = ""
+	GameState.cruise_to_poi = ""
+	GameState.cruise_scene = ""
+	get_tree().change_scene_to_file(GameState.SCENE_DRIVE_IN)
 
 
 func _screen_message(text: String, node_name: String) -> void:
@@ -2400,7 +2405,8 @@ func _build_blocks(track: Dictionary) -> void:
 	_flush_batches()
 
 
-## The lot faces the street to its north. One car waits on the apron.
+## Across the drive-in's road, on the south side. The front faces that road, and the
+## lot in front runs out to the curb.
 func _build_police_station(block: Dictionary) -> void:
 	var wide := float(block["w"])
 	var deep := float(block["d"])
@@ -2418,12 +2424,34 @@ func _build_police_station(block: Dictionary) -> void:
 	_add_box(root, Vector3(wide, 0.7, 0.16), Vector3(0.0, tall - 0.55, deep * 0.5 + 0.02), blue, 0.45)
 	_add_facade_label(root, "POLICE", Vector3(0.0, tall - 0.55, deep * 0.5 + 0.16), 2, 64, 0.012, Color(0.95, 0.93, 0.86), blue.darkened(0.4))
 	_add_box(root, Vector3(4.2, 3.1, 0.12), Vector3(-3.4, 1.7, deep * 0.5 + 0.04), Color(0.2, 0.24, 0.3), 0.55)
-	_add_box(root, Vector3(3.6, 2.2, 0.08), Vector3(3.2, 1.7, deep * 0.5 + 0.04), Color(0.55, 0.7, 0.82), 0.12, 0.05)
+	_police_window(root, wide, deep, 2, 3.2, 1.7, 3.6, 2.2)
 	_add_box(root, Vector3(1.4, 1.4, 0.08), Vector3(0.0, 1.15, deep * 0.5 + 0.06), Color(0.16, 0.18, 0.22), 0.5)
+	for face: int in [0, 1]:
+		for along: float in [-deep * 0.22, deep * 0.22]:
+			_police_window(root, wide, deep, face, along, 1.85, 1.35, 1.65)
+	for along: float in [-wide * 0.28, 0.0, wide * 0.28]:
+		_police_window(root, wide, deep, 3, along, 1.85, 1.45, 1.65)
 	var lamp := Color(0.25, 0.45, 1.0)
 	_add_box(root, Vector3(0.35, 0.35, 0.35), Vector3(0.0, tall + 1.15, 0.0), lamp, 0.3, 0.0, lamp, 1.4)
 	_add_box(root, Vector3(0.12, 0.85, 0.12), Vector3(0.0, tall + 0.58, 0.0), Color(0.15, 0.16, 0.18), 0.4)
-	_add_apron(root, Vector3(wide + 2.0, 0.06, 8.0), Vector3(0.0, 0.03, deep * 0.5 + 4.0), Color(0.45, 0.45, 0.43), 0.94)
+	var face_z := deep * 0.5
+	var to_curb := _nearest_curb(Vector2(root.position.x, root.position.z + face_z + 0.4))
+	var apron_d := clampf(to_curb + 0.4, 2.4, 8.0)
+	_add_apron(root, Vector3(wide + 2.0, 0.06, apron_d), Vector3(0.0, 0.03, face_z + apron_d * 0.5), Color(0.45, 0.45, 0.43), 0.94)
+
+
+## Glass with a frame and jail bars. `face` is 0 +X, 1 -X, 2 +Z, 3 -Z.
+func _police_window(root: Node3D, wide: float, deep: float, face: int, along: float, y: float, win_w: float, win_h: float) -> void:
+	var frame := Color(0.16, 0.17, 0.19)
+	var glass := Color(0.55, 0.7, 0.82)
+	var bar := Color(0.2, 0.21, 0.24)
+	_add_box(root, _face_size(face, win_w + 0.14, win_h + 0.14, 0.06), _face_pos(wide, deep, face, along, y, 0.02), frame, 0.4, 0.35)
+	_add_box(root, _face_size(face, win_w, win_h, 0.04), _face_pos(wide, deep, face, along, y, 0.05), glass, 0.12, 0.05)
+	var count := maxi(int(floor(win_w / 0.26)), 4)
+	for i in count:
+		var bx := -win_w * 0.5 + win_w * (float(i) + 0.5) / float(count)
+		_add_box(root, _face_size(face, 0.04, win_h - 0.08, 0.03), _face_pos(wide, deep, face, along + bx, y, 0.1), bar, 0.32, 0.8)
+	_add_box(root, _face_size(face, win_w - 0.06, 0.04, 0.03), _face_pos(wide, deep, face, along, y, 0.1), bar, 0.32, 0.8)
 
 
 ## A scenery box dressed as a building. One entrance on the nearest street, two on some lots.
