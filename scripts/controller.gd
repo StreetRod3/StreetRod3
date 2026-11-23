@@ -17,6 +17,20 @@ const STEER_LEFT := "steer_left"
 const STEER_RIGHT := "steer_right"
 const UP := "up"
 const DOWN := "down"
+const LOOK_LEFT := "look_left"
+const LOOK_RIGHT := "look_right"
+const LOOK_LEFT_WIDE := "look_left_wide"
+const LOOK_RIGHT_WIDE := "look_right_wide"
+## Held with a look, this asks for the wide turn instead of the 80° one.
+const LOOK_FAR := "look_far"
+const CAMERA_FAR := "camera_far"
+const CAMERA_CLOSE := "camera_close"
+const CAMERA_COCKPIT := "camera_cockpit"
+const CAMERA_BUMPER := "camera_bumper"
+const CAMERA_VIEWS: Array[String] = [CAMERA_FAR, CAMERA_CLOSE, CAMERA_COCKPIT, CAMERA_BUMPER]
+## How far the head turns, in radians. The wide look is the one past the shoulder.
+const QUARTER_YAW := deg_to_rad(80.0)
+const WIDE_YAW := deg_to_rad(165.0)
 const REVERSE := "reverse"
 const GEARS: Array[String] = ["1", "2", "3", "4", "5", "6", "7"]
 
@@ -115,7 +129,15 @@ static func action_label(action: String) -> String:
 		HANDBRAKE:
 			return "Hand brake"
 		CAMERA:
-			return "Camera"
+			return "Next camera"
+		CAMERA_FAR:
+			return "Far behind"
+		CAMERA_CLOSE:
+			return "Close behind"
+		CAMERA_COCKPIT:
+			return "Inside"
+		CAMERA_BUMPER:
+			return "Front bumper"
 		PAUSE:
 			return "Pause"
 		STEER_LEFT:
@@ -126,6 +148,16 @@ static func action_label(action: String) -> String:
 			return "Shift up"
 		DOWN:
 			return "Shift down"
+		LOOK_LEFT:
+			return "Look left"
+		LOOK_RIGHT:
+			return "Look right"
+		LOOK_LEFT_WIDE:
+			return "Look far left"
+		LOOK_RIGHT_WIDE:
+			return "Look far right"
+		LOOK_FAR:
+			return "Look further"
 		REVERSE:
 			return "Reverse"
 		"1":
@@ -276,7 +308,7 @@ static func pad_stick(x_axis: JoyAxis, y_axis: JoyAxis) -> Vector2:
 
 ## The jobs on the controls page, in its order.
 static func control_actions() -> Array[String]:
-	return [THROTTLE, BRAKE, STEER_LEFT, STEER_RIGHT, HANDBRAKE, UP, DOWN, CAMERA, PAUSE]
+	return [THROTTLE, BRAKE, STEER_LEFT, STEER_RIGHT, HANDBRAKE, UP, DOWN, LOOK_LEFT, LOOK_RIGHT, LOOK_LEFT_WIDE, LOOK_RIGHT_WIDE, LOOK_FAR, CAMERA_FAR, CAMERA_CLOSE, CAMERA_COCKPIT, CAMERA_BUMPER, CAMERA, PAUSE]
 
 
 static func control_label(action: String) -> String:
@@ -297,11 +329,29 @@ static func default_keys(action: String) -> Array:
 		HANDBRAKE:
 			return [KEY_SPACE, NO_KEY]
 		UP:
-			return [KEY_E, NO_KEY]
+			return [KEY_PERIOD, NO_KEY]
 		DOWN:
+			return [KEY_COMMA, NO_KEY]
+		LOOK_LEFT:
 			return [KEY_Q, NO_KEY]
-		CAMERA:
+		LOOK_RIGHT:
+			return [KEY_E, NO_KEY]
+		LOOK_LEFT_WIDE:
+			return [KEY_Z, NO_KEY]
+		LOOK_RIGHT_WIDE:
 			return [KEY_C, NO_KEY]
+		LOOK_FAR:
+			return [NO_KEY, NO_KEY]
+		CAMERA_FAR:
+			return [KEY_F1, NO_KEY]
+		CAMERA_CLOSE:
+			return [KEY_F2, NO_KEY]
+		CAMERA_COCKPIT:
+			return [KEY_F3, NO_KEY]
+		CAMERA_BUMPER:
+			return [KEY_F4, NO_KEY]
+		CAMERA:
+			return [NO_KEY, NO_KEY]
 	return [NO_KEY, NO_KEY]
 
 
@@ -325,6 +375,12 @@ static func default_pad(action: String) -> Array:
 			return [{"button": int(JOY_BUTTON_RIGHT_SHOULDER)}, {}]
 		DOWN:
 			return [{"button": int(JOY_BUTTON_LEFT_SHOULDER)}, {}]
+		LOOK_LEFT:
+			return [{"axis": int(JOY_AXIS_RIGHT_X), "dir": -1}, {}]
+		LOOK_RIGHT:
+			return [{"axis": int(JOY_AXIS_RIGHT_X), "dir": 1}, {}]
+		LOOK_FAR:
+			return [{"button": int(JOY_BUTTON_RIGHT_STICK)}, {}]
 		CAMERA:
 			return [{"button": int(JOY_BUTTON_Y)}, {}]
 		PAUSE:
@@ -381,6 +437,73 @@ static func pad_button_has_job(button: JoyButton) -> bool:
 			if entry is Dictionary and int(entry.get("button", -1)) == int(button):
 				return true
 	return false
+
+
+## How far the head is asked to turn, in radians. Negative looks left. A stick turns the head
+## only when it is pushed more that way than along itself, so the right stick can still be gas
+## and brake. Holding look further stretches that stick from 80° to the wide look.
+static func head_yaw() -> float:
+	var reach := WIDE_YAW if action_down(LOOK_FAR) else QUARTER_YAW
+	var left := maxf(_look_amount(LOOK_LEFT) * reach, _look_amount(LOOK_LEFT_WIDE) * WIDE_YAW)
+	var right := maxf(_look_amount(LOOK_RIGHT) * reach, _look_amount(LOOK_RIGHT_WIDE) * WIDE_YAW)
+	return clampf(right - left, -WIDE_YAW, WIDE_YAW)
+
+
+## The driving view a key asked for between steps, or the one still held. Far is 0. -1 is none.
+static func camera_view(tapped: int) -> int:
+	if tapped >= 0:
+		return tapped
+	for i: int in CAMERA_VIEWS.size():
+		if action_down(CAMERA_VIEWS[i]):
+			return i
+	return -1
+
+
+static func camera_view_for_key(code: int) -> int:
+	for i: int in CAMERA_VIEWS.size():
+		if keys_for(CAMERA_VIEWS[i]).has(code):
+			return i
+	return -1
+
+
+static func _look_amount(action: String) -> float:
+	for code: Variant in keys_for(action):
+		if int(code) != NO_KEY and Input.is_key_pressed(int(code) as Key):
+			return 1.0
+	var most := 0.0
+	for device: int in pads():
+		for entry: Variant in pad_for(action):
+			most = maxf(most, _look_pad_amount(device, entry))
+	return most
+
+
+static func _look_pad_amount(device: int, entry: Variant) -> float:
+	if not entry is Dictionary or entry.is_empty():
+		return 0.0
+	if entry.has("button"):
+		return _pad_amount(device, entry)
+	var axis := int(entry.get("axis", 0))
+	var along := _other_stick_axis(axis)
+	if along >= 0:
+		var across := absf(Input.get_joy_axis(device, axis as JoyAxis))
+		var other := absf(Input.get_joy_axis(device, along as JoyAxis))
+		if other >= across:
+			return 0.0
+	return _pad_amount(device, entry)
+
+
+## The other axis of a stick, or -1 when `axis` is not one.
+static func _other_stick_axis(axis: int) -> int:
+	match axis:
+		JOY_AXIS_LEFT_X:
+			return JOY_AXIS_LEFT_Y
+		JOY_AXIS_LEFT_Y:
+			return JOY_AXIS_LEFT_X
+		JOY_AXIS_RIGHT_X:
+			return JOY_AXIS_RIGHT_Y
+		JOY_AXIS_RIGHT_Y:
+			return JOY_AXIS_RIGHT_X
+	return -1
 
 
 static func _pad_amount(device: int, entry: Variant) -> float:
@@ -491,9 +614,12 @@ static func driving_hint(automatic: bool) -> String:
 
 static func _key_hint(automatic: bool) -> String:
 	var shifting := "drive, reverse" if automatic else "shift, reverse"
-	return "%s: throttle · %s: brake · %s: hand brake · %s, %s: steer · %s, %s: %s · %s: camera · %s+%s: burnout" % [
+	return "%s: throttle · %s: brake · %s: hand brake · %s, %s: steer · %s, %s: %s · %s, %s: look · %s, %s: look far · %s %s %s %s: camera · %s+%s: burnout" % [
 		_keys_text(THROTTLE), _keys_text(BRAKE), _keys_text(HANDBRAKE), _keys_text(STEER_LEFT), _keys_text(STEER_RIGHT),
-		_keys_text(DOWN), _keys_text(UP), shifting, _keys_text(CAMERA), _first_key_text(THROTTLE), _first_key_text(BRAKE),
+		_keys_text(DOWN), _keys_text(UP), shifting, _keys_text(LOOK_LEFT), _keys_text(LOOK_RIGHT),
+		_keys_text(LOOK_LEFT_WIDE), _keys_text(LOOK_RIGHT_WIDE),
+		_keys_text(CAMERA_FAR), _keys_text(CAMERA_CLOSE), _keys_text(CAMERA_COCKPIT), _keys_text(CAMERA_BUMPER),
+		_first_key_text(THROTTLE), _first_key_text(BRAKE),
 	]
 
 
@@ -515,18 +641,28 @@ static func _pad_hint() -> String:
 	var steering := "%s, %s" % [pad_entry_name(left), pad_entry_name(right)]
 	if left.get("axis", -1) == right.get("axis", -2) and left.get("dir", 0) == -int(right.get("dir", 0)):
 		steering = "Stick" if int(left.get("axis", -1)) == JOY_AXIS_LEFT_X else pad_entry_name(left).trim_suffix(" left")
-	return "%s: steer · %s: gas · %s: brake · %s: hand brake · %s/%s: shift, reverse · %s: camera · %s: pause · %s+%s: burnout" % [
+	return "%s: steer · %s: gas · %s: brake · %s: hand brake · %s/%s: shift, reverse · %s: look · %s: look far · %s: camera · %s: pause · %s+%s: burnout" % [
 		steering,
 		pad_entry_name(_first_pad_entry(THROTTLE)),
 		pad_entry_name(_first_pad_entry(BRAKE)),
 		pad_entry_name(_first_pad_entry(HANDBRAKE)),
 		pad_entry_name(_first_pad_entry(DOWN)),
 		pad_entry_name(_first_pad_entry(UP)),
+		_look_pad_text(),
+		pad_entry_name(_first_pad_entry(LOOK_FAR)),
 		pad_entry_name(_first_pad_entry(CAMERA)),
 		pad_entry_name(_first_pad_entry(PAUSE)),
 		pad_entry_name(_first_pad_entry(THROTTLE)),
 		pad_entry_name(_first_pad_entry(BRAKE)),
 	]
+
+
+static func _look_pad_text() -> String:
+	var left := _first_pad_entry(LOOK_LEFT)
+	var right := _first_pad_entry(LOOK_RIGHT)
+	if int(left.get("axis", -1)) == int(right.get("axis", -2)) and int(left.get("axis", -1)) == JOY_AXIS_RIGHT_X and int(left.get("dir", 0)) == -int(right.get("dir", 0)):
+		return "Right stick sideways"
+	return "%s, %s" % [pad_entry_name(left), pad_entry_name(right)]
 
 
 static func _first_pad_entry(action: String) -> Dictionary:

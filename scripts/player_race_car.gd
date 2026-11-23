@@ -17,6 +17,7 @@ const _CarBodyMotion := preload("res://scripts/car_body_motion.gd")
 const _WallScrape := preload("res://scripts/wall_scrape.gd")
 const _CarDamage := preload("res://scripts/car_damage.gd")
 const _ChaseCamera := preload("res://scripts/chase_camera.gd")
+const _HeadLook := preload("res://scripts/head_look.gd")
 const _AirTime := preload("res://scripts/air_time.gd")
 const _MouseDrive := preload("res://scripts/mouse_drive.gd")
 const _CarFile := preload("res://scripts/car_file.gd")
@@ -146,13 +147,15 @@ var _trend_from: float = 0.0
 var _steep_climb: float = -1.0
 var _steep_slide: float = 0.0
 var _steep_spin: float = 0.0
-## The gear the H-pattern shifter last asked for. Q and E can move off it until the next move.
+## The gear the H-pattern shifter last asked for. The shift keys can move off it until the next move.
 var _shifter_gear: int = _Controller.POSITION_NONE
 var _rumble := _Rumble.new()
 var _camera_held: bool = false
 var _tapped_up: bool = false
 var _tapped_down: bool = false
 var _tapped_camera: bool = false
+## A view key that went down between steps. Far is 0. -1 is none.
+var _tapped_view: int = -1
 var _shifter_up_held: bool = false
 var _shifter_down_held: bool = false
 ## How far into a burnout the car is, 0 to 1.
@@ -181,6 +184,7 @@ var _arcade_active: bool = false
 var _body_motion: _CarBodyMotion = _CarBodyMotion.new()
 var _cam_rest := Transform3D.IDENTITY
 var _chase_cam: _ChaseCamera = _ChaseCamera.new()
+var _head_look: _HeadLook = _HeadLook.new()
 var _parking := false
 ## Out of the race where it is, with nobody driving: wrecked, engine blown, or on a flat.
 var _halting := false
@@ -284,6 +288,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	_tapped_up = _tapped_up or _Controller.keys_for(_Controller.UP).has(code)
 	_tapped_down = _tapped_down or _Controller.keys_for(_Controller.DOWN).has(code)
 	_tapped_camera = _tapped_camera or _Controller.keys_for(_Controller.CAMERA).has(code)
+	var view := _Controller.camera_view_for_key(code)
+	if view >= 0:
+		_tapped_view = view
 
 
 func _camera_slot_name() -> String:
@@ -337,11 +344,12 @@ func _camera_pose(pos: Vector3, pitch_deg: float) -> Transform3D:
 func _place_camera(delta: float) -> void:
 	if _cam == null:
 		return
+	var rest := _head_look.apply(_cam_rest)
 	if _cam_mode == CAM_COCKPIT or _cam_mode == CAM_BUMPER:
-		_cam.global_transform = global_transform * _body_motion.lean_in_car_space() * _cam_rest
+		_cam.global_transform = global_transform * _body_motion.lean_in_car_space() * rest
 		return
 	var planar := _dynamics.cg_velocity if _parking else planar_velocity()
-	_chase_cam.place(_cam, self, _car_center, _cam_rest, planar, delta)
+	_chase_cam.place(_cam, self, _car_center, rest, planar, delta)
 
 
 func get_forward_speed() -> float:
@@ -828,6 +836,7 @@ func _halt_step(delta: float) -> void:
 func _physics_process(delta: float) -> void:
 	_damage.tick(delta)
 	_poll_camera()
+	_head_look.update(delta)
 	if _cited:
 		_halt_step(delta)
 		return
@@ -1237,12 +1246,22 @@ func _update_engine_sound(throttle: bool) -> void:
 
 func _poll_camera() -> void:
 	var held := _Controller.action_down(_Controller.CAMERA)
-	if (held and not _camera_held) or _tapped_camera:
-		_cam_mode = (_cam_mode + 1) % 4
-		GameState.driving_camera = _cam_mode
-		_apply_camera_mode()
+	var view := _Controller.camera_view(_tapped_view)
+	_tapped_view = -1
+	if view >= 0:
+		_set_camera_mode(view)
+	elif (held and not _camera_held) or _tapped_camera:
+		_set_camera_mode((_cam_mode + 1) % 4)
 	_camera_held = held
 	_tapped_camera = false
+
+
+func _set_camera_mode(mode: int) -> void:
+	if mode == _cam_mode:
+		return
+	_cam_mode = mode
+	GameState.driving_camera = _cam_mode
+	_apply_camera_mode()
 
 
 func _poll_shifter() -> void:

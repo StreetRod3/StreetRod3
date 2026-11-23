@@ -11,11 +11,16 @@ Every control in the game: keyboard, mouse, gamepad, and steering wheel. They ca
 | Throttle | W or Up |
 | Brake | S or Down |
 | Steer | A / D or Left / Right |
-| Shift up / down | E / Q |
-| Neutral | Q from first gear (or drive); the engine revs free on the gas |
-| Reverse | Q from neutral with the car stopped |
+| Shift up / down | . / , |
+| Neutral | , from first gear (or drive); the engine revs free on the gas |
+| Reverse | , from neutral with the car stopped |
+| Look left / right | Q / E, held, about 80° |
+| Look far left / right | Z / C, held, about 165° |
 | Hand brake | Space |
-| Camera | C |
+| Far behind | F1 |
+| Close behind | F2 |
+| Inside | F3 |
+| Front bumper | F4 |
 | Pause | Esc |
 | Burnout | W and S with the car stopped in gear, steering to swing the back round |
 
@@ -108,12 +113,14 @@ Xbox, PlayStation, Nintendo, and most other common gamepads work with no setup. 
 | Shift up / down | RB / LB | R1 / L1 | R / L |
 | Neutral | LB from first gear (or drive) | L1, the same way | L, the same way |
 | Reverse | LB from neutral with the car stopped | L1, the same way | L, the same way |
+| Look left / right | Right stick left / right | The same | The same |
+| Look further | Right stick click, with the stick sideways | R3, the same | RS, the same |
 | Hand brake | X | Square | Y |
-| Camera | Y | Triangle | X |
+| Next camera | Y | Triangle | X |
 | Pause | Start | Options | Plus |
 | Burnout | Gas and brake with the car stopped in gear | The same | The same |
 
-The triggers and sticks are gradual. On a Nintendo pad ZL and ZR are only on or off, so use the right stick to ease onto the gas. A burnout works with a trigger on one pedal and the stick on the other, such as ZL held and the right stick pushed up.
+The triggers and sticks are gradual. On a Nintendo pad ZL and ZR are only on or off, so use the right stick to ease onto the gas. A burnout works with a trigger on one pedal and the stick on the other, such as ZL held and the right stick pushed up. Looking uses the right stick sideways: a push that is more up or down than sideways stays gas and brake and does not turn the head. Clicking the right stick while it is sideways looks about 165° instead of 80°. The view eases back to straight ahead when the stick or the look keys are let go. Y steps to the next camera; F1 to F4 pick one directly.
 
 ### Menus and the garage
 
