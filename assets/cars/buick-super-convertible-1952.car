@@ -1,0 +1,78 @@
+{
+  "id": "buick-super-convertible-1952",
+  "name": "Buick Super Convertible 1952",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/buick-super-convertible-1952.glb",
+    "position": [0.0, 0.129, 0.0],
+    "height": 1.3258,
+    "ground_clearance": 0.129,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.842, 0.335, 1.729],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.842, 0.335, 1.729],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.842, 0.335, -1.357],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.842, 0.335, -1.357],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "chevy-235",
+    "transmission": "gb_man3",
+    "wheels": "wheel-std"
+  },
+  "driver": {
+    "position": [0.37, 1.26, -0.05]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.62, -10.5],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.89, -6.2],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.37, 1.31, -0.05],
+      "pitch": -1.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.5, 2.73],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 34.0},
+    "rear": {"node": "bumper_rear", "mass": 28.0}
+  },
+  "chassis": {
+    "mass": 1803,
+    "wheelbase": 3.086,
+    "cg_height": 0.56,
+    "front_axle_fraction": 0.54,
+    "max_steer_deg": 30
+  }
+}

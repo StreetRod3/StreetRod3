@@ -326,6 +326,53 @@ CARS = {
         # One dial in front of the driver, the speedometer with the gas gauge in it.
         'dials': ['speedo_fuel'],
     },
+    # 1952 Buick Super convertible (Model 56C): 206.2 in long, 80.0 in wide on a 121.5 in
+    # wheelbase (Concept Carz, 1952 Series 50; Buick's 1952 facts book for the width).
+    # The model's top is folded down under its boot, so the height (given top up) is
+    # scaled as the width.
+    'buick-1952-convertible': {
+        'size_in': (206.2, 80.0, None),
+        'wheelbase_in': 121.5,
+        'paint': {'metallic_paint'},
+        'bumpers': {
+            # The bar, its ends wrapping back to the wheel openings, the guards with their
+            # bullets, the plate on the right and the two arms behind the bar (the model
+            # gives them its pillow material); the grille's teeth stay.
+            'bumper_front': [((-1.1, -2.6, 0.25), (1.1, -2.1, 0.58)),
+                             ((0.35, -2.05, 0.30), (0.55, -1.9, 0.48)),
+                             ((-0.55, -2.05, 0.30), (-0.35, -1.9, 0.48))],
+            # The two halves, the guards, the bars between them and the plate between
+            # the guards; the tail lamps over the bar's ends stay.
+            'bumper_rear': [((-1.1, 2.0, 0.25), (1.1, 2.6, 0.58))],
+        },
+        'steer': ('bakelite', (0.378, -0.40, 1.0)),
+        # One dial in front of the driver, the speedometer with the gas gauge in it.
+        'dials': ['speedo_fuel'],
+    },
+    # 1955 Packard Caribbean convertible: 216.5 in long, 77.8 in wide on a 127 in
+    # wheelbase (Wikipedia, Packard Caribbean). Its top is down, so the height (62.9 in
+    # top up) is scaled as the width.
+    'packard-1955-caribbean': {
+        'size_in': (216.5, 77.8, None),
+        'wheelbase_in': 127.0,
+        # The blue; the white upper body and the trunk stay white.
+        'paint': {'blue_metallic'},
+        'tire': 'tyre tread.002',
+        'dial_face': 'gauge',
+        'bumpers': {
+            # The bar with its two bullet guards, the bars between them, the plate under
+            # it and the bars behind it, as the Clipper's.
+            'bumper_front': [((-1.1, -2.9, 0.25), (1.1, -2.296, 0.63))],
+            # The bar with the exhaust ports in its ends, the guards and the plate.
+            'bumper_rear': [((-1.1, 2.40, 0.3), (1.1, 2.85, 0.70))],
+        },
+        # The rim is in segments, blue and white.
+        'steer': ('box', ((0.23, -0.665, 0.80), (0.70, -0.48, 1.235))),
+        'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
+        # The Clipper's opening under the grille, closed the same way.
+        'fill': [('paint_white_real', ((-0.68, -2.54, 0.34), (0.68, -2.54, 0.34), (0.68, -2.54, 0.56),
+                                       (-0.68, -2.54, 0.56)), (0.0, -1.0, 0.0))],
+    },
 }
 
 TIRE = 'tyre'

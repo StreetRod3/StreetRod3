@@ -32,7 +32,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | File | Pack name | What it is | Notes |
 | --- | --- | --- | --- |
 | `buick-1950.blend` | 50buick | 1950 Buick Special four-door sedan (three portholes, notchback) | Black; an outside sun visor over the windshield |
-| `buick-1952-convertible.blend` | 52buick_conv | 1952 Buick convertible | |
+| `buick-1952-convertible.blend` | 52buick_conv | 1952 Buick Super convertible | Dark blue; the top folded down under its boot; the 1952 coupe's dash |
 | `buick-1952-coupe.blend` | 52buick_coupe | 1952 Buick Special two-door Deluxe sedan (model 48D) | Short for the real car: 192 in long on a 115 in wheelbase in the model |
 | `buick-1954.blend` | 54buick | 1954 Buick Special four-door sedan | Modeled 250 in long on a 150 in wheelbase, far over the real car; a strip speedometer; a hula girl on the dash |
 | `buick-1954-wagon.blend` | 54buickwagon | 1954 Buick Special Estate Wagon | The 1954 sedan's front end and dash; modeled as oversize as the sedan |
@@ -41,13 +41,13 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | `ford-1953-panel.blend` | 53fordpanel | Ford F-100 panel van | The wraparound windshield and grille are the 1956 F-100's |
 | `hudson-1951.blend` | 51hudson | 1951 Hudson Hornet club coupe | |
 | `jeep-1954-usps.blend` | 54 usps jeep | Jeep mail truck | Looks like the later DJ-5; a delivery truck, not a car to buy |
-| `packard-1955-caribbean.blend` | 55packard caribbean | 1955 Packard Caribbean convertible | |
+| `packard-1955-caribbean.blend` | 55packard caribbean | 1955 Packard Caribbean convertible | Blue and white; the top folded down under its boot; the Packards' dash |
 | `packard-1955-clipper.blend` | 55packardclipper | 1955 Packard Clipper Custom Constellation hardtop | Red with a cream roof and rear sides |
 | `packard-1955-patrician.blend` | 55packard patrician | 1955 Packard Patrician four-door sedan | Maroon and cream |
 
 ## Converting a car
 
-`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`), `packard-1955-clipper` (`packard-clipper-1955`), `packard-1955-patrician` (`packard-patrician-1955`), `ford-1950-wagon` (`ford-country-squire-1950`), `buick-1954` (`buick-special-1954`), `buick-1950` (`buick-special-1950`) and `buick-1954-wagon` (`buick-estate-wagon-1954`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
+`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`), `packard-1955-clipper` (`packard-clipper-1955`), `packard-1955-patrician` (`packard-patrician-1955`), `ford-1950-wagon` (`ford-country-squire-1950`), `buick-1954` (`buick-special-1954`), `buick-1950` (`buick-special-1950`), `buick-1954-wagon` (`buick-estate-wagon-1954`), `buick-1952-convertible` (`buick-super-convertible-1952`) and `packard-1955-caribbean` (`packard-caribbean-1955`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
 
 ## Changes from the download
 
@@ -85,6 +85,8 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | 1954 Buick Special four-door (Series 40) | 206.3 in long, 76.8 in wide, 60.5 in high, 122 in wheelbase | Real length, width, height and wheelbase; the model's 150 in wheelbase shortened by 0.813, its overhangs by 0.844 |
 | 1954 Buick Special Estate Wagon | Taken as the sedan's 206.3 in long, 76.8 in wide, 122 in wheelbase (the AMA sheet gives the sedan only); height not given | The sedan's length, width and wheelbase; the height scaled as the width (0.910) |
 | 1950 Buick Special four-door (Series 40) | 204.0 in long, 79.4 in wide, 63.9 in high, 121.5 in wheelbase | Real length, width, height and wheelbase; the model's 123.6 in wheelbase shortened by 0.982, its overhangs by 0.985 |
+| 1952 Buick Super convertible (56C) | 206.2 in long, 80.0 in wide, 121.5 in wheelbase | Real length, width and wheelbase; the model's 120.9 in wheelbase stretched by 1.003, its overhangs by 1.050; the height (the real one is top up, the model's top is down) scaled as the width (0.979) |
+| 1955 Packard Caribbean convertible | 216.5 in long, 77.8 in wide, 62.9 in high top up, 127 in wheelbase | Real length, width and wheelbase; the model's 125.5 in wheelbase stretched by 1.012, its overhangs shortened by 0.934; the height (top down) scaled as the width (0.964) |
 
 - Conceptcarz, Hudson Hornet Series 7A club coupe: https://www.conceptcarz.com/w9330/hudson-hornet-series-7a.aspx
 - Wikipedia, Hudson Hornet: https://en.wikipedia.org/wiki/Hudson_Hornet
@@ -96,3 +98,6 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 - Wikipedia, Packard Patrician (1955-56): https://en.wikipedia.org/wiki/Packard_Patrician
 - carsales (Redbook), 1950 Buick Special: https://www.carsales.com.au/research/buick/special/1950/no-badge
 - AMA specifications, 1954 Buick (January 1954): https://autohistorypreservationsociety.org/wp-content/uploads/1954-BUICK-AMA-Specs-Special-Century-Super-Roadmaster-Pg-1-25.pdf
+- Concept Carz, 1952 Buick Series 50 Super (length, wheelbase, weight): https://www.conceptcarz.com/s14026/concepts.aspx
+- Hometown Buick, 1952 Buick specifications (the Super's 80.0 in width): https://www.hometownbuick.com/1952-buick/1952 Buick Specifications
+- Wikipedia, Packard Caribbean: https://en.wikipedia.org/wiki/Packard_Caribbean

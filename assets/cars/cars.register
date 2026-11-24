@@ -170,6 +170,24 @@
       "hp": 230.0,
       "color": [0.82, 0.68, 0.5, 1.0],
       "car_file": "res://assets/cars/buick-estate-wagon-1954.car"
+    },
+    {
+      "id": "buick-super-convertible-1952",
+      "name": "1952 Buick Super Convertible",
+      "price": 1100,
+      "vmax": 170.0,
+      "hp": 155.0,
+      "color": [0.12, 0.17, 0.24, 1.0],
+      "car_file": "res://assets/cars/buick-super-convertible-1952.car"
+    },
+    {
+      "id": "packard-caribbean-1955",
+      "name": "1955 Packard Caribbean",
+      "price": 1300,
+      "vmax": 195.0,
+      "hp": 230.0,
+      "color": [0.33, 0.6, 0.92, 1.0],
+      "car_file": "res://assets/cars/packard-caribbean-1955.car"
     }
   ]
 }
