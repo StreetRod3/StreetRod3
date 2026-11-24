@@ -4,9 +4,9 @@
   "make": "GM",
   "model": {
     "path": "res://assets/cars/packard-clipper-1955.glb",
-    "position": [0.0, 0.198, 0.0],
-    "height": 1.337,
-    "ground_clearance": 0.198,
+    "position": [0.0, 0.206, 0.0],
+    "height": 1.3296,
+    "ground_clearance": 0.206,
     "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
   },
   "register": "res://assets/parts/parts.register",
@@ -40,7 +40,7 @@
     "wheels": "wheel-std"
   },
   "driver": {
-    "position": [0.448, 1.16, 0.09]
+    "position": [0.448, 1.15, 0.09]
   },
   "cameras": {
     "far": {
@@ -54,7 +54,7 @@
       "fov": 70.0
     },
     "cockpit": {
-      "position": [0.448, 1.21, 0.09],
+      "position": [0.448, 1.2, 0.09],
       "pitch": -1.0,
       "fov": 72.0
     },

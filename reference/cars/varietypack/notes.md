@@ -47,19 +47,22 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 
 ## Converting a car
 
-`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`) and `packard-1955-clipper` (`packard-clipper-1955`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
+`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`) and `packard-1955-clipper` (`packard-clipper-1955`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
 
 ## Changes from the download
 
 | Change | Why |
 | --- | --- |
 | Wheels, hubcaps, brake backing plates and spring hangers left out | The game mounts its own wheels and draws its own suspension |
-| Tailpipes left out | They stuck out behind the car once the rear bumper came off (user, 2026-11-22) |
+| Tailpipes left out | They stuck out behind the car once the rear bumper came off (user, 2026-11-22; the Packard's, which run out through its bumper, 2026-11-23) |
 | Bumpers, with their guards, brackets and plates, as `bumper_front` and `bumper_rear` | So the game can strip them |
 | Plates replaced by the blank plate (`assets/cars/plate-blank.png`, from the Impala's, `tools/make_blank_plate.py`) on a material named `plate` | The pack's plates read "LIBAU"; the player is to make their own plates later (user, 2026-11-22) |
 | Buick: the rear quarters' front edge trimmed in flush with the doors just above the side strip | The pack's quarter panel reaches 6 mm forward over the door's back edge there and stands 6 mm proud of it, so it cast a shadow onto the door (user, 2026-11-22); `trim` in the converter's `CARS` table |
 | Ford: the police gear left out (the "POLICE" lettering, roof lights and siren, the spotlight and its bracket, the three antennas, the radio with its microphone cord, the screen behind the front seat); the white front doors painted with the rest | So it is a civilian 1950 Ford Custom |
 | Packard: the knobs in the middle of the dials left out | The new needles have hubs of their own |
+| Ford: the top of the dash in the middle and the gravel pan under the grille painted with the body; the headliner along the windshield's top, which the pack has in the paint, made headliner | The dash top's ribbed image came out a grey panel and the pan black (user, 2026-11-23) |
+| Packard: a cream panel added under the grille, behind the bumper | With the bumper off there was a hole into the engine bay there (user, 2026-11-23) |
+| Packard: the "Packard" and "Clipper" scripts drawn as chrome lettering cut out by their image | Their image is a mask, which as one color made a dark box each (user, 2026-11-23) |
 | Front lamps in the tail-light material made clear | The pack gives the Buick red parking lamps; the real ones were clear |
 | Gauge faces printed and needles added: the Hudson's speedometer and combination gauge (fuel works, temperature stays put), the Buick's and the Ford's speedometer with a small gas gauge, the Packard's speedometer with four small gauges (fuel works; temperature, oil and amps stay put) | The pack's gauge image is not in the download and the dials have no needles; the small dial across the dash (a clock) keeps its plain face |
 | Colors from the material settings in one palette, the paint as the mask | Most of the images the materials used are not in the download |

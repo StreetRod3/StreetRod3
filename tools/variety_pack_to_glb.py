@@ -67,7 +67,13 @@ IN = 0.0254
 ## is (its material and a point on it, or `box` and a box round the whole wheel), all in
 ## the model's frame (meters, nose -Y, Z up, driver's side +X). Optional: `tire` and
 ## `dial_face`, where the car's tire and gauge-face materials have names of their own;
-## `drop`, boxes whose parts are left out, and `drop_materials`, materials left out.
+## `drop`, boxes whose parts are left out, and `drop_materials`, materials left out;
+## `recolor`, triangles that take another material's look (those of the `from`
+## materials in the parts wholly inside `parts_in`, or with their middles inside
+## `tris_in` and, given `facing`, facing that way); `fill`, flat four-cornered panels
+## added in a material's look (material, corners, outward normal); `badges`, decal
+## materials drawn as chrome lettering cut out by their image (a mask, white where the
+## letters are), by the image's file name in textures/.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -124,8 +130,17 @@ CARS = {
     'ford-1950-police': {
         'size_in': (196.8, 72.8, 63.1),
         'wheelbase_in': 114.0,
-        # Black with white front doors as a police car; all of it is the paint here.
-        'paint': {'paint_black', 'paint_whitee'},
+        # Black with white front doors as a police car; all of it is the paint here, and so
+        # is the top of the dash in the middle (its image, a ribbed one, is in `bars`).
+        'paint': {'paint_black', 'paint_whitee', 'bars'},
+        'recolor': [
+            # The gravel pan under the grille, part of the grille's mesh in the grilles'
+            # dark material, is the body's.
+            {'from': {'grooves'}, 'to': 'paint_black', 'parts_in': ((-1.0, -2.7, 0.3), (0.85, -2.1, 0.9))},
+            # The headliner along the windshield's top, by the sun visor, is in the paint.
+            {'from': {'paint_black'}, 'to': 'seats', 'tris_in': ((-0.75, -0.68, 1.46), (0.6, -0.40, 1.60)),
+             'facing': (0.0, 0.0, -1.0)},
+        ],
         'tire': 'tyre texture bake',
         'dial_face': 'textureford',
         'bumpers': {
@@ -161,6 +176,13 @@ CARS = {
         'wheelbase_in': 122.0,
         # The red; the cream roof and rear sides stay cream.
         'paint': {'packard_red'},
+        # The bumper hides an opening under the grille, between the fenders' cream lower
+        # corners; a cream panel closes it, just behind the grille's bottom bar and the
+        # fenders' front edges.
+        'fill': [('paint_white_real', ((-0.68, -2.54, 0.34), (0.68, -2.54, 0.34), (0.68, -2.54, 0.56),
+                                       (-0.68, -2.54, 0.56)), (0.0, -1.0, 0.0))],
+        # "Packard" on the hood's front and the trunk's left, "Clipper" on its right.
+        'badges': {'platesandbadges.001': 'packardplatesandAlpha.jpg'},
         'tire': 'tyre tread.002',
         'dial_face': 'gauge.001',
         'bumpers': {
@@ -199,9 +221,10 @@ WELL_OUT = 0.05
 ## A part out there is a wheel part only if its middle is this close to the hub (m).
 HUB_CENTERED = 0.1
 ## Tailpipes: parts longer than PIPE_LONG (m) whose top is below PIPE_TOP and whose
-## back end is more than PIPE_BEHIND behind the rear axle.
+## back end is more than PIPE_BEHIND behind the rear axle (the Packard's run out through
+## its rear bumper and reach 0.48 m up).
 PIPE_LONG = 1.5
-PIPE_TOP = 0.45
+PIPE_TOP = 0.5
 PIPE_BEHIND = 0.6
 ## The length scale eases from the wheelbase's to the overhangs' over this far either
 ## side of each axle (m).
@@ -209,6 +232,8 @@ BLEND = 0.35
 ## A trimmed panel edge ends up this far inside the skin it meets (m), so where the two
 ## overlap the neighbor is drawn and they don't flicker.
 TRIM_UNDER = 0.001
+## The badges' image size (px).
+BADGE_TEX = 512
 ## Clear glass with a faint green tint, as on the Studebaker.
 GLASS_MATERIAL = {
     'name': 'glass',
@@ -518,7 +543,7 @@ def build(car, dst):
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         data = dict(np.load(npz))
         info = json.load(open(npz + '.json'))
-    pos, nrm, mat, part = data['pos'], data['nrm'], data['mat'], data['part']
+    pos, nrm, mat, part, uv = data['pos'], data['nrm'], data['mat'].copy(), data['part'], data['uv']
     names = [d['name'] for d in info]
     nparts = part.max() + 1
     plo = np.full((nparts, 3), np.inf)
@@ -564,6 +589,16 @@ def build(car, dst):
     gear = {p for lo, hi in cfg.get('drop', []) for p in range(nparts) if inside(p, lo, hi)}
     dropped = wheel_parts | pipes | gear
     keep = ~np.isin(part, list(dropped)) & ~np.isin(mat, [names.index(m) for m in cfg.get('drop_materials', ())])
+    for rc in cfg.get('recolor', []):
+        sel = np.isin(mat, [names.index(m) for m in rc['from']])
+        if 'parts_in' in rc:
+            sel &= np.isin(part, [p for p in range(nparts) if inside(p, *rc['parts_in'])])
+        if 'tris_in' in rc:
+            mid = pos.mean(1)
+            sel &= np.all((mid >= rc['tris_in'][0]) & (mid <= rc['tris_in'][1]), 1)
+        if 'facing' in rc:
+            sel &= nrm.mean(1) @ np.asarray(rc['facing'], np.float64) > 0.3
+        mat[sel] = names.index(rc['to'])
 
     for trim in cfg.get('trim', []):
         trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim)
@@ -586,6 +621,16 @@ def build(car, dst):
                     group_of[p] = g
     for p in steer_parts:
         group_of[p] = 'driving_wheel'
+    for fill_mat, corners, normal in cfg.get('fill', []):
+        q = np.asarray(corners, np.float64)
+        pos = np.concatenate([pos, np.array([[q[0], q[1], q[2]], [q[0], q[2], q[3]]])])
+        nrm = np.concatenate([nrm, np.tile(np.asarray(normal, np.float64), (2, 3, 1))])
+        uv = np.concatenate([uv, np.zeros((2, 3, 2))])
+        mat = np.append(mat, [names.index(fill_mat)] * 2)
+        part = np.append(part, [nparts] * 2)
+        keep = np.append(keep, [True, True])
+        group_of = np.append(group_of, np.array(['body'], object))
+        nparts += 1
 
     # The model's frame (nose -Y, Z up) to the game's (Y up, nose +Z, driver's side +X).
     def to_yup(a):
@@ -655,6 +700,12 @@ def build(car, dst):
             if name in PLATE:
                 plate_parts += [(g, p) for p in np.unique(part[sel_g])]
                 continue
+            if name in cfg.get('badges', {}):
+                badge_uv = uv[sel_g].copy()
+                badge_uv[..., 1] = 1.0 - badge_uv[..., 1]
+                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': [], 'badge': []})
+                gp['badge'].append((to_game(pos[sel_g]), normals_to_game(pos[sel_g], nrm[sel_g]), badge_uv, name))
+                continue
             for front_lamp in (False, True):
                 sel = sel_g & ((tri_z > 0) == front_lamp) if base == 'tail light' else (sel_g if not front_lamp else None)
                 if sel is None or not sel.any():
@@ -665,7 +716,7 @@ def build(car, dst):
                 else:
                     p = to_game(pos[sel])
                     n = normals_to_game(pos[sel], nrm[sel])
-                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': []})
+                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': [], 'badge': []})
                 if name in GLASS:
                     gp['glass'].append((p, n))
                     continue
@@ -683,7 +734,7 @@ def build(car, dst):
         t = to_game(pos[part == p])
         facing = 1 if t[..., 2].mean() > 0 else -1
         qp, qn, qu, size_m = plate_quad(t, facing)
-        groups.setdefault(g, {'palette': [], 'glass': [], 'plate': []})['plate'].append((qp, qn, qu))
+        groups.setdefault(g, {'palette': [], 'glass': [], 'plate': [], 'badge': []})['plate'].append((qp, qn, qu))
         plate_sizes.append(size_m)
 
     grid = math.ceil(math.sqrt(len(looks)))
@@ -711,6 +762,19 @@ def build(car, dst):
         'alphaMode': 'OPAQUE', 'doubleSided': True}, GLASS_MATERIAL,
         {'name': 'plate', 'doubleSided': True,
          'pbrMetallicRoughness': {'baseColorTexture': {'index': 2}, 'metallicFactor': 0.3, 'roughnessFactor': 0.5}}]
+    # The badges: chrome where their image is white, cut out elsewhere (the game's paint
+    # leaves see-through materials alone).
+    badge_material = {}
+    for badge_name, image_name in cfg.get('badges', {}).items():
+        mask = Image.open(os.path.join(PACK, 'textures', image_name)).convert('L').resize((BADGE_TEX, BADGE_TEX), Image.LANCZOS)
+        badge_im = Image.new('RGBA', mask.size, CHROME[0] + (255,))
+        badge_im.putalpha(mask)
+        out.images.append(png_bytes(badge_im))
+        out.textures.append(len(out.images) - 1)
+        badge_material[badge_name] = len(out.materials)
+        out.materials.append({'name': 'badge', 'doubleSided': True, 'alphaMode': 'MASK', 'alphaCutoff': 0.5,
+                              'pbrMetallicRoughness': {'baseColorTexture': {'index': len(out.textures) - 1},
+                                                       'metallicFactor': 1.0, 'roughnessFactor': 0.15}})
 
     def primitives(g, frame=None):
         gp = groups.get(g)
@@ -738,6 +802,12 @@ def build(car, dst):
             u = np.concatenate([c for _, _, c in gp['plate']]).reshape(-1, 2).astype(np.float32)
             p, n, u, idx = share_corners(p, n, u)
             prims.append(out.primitive(p, n, idx, 2, u))
+        for badge_name in sorted({k for _, _, _, k in gp['badge']}):
+            these = [(a, b, c) for a, b, c, k in gp['badge'] if k == badge_name]
+            p, n = place(np.concatenate([a for a, _, _ in these]), np.concatenate([b for _, b, _ in these]))
+            u = np.concatenate([c for _, _, c in these]).reshape(-1, 2).astype(np.float32)
+            p, n, u, idx = share_corners(p, n, u)
+            prims.append(out.primitive(p, n, idx, badge_material[badge_name], u))
         return prims
 
     steer = np.concatenate([a for a, _, _ in groups['driving_wheel']['palette']]).reshape(-1, 3)

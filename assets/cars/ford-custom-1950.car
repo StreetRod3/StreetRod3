@@ -5,7 +5,7 @@
   "model": {
     "path": "res://assets/cars/ford-custom-1950.glb",
     "position": [0.0, 0.116, 0.0],
-    "height": 1.474,
+    "height": 1.4737,
     "ground_clearance": 0.116,
     "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
   },
