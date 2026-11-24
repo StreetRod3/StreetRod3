@@ -369,8 +369,8 @@ CARS = {
         # 2026-11-24): their corners there take the door skin's normals, height by height.
         'seam_normals': [{'material': 'metallic_paint', 'corners_in': (lo, hi),
                           'like': ((-1.03, -0.74, 0.30), (-0.85, 0.30, 0.90)) if lo[0] < 0 else ((0.85, -0.74, 0.30), (1.03, 0.30, 0.90))}
-                         for lo, hi in (((-1.03, -0.80, 0.35), (-0.90, -0.745, 0.84)), ((0.90, -0.80, 0.35), (1.03, -0.745, 0.84)),
-                                        ((-1.03, 0.40, 0.35), (-0.90, 0.50, 0.84)), ((0.90, 0.40, 0.35), (1.03, 0.50, 0.84)))],
+                         for lo, hi in (((-1.03, -0.80, 0.25), (-0.90, -0.745, 0.84)), ((0.90, -0.80, 0.25), (1.03, -0.745, 0.84)),
+                                        ((-1.03, 0.40, 0.25), (-0.90, 0.50, 0.84)), ((0.90, 0.40, 0.25), (1.03, 0.50, 0.84)))],
         # The fender skirts sit 3-4 cm in from the wheel openings' lips, which have no
         # return, so from behind the step showed the inside of the fender as a dark slot
         # at each skirt's front edge (user, 2026-11-24): out to just inside the lips.
@@ -922,7 +922,7 @@ def build(car, dst):
         c = pos[sel, :, st['axis']]
         # Past the edge the full distance, easing to nothing `span` back from it.
         side = np.sign(st['by'])
-        t = np.clip((c - st['edge']) * -side / st['span'] + 1.0, 0.0, 1.0)
+        t = np.clip((c - st['edge']) * side / st['span'] + 1.0, 0.0, 1.0)
         pos[sel, :, st['axis']] = c + st['by'] * t
         if 'inset' in st:
             # What has gone in under the neighbor's edge, in from its skin.
