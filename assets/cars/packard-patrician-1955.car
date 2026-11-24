@@ -1,0 +1,78 @@
+{
+  "id": "packard-patrician-1955",
+  "name": "Packard Patrician 1955",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/packard-patrician-1955.glb",
+    "position": [0.0, 0.173, 0.0],
+    "height": 1.3641,
+    "ground_clearance": 0.173,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.782, 0.335, 1.912],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.782, 0.335, 1.912],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.782, 0.335, -1.314],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.782, 0.335, -1.314],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "v8-265",
+    "transmission": "gb_auto3",
+    "wheels": "wheel-std"
+  },
+  "driver": {
+    "position": [0.451, 1.16, 0.1]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.6, -11.0],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.88, -6.6],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.451, 1.21, 0.1],
+      "pitch": -1.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.57, 2.9],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 42.0},
+    "rear": {"node": "bumper_rear", "mass": 38.0}
+  },
+  "chassis": {
+    "mass": 1940,
+    "wheelbase": 3.226,
+    "cg_height": 0.55,
+    "front_axle_fraction": 0.55,
+    "max_steer_deg": 30
+  }
+}

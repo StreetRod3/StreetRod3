@@ -69,11 +69,14 @@ IN = 0.0254
 ## `dial_face`, where the car's tire and gauge-face materials have names of their own;
 ## `drop`, boxes whose parts are left out, and `drop_materials`, materials left out;
 ## `recolor`, triangles that take another material's look (those of the `from`
-## materials in the parts wholly inside `parts_in`, or with their middles inside
+## materials in the parts wholly inside `parts_in` (of at least `min_part_tris`
+## triangles, given that), or with their middles inside
 ## `tris_in` and, given `facing`, facing that way); `fill`, flat four-cornered panels
 ## added in a material's look (material, corners, outward normal); `badges`, decal
 ## materials drawn as chrome lettering cut out by their image (a mask, white where the
-## letters are), by the image's file name in textures/.
+## letters are), by the image's file name in textures/ (or a mask and an image of the
+## letters' colors); `height` None scales the height as the width; `dial_order` 'size'
+## gives the `dials` kinds from the biggest dial down.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -199,6 +202,78 @@ CARS = {
         # From the middle of the car out: the gauges on the speedometer's inner side (top,
         # bottom), the speedometer, those on its outer side (bottom, top).
         'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
+    },
+    # 1955 Packard Patrician four-door sedan: 219.7 in long, 78.3 in wide, 62.2 in high
+    # on a 127 in wheelbase (Wikipedia, Packard Patrician).
+    'packard-1955-patrician': {
+        'size_in': (219.7, 78.3, 62.2),
+        'wheelbase_in': 127.0,
+        # The maroon; the cream roof stays cream.
+        'paint': {'bronze_paint'},
+        'tire': 'tyre tread.001',
+        'dial_face': 'gauge',
+        'bumpers': {
+            # The bar with its bullet guards, the bars under the grille between them, the
+            # plate and the brackets behind.
+            'bumper_front': [((-1.1, -2.9, 0.2), (1.1, -2.30, 0.59))],
+            # The bar with the exhaust ports in its ends, the guards with their lamps.
+            'bumper_rear': [((-1.1, 2.40, 0.3), (1.1, 2.85, 0.65))],
+        },
+        'steer': ('box', ((0.23, -0.665, 0.77), (0.70, -0.48, 1.22))),
+        'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
+        # The bumper hides an opening under the grille, above the cream valance; a cream
+        # panel closes it, behind the valance's and the fenders' front edges.
+        'fill': [('paint_white_real', ((-0.68, -2.56, 0.34), (0.68, -2.56, 0.34), (0.68, -2.56, 0.54),
+                                       (-0.68, -2.56, 0.54)), (0.0, -1.0, 0.0))],
+        # "Packard" and "Patrician" on the trunk, "The Patrician" in gold on the doors.
+        'badges': {'platesandbadges': ('patrician_alpha.png', 'patrician_colors2.png')},
+    },
+    # 1950 Ford Custom Deluxe station wagon: 208.0 in long on a 114 in wheelbase, the
+    # sedan's front end (72.8 in over its fenders; 76.4 in over the wagon's wood); its
+    # height is not given, so it scales as the width (Ford's specifications, April 1949).
+    'ford-1950-wagon': {
+        'size_in': (208.0, 72.8, None),
+        'wheelbase_in': 114.0,
+        # The red, and the top of the dash in the middle as on the sedan; the wood stays.
+        'paint': {'red_paint_metallic', 'bars'},
+        'tire': 'tyre black',
+        'dial_face': 'textureford',
+        'bumpers': {
+            'bumper_front': [((-1.0, -2.75, 0.2), (1.0, -2.15, 0.5))],
+            # The two halves with their guards, and the plate on its holder between them.
+            'bumper_rear': [((-1.0, 2.2, 0.25), (1.0, 2.7, 0.5))],
+        },
+        'steer': ('bakelite', (0.398, -0.58, 1.049)),
+        'dials': ['speedo_fuel'],
+        # The gravel pan under the grille, part of the grille's mesh in the frame's black,
+        # is the body's (not the small frame pieces behind the grille).
+        'recolor': [{'from': {'CHASSIS'}, 'to': 'red_paint_metallic',
+                     'parts_in': ((-0.9, -2.65, 0.3), (0.9, -2.05, 0.9)), 'min_part_tris': 200}],
+    },
+    # 1954 Buick Special four-door sedan (Series 40): 206.3 in long, 76.8 in wide, 60.5 in
+    # high on a 122 in wheelbase (AMA specifications, January 1954). The pack's model is
+    # 250 in long on a 150 in wheelbase.
+    'buick-1954': {
+        'size_in': (206.3, 76.8, 60.5),
+        'wheelbase_in': 122.0,
+        # The blue; the white roof stays white.
+        'paint': {'blue_metallic'},
+        'dial_face': 'buick_dash',
+        'bumpers': {
+            # The bar, the bar under it, the guards and their big bullets, a bracket and
+            # the plate.
+            'bumper_front': [((-1.1, -3.2, 0.2), (1.1, -2.55, 0.66))],
+            # The bar, the guards and their bullets (the plate is on the body).
+            'bumper_rear': [((-1.1, 2.55, 0.2), (1.1, 3.2, 0.62))],
+        },
+        'steer': ('blue_metallic', (0.397, -0.434, 1.094)),
+        # The bumper hides an opening under the grille, between the fenders; a body panel
+        # closes it, set back to where the fenders' bottom edges curve in.
+        'fill': [('blue_metallic', ((-0.78, -2.71, 0.40), (0.78, -2.71, 0.40), (0.78, -2.71, 0.64),
+                                    (-0.78, -2.71, 0.64)), (0.0, -1.0, 0.0))],
+        # The long strip speedometer, the small strip under it.
+        'dials': ['ribbon_speedo', 'ribbon_fuel'],
+        'dial_order': 'size',
     },
 }
 
@@ -592,7 +667,8 @@ def build(car, dst):
     for rc in cfg.get('recolor', []):
         sel = np.isin(mat, [names.index(m) for m in rc['from']])
         if 'parts_in' in rc:
-            sel &= np.isin(part, [p for p in range(nparts) if inside(p, *rc['parts_in'])])
+            big = np.bincount(part, minlength=nparts) >= rc.get('min_part_tris', 0)
+            sel &= np.isin(part, [p for p in range(nparts) if inside(p, *rc['parts_in']) and big[p]])
         if 'tris_in' in rc:
             mid = pos.mean(1)
             sel &= np.all((mid >= rc['tris_in'][0]) & (mid <= rc['tris_in'][1]), 1)
@@ -646,7 +722,8 @@ def build(car, dst):
     front_z = np.mean([(-(plo[t][1] + phi[t][1]) / 2) for t in tires if (plo[t][1] + phi[t][1]) / 2 < 0])
     rear_z = np.mean([(-(plo[t][1] + phi[t][1]) / 2) for t in tires if (plo[t][1] + phi[t][1]) / 2 >= 0])
     scale_x = width_in * IN / (body[:, 0].max() - body[:, 0].min())
-    scale_y = height_in * IN / (hi[1] - tire_pos[:, 1].min())
+    # With no height known, the height scales as the width does.
+    scale_y = scale_x if height_in is None else height_in * IN / (hi[1] - tire_pos[:, 1].min())
     origin_xy = np.array([(body[:, 0].min() + body[:, 0].max()) / 2, lo[1]])
 
     def to_game(q):
@@ -681,7 +758,12 @@ def build(car, dst):
         for idx, c, r, flat_face in pieces:
             if not flat_face and any(np.linalg.norm(c - fc) + r < fr for fc, fr in faces):
                 keep[idx] = False
-        dials = [dash.dial_frame(to_game(pos[idx])) for idx, _, _, flat_face in pieces if flat_face]
+        dials = []
+        for idx, _, _, flat_face in pieces:
+            if flat_face:
+                tris = to_game(pos[idx])
+                center, axis, radius = dash.dial_frame(tris)
+                dials.append((center, axis, radius, *dash.face_extent(tris, center, dash.pod_basis(axis))))
         dials = [d for d in dials if d[0][0] > DIAL_SIDE]
         if len(dials) != len(cfg['dials']):
             raise SystemExit(f'{len(dials)} dials found for {len(cfg["dials"])} kinds')
@@ -766,8 +848,12 @@ def build(car, dst):
     # leaves see-through materials alone).
     badge_material = {}
     for badge_name, image_name in cfg.get('badges', {}).items():
+        image_name, color_name = (image_name, None) if isinstance(image_name, str) else image_name
         mask = Image.open(os.path.join(PACK, 'textures', image_name)).convert('L').resize((BADGE_TEX, BADGE_TEX), Image.LANCZOS)
-        badge_im = Image.new('RGBA', mask.size, CHROME[0] + (255,))
+        if color_name:
+            badge_im = Image.open(os.path.join(PACK, 'textures', color_name)).convert('RGBA').resize(mask.size, Image.LANCZOS)
+        else:
+            badge_im = Image.new('RGBA', mask.size, CHROME[0] + (255,))
         badge_im.putalpha(mask)
         out.images.append(png_bytes(badge_im))
         out.textures.append(len(out.images) - 1)
@@ -825,7 +911,7 @@ def build(car, dst):
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
     pods = []
     if cfg.get('dials'):
-        pods = dash.build(dials, cfg['dials'])
+        pods = dash.build(dials, cfg['dials'], cfg.get('dial_order') == 'size')
         looks_mat = {}
         for key, material in dash.NEEDLE_MATERIALS.items():
             looks_mat[key] = len(out.materials)
@@ -833,11 +919,11 @@ def build(car, dst):
         for name, center, basis, kind, radius, parts in pods:
             children = []
             if kind:
-                out.images.append(dash.face_png(kind))
+                out.images.append(dash.face_png(kind, radius))
                 out.textures.append(len(out.images) - 1)
                 face_index = len(out.materials)
                 out.materials.append(dash.face_material(kind, len(out.textures) - 1))
-                ft, fn, fu = dash.disk(radius, dash.FACE_LIFT)
+                ft, fn, fu = dash.face_mesh(kind, radius)
                 p, n, u, idx = share_corners(ft.reshape(-1, 3).astype(np.float32), fn.reshape(-1, 3).astype(np.float32),
                                              fu.reshape(-1, 2).astype(np.float32))
                 children.append(out.node(f'{name}_face', mesh=out.mesh(f'{name}_face', [out.primitive(p, n, idx, face_index, u)])))
@@ -872,7 +958,7 @@ def build(car, dst):
     print('ground clearance in the model %.3f m' % (-w[:, 1].min()))
     print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
     for name, center, basis, kind, radius, _ in pods:
-        print(f'{name}: {kind or "needle"} at {center.round(3)}, face radius {radius:.4f}')
+        print(f'{name}: {kind or "needle"} at {center.round(3)}, face size {np.round(radius, 4)}')
 
 if __name__ == '__main__':
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]

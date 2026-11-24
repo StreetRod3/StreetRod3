@@ -13,7 +13,12 @@ dial gets a printed face laid just over the model's own and needles of its own:
     own pivot below the middle, F at the lower left and E at the lower right;
   * `fuel`, `temp`, `oil`, `amp`: a small round gauge of its own, its scale across the
     top over 90 degrees and its name below the pivot. The gas gauge works (its needle in
-    a pod named `dash_fuel_arch_90_pod`); the others' pointers stay put.
+    a pod named `dash_fuel_arch_90_pod`); the others' pointers stay put;
+  * `ribbon_speedo`, `ribbon_fuel`: a long flat strip (the 1954 Buick's) with a scale
+    along it and a bar of a needle that slides: the speedometer 0-120 mph left to right
+    (a pod named `dash_speedo_linear_<travel>_mph_120_pod`, which the game slides along
+    its -X, so its X points to the driver's left and its Z down), the gas gauge E to F
+    (`dash_fuel_linear_<travel>_pod`, resting at F and sliding back toward E).
 
 The faces are cream with dark printing, as on the cars of the day, and the needles red.
 The pods follow the other cars' dashes (tools/studebaker_dash.py): in a pod's frame the
@@ -81,6 +86,20 @@ def dial_frame(tris):
     return center, axis, np.linalg.norm(flat, axis=1).max()
 
 
+## A strip's scale spans this share of its width.
+RIBBON_SCALE = 0.88
+RIBBON_TEX = 1024
+## A strip needle's width (m) and its height as a share of the strip's.
+RIBBON_NEEDLE = 0.0025
+RIBBON_NEEDLE_SHARE = 0.8
+
+
+def face_extent(tris, center, basis):
+    """Half the width and half the height of a face (car space) in its pod's X and Z."""
+    q = (tris.reshape(-1, 3) - center) @ basis
+    return float(np.abs(q[:, 0]).max()), float(np.abs(q[:, 2]).max())
+
+
 def pod_basis(axis):
     """Pod axes in car space (columns X, Y, Z): +Y into the dash, +Z as near up as it can be."""
     y = axis / np.linalg.norm(axis)
@@ -136,6 +155,50 @@ def face_texture(kind):
     return im
 
 
+def ribbon_texture(kind, half_w, half_h):
+    w = RIBBON_TEX
+    h = max(48, round(w * half_h / half_w))
+    im = Image.new('RGB', (w, h), CREAM)
+    d = ImageDraw.Draw(im)
+    d.rectangle([2, 2, w - 3, h - 3], outline=INK, width=4)
+    x0, x1 = w * (1 - RIBBON_SCALE) / 2, w * (1 + RIBBON_SCALE) / 2
+    if kind == 'ribbon_speedo':
+        for mph in range(0, SPEEDO_MAX + 1, 5):
+            x = x0 + (x1 - x0) * mph / SPEEDO_MAX
+            major = mph % 20 == 0
+            d.line([(x, h * 0.08), (x, h * (0.45 if major else 0.3))], fill=INK, width=5 if major else 3)
+            if major:
+                _text(d, (x, h * 0.66), str(mph), _font(int(h * 0.33), True), INK)
+        _text(d, (x0 * 0.5, h * 0.5), 'MPH', _font(int(h * 0.22), True), INK)
+    else:
+        for k in range(5):
+            x = x0 + (x1 - x0) * k / 4
+            d.line([(x, h * 0.08), (x, h * (0.5 if k % 2 == 0 else 0.32))], fill=INK, width=6)
+        _text(d, (x0 + (x1 - x0) * 0.08, h * 0.75), 'E', _font(int(h * 0.42), True), RED)
+        _text(d, (x1 - (x1 - x0) * 0.08, h * 0.75), 'F', _font(int(h * 0.42), True), INK)
+        _text(d, ((x0 + x1) / 2, h * 0.75), 'GAS', _font(int(h * 0.3), True), INK)
+    return im
+
+
+def rect(half_w, half_h, lift):
+    """A rectangle in the pod's X-Z plane at -lift, facing -Y, with UVs over its image."""
+    c = [(-half_w, half_h), (half_w, half_h), (half_w, -half_h), (-half_w, -half_h)]
+    q = [np.array([x, -lift, z]) for x, z in c]
+    uv = [(0.5 + x / (2 * half_w), 0.5 - z / (2 * half_h)) for x, z in c]
+    tris = np.array([[q[0], q[2], q[1]], [q[0], q[3], q[2]]])
+    uvs = np.array([[uv[0], uv[2], uv[1]], [uv[0], uv[3], uv[2]]])
+    return tris, np.tile([0.0, -1.0, 0.0], (2, 3, 1)), uvs
+
+
+def bar(x, half_w, half_h, lift):
+    """A strip's needle: an upright bar at x."""
+    t, n, _ = rect(half_w, half_h, lift)
+    return t + np.array([x, 0.0, 0.0]), n
+
+
+FLIP = np.diag([-1.0, 1.0, -1.0])
+
+
 def disk(radius, lift, segments=SEGMENTS):
     """A disk in the pod's X-Z plane at -lift, facing -Y, with UVs over a square texture."""
     a = np.linspace(0.0, 2 * math.pi, segments, endpoint=False)
@@ -150,15 +213,32 @@ def disk(radius, lift, segments=SEGMENTS):
     return tris, nrm, np.array(uvs)
 
 
-def build(dials, kinds):
-    """The pods for a car's dials (each a (center, axis, radius) in car space), given their
-    kinds from the middle of the car out to the door. Returns a list of pods, each
-    (node name, origin, basis, face kind or None, face radius, [(node name, material key,
-    triangles, normals)]); a pod with a face kind also carries the face disk."""
-    order = sorted(dials, key=lambda dial: abs(dial[0][0]))
+def build(dials, kinds, by_size=False):
+    """The pods for a car's dials (each a (center, axis, radius, half width, half height)
+    in car space), given their kinds from the middle of the car out to the door (or, with
+    by_size, from the biggest down). Returns a list of pods, each (node name, origin,
+    basis, face kind or None, face size (a radius, or a strip's half width and height),
+    [(node name, material key, triangles, normals)]); a pod with a face kind also
+    carries the face."""
+    order = sorted(dials, key=lambda dial: -dial[2] if by_size else abs(dial[0][0]))
     pods = []
-    for kind, (center, axis, radius) in zip(kinds, order):
+    for kind, (center, axis, radius, half_w, half_h) in zip(kinds, order):
         basis = pod_basis(axis)
+        if kind in ('ribbon_speedo', 'ribbon_fuel'):
+            hw, hh = half_w * FACE_SHARE, half_h * FACE_SHARE
+            span = 2 * hw * RIBBON_SCALE
+            needle = bar(0.0, RIBBON_NEEDLE / 2, hh * RIBBON_NEEDLE_SHARE, NEEDLE_LIFT)
+            if kind == 'ribbon_speedo':
+                # Built with X to the right and Z up, then turned about Y so the game's
+                # slide along -X runs left to right.
+                t, n = needle[0] + np.array([-span / 2, 0.0, 0.0]), needle[1]
+                pods.append((f'dash_speedo_linear_{span:.4f}_mph_{SPEEDO_MAX}_pod', center, basis @ FLIP, kind,
+                             (hw, hh), [('speedo_needle', 'needle', t @ FLIP, n @ FLIP)]))
+            else:
+                t, n = needle[0] + np.array([span / 2, 0.0, 0.0]), needle[1]
+                pods.append((f'dash_fuel_linear_{span:.4f}_pod', center, basis, kind, (hw, hh),
+                             [('fuel_needle', 'needle', t, n)]))
+            continue
         r = radius * FACE_SHARE
         hub = [('hub', *disk(r * 0.07, HUB_LIFT, 16)[:2])]
         if kind in ('speedo', 'speedo_fuel'):
@@ -199,5 +279,15 @@ def face_material(kind, image_index):
                                      'metallicFactor': 0.0, 'roughnessFactor': 0.5}}
 
 
-def face_png(kind):
+def face_png(kind, size):
+    if kind.startswith('ribbon_'):
+        return _png(ribbon_texture(kind, *size))
     return _png(face_texture(kind))
+
+
+def face_mesh(kind, size):
+    """The face's triangles, normals and UVs in its pod's frame."""
+    if kind.startswith('ribbon_'):
+        t, n, u = rect(*size, FACE_LIFT)
+        return (t @ FLIP, n @ FLIP, u) if kind == 'ribbon_speedo' else (t, n, u)
+    return disk(size, FACE_LIFT)
