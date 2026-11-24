@@ -251,7 +251,11 @@ CARS = {
         # The gravel pan under the grille, part of the grille's mesh in the frame's black,
         # is the body's (not the small frame pieces behind the grille).
         'recolor': [{'from': {'CHASSIS'}, 'to': 'red_paint_metallic',
-                     'parts_in': ((-0.9, -2.65, 0.3), (0.9, -2.05, 0.9)), 'min_part_tris': 200}],
+                     'parts_in': ((-0.9, -2.65, 0.3), (0.9, -2.05, 0.9)), 'min_part_tris': 200},
+                    # The spare's tire on the tailgate is in the body's red; it is the
+                    # tires' black (user, 2026-11-23).
+                    {'from': {'red_paint_metallic'}, 'to': 'tyre black',
+                     'parts_in': ((-0.4, 2.15, 0.55), (0.4, 2.7, 1.3))}],
     },
     # 1954 Buick Special four-door sedan (Series 40): 206.3 in long, 76.8 in wide, 60.5 in
     # high on a 122 in wheelbase (AMA specifications, January 1954). The pack's model is
