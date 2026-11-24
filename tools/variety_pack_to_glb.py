@@ -76,7 +76,8 @@ IN = 0.0254
 ## materials drawn as chrome lettering cut out by their image (a mask, white where the
 ## letters are), by the image's file name in textures/ (or a mask and an image of the
 ## letters' colors); `height` None scales the height as the width; `dial_order` 'size'
-## gives the `dials` kinds from the biggest dial down.
+## gives the `dials` kinds from the biggest dial down; `clamp` pulls the parts wholly
+## inside `parts_in` in along an axis (0 X, 1 Y, 2 Z) to between `min` and `max`.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -271,6 +272,9 @@ CARS = {
         # closes it, set back to where the fenders' bottom edges curve in.
         'fill': [('blue_metallic', ((-0.78, -2.71, 0.40), (0.78, -2.71, 0.40), (0.78, -2.71, 0.64),
                                     (-0.78, -2.71, 0.64)), (0.0, -1.0, 0.0))],
+        # The frame rails run out through the panels behind the bumpers, the ends showing
+        # as brackets with the bumpers off; they end inside the body.
+        'clamp': [{'parts_in': ((-0.7, -2.9, 0.25), (0.7, 2.85, 0.58)), 'axis': 1, 'min': -2.69, 'max': 2.70}],
         # The long strip speedometer, the small strip under it.
         'dials': ['ribbon_speedo', 'ribbon_fuel'],
         'dial_order': 'size',
@@ -675,6 +679,10 @@ def build(car, dst):
         if 'facing' in rc:
             sel &= nrm.mean(1) @ np.asarray(rc['facing'], np.float64) > 0.3
         mat[sel] = names.index(rc['to'])
+
+    for cl in cfg.get('clamp', []):
+        sel = np.isin(part, [p for p in range(nparts) if inside(p, *cl['parts_in'])])
+        pos[sel, :, cl['axis']] = np.clip(pos[sel, :, cl['axis']], cl.get('min', -np.inf), cl.get('max', np.inf))
 
     for trim in cfg.get('trim', []):
         trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim)
