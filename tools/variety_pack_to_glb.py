@@ -81,7 +81,12 @@ IN = 0.0254
 ## `graft` takes parts from another of the pack's cars (`from`, its part numbers in
 ## `parts`), moved by `offset` and given one of this car's materials (`material`), for
 ## what the model lacks; `dial_side` moves the line inboard of which dials are not looked
-## for (DIAL_SIDE), for dials in the middle of the dash.
+## for (DIAL_SIDE), for dials in the middle of the dash; `stretch` draws the parts wholly
+## inside `parts_in` out along an axis past an `edge` by `by`, easing to nothing `span`
+## back from it (and, given `inset`, what ends up past `under` that much in toward the
+## middle, under the neighbor it now reaches beneath); `seam_normals` gives the corners
+## of a material in `corners_in` the normals of its corners in `like` at their height,
+## to shade a seam's rolled edges as the skin beside them; `shift` moves the parts wholly inside `parts_in` by `by`.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -352,6 +357,25 @@ CARS = {
         'steer': ('bakelite', (0.378, -0.40, 1.0)),
         # One dial in front of the driver, the speedometer with the gas gauge in it.
         'dials': ['speedo_fuel'],
+        # The front fender's back edge is open (no return) and stops just short of the
+        # door, so seen from behind the seam showed the inside of the fender, a dark band
+        # (user, 2026-11-24): the door's front edge (and the side strip on it) reaches
+        # 1.5 cm further forward, in under the fender, 2 mm in from its skin there.
+        'stretch': [{'parts_in': box, 'axis': 1, 'edge': -0.770, 'by': -0.015, 'span': 0.06,
+                     'under': -0.776, 'inset': 0.002}
+                    for box in (((-1.03, -0.80, 0.25), (-0.78, 0.47, 1.06)), ((0.78, -0.80, 0.25), (1.03, 0.47, 1.06)))],
+        # The fender's back edge and the door's front edge both roll in to the seam, so
+        # seen from behind the seam was a dark band: their corners there take the
+        # normals of the door skin just behind it, height by height.
+        'seam_normals': [{'material': 'metallic_paint', 'corners_in': ((-1.03, -0.80, 0.35), (-0.90, -0.745, 0.84)),
+                          'like': ((-1.03, -0.74, 0.30), (-0.85, 0.30, 0.90))},
+                         {'material': 'metallic_paint', 'corners_in': ((0.90, -0.80, 0.35), (1.03, -0.745, 0.84)),
+                          'like': ((0.85, -0.74, 0.30), (1.03, 0.30, 0.90))}],
+        # The fender skirts sit 3-4 cm in from the wheel openings' lips, which have no
+        # return, so from behind the step showed the inside of the fender as a dark slot
+        # at each skirt's front edge (user, 2026-11-24): out to just inside the lips.
+        'shift': [{'parts_in': ((-0.985, 0.92, 0.22), (-0.925, 1.81, 0.46)), 'by': (-0.025, 0.0, 0.0)},
+                  {'parts_in': ((0.925, 0.92, 0.22), (1.005, 1.81, 0.46)), 'by': (0.025, 0.0, 0.0)}],
     },
     # 1955 Packard Caribbean convertible: 216.5 in long, 77.8 in wide on a 127 in
     # wheelbase (Wikipedia, Packard Caribbean). Its top is down, so the height (62.9 in
@@ -846,8 +870,46 @@ def build(car, dst):
         sel = np.isin(part, [p for p in range(nparts) if inside(p, *cl['parts_in'])])
         pos[sel, :, cl['axis']] = np.clip(pos[sel, :, cl['axis']], cl.get('min', -np.inf), cl.get('max', np.inf))
 
+    for st in cfg.get('stretch', []):
+        sel = np.isin(part, [p for p in range(nparts) if inside(p, *st['parts_in'])])
+        c = pos[sel, :, st['axis']]
+        # Past the edge the full distance, easing to nothing `span` back from it.
+        side = np.sign(st['by'])
+        t = np.clip((c - st['edge']) * -side / st['span'] + 1.0, 0.0, 1.0)
+        pos[sel, :, st['axis']] = c + st['by'] * t
+        if 'inset' in st:
+            # What has gone in under the neighbor's edge, in from its skin.
+            hidden = sel[:, None] & ((pos[..., st['axis']] - st['under']) * side > 0)
+            pos[..., 0] -= np.where(hidden, np.sign(pos[..., 0]) * st['inset'], 0.0)
+    for sh in cfg.get('shift', []):
+        sel = np.isin(part, [p for p in range(nparts) if inside(p, *sh['parts_in'])])
+        pos[sel] += np.asarray(sh['by'])
+
+    for sn in cfg.get('seam_normals', []):
+        # Corners in `corners_in` take the mean face normal of the material's triangles
+        # whose middles are in `like`, at their height (2 cm bins, interpolated).
+        lo, hi = np.asarray(sn['corners_in'][0]), np.asarray(sn['corners_in'][1])
+        llo, lhi = np.asarray(sn['like'][0]), np.asarray(sn['like'][1])
+        of_mat = np.repeat(mat == names.index(sn['material']), 3)
+        flat_p = pos.reshape(-1, 3)
+        flat_n = nrm.reshape(-1, 3)
+        sn_mids = pos.mean(1)
+        sn_src = (mat == names.index(sn['material'])) & np.all((sn_mids >= llo) & (sn_mids <= lhi), 1)
+        sn_faces = np.cross(pos[:, 1] - pos[:, 0], pos[:, 2] - pos[:, 0])
+        sn_dst = of_mat & np.all((flat_p >= lo) & (flat_p <= hi), 1)
+        bins = np.arange(llo[2], lhi[2] + 0.02, 0.02)
+        level = np.full((len(bins), 3), np.nan)
+        for k, z in enumerate(bins):
+            near = sn_src & (np.abs(sn_mids[:, 2] - z) < 0.03)
+            if near.any():
+                level[k] = sn_faces[near].sum(0) / np.linalg.norm(sn_faces[near].sum(0))
+        ok = ~np.isnan(level[:, 0])
+        sn_new = np.stack([np.interp(flat_p[sn_dst, 2], bins[ok], level[ok, c]) for c in range(3)], 1)
+        flat_n[sn_dst] = sn_new / np.maximum(np.linalg.norm(sn_new, axis=1, keepdims=True), 1e-12)
+        nrm[:] = flat_n.reshape(nrm.shape)
+
     for trim in cfg.get('trim', []):
-        trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim)
+        print(f"trimmed in by up to {1000 * trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim):.1f} mm")
 
     steer_mat, steer_at = cfg['steer']
     if steer_mat == 'box':
