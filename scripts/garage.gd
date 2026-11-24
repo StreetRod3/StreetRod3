@@ -37,7 +37,7 @@ var _view_port: SubViewport
 @onready var _clock_skip_cruise: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
 @onready var _stats_panel: Control = $GarageUI/StatsPanel
 @onready var _spray_menu: Control = $GarageUI/ColorPickerMenu
-@onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/VBox/ColorPicker
+@onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/Body/ColorPicker
 @onready var _calendar: StaticBody3D = $InteractCalendar
 @onready var _calendar_hint: Label = $GarageUI/CalendarHint
 @onready var _garage_ui: CanvasLayer = $GarageUI
@@ -1127,8 +1127,8 @@ func _sync_menu_nav() -> void:
 		if _spray_finishes.visible:
 			spray_buttons.append(_spray_finish_pick)
 		spray_buttons.append_array([
-			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
-			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
+			$GarageUI/ColorPickerMenu/Panel/Margin/Body/Side/HBox/ConfirmBtn,
+			$GarageUI/ColorPickerMenu/Panel/Margin/Body/Side/HBox/CancelBtn,
 		])
 		_nav.setup(spray_buttons)
 	elif _offer_panel != null and _offer_panel.visible:
@@ -1619,7 +1619,9 @@ func _show_spray_picker() -> void:
 
 
 func _build_spray_zones() -> void:
-	var vbox := $GarageUI/ColorPickerMenu/Panel/Margin/VBox as VBoxContainer
+	# The column right of the color picker: the title, then these two rows, then Apply
+	# and Cancel at the foot.
+	var vbox := $GarageUI/ColorPickerMenu/Panel/Margin/Body/Side as VBoxContainer
 	_spray_zones = HBoxContainer.new()
 	_spray_zones.alignment = BoxContainer.ALIGNMENT_CENTER
 	var group := ButtonGroup.new()
@@ -1647,9 +1649,8 @@ func _build_spray_zones() -> void:
 	_spray_finish_pick.item_selected.connect(_on_spray_finish_selected)
 	_spray_finish_pick.custom_minimum_size = Vector2(140, 0)
 	_spray_finishes.add_child(_spray_finish_pick)
-	var buttons := $GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox
 	vbox.add_child(_spray_finishes)
-	vbox.move_child(_spray_finishes, buttons.get_index())
+	vbox.move_child(_spray_finishes, _spray_zones.get_index() + 1)
 	_spray_finishes.visible = false
 
 

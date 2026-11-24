@@ -85,7 +85,3 @@ Measured on 2026-11-14 on branch city-performance, free roam from the garage wit
 - **Lighter car models.** Traffic is 24 cars (`_COUNT` in `cruise_traffic.gd`). The SR1 bodies are 0.8 to 1.1 million triangles each (`sr1-c56` 1.03M, the 1932 coupe 819k, the Fairlane 752k) and the Styleline 387k, where the Corvette and F100 are 12k to 19k. Each wheel is 70k and each tire 43k, about 450k a car for the four corners. LODs are already generated on import. With traffic hidden the frame drops from 1.6 to 1.0 million triangles. Decimate those models, or give traffic a lighter wheel.
 - **Reduce Tire polycount**
 - **The places.** The garage, drive-in, gas station and Royal Rods are still built of separate boxes, now with shared materials. They are few, and the garage doors move, so they were not merged.
-
-## Paint screen
-
-The garage's paint menu needs changes; what they are is to be decided. Known so far: at 1280x720 the menu is taller than the screen, so its top row sits behind the car's name and the Finish list, Apply and Cancel are under the status bar. The color picker's Swatches and Recent Colors take the most room.
