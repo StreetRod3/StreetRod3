@@ -62,9 +62,12 @@ PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reference
 CELL = 16
 IN = 0.0254
 
-## Per car: the real car's size and wheelbase (inches), its paint material, the boxes
+## Per car: the real car's size and wheelbase (inches), its paint materials, the boxes
 ## that hold its bumpers (any number of boxes each) and where its steering wheel's rim
-## is, all in the model's frame (meters, nose -Y, Z up, driver's side +X).
+## is (its material and a point on it, or `box` and a box round the whole wheel), all in
+## the model's frame (meters, nose -Y, Z up, driver's side +X). Optional: `tire` and
+## `dial_face`, where the car's tire and gauge-face materials have names of their own;
+## `drop`, boxes whose parts are left out, and `drop_materials`, materials left out.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -114,6 +117,66 @@ CARS = {
                   'region': ((0.85, 0.24, 0.70), (1.05, 0.42, 0.80)),
                   'full': ((0.24, 0.72), (0.30, 0.785)),
                   'ref': ((0.85, 0.245, 0.68), (1.05, 0.268, 0.82))}],
+    },
+    # 1950 Ford Custom Deluxe Fordor sedan, made from the pack's police car: 196.8 in long,
+    # 72.8 in wide, 63.1 in high on a 114 in wheelbase (Wikipedia, 1949 Ford; Ford's 1949
+    # specifications for the height).
+    'ford-1950-police': {
+        'size_in': (196.8, 72.8, 63.1),
+        'wheelbase_in': 114.0,
+        # Black with white front doors as a police car; all of it is the paint here.
+        'paint': {'paint_black', 'paint_whitee'},
+        'tire': 'tyre texture bake',
+        'dial_face': 'textureford',
+        'bumpers': {
+            # The bar with its two small guards and the front plate under it.
+            'bumper_front': [((-1.1, -2.75, 0.2), (1.0, -2.15, 0.47))],
+            # The bar and its guards; the rear plate is on the trunk panel and stays.
+            'bumper_rear': [((-1.1, 2.25, 0.25), (1.0, 2.75, 0.47))],
+        },
+        'steer': ('bakelite', (0.326, -0.595, 1.024)),
+        # One dial in front of the driver, the speedometer with the small gauges in it.
+        'dials': ['speedo_fuel'],
+        # The police gear: the "POLICE" lettering on roof, hood, doors, fenders and trunk,
+        # and the radio under the dash ...
+        'drop_materials': {'police_car1', 'motorola'},
+        # ... the roof lights with their bases and the siren, the spotlight on its
+        # bracket by the driver's windshield pillar, the antennas on the cowl and the rear
+        # fenders, the wire screen behind the front seat and the rest of the radio with
+        # its microphone's coiled cord.
+        'drop': [((0.3, -0.6, 1.53), (0.55, -0.42, 1.76)),
+                 ((-0.7, -0.6, 1.53), (-0.5, -0.42, 1.76)),
+                 ((-0.2, -0.62, 1.62), (0.05, -0.19, 1.95)),
+                 ((0.76, -1.06, 0.98), (1.05, -0.92, 1.38)),
+                 ((-0.82, -1.01, 1.11), (-0.79, -0.98, 1.67)),
+                 ((-0.82, 2.04, 1.0), (-0.79, 2.28, 1.78)),
+                 ((0.67, 2.04, 1.0), (0.70, 2.28, 1.78)),
+                 ((-0.87, 0.17, 0.31), (0.73, 0.21, 1.65)),
+                 ((-0.57, -0.98, 1.09), (-0.22, -0.69, 1.31))],
+    },
+    # 1955 Packard Clipper Custom Constellation hardtop: 214.8 in long, 78.0 in wide,
+    # 62.0 in high on a 122 in wheelbase (Redbook, via carsales).
+    'packard-1955-clipper': {
+        'size_in': (214.8, 78.0, 62.0),
+        'wheelbase_in': 122.0,
+        # The red; the cream roof and rear sides stay cream.
+        'paint': {'packard_red'},
+        'tire': 'tyre tread.002',
+        'dial_face': 'gauge.001',
+        'bumpers': {
+            # The bar with its two bullet guards, the bars between them, the plate under
+            # it and the bars behind it (not the strip under the grille, which is the
+            # grille's).
+            'bumper_front': [((-1.1, -2.9, 0.25), (1.1, -2.296, 0.63))],
+            # The bar with the exhaust ports in its ends, the guards with the lamps in
+            # them and the plate between them.
+            'bumper_rear': [((-1.1, 2.40, 0.3), (1.1, 2.85, 0.70))],
+        },
+        # The rim is in segments, red and cream.
+        'steer': ('box', ((0.23, -0.665, 0.80), (0.70, -0.48, 1.235))),
+        # From the middle of the car out: the gauges on the speedometer's inner side (top,
+        # bottom), the speedometer, those on its outer side (bottom, top).
+        'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
     },
 }
 
@@ -179,7 +242,15 @@ LOOKS = {
     # The gold script on the Hudson's rear fenders.
     'taxi paint': ((232, 196, 96), (255, 40, 255)),
     'tyre': ((16, 16, 16), (255, 200, 10)),
+    # The Packard's chrome and carpet, whose images are not in the download.
+    'metal': CHROME,
+    'carped_red': ((96, 18, 18), (255, 240, 10)),
 }
+## A dial's face is at least this big across (m, model scale) and flat to within
+## DIAL_FLAT; on the driver's side, at least DIAL_SIDE out from the middle (m, game).
+DIAL_MIN = 0.03
+DIAL_FLAT = 0.002
+DIAL_SIDE = 0.15
 
 
 def srgb(c):
@@ -407,6 +478,30 @@ def plate_quad(tris, facing):
     return pos, nrm, uvs, (half_w * 2, half_h * 2)
 
 
+def dial_faces(tris):
+    """The gauge-face triangles in pieces that hang together by their corners, as lists
+    of their indices: one piece per face (a mesh part can hold several faces, and a
+    face's center knob is a part of its own)."""
+    import numpy as np
+    keys = np.round(tris.reshape(-1, 3), 5)
+    _, corner = np.unique(keys, axis=0, return_inverse=True)
+    corner = corner.reshape(-1, 3)
+    parent = np.arange(corner.max() + 1)
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    for a, b, c in corner:
+        for x, y in ((a, b), (b, c)):
+            rx, ry = find(x), find(y)
+            if rx != ry:
+                parent[rx] = ry
+    piece = np.array([find(a) for a in corner[:, 0]])
+    return [np.nonzero(piece == k)[0] for k in np.unique(piece)]
+
+
 def build(car, dst):
     import numpy as np
     from PIL import Image
@@ -444,7 +539,7 @@ def build(car, dst):
     # replace) and, for parts centered on the hub, outboard by WELL_OUT (hubcaps that
     # stand proud of the tire).
     floor = flat[:, 2].min()
-    tire_mat = names.index(TIRE)
+    tire_mat = names.index(cfg.get('tire', TIRE))
     tires = [p for p in np.unique(part[mat == tire_mat]) if plo[p][2] < floor + 0.01]
     wheel_parts = set()
     for t in tires:
@@ -466,17 +561,23 @@ def build(car, dst):
     rear_axle = max((plo[t][1] + phi[t][1]) / 2 for t in tires)
     pipes = {p for p in range(nparts) if phi[p][1] - plo[p][1] > PIPE_LONG and phi[p][2] < PIPE_TOP
              and phi[p][1] > rear_axle + PIPE_BEHIND}
-    dropped = wheel_parts | pipes
-    keep = ~np.isin(part, list(dropped))
+    gear = {p for lo, hi in cfg.get('drop', []) for p in range(nparts) if inside(p, lo, hi)}
+    dropped = wheel_parts | pipes | gear
+    keep = ~np.isin(part, list(dropped)) & ~np.isin(mat, [names.index(m) for m in cfg.get('drop_materials', ())])
 
     for trim in cfg.get('trim', []):
         trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim)
 
     steer_mat, steer_at = cfg['steer']
-    near = [p for p in np.unique(part[mat == names.index(steer_mat)])
-            if np.linalg.norm((plo[p] + phi[p]) / 2 - steer_at) < 0.1]
-    rim_part = max(near, key=lambda p: np.sum(part == p))
-    steer_parts = {p for p in range(nparts) if inside(p, plo[rim_part], phi[rim_part], 0.005)}
+    if steer_mat == 'box':
+        steer_box = steer_at
+        steer_parts = {p for p in range(nparts) if inside(p, *steer_box)}
+    else:
+        near = [p for p in np.unique(part[mat == names.index(steer_mat)])
+                if np.linalg.norm((plo[p] + phi[p]) / 2 - steer_at) < 0.1]
+        rim_part = max(near, key=lambda p: np.sum(part == p))
+        steer_box = (plo[rim_part], phi[rim_part])
+        steer_parts = {p for p in range(nparts) if inside(p, plo[rim_part], phi[rim_part], 0.005)}
     group_of = np.full(nparts, 'body', object)
     for g, boxes in cfg['bumpers'].items():
         for lo, hi in boxes:
@@ -514,10 +615,31 @@ def build(car, dst):
         return n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
 
     _, _, (s_mid, s_over) = length_map(np.zeros(1), front_z, rear_z, length_in * IN, cfg['wheelbase_in'] * IN, lo[2], hi[2])
-    rim = pos[part == rim_part].reshape(-1, 3)
-    rim_mid_src = (rim.min(0) + rim.max(0)) / 2
+    rim_mid_src = to_yup((np.asarray(steer_box[0]) + np.asarray(steer_box[1])) / 2)
     rim_mid = to_game(rim_mid_src)
     even = (scale_x + scale_y + s_mid) / 3
+
+    # The dials: the flat pieces of the gauge-face material, big enough, on the driver's
+    # side (the same face is on a clock, and on the Packard the radio, across the dash).
+    # A knob of that material in the middle of one (the Packard's) gives way to the
+    # needles' own hubs.
+    if cfg.get('dials'):
+        import variety_pack_dash as dash
+        face_idx = np.nonzero(keep & (mat == names.index(cfg.get('dial_face', DIAL_FACE))))[0]
+        pieces = []
+        for idx in dial_faces(pos[face_idx]):
+            tris = pos[face_idx[idx]]
+            center, axis, radius = dash.dial_frame(tris)
+            depth = np.ptp((tris.reshape(-1, 3) - center) @ axis)
+            pieces.append((face_idx[idx], center, radius, 2 * radius >= DIAL_MIN and depth <= DIAL_FLAT))
+        faces = [(c, r) for _, c, r, flat_face in pieces if flat_face]
+        for idx, c, r, flat_face in pieces:
+            if not flat_face and any(np.linalg.norm(c - fc) + r < fr for fc, fr in faces):
+                keep[idx] = False
+        dials = [dash.dial_frame(to_game(pos[idx])) for idx, _, _, flat_face in pieces if flat_face]
+        dials = [d for d in dials if d[0][0] > DIAL_SIDE]
+        if len(dials) != len(cfg['dials']):
+            raise SystemExit(f'{len(dials)} dials found for {len(cfg["dials"])} kinds')
 
     # Each kept triangle's look: the paint, glass, the plate, or a palette color; the
     # front lamps in the tail-light material are parking lamps.
@@ -633,12 +755,6 @@ def build(car, dst):
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
     pods = []
     if cfg.get('dials'):
-        import variety_pack_dash as dash
-        face_mat = names.index(DIAL_FACE)
-        # The driver's dials only: the same face is on a small dial (a clock) across the dash.
-        dials = [dash.dial_frame(to_game(pos[keep & (mat == face_mat) & (part == p)]))
-                 for p in np.unique(part[keep & (mat == face_mat)])]
-        dials = [d for d in dials if d[0][0] > 0]
         pods = dash.build(dials, cfg['dials'])
         looks_mat = {}
         for key, material in dash.NEEDLE_MATERIALS.items():

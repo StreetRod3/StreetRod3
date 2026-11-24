@@ -10,7 +10,10 @@ dial gets a printed face laid just over the model's own and needles of its own:
     in a pod named `dash_fuel_arch_90_pod`, which turns it back from F as the tank
     empties) and TEMP across the bottom, whose pointer stays put;
   * `speedo_fuel`: the speedometer with a small gas gauge in the gap at the bottom, its
-    own pivot below the middle, F at the lower left and E at the lower right.
+    own pivot below the middle, F at the lower left and E at the lower right;
+  * `fuel`, `temp`, `oil`, `amp`: a small round gauge of its own, its scale across the
+    top over 90 degrees and its name below the pivot. The gas gauge works (its needle in
+    a pod named `dash_fuel_arch_90_pod`); the others' pointers stay put.
 
 The faces are cream with dark printing, as on the cars of the day, and the needles red.
 The pods follow the other cars' dashes (tools/studebaker_dash.py): in a pod's frame the
@@ -46,6 +49,14 @@ SMALL_FUEL_NEEDLE = 0.30
 ## Where the combination gauge's TEMP pointer rests, clockwise from up (C at 135, H at
 ## 225: it sits a little past C).
 TEMP_AT = 150.0
+## The small gauges: the marks at the ends of the scale (left, right; the color of each)
+## and where the pointer rests, clockwise from up (the scale runs -45 to 45).
+SMALL = {
+    'fuel': ('FUEL', (('E', RED), ('F', INK)), FUEL_SWEEP / 2),
+    'temp': ('TEMP', (('C', INK), ('H', RED)), -15.0),
+    'oil': ('OIL', (('0', INK), ('80', INK)), 5.0),
+    'amp': ('AMP', (('-', RED), ('+', INK)), 6.0),
+}
 NEEDLE_MATERIALS = {
     'needle': MATERIALS['needle'],
     'pointer': {'name': 'dash_ink_pointer_mat', 'doubleSided': True,
@@ -116,6 +127,12 @@ def face_texture(kind):
         _text(d, _polar(c, r - TEX * 0.15, 135.0), 'C', _font(int(TEX * 0.09)), INK)
         _text(d, _polar(c, r - TEX * 0.15, 225.0), 'H', _font(int(TEX * 0.09)), RED)
         _text(d, (c[0], c[1] + TEX * 0.12), 'TEMP', _font(int(TEX * 0.065), True), INK)
+    elif kind in SMALL:
+        title, ends, _ = SMALL[kind]
+        _ticks(d, c, r, -FUEL_SWEEP / 2, FUEL_SWEEP, 4, 2, TEX * 0.12, TEX * 0.07, 10)
+        for (mark, color), deg in zip(ends, (-FUEL_SWEEP / 2 - 22, FUEL_SWEEP / 2 + 22)):
+            _text(d, _polar(c, r - TEX * 0.11, deg), mark, _font(int(TEX * 0.14), True), color)
+        _text(d, (c[0], c[1] + TEX * 0.2), title, _font(int(TEX * 0.13), True), INK)
     return im
 
 
@@ -161,6 +178,17 @@ def build(dials, kinds):
                          [('temp_needle', 'pointer', *temp), ('combo_hub', *hub[0])]))
             pods.append((f'dash_fuel_arch_{FUEL_SWEEP:.0f}_pod', center, basis, None, r,
                          [('fuel_needle', 'needle', *fuel)]))
+        elif kind in SMALL:
+            needle = _needle(r * 0.82, r * 0.15, r * 0.06, SMALL[kind][2], -NEEDLE_LIFT)
+            small_hub = ('hub', *disk(r * 0.12, HUB_LIFT, 12)[:2])
+            if kind == 'fuel':
+                pods.append((f'dash_fuel_arch_{FUEL_SWEEP:.0f}_pod', center, basis, kind, r,
+                             [('fuel_needle', 'needle', *needle), ('fuel_hub', *small_hub)]))
+            else:
+                pods.append((f'dash_{kind}_pod', center, basis, kind, r,
+                             [(f'{kind}_needle', 'pointer', *needle), (f'{kind}_hub', *small_hub)]))
+        else:
+            raise ValueError(f'no such dial kind: {kind}')
     return pods
 
 

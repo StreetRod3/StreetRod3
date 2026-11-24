@@ -107,6 +107,24 @@
       "hp": 155.0,
       "color": [0.55, 0.06, 0.05, 1.0],
       "car_file": "res://assets/cars/buick-special-1952.car"
+    },
+    {
+      "id": "ford-custom-1950",
+      "name": "1950 Ford Custom",
+      "price": 900,
+      "vmax": 170.0,
+      "hp": 150.0,
+      "color": [0.12, 0.26, 0.18, 1.0],
+      "car_file": "res://assets/cars/ford-custom-1950.car"
+    },
+    {
+      "id": "packard-clipper-1955",
+      "name": "1955 Packard Clipper",
+      "price": 1050,
+      "vmax": 195.0,
+      "hp": 230.0,
+      "color": [0.62, 0.07, 0.07, 1.0],
+      "car_file": "res://assets/cars/packard-clipper-1955.car"
     }
   ]
 }
