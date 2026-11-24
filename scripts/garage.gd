@@ -40,7 +40,7 @@ var _view_port: SubViewport
 @onready var _clock_skip_cruise: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
 @onready var _stats_panel: Control = $GarageUI/StatsPanel
 @onready var _spray_menu: Control = $GarageUI/ColorPickerMenu
-@onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/VBox/ColorPicker
+@onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/Body/ColorPicker
 @onready var _calendar: StaticBody3D = $InteractCalendar
 @onready var _calendar_hint: Label = $GarageUI/CalendarHint
 @onready var _garage_ui: CanvasLayer = $GarageUI
@@ -153,9 +153,12 @@ var _nav := _MenuNav.new()
 var _spray_zones: HBoxContainer
 var _spray_body_btn: Button
 var _spray_cove_btn: Button
-## The accent's finish, a list on its own line above Apply while Accent is chosen:
-## Paint, Vinyl, Matte (CarFile.ACCENT_FINISHES).
+## The paint's finish, a list on its own line above Apply: the body's (Gloss, Matte,
+## Primer, Metallic, Candy, Pearl, CarFile.PAINT_FINISHES), or while Accent is chosen the
+## accent's (the body's six and Vinyl, CarFile.ACCENT_FINISHES).
 var _spray_finishes: HBoxContainer
+## The color the picker goes to when Primer is chosen for the body.
+const PRIMER_GREY := Color(0.45, 0.46, 0.45, 1.0)
 var _spray_finish_pick: OptionButton
 var _car_list: Control
 var _car_list_rows: VBoxContainer
@@ -1127,8 +1130,8 @@ func _sync_menu_nav() -> void:
 		if _spray_finishes.visible:
 			spray_buttons.append(_spray_finish_pick)
 		spray_buttons.append_array([
-			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/ConfirmBtn,
-			$GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox/CancelBtn,
+			$GarageUI/ColorPickerMenu/Panel/Margin/Body/Side/HBox/ConfirmBtn,
+			$GarageUI/ColorPickerMenu/Panel/Margin/Body/Side/HBox/CancelBtn,
 		])
 		_nav.setup(spray_buttons)
 	elif _offer_panel != null and _offer_panel.visible:
@@ -1619,7 +1622,9 @@ func _show_spray_picker() -> void:
 
 
 func _build_spray_zones() -> void:
-	var vbox := $GarageUI/ColorPickerMenu/Panel/Margin/VBox as VBoxContainer
+	# The column right of the color picker: the title, then these two rows, then Apply
+	# and Cancel at the foot.
+	var vbox := $GarageUI/ColorPickerMenu/Panel/Margin/Body/Side as VBoxContainer
 	_spray_zones = HBoxContainer.new()
 	_spray_zones.alignment = BoxContainer.ALIGNMENT_CENTER
 	var group := ButtonGroup.new()
@@ -1644,32 +1649,51 @@ func _build_spray_zones() -> void:
 	label.text = "Finish"
 	_spray_finishes.add_child(label)
 	_spray_finish_pick = OptionButton.new()
-	for finish: String in CarFile.ACCENT_FINISHES:
-		_spray_finish_pick.add_item(finish.capitalize())
+	_spray_finish_pick.item_selected.connect(_on_spray_finish_selected)
 	_spray_finish_pick.custom_minimum_size = Vector2(140, 0)
 	_spray_finishes.add_child(_spray_finish_pick)
-	var buttons := $GarageUI/ColorPickerMenu/Panel/Margin/VBox/HBox
 	vbox.add_child(_spray_finishes)
-	vbox.move_child(_spray_finishes, buttons.get_index())
+	vbox.move_child(_spray_finishes, _spray_zones.get_index() + 1)
 	_spray_finishes.visible = false
 
 
-## The finish list shows while Accent is chosen, set to the car's present finish.
+## Whether the paint menu is on the accent (or cove) rather than the body.
+func _spraying_accent() -> bool:
+	return _spray_zones.visible and _spray_cove_btn.button_pressed
+
+
+## The finishes the list offers for the zone being painted.
+func _spray_finish_names() -> Array[String]:
+	return CarFile.ACCENT_FINISHES if _spraying_accent() else CarFile.PAINT_FINISHES
+
+
+## The finish list, filled for the zone being painted and set to its present finish.
 func _show_spray_finish() -> void:
-	var shown := _spray_zones.visible and _spray_cove_btn.button_pressed
-	var changed := shown != _spray_finishes.visible
-	_spray_finishes.visible = shown
-	if shown:
-		_spray_finish_pick.select(maxi(0, CarFile.ACCENT_FINISHES.find(GameState.car_accent_finish_now())))
+	var changed := not _spray_finishes.visible
+	_spray_finishes.visible = true
+	var names := _spray_finish_names()
+	_spray_finish_pick.clear()
+	for finish: String in names:
+		_spray_finish_pick.add_item(finish.capitalize())
+	var now := GameState.car_accent_finish_now() if _spraying_accent() else GameState.car_paint_finish
+	_spray_finish_pick.select(maxi(0, names.find(now)))
 	if changed and _spray_menu.visible:
 		_sync_menu_nav()
 
 
 func _chosen_spray_finish() -> String:
+	var names := _spray_finish_names()
 	var at := _spray_finish_pick.selected
-	if at < 0 or at >= CarFile.ACCENT_FINISHES.size():
-		return GameState.car_accent_finish_now()
-	return CarFile.ACCENT_FINISHES[at]
+	if at < 0 or at >= names.size():
+		return GameState.car_accent_finish_now() if _spraying_accent() else GameState.car_paint_finish
+	return names[at]
+
+
+## Picking Primer puts the color at primer grey, which can still be changed (to red
+## oxide, say).
+func _on_spray_finish_selected(_at: int) -> void:
+	if _chosen_spray_finish() == "primer":
+		_spray_color_picker.color = PRIMER_GREY
 
 
 ## The picker shows the chosen zone's paint; an unpainted cove shows the body's, an
@@ -1691,6 +1715,7 @@ func _on_spray_confirm_pressed() -> void:
 		GameState.set_car_accent_finish(_chosen_spray_finish())
 	else:
 		GameState.set_car_color(_spray_color_picker.color)
+		GameState.set_car_paint_finish(_chosen_spray_finish())
 	# Update the preview immediately.
 	if _car_pivot.has_method(&"set_car_body_color"):
 		_car_pivot.set_car_body_color(GameState.car_color)

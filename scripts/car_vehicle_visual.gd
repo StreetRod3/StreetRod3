@@ -123,6 +123,14 @@ func apply_roof() -> void:
 				skin_node.visible = vinyl == (skin == "vinyl")
 
 
+## The body paint's finish (CarFile.PAINT_FINISHES): a preview, someone else's car, is
+## always gloss, the player's car the one chosen in the garage.
+func _active_paint_finish() -> String:
+	if _previewing:
+		return "gloss"
+	return GameState.car_paint_finish
+
+
 ## The cove's or accent's finish: a preview shows its car file's, the player's car the
 ## one chosen in the garage.
 func _active_accent_finish() -> String:
@@ -492,7 +500,7 @@ func _paint_solid_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			mat = mesh_instance.mesh.surface_get_material(i)
 		if mat == null:
 			mat = StandardMaterial3D.new()
-		if mat is StandardMaterial3D and (_dither_cell() > 0.0 or _has_cove()):
+		if mat is StandardMaterial3D and (_dither_cell() > 0.0 or _has_cove() or _active_paint_finish() != "gloss"):
 			mesh_instance.set_surface_override_material(i, _shaded_solid_paint(mat as StandardMaterial3D, color, mesh_instance))
 			continue
 		var mat_copy := mat.duplicate()
@@ -522,6 +530,9 @@ func _shaded_solid_paint(std: StandardMaterial3D, color: Color, mesh_instance: M
 	shader_mat.set_shader_parameter("albedo_tex", _white_texture)
 	shader_mat.set_shader_parameter("metallic", std.metallic)
 	shader_mat.set_shader_parameter("roughness", std.roughness)
+	if std.clearcoat_enabled:
+		shader_mat.set_shader_parameter("clearcoat", std.clearcoat)
+		shader_mat.set_shader_parameter("clearcoat_roughness", std.clearcoat_roughness)
 	_set_paint_params(shader_mat, color, mesh_instance)
 	if std.normal_enabled and std.normal_texture != null:
 		shader_mat.set_shader_parameter("normal_tex", std.normal_texture)
@@ -553,6 +564,7 @@ func _set_paint_params(shader_mat: ShaderMaterial, color: Color, mesh_instance: 
 	shader_mat.set_shader_parameter("use_accent", 0.0 if _accent().is_empty() else 1.0)
 	shader_mat.set_shader_parameter("accent_color", _accent_color())
 	shader_mat.set_shader_parameter("accent_finish", maxi(0, _CarFile.ACCENT_FINISHES.find(_active_accent_finish())))
+	shader_mat.set_shader_parameter("paint_finish", maxi(0, _CarFile.PAINT_FINISHES.find(_active_paint_finish())))
 
 
 func _cove() -> Dictionary:
@@ -639,7 +651,10 @@ func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 			normal = std.normal_texture
 			normal_scale = std.normal_scale
 		if tex == null:
-			if mat is StandardMaterial3D:
+			if mat is StandardMaterial3D and _active_paint_finish() != "gloss":
+				# A finish needs the paint shader, over plain white as on a solid body.
+				mesh_instance.set_surface_override_material(i, _shaded_solid_paint(mat as StandardMaterial3D, color, mesh_instance))
+			elif mat is StandardMaterial3D:
 				var solid := (mat as StandardMaterial3D).duplicate() as StandardMaterial3D
 				solid.albedo_color = color
 				mesh_instance.set_surface_override_material(i, solid)
