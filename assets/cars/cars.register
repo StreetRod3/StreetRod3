@@ -188,6 +188,24 @@
       "hp": 230.0,
       "color": [0.33, 0.6, 0.92, 1.0],
       "car_file": "res://assets/cars/packard-caribbean-1955.car"
+    },
+    {
+      "id": "ford-f100-panel-1956",
+      "name": "1956 Ford F-100 Panel",
+      "price": 850,
+      "vmax": 185.0,
+      "hp": 260.0,
+      "color": [0.2, 0.42, 0.72, 1.0],
+      "car_file": "res://assets/cars/ford-f100-panel-1956.car"
+    },
+    {
+      "id": "jeep-dispatcher-1965",
+      "name": "1965 Jeep Dispatcher",
+      "price": 650,
+      "vmax": 140.0,
+      "hp": 135.0,
+      "color": [0.1, 0.14, 0.35, 1.0],
+      "car_file": "res://assets/cars/jeep-dispatcher-1965.car"
     }
   ]
 }

@@ -14,6 +14,11 @@ dial gets a printed face laid just over the model's own and needles of its own:
   * `fuel`, `temp`, `oil`, `amp`: a small round gauge of its own, its scale across the
     top over 90 degrees and its name below the pivot. The gas gauge works (its needle in
     a pod named `dash_fuel_arch_90_pod`); the others' pointers stay put;
+  * `half_speedo`: a half-round speedometer (the 1956 Ford truck's), 0-120 mph over 180
+    degrees from the left across the top, its pivot in the middle of the flat bottom edge
+    (a pod named `dash_speedo_arch_180_mph_120_pod`); the face is the model's, a half disk
+    stretched to its width, so a face wider than twice its height is printed as a half
+    ellipse;
   * `ribbon_speedo`, `ribbon_fuel`: a long flat strip (the 1954 Buick's) with a scale
     along it and a bar of a needle that slides: the speedometer 0-120 mph left to right
     (a pod named `dash_speedo_linear_<travel>_mph_120_pod`, which the game slides along
@@ -47,6 +52,7 @@ RED = (176, 32, 24)
 SPEEDO_SWEEP = 240.0
 SPEEDO_MAX = 120
 FUEL_SWEEP = 90.0
+HALF_SWEEP = 180.0
 ## Where a speedo_fuel face's gas gauge pivots, below the middle, and how long its needle
 ## is, as shares of the face's radius.
 SMALL_FUEL_DOWN = 0.36
@@ -155,6 +161,39 @@ def face_texture(kind):
     return im
 
 
+def half_texture():
+    """The half-round speedometer's face: TEX wide, TEX/2 high, the pivot in the middle of
+    the bottom edge."""
+    im = Image.new('RGB', (TEX, TEX // 2), CREAM)
+    d = ImageDraw.Draw(im)
+    c = (TEX / 2, TEX / 2)
+    r = TEX / 2 - TEX * 0.03
+    d.arc([c[0] - r - 2, c[1] - r - 2, c[0] + r + 2, c[1] + r + 2], 180, 360, fill=INK, width=6)
+    start = -HALF_SWEEP / 2
+    _ticks(d, c, r, start, HALF_SWEEP, SPEEDO_MAX // 5, 2, TEX * 0.06, TEX * 0.03, 6)
+    for mph in range(0, SPEEDO_MAX + 1, 20):
+        deg = start + HALF_SWEEP * mph / SPEEDO_MAX
+        at = _polar(c, r - TEX * 0.12, deg)
+        _text(d, (at[0], min(at[1], c[1] - TEX * 0.04)), str(mph), _font(int(TEX * 0.06)), INK)
+    _text(d, (c[0], c[1] - TEX * 0.17), 'MPH', _font(int(TEX * 0.05), True), INK)
+    return im
+
+
+def half_disk(half_w, height, lift, segments=SEGMENTS):
+    """A half disk (a half ellipse, half_w wide each way and height high) in the pod's X-Z
+    plane above its origin, at -lift, facing -Y, with UVs over half_texture."""
+    a = np.linspace(-math.pi / 2, math.pi / 2, segments // 2 + 1)
+    rim = np.stack([np.sin(a) * half_w, np.zeros_like(a), np.cos(a) * height], 1)
+    tris, uvs = [], []
+    for i in range(len(rim) - 1):
+        p = [np.zeros(3), rim[i + 1], rim[i]]
+        tris.append(p)
+        uvs.append([(0.5 + q[0] / (2 * half_w), 1.0 - q[2] / height) for q in p])
+    tris = np.array(tris) + np.array([0.0, -lift, 0.0])
+    nrm = np.tile([0.0, -1.0, 0.0], (len(tris), 3, 1))
+    return tris, nrm, np.array(uvs)
+
+
 def ribbon_texture(kind, half_w, half_h):
     w = RIBBON_TEX
     h = max(48, round(w * half_h / half_w))
@@ -239,6 +278,16 @@ def build(dials, kinds, by_size=False):
                 pods.append((f'dash_fuel_linear_{span:.4f}_pod', center, basis, kind, (hw, hh),
                              [('fuel_needle', 'needle', t, n)]))
             continue
+        if kind == 'half_speedo':
+            # The pivot is in the middle of the face's flat bottom edge.
+            hw = half_w * FACE_SHARE
+            height = min(2 * half_h, half_w) * FACE_SHARE
+            at = center - basis @ np.array([0.0, 0.0, half_h * FACE_SHARE])
+            needle = _needle(height * 0.88, height * 0.08, height * 0.03, -HALF_SWEEP / 2, -NEEDLE_LIFT)
+            hub = disk(height * 0.08, HUB_LIFT, 16)[:2]
+            pods.append((f'dash_speedo_arch_{HALF_SWEEP:.0f}_mph_{SPEEDO_MAX}_pod', at, basis, kind, (hw, height),
+                         [('speedo_needle', 'needle', *needle), ('speedo_hub', 'hub', *hub)]))
+            continue
         r = radius * FACE_SHARE
         hub = [('hub', *disk(r * 0.07, HUB_LIFT, 16)[:2])]
         if kind in ('speedo', 'speedo_fuel'):
@@ -282,6 +331,8 @@ def face_material(kind, image_index):
 def face_png(kind, size):
     if kind.startswith('ribbon_'):
         return _png(ribbon_texture(kind, *size))
+    if kind == 'half_speedo':
+        return _png(half_texture())
     return _png(face_texture(kind))
 
 
@@ -290,4 +341,6 @@ def face_mesh(kind, size):
     if kind.startswith('ribbon_'):
         t, n, u = rect(*size, FACE_LIFT)
         return (t @ FLIP, n @ FLIP, u) if kind == 'ribbon_speedo' else (t, n, u)
+    if kind == 'half_speedo':
+        return half_disk(*size, FACE_LIFT)
     return disk(size, FACE_LIFT)

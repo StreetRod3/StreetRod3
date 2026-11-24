@@ -99,3 +99,5 @@ assets/cars/buick-special-1950.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/buick-estate-wagon-1954.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/buick-super-convertible-1952.glb filter=lfs diff=lfs merge=lfs -text
 assets/cars/packard-caribbean-1955.glb filter=lfs diff=lfs merge=lfs -text
+assets/cars/ford-f100-panel-1956.glb filter=lfs diff=lfs merge=lfs -text
+assets/cars/jeep-dispatcher-1965.glb filter=lfs diff=lfs merge=lfs -text

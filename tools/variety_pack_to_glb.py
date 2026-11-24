@@ -77,7 +77,11 @@ IN = 0.0254
 ## letters are), by the image's file name in textures/ (or a mask and an image of the
 ## letters' colors); `height` None scales the height as the width; `dial_order` 'size'
 ## gives the `dials` kinds from the biggest dial down; `clamp` pulls the parts wholly
-## inside `parts_in` in along an axis (0 X, 1 Y, 2 Z) to between `min` and `max`.
+## inside `parts_in` in along an axis (0 X, 1 Y, 2 Z) to between `min` and `max`;
+## `graft` takes parts from another of the pack's cars (`from`, its part numbers in
+## `parts`), moved by `offset` and given one of this car's materials (`material`), for
+## what the model lacks; `dial_side` moves the line inboard of which dials are not looked
+## for (DIAL_SIDE), for dials in the middle of the dash.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -372,6 +376,58 @@ CARS = {
         # The Clipper's opening under the grille, closed the same way.
         'fill': [('paint_white_real', ((-0.68, -2.54, 0.34), (0.68, -2.54, 0.34), (0.68, -2.54, 0.56),
                                        (-0.68, -2.54, 0.56)), (0.0, -1.0, 0.0))],
+    },
+    # 1956 Ford F-100 panel delivery (the pack calls it a 1953; the wraparound windshield
+    # and the grille are the 1956's): 110 in wheelbase (fordf100s.com); the 1953-56 panel
+    # 201.8 in long, 75.6 in wide (Concept Carz, 1953 F-100 panel); its height is not
+    # given, so it scales as the width.
+    'ford-1953-panel': {
+        'size_in': (201.8, 75.6, None),
+        'wheelbase_in': 110.0,
+        'paint': {'blue_metallic'},
+        'tire': 'tyre black',
+        'dial_face': 'half_speedo',
+        # The decal on the rear door, whose image is not in the download (a black square).
+        'drop_materials': {'van_decals'},
+        'bumpers': {
+            # The bar, its bolt heads and its two brackets.
+            'bumper_front': [((-1.0, -2.75, 0.35), (1.0, -2.5, 0.53))],
+            'bumper_rear': [((-1.0, 2.5, 0.37), (1.0, 2.75, 0.54))],
+        },
+        'steer': ('bakelite', (0.379, -0.5635, 1.346)),
+        # The half-round speedometer in front of the driver.
+        'dials': ['half_speedo'],
+    },
+    # Jeep DJ-5 Dispatcher (the pack calls it a 1954 mail jeep; it is the later DJ-5):
+    # 133.0 in long, 68.5 in wide, 68.7 in high on an 81 in wheelbase (Jeep Database,
+    # DJ-5). Made civilian: the postal service decals and the MAIL letters on the back are
+    # left out and the body is one color, the cream top and the red stripe with the blue.
+    'jeep-1954-usps': {
+        'size_in': (133.0, 68.5, 68.7),
+        'wheelbase_in': 81.0,
+        'paint': {'blue_paint', 'paint_whitee', 'red'},
+        'tire': 'tyre black',
+        'dial_face': 'SPEEDO',
+        'drop_materials': {'postal service'},
+        'drop': [((-0.4, 1.91, 0.64), (0.36, 1.93, 0.99))],
+        'bumpers': {
+            # The bar and its two brackets; the tow hooks under it stay on the frame.
+            'bumper_front': [((-0.9, -2.05, 0.47), (0.9, -1.8, 0.65))],
+            'bumper_rear': [((-0.9, 1.93, 0.4), (0.9, 2.05, 0.6))],
+        },
+        # The model has no steering wheel; the Ford truck's (rim, hub, spokes and column)
+        # in front of the driver's seat, in the Jeep's black.
+        'graft': [{'from': 'ford-1953-panel', 'parts': [72, 73, 74, 75, 76, 78],
+                   'offset': (0.071, 0.4335, -0.196), 'material': 'Metal_painted'}],
+        'steer': ('box', ((0.17, -0.27, 0.90), (0.73, 0.0, 1.40))),
+        # The speedometer and the gas gauge, in the middle of the dash.
+        'dials': ['speedo', 'fuel'],
+        'dial_order': 'size',
+        'dial_side': -0.2,
+        # The rear bumper and the front one's brackets are olive; black like the front bar.
+        'recolor': [{'from': {'paint_green'}, 'to': 'lorrymetal', 'parts_in': ((-1.0, -2.1, 0.0), (1.0, 2.1, 2.2))}],
+        # The frame rails run 7 cm out behind the body to the rear bumper; they end inside it.
+        'clamp': [{'parts_in': ((-0.45, -1.85, 0.45), (0.45, 2.0, 0.73)), 'axis': 1, 'max': 1.90}],
     },
 }
 
@@ -708,16 +764,28 @@ def build(car, dst):
     from studebaker_dash import quaternion
 
     cfg = CARS[car]
-    blend = os.path.join(PACK, 'split', car + '.blend')
-    with tempfile.TemporaryDirectory() as tmp:
-        npz = os.path.join(tmp, 'mesh.npz')
-        subprocess.run(['blender', '-b', '--factory-startup', '--disable-autoexec', '--python',
-                        os.path.abspath(__file__), '--', 'dump', blend, npz],
-                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        data = dict(np.load(npz))
-        info = json.load(open(npz + '.json'))
+
+    def load(name):
+        blend = os.path.join(PACK, 'split', name + '.blend')
+        with tempfile.TemporaryDirectory() as tmp:
+            npz = os.path.join(tmp, 'mesh.npz')
+            subprocess.run(['blender', '-b', '--factory-startup', '--disable-autoexec', '--python',
+                            os.path.abspath(__file__), '--', 'dump', blend, npz],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return dict(np.load(npz)), json.load(open(npz + '.json'))
+
+    data, info = load(car)
     pos, nrm, mat, part, uv = data['pos'], data['nrm'], data['mat'].copy(), data['part'], data['uv']
     names = [d['name'] for d in info]
+    for graft in cfg.get('graft', []):
+        donor, _ = load(graft['from'])
+        sel = np.isin(donor['part'], graft['parts'])
+        renumber = {p: part.max() + 1 + k for k, p in enumerate(sorted(graft['parts']))}
+        pos = np.concatenate([pos, donor['pos'][sel] + np.asarray(graft['offset'])])
+        nrm = np.concatenate([nrm, donor['nrm'][sel]])
+        uv = np.concatenate([uv, donor['uv'][sel]])
+        mat = np.concatenate([mat, np.full(sel.sum(), names.index(graft['material']), mat.dtype)])
+        part = np.concatenate([part, np.array([renumber[p] for p in donor['part'][sel]], part.dtype)])
     nparts = part.max() + 1
     plo = np.full((nparts, 3), np.inf)
     phi = np.full((nparts, 3), -np.inf)
@@ -866,7 +934,7 @@ def build(car, dst):
                 tris = to_game(pos[idx])
                 center, axis, radius = dash.dial_frame(tris)
                 dials.append((center, axis, radius, *dash.face_extent(tris, center, dash.pod_basis(axis))))
-        dials = [d for d in dials if d[0][0] > DIAL_SIDE]
+        dials = [d for d in dials if d[0][0] > cfg.get('dial_side', DIAL_SIDE)]
         if len(dials) != len(cfg['dials']):
             raise SystemExit(f'{len(dials)} dials found for {len(cfg["dials"])} kinds')
 

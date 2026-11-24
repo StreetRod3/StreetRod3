@@ -38,16 +38,16 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | `buick-1954-wagon.blend` | 54buickwagon | 1954 Buick Special Estate Wagon | The 1954 sedan's front end and dash; modeled as oversize as the sedan |
 | `ford-1950-police.blend` | 50fordpolice | 1950 Ford Custom Fordor police car | In the game as a civilian car, its police gear left out |
 | `ford-1950-wagon.blend` | 50fordwagon | 1950 Ford Custom Deluxe station wagon (Country Squire) | Red steel wheels, spare on the tailgate |
-| `ford-1953-panel.blend` | 53fordpanel | Ford F-100 panel van | The wraparound windshield and grille are the 1956 F-100's |
+| `ford-1953-panel.blend` | 53fordpanel | Ford F-100 panel van | The wraparound windshield and grille are the 1956 F-100's; a half-round speedometer and a hula girl on the dash |
 | `hudson-1951.blend` | 51hudson | 1951 Hudson Hornet club coupe | |
-| `jeep-1954-usps.blend` | 54 usps jeep | Jeep mail truck | Looks like the later DJ-5; a delivery truck, not a car to buy |
+| `jeep-1954-usps.blend` | 54 usps jeep | Jeep mail truck | The later DJ-5 Dispatcher, in a navy, cream and red mail livery with postal decals and MAIL on the back; no steering wheel |
 | `packard-1955-caribbean.blend` | 55packard caribbean | 1955 Packard Caribbean convertible | Blue and white; the top folded down under its boot; the Packards' dash |
 | `packard-1955-clipper.blend` | 55packardclipper | 1955 Packard Clipper Custom Constellation hardtop | Red with a cream roof and rear sides |
 | `packard-1955-patrician.blend` | 55packard patrician | 1955 Packard Patrician four-door sedan | Maroon and cream |
 
 ## Converting a car
 
-`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`), `packard-1955-clipper` (`packard-clipper-1955`), `packard-1955-patrician` (`packard-patrician-1955`), `ford-1950-wagon` (`ford-country-squire-1950`), `buick-1954` (`buick-special-1954`), `buick-1950` (`buick-special-1950`), `buick-1954-wagon` (`buick-estate-wagon-1954`), `buick-1952-convertible` (`buick-super-convertible-1952`) and `packard-1955-caribbean` (`packard-caribbean-1955`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
+`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`), `packard-1955-clipper` (`packard-clipper-1955`), `packard-1955-patrician` (`packard-patrician-1955`), `ford-1950-wagon` (`ford-country-squire-1950`), `buick-1954` (`buick-special-1954`), `buick-1950` (`buick-special-1950`), `buick-1954-wagon` (`buick-estate-wagon-1954`), `buick-1952-convertible` (`buick-super-convertible-1952`), `packard-1955-caribbean` (`packard-caribbean-1955`), `ford-1953-panel` (`ford-f100-panel-1956`) and `jeep-1954-usps` (`jeep-dispatcher-1965`). `graft` borrows parts from another of the pack's cars (the Jeep's steering wheel is the Ford truck's) and `dial_side` lets dials in the middle of the dash be found. Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
 
 ## Changes from the download
 
@@ -67,8 +67,12 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | 1954 Buick and its wagon: the frame rails' ends pulled in to end inside the body | They ran out through the panels behind the bumpers and showed as brackets with the bumpers off (user, 2026-11-23) |
 | 1954 Buick: its strip speedometer and the small strip under it made a sliding speedometer (0-120 mph) and gas gauge | The game slides a needle in a `linear` pod; the speedometer's top is in the pod's name |
 | Packard: the "Packard" and "Clipper" scripts drawn as chrome lettering cut out by their image | Their image is a mask, which as one color made a dark box each (user, 2026-11-23) |
+| Jeep: made civilian, the postal service decals and the MAIL letters on the back left out and the body (navy, cream top, red stripe) one color | So it is a Jeep Dispatcher anyone could buy, as the Ford police car was made a civilian Ford |
+| Jeep: the Ford truck's steering wheel and column added in front of the driver's seat, black | The model has none |
+| Jeep: the olive rear bumper and front bumper brackets made black like the front bar; the frame rails' rear ends pulled in to end inside the body | They ran 7 cm out behind the body and showed as two blocks with the bumper off |
+| Ford truck: the decal on the rear door left out | Its image is not in the download, so it was a black square |
 | Front lamps in the tail-light material made clear | The pack gives the Buick red parking lamps; the real ones were clear |
-| Gauge faces printed and needles added: the Hudson's speedometer and combination gauge (fuel works, temperature stays put), the Buick's and the Ford's speedometer with a small gas gauge, the Packards' speedometer with four small gauges (fuel works; temperature, oil and amps stay put), the 1954 Buick's strip speedometer and gas gauge | The pack's gauge image is not in the download and the dials have no needles; the small dial across the dash (a clock) keeps its plain face |
+| Gauge faces printed and needles added: the Hudson's speedometer and combination gauge (fuel works, temperature stays put), the Buick's and the Ford's speedometer with a small gas gauge, the Packards' speedometer with four small gauges (fuel works; temperature, oil and amps stay put), the 1954 Buick's strip speedometer and gas gauge, the Ford truck's half-round speedometer (0-120 mph over 180 degrees), the Jeep's speedometer and gas gauge | The pack's gauge image is not in the download and the dials have no needles; the small dial across the dash (a clock) keeps its plain face |
 | Colors from the material settings in one palette, the paint as the mask | Most of the images the materials used are not in the download |
 | Length scaled in two parts | The wheelbase to the real one between the axles, the overhangs to the rest of the real length, easing from one to the other around each axle, so the car is neither too long nor short in the wheelbase (user, 2026-11-22) |
 
@@ -86,6 +90,8 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | 1954 Buick Special Estate Wagon | Taken as the sedan's 206.3 in long, 76.8 in wide, 122 in wheelbase (the AMA sheet gives the sedan only); height not given | The sedan's length, width and wheelbase; the height scaled as the width (0.910) |
 | 1950 Buick Special four-door (Series 40) | 204.0 in long, 79.4 in wide, 63.9 in high, 121.5 in wheelbase | Real length, width, height and wheelbase; the model's 123.6 in wheelbase shortened by 0.982, its overhangs by 0.985 |
 | 1952 Buick Super convertible (56C) | 206.2 in long, 80.0 in wide, 121.5 in wheelbase | Real length, width and wheelbase; the model's 120.9 in wheelbase stretched by 1.003, its overhangs by 1.050; the height (the real one is top up, the model's top is down) scaled as the width (0.979) |
+| 1956 Ford F-100 panel delivery | 110 in wheelbase; the 1953-56 panel 201.8 in long, 75.6 in wide; height not given | Real length, width and wheelbase; the model's 121.1 in wheelbase shortened by 0.908, its overhangs by 0.978; the height scaled as the width (0.912) |
+| Jeep DJ-5 Dispatcher | 133.0 in long, 68.5 in wide, 68.7 in high, 81 in wheelbase | Real length, width, height and wheelbase; the model's 100.1 in wheelbase shortened by 0.809, its overhangs by 0.906, its width by 0.944, its height by 0.812 |
 | 1955 Packard Caribbean convertible | 216.5 in long, 77.8 in wide, 62.9 in high top up, 127 in wheelbase | Real length, width and wheelbase; the model's 125.5 in wheelbase stretched by 1.012, its overhangs shortened by 0.934; the height (top down) scaled as the width (0.964) |
 
 - Conceptcarz, Hudson Hornet Series 7A club coupe: https://www.conceptcarz.com/w9330/hudson-hornet-series-7a.aspx
@@ -101,3 +107,6 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 - Concept Carz, 1952 Buick Series 50 Super (length, wheelbase, weight): https://www.conceptcarz.com/s14026/concepts.aspx
 - Hometown Buick, 1952 Buick specifications (the Super's 80.0 in width): https://www.hometownbuick.com/1952-buick/1952 Buick Specifications
 - Wikipedia, Packard Caribbean: https://en.wikipedia.org/wiki/Packard_Caribbean
+- fordf100s.com, 1956 Ford F-100 (wheelbase, weight): https://fordf100s-com.pages.dev/1956-ford-f100/
+- Concept Carz, 1953 Ford F-100 panel (length, width): https://www.conceptcarz.com/s24156/concepts.aspx
+- Jeep Database, DJ-5: https://jeepdatabase.squarespace.com/dj5
