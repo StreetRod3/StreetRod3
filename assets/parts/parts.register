@@ -630,6 +630,17 @@
       "hp": 0,
       "vmax": 8,
       "grip": 5
+    },
+    {
+      "id": "tires-drag",
+      "slot": "tires",
+      "style": "drag",
+      "name": "Drag slicks",
+      "price": 340,
+      "hp": 0,
+      "vmax": 4,
+      "grip": 3,
+      "launch_grip": 2.2
     }
   ],
   "headers": [
@@ -835,6 +846,16 @@
       "lower_m": 0.03
     },
     {
+      "id": "springs-gasser",
+      "slot": "springs",
+      "style": "gasser",
+      "name": "Gasser springs",
+      "price": 380,
+      "spring_rate": 1.25,
+      "lower_m": -0.15,
+      "weight_back": 0.05
+    },
+    {
       "id": "shocks-stock",
       "slot": "shocks",
       "stock": true,
@@ -858,6 +879,16 @@
       "name": "Racing shocks",
       "price": 320,
       "shock_rate": 1.7
+    },
+    {
+      "id": "shocks-drag",
+      "slot": "shocks",
+      "style": "drag",
+      "name": "90/10 drag shocks",
+      "price": 240,
+      "shock_rate": 1.0,
+      "front_rebound": 0.1,
+      "rear_bump": 0.4
     }
   ],
   "mounts": [

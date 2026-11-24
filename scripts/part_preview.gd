@@ -103,7 +103,7 @@ static func _wheel(part: Dictionary) -> Node3D:
 static func _tire(part: Dictionary) -> Node3D:
 	var root := Node3D.new()
 	var style := str(part.get("style", "bias"))
-	var slick := style == "slick"
+	var slick := style == "slick" or style == "drag"
 	var ring := _torus(0.16 if slick else 0.2, 0.36 if slick else 0.33, Color(0.07, 0.07, 0.07), 0.55 if slick else 0.92)
 	root.add_child(ring)
 	if style == "radial":

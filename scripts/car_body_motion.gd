@@ -28,6 +28,8 @@ var _dynamics: _Dynamics
 var _body: Node3D
 var _body_rest := Transform3D.IDENTITY
 var _lean_center := Vector3.ZERO
+## The rear axle's line, which the whole car turns about in a wheelstand.
+var _stand_pivot := Vector3.ZERO
 ## One entry per wheel: its node, resting transform, hub, radius, and how far it has rolled.
 var _wheels: Array[Dictionary] = []
 var _steering_model_root: Node
@@ -103,6 +105,15 @@ func capture() -> void:
 	if _dynamics != null:
 		var cg := _dynamics.cg_local - _visual.position
 		_lean_center = Vector3(cg.x, _dynamics.config.cg_height_m, cg.z)
+		_stand_pivot = Vector3(cg.x, 0.0, cg.z + _dynamics.rear_axle_offset())
+	var rear_hubs := 0
+	var rear_sum := Vector3.ZERO
+	for wheel: Dictionary in _wheels:
+		if not wheel.is_empty() and not bool(wheel["front"]):
+			rear_sum += wheel["hub"] as Vector3
+			rear_hubs += 1
+	if rear_hubs > 0:
+		_stand_pivot = rear_sum / float(rear_hubs)
 
 
 ## Runs the springs and shocks for a car whose tires are not doing so, from how its velocity
@@ -129,7 +140,15 @@ func note_velocity(velocity: Vector3) -> void:
 func lean_in_car_space() -> Transform3D:
 	if _visual == null:
 		return Transform3D.IDENTITY
-	return _visual.transform * _lean_transform() * _visual.transform.affine_inverse()
+	return _visual.transform * _stand_transform() * _lean_transform() * _visual.transform.affine_inverse()
+
+
+## The whole car turned up about its rear axle, in a wheelstand.
+func _stand_transform() -> Transform3D:
+	if _dynamics == null or _dynamics.wheelstand() <= 0.0:
+		return Transform3D.IDENTITY
+	var turn := Basis(Vector3.RIGHT, -_dynamics.wheelstand())
+	return Transform3D(Basis.IDENTITY, _stand_pivot) * Transform3D(turn, Vector3.ZERO) * Transform3D(Basis.IDENTITY, -_stand_pivot)
 
 
 func _lean_transform() -> Transform3D:
@@ -146,8 +165,9 @@ func _lean_transform() -> Transform3D:
 func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: float = 0.0, rpm: float = 0.0) -> void:
 	if not _captured:
 		return
+	var stand := _stand_transform()
 	if _body != null:
-		_body.transform = _lean_transform() * _body_rest
+		_body.transform = stand * _lean_transform() * _body_rest
 	var sim_wheels: Array = _dynamics.wheels() if _dynamics != null else []
 	var shown := _shown_steer(steer, steer_input)
 	_pose_steering_wheel(dt, shown)
@@ -167,7 +187,7 @@ func pose(dt: float, speed: float, steer: float, steer_input: float, rear_spin: 
 		if i == flat_wheel:
 			hub.y -= flat_drop
 		var mesh := Transform3D(turn, hub) * Transform3D(Basis.IDENTITY, -(wheel["hub"] as Vector3))
-		(wheel["node"] as Node3D).transform = mesh * (wheel["rest"] as Transform3D)
+		(wheel["node"] as Node3D).transform = stand * mesh * (wheel["rest"] as Transform3D)
 
 
 func _shown_steer(steer: float, steer_input: float) -> float:

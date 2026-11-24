@@ -213,6 +213,19 @@ var _roll: float = 0.0
 var _roll_vel: float = 0.0
 var _pitch_inertia: float = 2500.0
 var _roll_inertia: float = 600.0
+## The wheelstand: how far the whole car has turned up about its rear axle, nose up, in radians,
+## and how fast. 0 with the front tires on the road.
+var _stand: float = 0.0
+var _stand_vel: float = 0.0
+## How far the mass center sits ahead of the rear axle, in meters.
+var _rear_reach: float = 1.3
+## How many times the rear tires' grip the drive can use, from the tires (drag slicks hook up).
+## The sideways grip stays the tires' rating.
+var _launch_grip: float = 1.0
+## Share of the shocks' damping the front ones keep as they extend: drag shocks let the nose up.
+var _front_rebound: float = 1.0
+## Share the rear ones keep as they compress: drag shocks let the rear squat.
+var _rear_bump: float = 1.0
 var _spring_rate: float = spring_stiffness
 var _shock_rate: float = damper_coefficient
 var _ride_lower: float = 0.0
@@ -258,6 +271,13 @@ const _BUMP_STIFFNESS := 6.0
 const _LOAD_CAP := 4.0
 const _HEAVE_LIMIT_M := 0.18
 const _LEAN_LIMIT_RAD := 0.12
+## Where the tail touches the road in a wheelstand, in radians up from level. It stops there.
+const _STAND_MAX_RAD := 0.42
+## Share of its speed a nose coming up onto the tail keeps, going back down.
+const _STAND_TAIL_BOUNCE := 0.3
+## A wheelstand starts only under at least this share of the pull that would hold the nose up:
+## front tires off a ramp's lip, with the rear ones still on it, are not one.
+const _STAND_PULL_SHARE := 0.5
 ## How fast normalized longitudinal slip chases the force the driver asked for.
 const _SLIP_RESPONSE := 9.0
 const _CATCH_LOCK_MAX_RAD := 0.5
@@ -302,6 +322,9 @@ func apply_setup(chassis: Dictionary, grip_rating: float) -> void:
 	_spring_rate = spring_stiffness * mass_scale * float(chassis.get("spring_rate", 1.0))
 	_shock_rate = damper_coefficient * mass_scale * float(chassis.get("shock_rate", 1.0))
 	_ride_lower = float(chassis.get("ride_lower", 0.0))
+	_launch_grip = maxf(float(chassis.get("launch_grip", 1.0)), 0.1)
+	_front_rebound = clampf(float(chassis.get("front_rebound", 1.0)), 0.0, 1.0)
+	_rear_bump = clampf(float(chassis.get("rear_bump", 1.0)), 0.0, 1.0)
 	var rating := grip_rating - config.grip_reference_rating
 	_tire_grip = maxf(config.grip_mu + rating * config.grip_mu_per_rating, 0.2)
 	_apply_grip_to_wheels()
@@ -401,6 +424,22 @@ func body_roll() -> float:
 	return _roll
 
 
+## How far the car stands up on its rear wheels, in radians, nose up. 0 with the front down.
+func wheelstand() -> float:
+	return _stand
+
+
+## How far ahead of the mass center the rear axle sits, in meters: negative, it is behind.
+func rear_axle_offset() -> float:
+	return -_rear_reach
+
+
+## The most the car can speed up with all its weight on the rear tires, in m/s²: what
+## the tires let a launch put on the road.
+func launch_accel() -> float:
+	return _tire_grip * config.asphalt.grip_multiplier * _launch_grip * config.gravity
+
+
 ## Peak acceleration the asphalt tires allow on a flat road, in m/s².
 func grip_accel() -> float:
 	return _tire_grip * config.asphalt.grip_multiplier * config.gravity
@@ -440,6 +479,8 @@ func reset_motion() -> void:
 	_pitch_vel = 0.0
 	_roll = 0.0
 	_roll_vel = 0.0
+	_stand = 0.0
+	_stand_vel = 0.0
 	for wheel in _wheels:
 		wheel.long_slip = 0.0
 		wheel.compression_speed = 0.0
@@ -577,7 +618,9 @@ func _axle_average(front: bool) -> float:
 func ride(dt: float, long_accel: float, lat_accel: float) -> void:
 	if dt <= 0.0 or _wheels.is_empty():
 		return
-	_long_accel = long_accel
+	# Speeding up, the body feels no more than the tires can put down; the arcade drive's pull
+	# has no such limit of its own.
+	_long_accel = minf(long_accel, launch_accel())
 	_lat_accel = lat_accel
 	_update_suspension(dt)
 	_integrate_suspension(dt)
@@ -758,7 +801,9 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 		wheel.force_body = unloaded
 		return unloaded
 
-	var requested := long_request / limit
+	# Drag slicks hook up: the rear tires push and brake harder than they hold sideways.
+	var long_scale := _launch_grip if wheel.driven else 1.0
+	var requested := long_request / (limit * long_scale)
 	var combined := Vector2.ZERO
 	wheel.peak_curve = use_peak_slip_curve
 	if use_peak_slip_curve:
@@ -772,9 +817,10 @@ func _tire_force(wheel: Wheel, basis: Basis, drive_each: float, brake_input: flo
 		wheel.long_slip = requested
 		var s_lat := slip / maxf(config.slip_angle_full_grip_rad, 0.01)
 		combined = _saturating_slip_force(requested, s_lat, limit)
+	combined.x *= long_scale
 	wheel.long_force = combined.x
 	wheel.lat_force = combined.y
-	wheel.grip_utilization = combined.length() / limit
+	wheel.grip_utilization = Vector2(combined.x / long_scale, combined.y).length() / limit
 	var force := fwd * combined.x + right * combined.y
 	force += _surface_drag(wheel.axle_blend, contact_body)
 	wheel.force_body = force
@@ -878,6 +924,7 @@ func _distribute_weight() -> void:
 	var to_front := absf(front_z)
 	var to_rear := absf(rear_z)
 	_wheelbase = span
+	_rear_reach = maxf(-rear_z, 0.05)
 	_front_track = maxf(absf(_wheels[0].offset.x - _wheels[1].offset.x), 0.4)
 	_rear_track = maxf(absf(_wheels[2].offset.x - _wheels[3].offset.x), 0.4)
 	var weight := config.mass_kg * config.gravity
@@ -935,7 +982,8 @@ func _update_suspension(dt: float) -> void:
 	for wheel in _wheels:
 		var origin := car.global_transform * wheel.local_position
 		var body_lift := _heave + _pitch * wheel.offset.z + _roll * wheel.offset.x
-		origin.y += body_lift
+		# Standing up, the car turns about its rear axle and the front wheels go up with it.
+		origin.y += body_lift + (wheel.offset.z + _rear_reach) * sin(_stand)
 		var ground_y := _raycast_ground(space, car, origin, wheel.road_y)
 		var drop := origin.y - ground_y
 		if wheel.ride_recapture:
@@ -962,7 +1010,12 @@ func _update_suspension(dt: float) -> void:
 			var blend := 1.0 - exp(-16.0 * dt)
 			wheel.compression_speed = lerpf(wheel.compression_speed, raw_speed, blend)
 			wheel.compression = compression
-		var force := compression * stiffness + wheel.compression_speed * damper
+		var shock := damper
+		if wheel.front and wheel.compression_speed < 0.0:
+			shock *= _front_rebound
+		elif not wheel.front and wheel.compression_speed > 0.0:
+			shock *= _rear_bump
+		var force := compression * stiffness + wheel.compression_speed * shock
 		if travel > _MAX_TRAVEL_M:
 			force += (travel - _MAX_TRAVEL_M) * stiffness * _BUMP_STIFFNESS
 		var cap := maxf(wheel.static_load, 1.0) * _LOAD_CAP
@@ -1023,6 +1076,10 @@ func _integrate_suspension(dt: float) -> void:
 	_heave_vel += (support - mass * config.gravity) / mass * dt
 	_pitch_vel += (pitch_moment + mass * long_accel * height) / _pitch_inertia * dt
 	_roll_vel += (roll_moment + mass * lat_accel * height) / _roll_inertia * dt
+	if _stand > 0.0:
+		# Up on the rear wheels, the whole car turns about the axle (`_step_stand`), and the body
+		# holds still on its springs.
+		_pitch_vel = 0.0
 	_heave += _heave_vel * dt
 	_pitch += _pitch_vel * dt
 	_roll += _roll_vel * dt
@@ -1032,6 +1089,7 @@ func _integrate_suspension(dt: float) -> void:
 	if absf(_pitch) > _LEAN_LIMIT_RAD:
 		_pitch = clampf(_pitch, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
 		_pitch_vel = 0.0
+	_step_stand(dt)
 	if absf(_roll) > _LEAN_LIMIT_RAD:
 		_roll = clampf(_roll, -_LEAN_LIMIT_RAD, _LEAN_LIMIT_RAD)
 		_roll_vel = 0.0
@@ -1040,6 +1098,57 @@ func _integrate_suspension(dt: float) -> void:
 	var corner_speed := absf(_heave_vel) + absf(_pitch_vel) * _wheelbase * 0.5 + absf(_roll_vel) * track * 0.5
 	var wallow_loss := minf(corner_speed * _WALLOW_GRIP_LOSS, _WALLOW_GRIP_LOSS_MAX)
 	_ride_grip = lerpf(_ride_grip, 1.0 - lean_loss - wallow_loss, 1.0 - exp(-_RIDE_GRIP_RESPONSE * dt))
+
+
+## The wheelstand. The car turns about its rear axle as a whole: speeding up lifts it, about the
+## mass center's height over the road, and its weight brings it down, about how far the mass
+## center is ahead of the axle. Up past the balance point it would go over, but the tail touches
+## first. On the road it starts once the front tires are off, the rear ones on, the car pulling
+## hard, and either the pull holds the nose up or the nose is still rising on its springs: thrown
+## up off the line.
+func _step_stand(dt: float) -> void:
+	if _wheels.size() != 4:
+		return
+	var mass := config.mass_kg
+	var reach := _rear_reach
+	var height := maxf(config.cg_height_m, 0.05)
+	var accel := minf(_long_accel, launch_accel())
+	var lift := mass * (accel * (reach * sin(_stand) + height * cos(_stand)) - config.gravity * (reach * cos(_stand) - height * sin(_stand)))
+	var inertia := _pitch_inertia + mass * reach * reach
+	if _stand <= 0.0:
+		var thrown := maxf(_pitch_vel, 0.0)
+		var pulling := accel * height >= _STAND_PULL_SHARE * config.gravity * reach
+		var can_lift := pulling and _front_off_road() and _rear_on_road()
+		if not can_lift or (lift <= 0.0 and thrown <= 0.0):
+			_stand = 0.0
+			_stand_vel = 0.0
+			return
+		_stand_vel = thrown
+	_stand_vel += lift / inertia * dt
+	_stand += _stand_vel * dt
+	if _stand >= _STAND_MAX_RAD:
+		_stand = _STAND_MAX_RAD
+		if _stand_vel > 0.0:
+			_stand_vel *= -_STAND_TAIL_BOUNCE
+	if _stand <= 0.0:
+		# The front tires come down: the springs take what speed the nose still has.
+		_pitch_vel = minf(_pitch_vel, _stand_vel)
+		_stand = 0.0
+		_stand_vel = 0.0
+
+
+func _front_off_road() -> bool:
+	for wheel in _wheels:
+		if wheel.front and wheel.suspension_force > 0.0:
+			return false
+	return true
+
+
+func _rear_on_road() -> bool:
+	for wheel in _wheels:
+		if not wheel.front and wheel.suspension_force > 0.0:
+			return true
+	return false
 
 
 func _update_inertia() -> void:
