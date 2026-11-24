@@ -285,6 +285,47 @@ CARS = {
         'dials': ['ribbon_speedo', 'ribbon_fuel'],
         'dial_order': 'size',
     },
+    # 1954 Buick Special Estate Wagon: the sedan's front end, wheelbase and length (AMA
+    # specifications for the Series 40 sedan, January 1954; the wagon's own are not
+    # given), its height scaled as the width.
+    'buick-1954-wagon': {
+        'size_in': (206.3, 76.8, None),
+        'wheelbase_in': 122.0,
+        # The cream; the white roof stays white.
+        'paint': {'creme paint'},
+        'dial_face': 'buick_dash',
+        'bumpers': {
+            'bumper_front': [((-1.1, -3.2, 0.2), (1.1, -2.55, 0.66))],
+            # The bar, the guards and their bullets (the plate is on the tailgate).
+            'bumper_rear': [((-1.1, 2.55, 0.2), (1.1, 3.2, 0.62))],
+        },
+        'steer': ('creme paint', (0.397, -0.434, 1.09)),
+        # The frame rails end inside the body, as on the sedan.
+        'clamp': [{'parts_in': ((-0.75, -2.9, 0.24), (0.75, 2.85, 0.58)), 'axis': 1, 'min': -2.69, 'max': 2.70}],
+        # The sedan's opening under the grille, and its panel.
+        'fill': [('creme paint', ((-0.78, -2.71, 0.40), (0.78, -2.71, 0.40), (0.78, -2.71, 0.64),
+                                  (-0.78, -2.71, 0.64)), (0.0, -1.0, 0.0))],
+        'dials': ['ribbon_speedo', 'ribbon_fuel'],
+        'dial_order': 'size',
+    },
+    # 1950 Buick Special four-door sedan (Series 40): 204.0 in long, 79.4 in wide, 63.9 in
+    # high on a 121.5 in wheelbase (Redbook, via carsales).
+    'buick-1950': {
+        'size_in': (204.0, 79.4, 63.9),
+        'wheelbase_in': 121.5,
+        'paint': {'paint_black'},
+        'bumpers': {
+            # The bar and the bar under it, the ends, the guards with the parking lamps in
+            # their tops, the plate on the right; the grille's teeth stay.
+            'bumper_front': [((-1.1, -2.7, 0.2), (1.1, -2.1, 0.63))],
+            # The two halves, the guards, the middle and the plate between the guards
+            # with the bar over it.
+            'bumper_rear': [((-1.1, 2.1, 0.2), (1.1, 2.7, 0.6)), ((-0.45, 2.3, 0.2), (0.45, 2.7, 0.70))],
+        },
+        'steer': ('Metal_painted', (0.387, -0.408, 1.091)),
+        # One dial in front of the driver, the speedometer with the gas gauge in it.
+        'dials': ['speedo_fuel'],
+    },
 }
 
 TIRE = 'tyre'

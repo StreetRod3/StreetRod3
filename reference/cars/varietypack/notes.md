@@ -31,11 +31,11 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 
 | File | Pack name | What it is | Notes |
 | --- | --- | --- | --- |
-| `buick-1950.blend` | 50buick | 1950 Buick four-door sedan | |
+| `buick-1950.blend` | 50buick | 1950 Buick Special four-door sedan (three portholes, notchback) | Black; an outside sun visor over the windshield |
 | `buick-1952-convertible.blend` | 52buick_conv | 1952 Buick convertible | |
 | `buick-1952-coupe.blend` | 52buick_coupe | 1952 Buick Special two-door Deluxe sedan (model 48D) | Short for the real car: 192 in long on a 115 in wheelbase in the model |
 | `buick-1954.blend` | 54buick | 1954 Buick Special four-door sedan | Modeled 250 in long on a 150 in wheelbase, far over the real car; a strip speedometer; a hula girl on the dash |
-| `buick-1954-wagon.blend` | 54buickwagon | 1954 Buick station wagon | |
+| `buick-1954-wagon.blend` | 54buickwagon | 1954 Buick Special Estate Wagon | The 1954 sedan's front end and dash; modeled as oversize as the sedan |
 | `ford-1950-police.blend` | 50fordpolice | 1950 Ford Custom Fordor police car | In the game as a civilian car, its police gear left out |
 | `ford-1950-wagon.blend` | 50fordwagon | 1950 Ford Custom Deluxe station wagon (Country Squire) | Red steel wheels, spare on the tailgate |
 | `ford-1953-panel.blend` | 53fordpanel | Ford F-100 panel van | The wraparound windshield and grille are the 1956 F-100's |
@@ -47,7 +47,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 
 ## Converting a car
 
-`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`), `packard-1955-clipper` (`packard-clipper-1955`), `packard-1955-patrician` (`packard-patrician-1955`), `ford-1950-wagon` (`ford-country-squire-1950`) and `buick-1954` (`buick-special-1954`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
+`tools/variety_pack_to_glb.py <split name> <out.glb>` builds a game body from one of the split files; each car needs an entry in its `CARS` table (real size and wheelbase, paint material, bumper boxes, steering wheel). Done so far: `hudson-1951` (in the game as `hudson-hornet-1951`), `buick-1952-coupe` (`buick-special-1952`), `ford-1950-police` (`ford-custom-1950`), `packard-1955-clipper` (`packard-clipper-1955`), `packard-1955-patrician` (`packard-patrician-1955`), `ford-1950-wagon` (`ford-country-squire-1950`), `buick-1954` (`buick-special-1954`), `buick-1950` (`buick-special-1950`) and `buick-1954-wagon` (`buick-estate-wagon-1954`). Where a car's tire or gauge-face material has a name of its own, `tire` and `dial_face` give it; `drop` (boxes) and `drop_materials` leave parts out; `steer` can be a box round the whole wheel when the rim is in pieces; `recolor`, `fill` and `badges` give triangles another material's look, add flat panels, and draw decal lettering. The dials become working gauges through `tools/variety_pack_dash.py`, by the `dials` entry in `CARS`.
 
 ## Changes from the download
 
@@ -64,7 +64,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | Packards and the 1954 Buick: a panel added under the grille, behind the bumper (cream on the Packards, body color on the Buick) | With the bumper off there was a hole into the engine bay there (user, 2026-11-23) |
 | Ford wagon: the gravel pan under the grille painted with the body | As on the Ford sedan |
 | Ford wagon: the spare on the tailgate, its wheel painted with the body and its tire black | The pack paints the car's wheels its red and makes the spare's tire in the body's red; the road wheels are the game's, the spare is the body's (user, 2026-11-23) |
-| 1954 Buick: the frame rails' ends pulled in to end inside the body | They ran out through the panels behind the bumpers and showed as brackets with the bumpers off (user, 2026-11-23) |
+| 1954 Buick and its wagon: the frame rails' ends pulled in to end inside the body | They ran out through the panels behind the bumpers and showed as brackets with the bumpers off (user, 2026-11-23) |
 | 1954 Buick: its strip speedometer and the small strip under it made a sliding speedometer (0-120 mph) and gas gauge | The game slides a needle in a `linear` pod; the speedometer's top is in the pod's name |
 | Packard: the "Packard" and "Clipper" scripts drawn as chrome lettering cut out by their image | Their image is a mask, which as one color made a dark box each (user, 2026-11-23) |
 | Front lamps in the tail-light material made clear | The pack gives the Buick red parking lamps; the real ones were clear |
@@ -83,6 +83,8 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | 1955 Packard Patrician | 219.7 in long, 78.3 in wide, 62.2 in high, 127 in wheelbase | Real length, width, height and wheelbase; the model's wheelbase kept (1.000), its overhangs shortened by 0.970 |
 | 1950 Ford Custom Deluxe station wagon | 208.0 in long, 76.4 in wide over the wood (72.8 over the fenders, as the sedan), 114 in wheelbase; height not given | Real length and wheelbase, the fenders 72.8 in; the height scaled as the width (0.949) |
 | 1954 Buick Special four-door (Series 40) | 206.3 in long, 76.8 in wide, 60.5 in high, 122 in wheelbase | Real length, width, height and wheelbase; the model's 150 in wheelbase shortened by 0.813, its overhangs by 0.844 |
+| 1954 Buick Special Estate Wagon | Taken as the sedan's 206.3 in long, 76.8 in wide, 122 in wheelbase (the AMA sheet gives the sedan only); height not given | The sedan's length, width and wheelbase; the height scaled as the width (0.910) |
+| 1950 Buick Special four-door (Series 40) | 204.0 in long, 79.4 in wide, 63.9 in high, 121.5 in wheelbase | Real length, width, height and wheelbase; the model's 123.6 in wheelbase shortened by 0.982, its overhangs by 0.985 |
 
 - Conceptcarz, Hudson Hornet Series 7A club coupe: https://www.conceptcarz.com/w9330/hudson-hornet-series-7a.aspx
 - Wikipedia, Hudson Hornet: https://en.wikipedia.org/wiki/Hudson_Hornet
@@ -92,4 +94,5 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 - The Henry Ford, 1949 Ford specifications (height): https://ophelia.sdsu.edu:8443/henryford_org/03-25-2015/exhibits/showroom/1949/specs.html
 - carsales (Redbook), 1955 Packard Clipper Custom Constellation: https://www.carsales.com.au/research/packard/clipper/1955/custom-constellation
 - Wikipedia, Packard Patrician (1955-56): https://en.wikipedia.org/wiki/Packard_Patrician
+- carsales (Redbook), 1950 Buick Special: https://www.carsales.com.au/research/buick/special/1950/no-badge
 - AMA specifications, 1954 Buick (January 1954): https://autohistorypreservationsociety.org/wp-content/uploads/1954-BUICK-AMA-Specs-Special-Century-Super-Roadmaster-Pg-1-25.pdf
