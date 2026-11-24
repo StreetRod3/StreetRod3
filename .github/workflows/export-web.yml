@@ -48,10 +48,10 @@ jobs:
           # GitHub Pages runs Jekyll unless this file exists at the published root.
           touch build/web/.nojekyll
 
-      - name: Upload web build
-        uses: actions/upload-artifact@v4
+      # Upload here, not in the deploy job. deploy-pages lists artifacts immediately
+      # and misses one that was finalized in the same job a moment earlier.
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
         with:
-          name: web-build
           path: build/web
-          if-no-files-found: error
-          retention-days: 3
+          include-hidden-files: true
