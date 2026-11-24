@@ -55,6 +55,29 @@ const float MATTE_ROUGHNESS = 0.78;
 // Vinyl grain: cells this many to the meter, tipping the surface by up to this much.
 const float GRAIN_SCALE = 450.0;
 const float GRAIN_DEPTH = 0.18;
+// The body paint's finish, chosen in the garage's paint menu (CarFile.PAINT_FINISHES): 0
+// gloss (the car file's own model.paint), 1 matte, 2 primer, 3 metallic, 4 candy, 5 pearl.
+// It covers the paint, and an accent or cove whose finish is "paint".
+uniform int paint_finish = 0;
+// Each finish's metallic, roughness, clear coat and clear coat roughness (gloss's are
+// the car file's, from the uniforms above).
+const vec4 FINISHES[6] = vec4[6](
+	vec4(0.0),
+	vec4(0.0, 0.72, 0.0, 0.0),
+	vec4(0.0, 0.95, 0.0, 0.0),
+	vec4(0.3, 0.38, 1.0, 0.05),
+	vec4(0.35, 0.22, 1.0, 0.02),
+	vec4(0.25, 0.3, 1.0, 0.04)
+);
+// Metal flake under the clear coat: cells this many to the meter, of which this share
+// hold a flake, tipped its own way by up to FLAKE_DEPTH and a little lighter, so it
+// glints (metallic, candy, pearl). It fades out where a flake is smaller than a pixel, so
+// from afar the finish is smooth rather than shimmering.
+const float FLAKE_SCALE = 650.0;
+const float FLAKE_SHARE = 0.14;
+const float FLAKE_DEPTH[6] = float[6](0.0, 0.0, 0.0, 0.6, 0.45, 0.25);
+// Pearl: how far round the color wheel the paint turns where it is seen edge-on, in radians.
+const float PEARL_TURN = 0.9;
 
 varying vec3 model_pos;
 varying vec3 model_normal;
@@ -123,6 +146,44 @@ float grain_noise(vec3 p) {
 	return mix(a, b, f.z);
 }
 
+// Turns a color round the color wheel (about the grey axis).
+vec3 hue_turn(vec3 c, float a) {
+	vec3 k = vec3(0.57735);
+	float co = cos(a);
+	return c * co + cross(k, c) * sin(a) + k * dot(k, c) * (1.0 - co);
+}
+
+// The paint's color in the body's finish; facing is 1 where the surface faces the eye, 0
+// edge-on.
+vec3 finish_color(vec3 c, float facing) {
+	if (paint_finish == 2) {
+		// Primer: chalky, a little greyed and lightened, and blotchy where it was sanded.
+		float lum = dot(c, vec3(0.299, 0.587, 0.114));
+		c = mix(mix(vec3(lum), c, 0.7), vec3(0.6), 0.12);
+		return c * (0.92 + 0.16 * grain_noise(model_pos * 5.0));
+	}
+	if (paint_finish == 3) {
+		// Metallic: the flakes throw light back where the paint faces the eye, so it is
+		// lighter there and darker edge-on (the "flop").
+		vec3 face = min(c * 1.7 + vec3(0.07), vec3(1.0));
+		return mix(c * 0.45, face, facing);
+	}
+	if (paint_finish == 4) {
+		// Candy: a richer, brighter color where it faces the eye, deepening toward the
+		// edges as through a thicker tinted coat.
+		float lum = dot(c, vec3(0.299, 0.587, 0.114));
+		vec3 rich = clamp(vec3(lum) + (c - vec3(lum)) * 1.5, vec3(0.0), vec3(1.0));
+		vec3 face = min(rich * 1.3, vec3(1.0));
+		return mix(rich * rich * 0.45, face, pow(facing, 1.2));
+	}
+	if (paint_finish == 5) {
+		// Pearl: a paler, turned color sheens over it edge-on.
+		vec3 sheen = mix(max(hue_turn(c, PEARL_TURN), vec3(0.0)), vec3(1.0), 0.3);
+		return mix(c, sheen, pow(1.0 - facing, 2.0) * 0.85);
+	}
+	return c;
+}
+
 void fragment() {
 	vec4 tex = texture(albedo_tex, UV);
 	bool cove = in_cove();
@@ -135,9 +196,31 @@ void fragment() {
 		painted = mix(paint, accent_color.rgb, accent) * tex.r;
 		zone = max(zone, accent);
 	}
-	zone *= tex.a * (accent_finish > 0 ? 1.0 : 0.0);
+	// The accent's or cove's share of the texel where it has a finish of its own; the
+	// rest of the paint takes the body's.
+	float own = accent_finish > 0 ? zone : 0.0;
+	zone = own * tex.a;
+	float body = paint_finish > 0 ? tex.a * (1.0 - own) : 0.0;
 	if (dither_cell > 0.0) {
 		painted *= paint_tone();
+	}
+	vec4 finish = FINISHES[paint_finish];
+	// This texel's flake, if it has one: 1 in a flake, faded out with distance.
+	float flake = 0.0;
+	vec3 flake_cell = vec3(0.0);
+	if (FLAKE_DEPTH[paint_finish] > 0.0 && body > 0.0) {
+		vec3 p = model_pos * FLAKE_SCALE;
+		flake_cell = floor(p);
+		float fade = 1.0 - smoothstep(0.5, 1.0, length(fwidth(p)));
+		// A round speck in its cell, off center by the cell's own amount.
+		vec3 off = vec3(grain_hash(flake_cell + 5.9), grain_hash(flake_cell + 9.4), grain_hash(flake_cell + 2.6)) * 0.4 - 0.2;
+		float speck = step(length(fract(p) - 0.5 - off), 0.3);
+		flake = step(1.0 - FLAKE_SHARE, grain_hash(flake_cell + 3.3)) * speck * fade * body;
+	}
+	if (paint_finish > 0) {
+		float facing = clamp(dot(normalize(NORMAL), VIEW), 0.0, 1.0);
+		painted = mix(painted, finish_color(painted, facing), 1.0 - own);
+		painted = mix(painted, min(painted * 1.6 + vec3(0.05), vec3(1.0)), flake);
 	}
 	ALBEDO = mix(tex.rgb, painted, tex.a);
 	float metal;
@@ -151,13 +234,24 @@ void fragment() {
 		metal = mix(0.05, metallic, tex.a);
 		rough = mix(0.82, roughness, tex.a);
 	}
+	metal = mix(metal, finish.x, body);
+	rough = mix(rough, finish.y, body);
 	METALLIC = mix(metal, 0.0, zone);
 	ROUGHNESS = mix(rough, accent_finish == 1 ? VINYL_ROUGHNESS : MATTE_ROUGHNESS, zone);
-	CLEARCOAT = clearcoat * tex.a * (1.0 - zone);
-	CLEARCOAT_ROUGHNESS = clearcoat_roughness;
+	CLEARCOAT = (paint_finish > 0 ? finish.z : clearcoat) * tex.a * (1.0 - zone);
+	CLEARCOAT_ROUGHNESS = paint_finish > 0 ? finish.w : clearcoat_roughness;
+	// Primer has hardly any shine at all.
+	SPECULAR = mix(0.5, 0.2, paint_finish == 2 ? body : 0.0);
 	if (use_normal > 0.5) {
 		NORMAL_MAP = texture(normal_tex, UV).rgb;
 		NORMAL_MAP_DEPTH = normal_scale;
+	}
+	if (flake > 0.0) {
+		// Each flake is a cell fixed to the car, tipped its own way.
+		vec3 g = vec3(grain_hash(flake_cell), grain_hash(flake_cell + 7.1), grain_hash(flake_cell + 13.7)) - 0.5;
+		g = mat3(VIEW_MATRIX) * (mat3(MODEL_MATRIX) * (inverse(mat3(car_from_mesh)) * g));
+		g -= dot(g, NORMAL) * NORMAL;
+		NORMAL = normalize(NORMAL + g * (2.0 * FLAKE_DEPTH[paint_finish] * flake));
 	}
 	if (accent_finish == 1 && zone > 0.0 && use_normal < 0.5) {
 		// Vinyl's grain, fixed to the car, fading out where a cell is smaller than a pixel;

@@ -66,6 +66,9 @@ const PAINT_FINISH_KEYS: Array[String] = ["metallic", "roughness", "clearcoat", 
 ## A cove's or accent's finishes, in the garage paint menu's order; car_paint_mask.gdshader's
 ## accent_finish is the index.
 const ACCENT_FINISHES: Array[String] = ["paint", "vinyl", "matte"]
+## The body paint's finishes, in the garage paint menu's order; car_paint_mask.gdshader's
+## paint_finish is the index. Gloss is the car file's own model.paint; the rest replace it.
+const PAINT_FINISHES: Array[String] = ["gloss", "matte", "primer", "metallic", "candy", "pearl"]
 const DEFAULT_CAMERAS: Dictionary = {
 	"far": {"position": Vector3(0.0, 2.55, -10.4), "pitch": -14.0, "fov": 68.0},
 	"close": {"position": Vector3(0.0, 1.8, -6.1), "pitch": -10.0, "fov": 70.0},

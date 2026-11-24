@@ -127,7 +127,7 @@ A register entry with `families` or `makes` as a list stands for one copy per fa
 | `newspaper` | Open the classifieds |
 | `radio` | Toggle music |
 | `doors` | Open the drive-in |
-| `spray` | Color picker; writes `GameState.car_color` |
+| `spray` | Color picker and finish; writes `GameState.car_color` and `GameState.car_paint_finish` (or the accent's color and finish) |
 | `calendar` | Pulls the wall calendar toward the camera |
 | `transmission` | Opens the transmission scene (low band between the wheels, or T) |
 | `creeper` | Opens the under-car scene (the creeper on the floor, or U) |
