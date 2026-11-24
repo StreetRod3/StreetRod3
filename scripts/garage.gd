@@ -152,7 +152,7 @@ var _spray_body_btn: Button
 var _spray_cove_btn: Button
 ## The paint's finish, a list on its own line above Apply: the body's (Gloss, Matte,
 ## Primer, Metallic, Candy, Pearl, CarFile.PAINT_FINISHES), or while Accent is chosen the
-## accent's (Paint, Vinyl, Matte, CarFile.ACCENT_FINISHES).
+## accent's (the body's six and Vinyl, CarFile.ACCENT_FINISHES).
 var _spray_finishes: HBoxContainer
 ## The color the picker goes to when Primer is chosen for the body.
 const PRIMER_GREY := Color(0.45, 0.46, 0.45, 1.0)
@@ -1686,10 +1686,10 @@ func _chosen_spray_finish() -> String:
 	return names[at]
 
 
-## Picking Primer for the body puts the color at primer grey, which can still be changed
-## (to red oxide, say).
+## Picking Primer puts the color at primer grey, which can still be changed (to red
+## oxide, say).
 func _on_spray_finish_selected(_at: int) -> void:
-	if not _spraying_accent() and _chosen_spray_finish() == "primer":
+	if _chosen_spray_finish() == "primer":
 		_spray_color_picker.color = PRIMER_GREY
 
 

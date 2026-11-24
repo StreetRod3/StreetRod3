@@ -39,7 +39,7 @@ extends RefCounted
 ## an accent, not both; either is painted with the garage paint menu's Accent choice.
 ##
 ## A cove or accent can give its `finish` until the player picks one in the garage:
-## "paint" (the body's finish, the default), "vinyl" or "matte" (ACCENT_FINISHES).
+## "gloss" (the default), or another of ACCENT_FINISHES.
 ##
 ## `model.roof` is for a model whose roof the garage can chop: it has nodes `roof_stock`
 ## and `roof_chopped` (the roof's glass, trim and what hangs inside from it), each with
@@ -64,8 +64,10 @@ const CAMERA_MODES: Array[String] = ["far", "close", "cockpit", "bumper"]
 ## The paint finish a car file can set in model.paint: shader parameters of the same names.
 const PAINT_FINISH_KEYS: Array[String] = ["metallic", "roughness", "clearcoat", "clearcoat_roughness"]
 ## A cove's or accent's finishes, in the garage paint menu's order; car_paint_mask.gdshader's
-## accent_finish is the index.
-const ACCENT_FINISHES: Array[String] = ["paint", "vinyl", "matte"]
+## accent_finish is the index: the body's finishes (PAINT_FINISHES, in the same order) and
+## vinyl. Older saves have "paint", from when the accent could only follow the body, which
+## was always gloss then; it reads as "gloss".
+const ACCENT_FINISHES: Array[String] = ["gloss", "matte", "primer", "metallic", "candy", "pearl", "vinyl"]
 ## The body paint's finishes, in the garage paint menu's order; car_paint_mask.gdshader's
 ## paint_finish is the index. Gloss is the car file's own model.paint; the rest replace it.
 const PAINT_FINISHES: Array[String] = ["gloss", "matte", "primer", "metallic", "candy", "pearl"]
@@ -194,10 +196,12 @@ static func _parse_model(root: Dictionary, result: Dictionary) -> void:
 			}
 
 
-## A cove's or accent's `finish` until one is chosen in the garage: "paint" (the body's
-## finish, the default), "vinyl" or "matte".
+## A cove's or accent's `finish` until one is chosen in the garage: "gloss" (the default),
+## or any other of ACCENT_FINISHES.
 static func _accent_finish(block: Dictionary, result: Dictionary) -> String:
 	var finish := str(block.get("finish", ACCENT_FINISHES[0]))
+	if finish == "paint":
+		finish = "gloss"
 	if not ACCENT_FINISHES.has(finish):
 		result.errors.append("Car model accent finish must be one of %s." % ", ".join(ACCENT_FINISHES))
 		return ACCENT_FINISHES[0]

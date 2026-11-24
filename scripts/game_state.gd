@@ -251,8 +251,8 @@ var car_color: Color = Color(0.78, 0.14, 0.14, 1.0)
 ## and a cove takes the body color, an accent the car file's accent color.
 const NO_COVE_PAINT := Color(0, 0, 0, 0)
 var car_cove_color: Color = NO_COVE_PAINT
-## The cove's or accent's finish chosen in the garage ("paint", "vinyl" or "matte",
-## CarFile.ACCENT_FINISHES); empty until one is chosen, and then the car file's.
+## The cove's or accent's finish chosen in the garage (CarFile.ACCENT_FINISHES); empty until
+## one is chosen, and then the car file's.
 var car_accent_finish: String = ""
 ## The body paint's finish chosen in the garage (CarFile.PAINT_FINISHES): "gloss", the car
 ## file's own shine, until another is chosen.
@@ -3264,13 +3264,22 @@ func set_car_cove_color(next: Color) -> void:
 
 
 func set_car_accent_finish(next: String) -> void:
-	car_accent_finish = next
+	car_accent_finish = accent_finish_from(next)
 	_sync_record_from_active()
 
 
 func set_car_paint_finish(next: String) -> void:
 	car_paint_finish = paint_finish_from(next)
 	_sync_record_from_active()
+
+
+## A saved or chosen accent finish: one of CarFile.ACCENT_FINISHES, or empty (the car
+## file's) for anything else. An older save's "paint" is "gloss".
+static func accent_finish_from(value: Variant) -> String:
+	var finish := str(value)
+	if finish == "paint":
+		return "gloss"
+	return finish if _CarFile.ACCENT_FINISHES.has(finish) else ""
 
 
 ## A saved or chosen body finish, "gloss" for anything not in CarFile.PAINT_FINISHES.
@@ -3284,15 +3293,16 @@ func car_accent_finish_now() -> String:
 	return car_accent_finish if not car_accent_finish.is_empty() else spec_accent_finish(car_spec)
 
 
-## A car file's cove or accent finish ("paint" when it gives none, or has no cove or accent).
+## A car file's cove or accent finish ("gloss" when it gives none, or has no cove or accent).
 static func spec_accent_finish(spec: Dictionary) -> String:
 	var model: Variant = spec.get("model", {})
 	if typeof(model) == TYPE_DICTIONARY:
 		for key: String in ["accent", "cove"]:
 			var zone: Variant = (model as Dictionary).get(key, null)
 			if typeof(zone) == TYPE_DICTIONARY:
-				return str((zone as Dictionary).get("finish", "paint"))
-	return "paint"
+				var finish := accent_finish_from((zone as Dictionary).get("finish", "gloss"))
+				return finish if not finish.is_empty() else "gloss"
+	return "gloss"
 
 
 ## Whether the active car has a cove or an accent to paint on its own.
@@ -4249,7 +4259,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 		car_color = paint
 	var cove_paint: Variant = rec.get("cove_color", NO_COVE_PAINT)
 	car_cove_color = cove_paint if cove_paint is Color else NO_COVE_PAINT
-	car_accent_finish = str(rec.get("accent_finish", ""))
+	car_accent_finish = accent_finish_from(rec.get("accent_finish", ""))
 	car_paint_finish = paint_finish_from(rec.get("paint_finish", "gloss"))
 	car_roof_chopped = bool(rec.get("roof_chopped", false))
 	bumpers_off = bumper_ends(rec.get("bumpers_off", []))
@@ -4294,7 +4304,7 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 		"model_id": str(rec.get("model_id", model_id)),
 		"color": [paint.r, paint.g, paint.b, paint.a],
 		"cove_color": [cove_paint.r, cove_paint.g, cove_paint.b, cove_paint.a],
-		"accent_finish": str(rec.get("accent_finish", "")),
+		"accent_finish": accent_finish_from(rec.get("accent_finish", "")),
 		"paint_finish": paint_finish_from(rec.get("paint_finish", "gloss")),
 		"roof_chopped": bool(rec.get("roof_chopped", false)),
 		"bumpers_off": bumper_ends(rec.get("bumpers_off", [])),
@@ -4376,7 +4386,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"model_id": model_id,
 		"color": _color_from_save(row.get("color", null), car_color),
 		"cove_color": _color_from_save(row.get("cove_color", null), NO_COVE_PAINT),
-		"accent_finish": str(row.get("accent_finish", "")),
+		"accent_finish": accent_finish_from(row.get("accent_finish", "")),
 		"paint_finish": paint_finish_from(row.get("paint_finish", "gloss")),
 		"roof_chopped": bool(row.get("roof_chopped", false)),
 		"bumpers_off": bumper_ends(row.get("bumpers_off", [])),
