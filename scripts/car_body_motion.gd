@@ -197,9 +197,11 @@ func _refresh_steering_wheel() -> void:
 		if speedo_pod != null:
 			var pod_name := String(speedo_pod.name)
 			if pod_name.contains("linear_"):
+				# "dash_speedo_linear_0.29_pod" slides its needle 0.29 m for 0 to 160 mph (Godot
+				# turns the point into "_"); with "_mph_120" before "_pod", for 0 to 120 mph.
 				var parts := pod_name.split("linear_")
 				if parts.size() > 1:
-					var num_str := parts[1].replace("_pod", "").replace("_", ".")
+					var num_str := parts[1].get_slice("_mph_", 0).replace("_pod", "").replace("_", ".")
 					_speedo_linear_travel = maxf(num_str.to_float(), 0.0)
 			elif pod_name.contains("arch_"):
 				# A pod named "dash_speedo_arch_270_pod" sweeps 270 degrees from 0 to full range,
@@ -208,10 +210,10 @@ func _refresh_steering_wheel() -> void:
 				var sweep_deg := pod_name.split("arch_")[1].get_slice("_", 0).to_float()
 				if sweep_deg > 0.0:
 					_speedo_sweep_rad = deg_to_rad(sweep_deg)
-				if pod_name.contains("_mph_"):
-					var top_mph := pod_name.split("_mph_")[1].get_slice("_", 0).to_float()
-					if top_mph > 0.0:
-						_speedo_max_mph = top_mph
+			if pod_name.contains("_mph_"):
+				var top_mph := pod_name.split("_mph_")[1].get_slice("_", 0).to_float()
+				if top_mph > 0.0:
+					_speedo_max_mph = top_mph
 	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
 	if _tach_needle != null:
 		_tach_rest = _tach_needle.transform

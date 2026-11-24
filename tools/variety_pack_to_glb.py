@@ -62,9 +62,31 @@ PACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'reference
 CELL = 16
 IN = 0.0254
 
-## Per car: the real car's size and wheelbase (inches), its paint material, the boxes
+## Per car: the real car's size and wheelbase (inches), its paint materials, the boxes
 ## that hold its bumpers (any number of boxes each) and where its steering wheel's rim
-## is, all in the model's frame (meters, nose -Y, Z up, driver's side +X).
+## is (its material and a point on it, or `box` and a box round the whole wheel), all in
+## the model's frame (meters, nose -Y, Z up, driver's side +X). Optional: `tire` and
+## `dial_face`, where the car's tire and gauge-face materials have names of their own;
+## `drop`, boxes whose parts are left out, and `drop_materials`, materials left out;
+## `recolor`, triangles that take another material's look (those of the `from`
+## materials in the parts wholly inside `parts_in` (of at least `min_part_tris`
+## triangles, given that), or with their middles inside
+## `tris_in` and, given `facing`, facing that way); `fill`, flat four-cornered panels
+## added in a material's look (material, corners, outward normal); `badges`, decal
+## materials drawn as chrome lettering cut out by their image (a mask, white where the
+## letters are), by the image's file name in textures/ (or a mask and an image of the
+## letters' colors; or the name of a mask made here, in BADGE_MAKERS); `height` None scales the height as the width; `dial_order` 'size'
+## gives the `dials` kinds from the biggest dial down; `clamp` pulls the parts wholly
+## inside `parts_in` in along an axis (0 X, 1 Y, 2 Z) to between `min` and `max`;
+## `graft` takes parts from another of the pack's cars (`from`, its part numbers in
+## `parts`), moved by `offset` and given one of this car's materials (`material`), for
+## what the model lacks; `dial_side` moves the line inboard of which dials are not looked
+## for (DIAL_SIDE), for dials in the middle of the dash; `stretch` draws the parts wholly
+## inside `parts_in` out along an axis past an `edge` by `by`, easing to nothing `span`
+## back from it (and, given `inset`, what ends up past `under` that much in toward the
+## middle, under the neighbor it now reaches beneath); `seam_normals` gives the corners
+## of a material in `corners_in` the normals of its corners in `like` at their height,
+## to shade a seam's rolled edges as the skin beside them; `shift` moves the parts wholly inside `parts_in` by `by`.
 CARS = {
     # 1951 Hudson Hornet club coupe: 208.5 in long, 77.4 in wide, 60.4 in high on a 124 in
     # wheelbase, 7.10-15 tires (conceptcarz, Series 7A club coupe).
@@ -115,6 +137,326 @@ CARS = {
                   'full': ((0.24, 0.72), (0.30, 0.785)),
                   'ref': ((0.85, 0.245, 0.68), (1.05, 0.268, 0.82))}],
     },
+    # 1950 Ford Custom Deluxe Fordor sedan, made from the pack's police car: 196.8 in long,
+    # 72.8 in wide, 63.1 in high on a 114 in wheelbase (Wikipedia, 1949 Ford; Ford's 1949
+    # specifications for the height).
+    'ford-1950-police': {
+        'size_in': (196.8, 72.8, 63.1),
+        'wheelbase_in': 114.0,
+        # Black with white front doors as a police car; all of it is the paint here, and so
+        # is the top of the dash in the middle (its image, a ribbed one, is in `bars`).
+        'paint': {'paint_black', 'paint_whitee', 'bars'},
+        'recolor': [
+            # The gravel pan under the grille, part of the grille's mesh in the grilles'
+            # dark material, is the body's.
+            {'from': {'grooves'}, 'to': 'paint_black', 'parts_in': ((-1.0, -2.7, 0.3), (0.85, -2.1, 0.9))},
+            # The headliner along the windshield's top, by the sun visor, is in the paint.
+            {'from': {'paint_black'}, 'to': 'seats', 'tris_in': ((-0.75, -0.68, 1.46), (0.6, -0.40, 1.60)),
+             'facing': (0.0, 0.0, -1.0)},
+        ],
+        'tire': 'tyre texture bake',
+        'dial_face': 'textureford',
+        'bumpers': {
+            # The bar with its two small guards and the front plate under it.
+            'bumper_front': [((-1.1, -2.75, 0.2), (1.0, -2.15, 0.47))],
+            # The bar and its guards; the rear plate is on the trunk panel and stays.
+            'bumper_rear': [((-1.1, 2.25, 0.25), (1.0, 2.75, 0.47))],
+        },
+        'steer': ('bakelite', (0.326, -0.595, 1.024)),
+        # One dial in front of the driver, the speedometer with the small gauges in it.
+        'dials': ['speedo_fuel'],
+        # The police gear: the "POLICE" lettering on roof, hood, doors, fenders and trunk,
+        # and the radio under the dash ...
+        'drop_materials': {'police_car1', 'motorola'},
+        # ... the roof lights with their bases and the siren, the spotlight on its
+        # bracket by the driver's windshield pillar, the antennas on the cowl and the rear
+        # fenders, the wire screen behind the front seat and the rest of the radio with
+        # its microphone's coiled cord.
+        'drop': [((0.3, -0.6, 1.53), (0.55, -0.42, 1.76)),
+                 ((-0.7, -0.6, 1.53), (-0.5, -0.42, 1.76)),
+                 ((-0.2, -0.62, 1.62), (0.05, -0.19, 1.95)),
+                 ((0.76, -1.06, 0.98), (1.05, -0.92, 1.38)),
+                 ((-0.82, -1.01, 1.11), (-0.79, -0.98, 1.67)),
+                 ((-0.82, 2.04, 1.0), (-0.79, 2.28, 1.78)),
+                 ((0.67, 2.04, 1.0), (0.70, 2.28, 1.78)),
+                 ((-0.87, 0.17, 0.31), (0.73, 0.21, 1.65)),
+                 ((-0.57, -0.98, 1.09), (-0.22, -0.69, 1.31))],
+    },
+    # 1955 Packard Clipper Custom Constellation hardtop: 214.8 in long, 78.0 in wide,
+    # 62.0 in high on a 122 in wheelbase (Redbook, via carsales).
+    'packard-1955-clipper': {
+        'size_in': (214.8, 78.0, 62.0),
+        'wheelbase_in': 122.0,
+        # The red; the cream roof and rear sides stay cream.
+        'paint': {'packard_red'},
+        # The bumper hides an opening under the grille, between the fenders' cream lower
+        # corners; a cream panel closes it, just behind the grille's bottom bar and the
+        # fenders' front edges.
+        'fill': [('paint_white_real', ((-0.68, -2.54, 0.34), (0.68, -2.54, 0.34), (0.68, -2.54, 0.56),
+                                       (-0.68, -2.54, 0.56)), (0.0, -1.0, 0.0))],
+        # "Packard" on the hood's front and the trunk's left, "Clipper" on its right.
+        'badges': {'platesandbadges.001': 'packardplatesandAlpha.jpg'},
+        'tire': 'tyre tread.002',
+        'dial_face': 'gauge.001',
+        'bumpers': {
+            # The bar with its two bullet guards, the bars between them, the plate under
+            # it and the bars behind it (not the strip under the grille, which is the
+            # grille's).
+            'bumper_front': [((-1.1, -2.9, 0.25), (1.1, -2.296, 0.63))],
+            # The bar with the exhaust ports in its ends, the guards with the lamps in
+            # them and the plate between them.
+            'bumper_rear': [((-1.1, 2.40, 0.3), (1.1, 2.85, 0.70))],
+        },
+        # The rim is in segments, red and cream.
+        'steer': ('box', ((0.23, -0.665, 0.80), (0.70, -0.48, 1.235))),
+        # From the middle of the car out: the gauges on the speedometer's inner side (top,
+        # bottom), the speedometer, those on its outer side (bottom, top).
+        'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
+    },
+    # 1955 Packard Patrician four-door sedan: 219.7 in long, 78.3 in wide, 62.2 in high
+    # on a 127 in wheelbase (Wikipedia, Packard Patrician).
+    'packard-1955-patrician': {
+        'size_in': (219.7, 78.3, 62.2),
+        'wheelbase_in': 127.0,
+        # The maroon; the cream roof stays cream.
+        'paint': {'bronze_paint'},
+        'tire': 'tyre tread.001',
+        'dial_face': 'gauge',
+        'bumpers': {
+            # The bar with its bullet guards, the bars under the grille between them, the
+            # plate and the brackets behind.
+            'bumper_front': [((-1.1, -2.9, 0.2), (1.1, -2.30, 0.59))],
+            # The bar with the exhaust ports in its ends, the guards with their lamps.
+            'bumper_rear': [((-1.1, 2.40, 0.3), (1.1, 2.85, 0.65))],
+        },
+        'steer': ('box', ((0.23, -0.665, 0.77), (0.70, -0.48, 1.22))),
+        'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
+        # The bumper hides an opening under the grille, above the cream valance; a cream
+        # panel closes it, behind the valance's and the fenders' front edges.
+        'fill': [('paint_white_real', ((-0.68, -2.56, 0.34), (0.68, -2.56, 0.34), (0.68, -2.56, 0.54),
+                                       (-0.68, -2.56, 0.54)), (0.0, -1.0, 0.0))],
+        # "Packard" and "Patrician" on the trunk, "The Patrician" in gold on the doors.
+        'badges': {'platesandbadges': ('patrician_alpha.png', 'patrician_colors2.png')},
+    },
+    # 1950 Ford Custom Deluxe station wagon: 208.0 in long on a 114 in wheelbase, the
+    # sedan's front end (72.8 in over its fenders; 76.4 in over the wagon's wood); its
+    # height is not given, so it scales as the width (Ford's specifications, April 1949).
+    'ford-1950-wagon': {
+        'size_in': (208.0, 72.8, None),
+        'wheelbase_in': 114.0,
+        # The red, the top of the dash in the middle as on the sedan, and the spare's wheel
+        # on the tailgate, body colored as the pack has it (user, 2026-11-23); the wood
+        # stays.
+        'paint': {'red_paint_metallic', 'bars', 'v8wheel'},
+        'tire': 'tyre black',
+        'dial_face': 'textureford',
+        'bumpers': {
+            'bumper_front': [((-1.0, -2.75, 0.2), (1.0, -2.15, 0.5))],
+            # The two halves with their guards, and the plate on its holder between them.
+            'bumper_rear': [((-1.0, 2.2, 0.25), (1.0, 2.7, 0.5))],
+        },
+        'steer': ('bakelite', (0.398, -0.58, 1.049)),
+        'dials': ['speedo_fuel'],
+        # The gravel pan under the grille, part of the grille's mesh in the frame's black,
+        # is the body's (not the small frame pieces behind the grille).
+        'recolor': [{'from': {'CHASSIS'}, 'to': 'red_paint_metallic',
+                     'parts_in': ((-0.9, -2.65, 0.3), (0.9, -2.05, 0.9)), 'min_part_tris': 200},
+                    # The spare's tire on the tailgate is in the body's red; it is the
+                    # tires' black (user, 2026-11-23).
+                    {'from': {'red_paint_metallic'}, 'to': 'tyre black',
+                     'parts_in': ((-0.4, 2.15, 0.55), (0.4, 2.7, 1.3))}],
+    },
+    # 1954 Buick Special four-door sedan (Series 40): 206.3 in long, 76.8 in wide, 60.5 in
+    # high on a 122 in wheelbase (AMA specifications, January 1954). The pack's model is
+    # 250 in long on a 150 in wheelbase.
+    'buick-1954': {
+        'size_in': (206.3, 76.8, 60.5),
+        'wheelbase_in': 122.0,
+        # The blue; the white roof stays white.
+        'paint': {'blue_metallic'},
+        'dial_face': 'buick_dash',
+        'bumpers': {
+            # The bar, the bar under it, the guards and their big bullets, a bracket and
+            # the plate.
+            'bumper_front': [((-1.1, -3.2, 0.2), (1.1, -2.55, 0.66))],
+            # The bar, the guards and their bullets (the plate is on the body).
+            'bumper_rear': [((-1.1, 2.55, 0.2), (1.1, 3.2, 0.62))],
+        },
+        'steer': ('blue_metallic', (0.397, -0.434, 1.094)),
+        # The bumper hides an opening under the grille, between the fenders; a body panel
+        # closes it, set back to where the fenders' bottom edges curve in.
+        'fill': [('blue_metallic', ((-0.78, -2.71, 0.40), (0.78, -2.71, 0.40), (0.78, -2.71, 0.64),
+                                    (-0.78, -2.71, 0.64)), (0.0, -1.0, 0.0))],
+        # The frame rails run out through the panels behind the bumpers, the ends showing
+        # as brackets with the bumpers off; they end inside the body.
+        'clamp': [{'parts_in': ((-0.7, -2.9, 0.25), (0.7, 2.85, 0.58)), 'axis': 1, 'min': -2.69, 'max': 2.70}],
+        # The long strip speedometer, the small strip under it.
+        'dials': ['ribbon_speedo', 'ribbon_fuel'],
+        'dial_order': 'size',
+    },
+    # 1954 Buick Special Estate Wagon: the sedan's front end, wheelbase and length (AMA
+    # specifications for the Series 40 sedan, January 1954; the wagon's own are not
+    # given), its height scaled as the width.
+    'buick-1954-wagon': {
+        'size_in': (206.3, 76.8, None),
+        'wheelbase_in': 122.0,
+        # The cream; the white roof stays white.
+        'paint': {'creme paint'},
+        'dial_face': 'buick_dash',
+        'bumpers': {
+            'bumper_front': [((-1.1, -3.2, 0.2), (1.1, -2.55, 0.66))],
+            # The bar, the guards and their bullets (the plate is on the tailgate).
+            'bumper_rear': [((-1.1, 2.55, 0.2), (1.1, 3.2, 0.62))],
+        },
+        'steer': ('creme paint', (0.397, -0.434, 1.09)),
+        # The frame rails end inside the body, as on the sedan.
+        'clamp': [{'parts_in': ((-0.75, -2.9, 0.24), (0.75, 2.85, 0.58)), 'axis': 1, 'min': -2.69, 'max': 2.70}],
+        # The sedan's opening under the grille, and its panel.
+        'fill': [('creme paint', ((-0.78, -2.71, 0.40), (0.78, -2.71, 0.40), (0.78, -2.71, 0.64),
+                                  (-0.78, -2.71, 0.64)), (0.0, -1.0, 0.0))],
+        'dials': ['ribbon_speedo', 'ribbon_fuel'],
+        'dial_order': 'size',
+    },
+    # 1950 Buick Special four-door sedan (Series 40): 204.0 in long, 79.4 in wide, 63.9 in
+    # high on a 121.5 in wheelbase (Redbook, via carsales).
+    'buick-1950': {
+        'size_in': (204.0, 79.4, 63.9),
+        'wheelbase_in': 121.5,
+        'paint': {'paint_black'},
+        'bumpers': {
+            # The bar and the bar under it, the ends, the guards with the parking lamps in
+            # their tops, the plate on the right; the grille's teeth stay.
+            'bumper_front': [((-1.1, -2.7, 0.2), (1.1, -2.1, 0.63))],
+            # The two halves, the guards, the middle and the plate between the guards
+            # with the bar over it.
+            'bumper_rear': [((-1.1, 2.1, 0.2), (1.1, 2.7, 0.6)), ((-0.45, 2.3, 0.2), (0.45, 2.7, 0.70))],
+        },
+        'steer': ('Metal_painted', (0.387, -0.408, 1.091)),
+        # One dial in front of the driver, the speedometer with the gas gauge in it.
+        'dials': ['speedo_fuel'],
+    },
+    # 1952 Buick Super convertible (Model 56C): 206.2 in long, 80.0 in wide on a 121.5 in
+    # wheelbase (Concept Carz, 1952 Series 50; Buick's 1952 facts book for the width).
+    # The model's top is folded down under its boot, so the height (given top up) is
+    # scaled as the width.
+    'buick-1952-convertible': {
+        'size_in': (206.2, 80.0, None),
+        'wheelbase_in': 121.5,
+        'paint': {'metallic_paint'},
+        'bumpers': {
+            # The bar, its ends wrapping back to the wheel openings, the guards with their
+            # bullets, the plate on the right and the two arms behind the bar (the model
+            # gives them its pillow material); the grille's teeth stay.
+            'bumper_front': [((-1.1, -2.6, 0.25), (1.1, -2.1, 0.58)),
+                             ((0.35, -2.05, 0.30), (0.55, -1.9, 0.48)),
+                             ((-0.55, -2.05, 0.30), (-0.35, -1.9, 0.48))],
+            # The two halves, the guards, the bars between them and the plate between
+            # the guards; the tail lamps over the bar's ends stay.
+            'bumper_rear': [((-1.1, 2.0, 0.25), (1.1, 2.6, 0.58))],
+        },
+        'steer': ('bakelite', (0.378, -0.40, 1.0)),
+        # One dial in front of the driver, the speedometer with the gas gauge in it.
+        'dials': ['speedo_fuel'],
+        # The front fender's back edge is open (no return) and stops just short of the
+        # door, so seen from behind the seam showed the inside of the fender, a dark band
+        # (user, 2026-11-24): the door's front edge (and the side strip on it) reaches
+        # 1.5 cm further forward, in under the fender, 2 mm in from its skin there.
+        'stretch': [{'parts_in': box, 'axis': 1, 'edge': -0.770, 'by': -0.015, 'span': 0.06,
+                     'under': -0.776, 'inset': 0.002}
+                    for box in (((-1.03, -0.80, 0.25), (-0.78, 0.47, 1.06)), ((0.78, -0.80, 0.25), (1.03, 0.47, 1.06)))],
+        # The panels' edges roll in to the door seams, so seen at a slant each seam was a
+        # dark band (the front one from behind, the back one from the front; user,
+        # 2026-11-24): their corners there take the door skin's normals, height by height.
+        'seam_normals': [{'material': 'metallic_paint', 'corners_in': (lo, hi),
+                          'like': ((-1.03, -0.74, 0.30), (-0.85, 0.30, 0.90)) if lo[0] < 0 else ((0.85, -0.74, 0.30), (1.03, 0.30, 0.90))}
+                         for lo, hi in (((-1.03, -0.80, 0.25), (-0.90, -0.745, 0.84)), ((0.90, -0.80, 0.25), (1.03, -0.745, 0.84)),
+                                        ((-1.03, 0.40, 0.25), (-0.90, 0.50, 0.84)), ((0.90, 0.40, 0.25), (1.03, 0.50, 0.84)))],
+        # The fender skirts sit 3-4 cm in from the wheel openings' lips, which have no
+        # return, so from behind the step showed the inside of the fender as a dark slot
+        # at each skirt's front edge (user, 2026-11-24): out to just inside the lips.
+        'shift': [{'parts_in': ((-0.985, 0.92, 0.22), (-0.925, 1.81, 0.46)), 'by': (-0.025, 0.0, 0.0)},
+                  {'parts_in': ((0.925, 0.92, 0.22), (1.005, 1.81, 0.46)), 'by': (0.025, 0.0, 0.0)}],
+    },
+    # 1955 Packard Caribbean convertible: 216.5 in long, 77.8 in wide on a 127 in
+    # wheelbase (Wikipedia, Packard Caribbean). Its top is down, so the height (62.9 in
+    # top up) is scaled as the width.
+    'packard-1955-caribbean': {
+        'size_in': (216.5, 77.8, None),
+        'wheelbase_in': 127.0,
+        # The blue; the white upper body and the trunk stay white.
+        'paint': {'blue_metallic'},
+        'tire': 'tyre tread.002',
+        'dial_face': 'gauge',
+        'bumpers': {
+            # The bar with its two bullet guards, the bars between them, the plate under
+            # it and the bars behind it, as the Clipper's.
+            'bumper_front': [((-1.1, -2.9, 0.25), (1.1, -2.296, 0.63))],
+            # The bar with the exhaust ports in its ends, the guards and the plate.
+            'bumper_rear': [((-1.1, 2.40, 0.3), (1.1, 2.85, 0.70))],
+        },
+        # The rim is in segments, blue and white.
+        'steer': ('box', ((0.23, -0.665, 0.80), (0.70, -0.48, 1.235))),
+        'dials': ['fuel', 'temp', 'speedo', 'amp', 'oil'],
+        # The Clipper's opening under the grille, closed the same way.
+        'fill': [('paint_white_real', ((-0.68, -2.54, 0.34), (0.68, -2.54, 0.34), (0.68, -2.54, 0.56),
+                                       (-0.68, -2.54, 0.56)), (0.0, -1.0, 0.0))],
+        # "Packard" on the hood and the trunk's left, "Caribbean" on the trunk's right and
+        # the front fenders, as chrome lettering; the pack's image for them is not in the
+        # download, so they were plain grey plates (user, 2026-11-24).
+        'badges': {'packard_caribbean': 'caribbean'},
+    },
+    # 1956 Ford F-100 panel delivery (the pack calls it a 1953; the wraparound windshield
+    # and the grille are the 1956's): 110 in wheelbase (fordf100s.com); the 1953-56 panel
+    # 201.8 in long, 75.6 in wide (Concept Carz, 1953 F-100 panel); its height is not
+    # given, so it scales as the width.
+    'ford-1953-panel': {
+        'size_in': (201.8, 75.6, None),
+        'wheelbase_in': 110.0,
+        'paint': {'blue_metallic'},
+        'tire': 'tyre black',
+        'dial_face': 'half_speedo',
+        # The decal on the rear door, whose image is not in the download (a black square).
+        'drop_materials': {'van_decals'},
+        'bumpers': {
+            # The bar, its bolt heads and its two brackets.
+            'bumper_front': [((-1.0, -2.75, 0.35), (1.0, -2.5, 0.53))],
+            'bumper_rear': [((-1.0, 2.5, 0.37), (1.0, 2.75, 0.54))],
+        },
+        'steer': ('bakelite', (0.379, -0.5635, 1.346)),
+        # The half-round speedometer in front of the driver.
+        'dials': ['half_speedo'],
+    },
+    # Jeep DJ-5 Dispatcher (the pack calls it a 1954 mail jeep; it is the later DJ-5):
+    # 133.0 in long, 68.5 in wide, 68.7 in high on an 81 in wheelbase (Jeep Database,
+    # DJ-5). Made civilian: the postal service decals and the MAIL letters on the back are
+    # left out and the body is one color, the cream top and the red stripe with the blue.
+    'jeep-1954-usps': {
+        'size_in': (133.0, 68.5, 68.7),
+        'wheelbase_in': 81.0,
+        'paint': {'blue_paint', 'paint_whitee', 'red'},
+        'tire': 'tyre black',
+        'dial_face': 'SPEEDO',
+        'drop_materials': {'postal service'},
+        'drop': [((-0.4, 1.91, 0.64), (0.36, 1.93, 0.99))],
+        'bumpers': {
+            # The bar and its two brackets; the tow hooks under it stay on the frame.
+            'bumper_front': [((-0.9, -2.05, 0.47), (0.9, -1.8, 0.65))],
+            'bumper_rear': [((-0.9, 1.93, 0.4), (0.9, 2.05, 0.6))],
+        },
+        # The model has no steering wheel; the Ford truck's (rim, hub, spokes and column)
+        # in front of the driver's seat, in the Jeep's black.
+        'graft': [{'from': 'ford-1953-panel', 'parts': [72, 73, 74, 75, 76, 78],
+                   'offset': (0.071, 0.4335, -0.196), 'material': 'Metal_painted'}],
+        'steer': ('box', ((0.17, -0.27, 0.90), (0.73, 0.0, 1.40))),
+        # The speedometer and the gas gauge, in the middle of the dash.
+        'dials': ['speedo', 'fuel'],
+        'dial_order': 'size',
+        'dial_side': -0.2,
+        # The rear bumper and the front one's brackets are olive; black like the front bar.
+        'recolor': [{'from': {'paint_green'}, 'to': 'lorrymetal', 'parts_in': ((-1.0, -2.1, 0.0), (1.0, 2.1, 2.2))}],
+        # The frame rails run 7 cm out behind the body to the rear bumper; they end inside it.
+        'clamp': [{'parts_in': ((-0.45, -1.85, 0.45), (0.45, 2.0, 0.73)), 'axis': 1, 'max': 1.90}],
+    },
 }
 
 TIRE = 'tyre'
@@ -136,9 +478,10 @@ WELL_OUT = 0.05
 ## A part out there is a wheel part only if its middle is this close to the hub (m).
 HUB_CENTERED = 0.1
 ## Tailpipes: parts longer than PIPE_LONG (m) whose top is below PIPE_TOP and whose
-## back end is more than PIPE_BEHIND behind the rear axle.
+## back end is more than PIPE_BEHIND behind the rear axle (the Packard's run out through
+## its rear bumper and reach 0.48 m up).
 PIPE_LONG = 1.5
-PIPE_TOP = 0.45
+PIPE_TOP = 0.5
 PIPE_BEHIND = 0.6
 ## The length scale eases from the wheelbase's to the overhangs' over this far either
 ## side of each axle (m).
@@ -146,6 +489,51 @@ BLEND = 0.35
 ## A trimmed panel edge ends up this far inside the skin it meets (m), so where the two
 ## overlap the neighbor is drawn and they don't flicker.
 TRIM_UNDER = 0.001
+def caribbean_badges():
+    """The Caribbean's lettering mask, whose image is not in the download: its plates use
+    the Patrician's layout, so the Patrician's "Packard" row (the hood and the trunk's
+    left) is kept, and "Caribbean" goes in script where the Patrician has "Patrician" (the
+    trunk's right) and on the long plate of each front fender, whose short plate ahead of
+    it (the row's first 0.291 of its width) gets a chevron."""
+    from PIL import Image, ImageDraw, ImageFont
+    size = 1024
+    src = Image.open(os.path.join(PACK, 'textures', 'patrician_alpha.png')).convert('L').resize((size, size), Image.LANCZOS)
+    im = Image.new('L', (size, size), 0)
+
+    def row(v0, v1):
+        # Rows by UV v, which runs up the image.
+        return round((1.0 - v1) * size), round((1.0 - v0) * size)
+    top, bottom = row(0.607, 0.709)
+    im.paste(src.crop((0, top, size, bottom)), (0, top))
+    font_path = '/usr/share/fonts/opentype/urw-base35/Z003-MediumItalic.otf'
+    draw = ImageDraw.Draw(im)
+    split = round(0.291 * size)
+    for (v0, v1), (u0, u1) in (((0.434, 0.607), (0, size)), ((0.203, 0.434), (split, size))):
+        top, bottom = row(v0, v1)
+        height = bottom - top
+        width = u1 - u0
+        pt = height
+        while True:
+            font = ImageFont.truetype(font_path, pt)
+            box = draw.textbbox((0, 0), 'Caribbean', font=font, stroke_width=3)
+            if box[2] - box[0] <= width * 0.92 and box[3] - box[1] <= height * 0.86:
+                break
+            pt -= 2
+        x = u0 + (width - (box[2] - box[0])) / 2 - box[0]
+        y = top + (height - (box[3] - box[1])) / 2 - box[1]
+        draw.text((x, y), 'Caribbean', font=font, fill=255, stroke_width=3, stroke_fill=255)
+    top, bottom = row(0.203, 0.434)
+    cx, cy, w, h = split / 2, (top + bottom) / 2, split * 0.36, (bottom - top) * 0.3
+    t = h * 0.8
+    draw.polygon([(cx - w, cy - h), (cx - w + t, cy - h), (cx, cy + h - t * 1.2), (cx + w - t, cy - h), (cx + w, cy - h),
+                  (cx, cy + h)], fill=255)
+    return im
+
+
+## Badge masks made here, for cars whose lettering image is not in the download.
+BADGE_MAKERS = {'caribbean': caribbean_badges}
+## The badges' image size (px).
+BADGE_TEX = 512
 ## Clear glass with a faint green tint, as on the Studebaker.
 GLASS_MATERIAL = {
     'name': 'glass',
@@ -179,7 +567,15 @@ LOOKS = {
     # The gold script on the Hudson's rear fenders.
     'taxi paint': ((232, 196, 96), (255, 40, 255)),
     'tyre': ((16, 16, 16), (255, 200, 10)),
+    # The Packard's chrome and carpet, whose images are not in the download.
+    'metal': CHROME,
+    'carped_red': ((96, 18, 18), (255, 240, 10)),
 }
+## A dial's face is at least this big across (m, model scale) and flat to within
+## DIAL_FLAT; on the driver's side, at least DIAL_SIDE out from the middle (m, game).
+DIAL_MIN = 0.03
+DIAL_FLAT = 0.002
+DIAL_SIDE = 0.15
 
 
 def srgb(c):
@@ -407,6 +803,30 @@ def plate_quad(tris, facing):
     return pos, nrm, uvs, (half_w * 2, half_h * 2)
 
 
+def dial_faces(tris):
+    """The gauge-face triangles in pieces that hang together by their corners, as lists
+    of their indices: one piece per face (a mesh part can hold several faces, and a
+    face's center knob is a part of its own)."""
+    import numpy as np
+    keys = np.round(tris.reshape(-1, 3), 5)
+    _, corner = np.unique(keys, axis=0, return_inverse=True)
+    corner = corner.reshape(-1, 3)
+    parent = np.arange(corner.max() + 1)
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+    for a, b, c in corner:
+        for x, y in ((a, b), (b, c)):
+            rx, ry = find(x), find(y)
+            if rx != ry:
+                parent[rx] = ry
+    piece = np.array([find(a) for a in corner[:, 0]])
+    return [np.nonzero(piece == k)[0] for k in np.unique(piece)]
+
+
 def build(car, dst):
     import numpy as np
     from PIL import Image
@@ -415,16 +835,28 @@ def build(car, dst):
     from studebaker_dash import quaternion
 
     cfg = CARS[car]
-    blend = os.path.join(PACK, 'split', car + '.blend')
-    with tempfile.TemporaryDirectory() as tmp:
-        npz = os.path.join(tmp, 'mesh.npz')
-        subprocess.run(['blender', '-b', '--factory-startup', '--disable-autoexec', '--python',
-                        os.path.abspath(__file__), '--', 'dump', blend, npz],
-                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        data = dict(np.load(npz))
-        info = json.load(open(npz + '.json'))
-    pos, nrm, mat, part = data['pos'], data['nrm'], data['mat'], data['part']
+
+    def load(name):
+        blend = os.path.join(PACK, 'split', name + '.blend')
+        with tempfile.TemporaryDirectory() as tmp:
+            npz = os.path.join(tmp, 'mesh.npz')
+            subprocess.run(['blender', '-b', '--factory-startup', '--disable-autoexec', '--python',
+                            os.path.abspath(__file__), '--', 'dump', blend, npz],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return dict(np.load(npz)), json.load(open(npz + '.json'))
+
+    data, info = load(car)
+    pos, nrm, mat, part, uv = data['pos'], data['nrm'], data['mat'].copy(), data['part'], data['uv']
     names = [d['name'] for d in info]
+    for graft in cfg.get('graft', []):
+        donor, _ = load(graft['from'])
+        sel = np.isin(donor['part'], graft['parts'])
+        renumber = {p: part.max() + 1 + k for k, p in enumerate(sorted(graft['parts']))}
+        pos = np.concatenate([pos, donor['pos'][sel] + np.asarray(graft['offset'])])
+        nrm = np.concatenate([nrm, donor['nrm'][sel]])
+        uv = np.concatenate([uv, donor['uv'][sel]])
+        mat = np.concatenate([mat, np.full(sel.sum(), names.index(graft['material']), mat.dtype)])
+        part = np.concatenate([part, np.array([renumber[p] for p in donor['part'][sel]], part.dtype)])
     nparts = part.max() + 1
     plo = np.full((nparts, 3), np.inf)
     phi = np.full((nparts, 3), -np.inf)
@@ -444,7 +876,7 @@ def build(car, dst):
     # replace) and, for parts centered on the hub, outboard by WELL_OUT (hubcaps that
     # stand proud of the tire).
     floor = flat[:, 2].min()
-    tire_mat = names.index(TIRE)
+    tire_mat = names.index(cfg.get('tire', TIRE))
     tires = [p for p in np.unique(part[mat == tire_mat]) if plo[p][2] < floor + 0.01]
     wheel_parts = set()
     for t in tires:
@@ -466,17 +898,76 @@ def build(car, dst):
     rear_axle = max((plo[t][1] + phi[t][1]) / 2 for t in tires)
     pipes = {p for p in range(nparts) if phi[p][1] - plo[p][1] > PIPE_LONG and phi[p][2] < PIPE_TOP
              and phi[p][1] > rear_axle + PIPE_BEHIND}
-    dropped = wheel_parts | pipes
-    keep = ~np.isin(part, list(dropped))
+    gear = {p for lo, hi in cfg.get('drop', []) for p in range(nparts) if inside(p, lo, hi)}
+    dropped = wheel_parts | pipes | gear
+    keep = ~np.isin(part, list(dropped)) & ~np.isin(mat, [names.index(m) for m in cfg.get('drop_materials', ())])
+    for rc in cfg.get('recolor', []):
+        sel = np.isin(mat, [names.index(m) for m in rc['from']])
+        if 'parts_in' in rc:
+            big = np.bincount(part, minlength=nparts) >= rc.get('min_part_tris', 0)
+            sel &= np.isin(part, [p for p in range(nparts) if inside(p, *rc['parts_in']) and big[p]])
+        if 'tris_in' in rc:
+            mid = pos.mean(1)
+            sel &= np.all((mid >= rc['tris_in'][0]) & (mid <= rc['tris_in'][1]), 1)
+        if 'facing' in rc:
+            sel &= nrm.mean(1) @ np.asarray(rc['facing'], np.float64) > 0.3
+        mat[sel] = names.index(rc['to'])
+
+    for cl in cfg.get('clamp', []):
+        sel = np.isin(part, [p for p in range(nparts) if inside(p, *cl['parts_in'])])
+        pos[sel, :, cl['axis']] = np.clip(pos[sel, :, cl['axis']], cl.get('min', -np.inf), cl.get('max', np.inf))
+
+    for st in cfg.get('stretch', []):
+        sel = np.isin(part, [p for p in range(nparts) if inside(p, *st['parts_in'])])
+        c = pos[sel, :, st['axis']]
+        # Past the edge the full distance, easing to nothing `span` back from it.
+        side = np.sign(st['by'])
+        t = np.clip((c - st['edge']) * side / st['span'] + 1.0, 0.0, 1.0)
+        pos[sel, :, st['axis']] = c + st['by'] * t
+        if 'inset' in st:
+            # What has gone in under the neighbor's edge, in from its skin.
+            hidden = sel[:, None] & ((pos[..., st['axis']] - st['under']) * side > 0)
+            pos[..., 0] -= np.where(hidden, np.sign(pos[..., 0]) * st['inset'], 0.0)
+    for sh in cfg.get('shift', []):
+        sel = np.isin(part, [p for p in range(nparts) if inside(p, *sh['parts_in'])])
+        pos[sel] += np.asarray(sh['by'])
+
+    for sn in cfg.get('seam_normals', []):
+        # Corners in `corners_in` take the mean face normal of the material's triangles
+        # whose middles are in `like`, at their height (2 cm bins, interpolated).
+        lo, hi = np.asarray(sn['corners_in'][0]), np.asarray(sn['corners_in'][1])
+        llo, lhi = np.asarray(sn['like'][0]), np.asarray(sn['like'][1])
+        of_mat = np.repeat(mat == names.index(sn['material']), 3)
+        flat_p = pos.reshape(-1, 3)
+        flat_n = nrm.reshape(-1, 3)
+        sn_mids = pos.mean(1)
+        sn_src = (mat == names.index(sn['material'])) & np.all((sn_mids >= llo) & (sn_mids <= lhi), 1)
+        sn_faces = np.cross(pos[:, 1] - pos[:, 0], pos[:, 2] - pos[:, 0])
+        sn_dst = of_mat & np.all((flat_p >= lo) & (flat_p <= hi), 1)
+        bins = np.arange(llo[2], lhi[2] + 0.02, 0.02)
+        level = np.full((len(bins), 3), np.nan)
+        for k, z in enumerate(bins):
+            near = sn_src & (np.abs(sn_mids[:, 2] - z) < 0.03)
+            if near.any():
+                level[k] = sn_faces[near].sum(0) / np.linalg.norm(sn_faces[near].sum(0))
+        ok = ~np.isnan(level[:, 0])
+        sn_new = np.stack([np.interp(flat_p[sn_dst, 2], bins[ok], level[ok, c]) for c in range(3)], 1)
+        flat_n[sn_dst] = sn_new / np.maximum(np.linalg.norm(sn_new, axis=1, keepdims=True), 1e-12)
+        nrm[:] = flat_n.reshape(nrm.shape)
 
     for trim in cfg.get('trim', []):
-        trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim)
+        print(f"trimmed in by up to {1000 * trim_lip(pos, nrm, mat == names.index(trim['panel']), part, trim):.1f} mm")
 
     steer_mat, steer_at = cfg['steer']
-    near = [p for p in np.unique(part[mat == names.index(steer_mat)])
-            if np.linalg.norm((plo[p] + phi[p]) / 2 - steer_at) < 0.1]
-    rim_part = max(near, key=lambda p: np.sum(part == p))
-    steer_parts = {p for p in range(nparts) if inside(p, plo[rim_part], phi[rim_part], 0.005)}
+    if steer_mat == 'box':
+        steer_box = steer_at
+        steer_parts = {p for p in range(nparts) if inside(p, *steer_box)}
+    else:
+        near = [p for p in np.unique(part[mat == names.index(steer_mat)])
+                if np.linalg.norm((plo[p] + phi[p]) / 2 - steer_at) < 0.1]
+        rim_part = max(near, key=lambda p: np.sum(part == p))
+        steer_box = (plo[rim_part], phi[rim_part])
+        steer_parts = {p for p in range(nparts) if inside(p, plo[rim_part], phi[rim_part], 0.005)}
     group_of = np.full(nparts, 'body', object)
     for g, boxes in cfg['bumpers'].items():
         for lo, hi in boxes:
@@ -485,6 +976,16 @@ def build(car, dst):
                     group_of[p] = g
     for p in steer_parts:
         group_of[p] = 'driving_wheel'
+    for fill_mat, corners, normal in cfg.get('fill', []):
+        q = np.asarray(corners, np.float64)
+        pos = np.concatenate([pos, np.array([[q[0], q[1], q[2]], [q[0], q[2], q[3]]])])
+        nrm = np.concatenate([nrm, np.tile(np.asarray(normal, np.float64), (2, 3, 1))])
+        uv = np.concatenate([uv, np.zeros((2, 3, 2))])
+        mat = np.append(mat, [names.index(fill_mat)] * 2)
+        part = np.append(part, [nparts] * 2)
+        keep = np.append(keep, [True, True])
+        group_of = np.append(group_of, np.array(['body'], object))
+        nparts += 1
 
     # The model's frame (nose -Y, Z up) to the game's (Y up, nose +Z, driver's side +X).
     def to_yup(a):
@@ -500,7 +1001,8 @@ def build(car, dst):
     front_z = np.mean([(-(plo[t][1] + phi[t][1]) / 2) for t in tires if (plo[t][1] + phi[t][1]) / 2 < 0])
     rear_z = np.mean([(-(plo[t][1] + phi[t][1]) / 2) for t in tires if (plo[t][1] + phi[t][1]) / 2 >= 0])
     scale_x = width_in * IN / (body[:, 0].max() - body[:, 0].min())
-    scale_y = height_in * IN / (hi[1] - tire_pos[:, 1].min())
+    # With no height known, the height scales as the width does.
+    scale_y = scale_x if height_in is None else height_in * IN / (hi[1] - tire_pos[:, 1].min())
     origin_xy = np.array([(body[:, 0].min() + body[:, 0].max()) / 2, lo[1]])
 
     def to_game(q):
@@ -514,10 +1016,36 @@ def build(car, dst):
         return n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
 
     _, _, (s_mid, s_over) = length_map(np.zeros(1), front_z, rear_z, length_in * IN, cfg['wheelbase_in'] * IN, lo[2], hi[2])
-    rim = pos[part == rim_part].reshape(-1, 3)
-    rim_mid_src = (rim.min(0) + rim.max(0)) / 2
+    rim_mid_src = to_yup((np.asarray(steer_box[0]) + np.asarray(steer_box[1])) / 2)
     rim_mid = to_game(rim_mid_src)
     even = (scale_x + scale_y + s_mid) / 3
+
+    # The dials: the flat pieces of the gauge-face material, big enough, on the driver's
+    # side (the same face is on a clock, and on the Packard the radio, across the dash).
+    # A knob of that material in the middle of one (the Packard's) gives way to the
+    # needles' own hubs.
+    if cfg.get('dials'):
+        import variety_pack_dash as dash
+        face_idx = np.nonzero(keep & (mat == names.index(cfg.get('dial_face', DIAL_FACE))))[0]
+        pieces = []
+        for idx in dial_faces(pos[face_idx]):
+            tris = pos[face_idx[idx]]
+            center, axis, radius = dash.dial_frame(tris)
+            depth = np.ptp((tris.reshape(-1, 3) - center) @ axis)
+            pieces.append((face_idx[idx], center, radius, 2 * radius >= DIAL_MIN and depth <= DIAL_FLAT))
+        faces = [(c, r) for _, c, r, flat_face in pieces if flat_face]
+        for idx, c, r, flat_face in pieces:
+            if not flat_face and any(np.linalg.norm(c - fc) + r < fr for fc, fr in faces):
+                keep[idx] = False
+        dials = []
+        for idx, _, _, flat_face in pieces:
+            if flat_face:
+                tris = to_game(pos[idx])
+                center, axis, radius = dash.dial_frame(tris)
+                dials.append((center, axis, radius, *dash.face_extent(tris, center, dash.pod_basis(axis))))
+        dials = [d for d in dials if d[0][0] > cfg.get('dial_side', DIAL_SIDE)]
+        if len(dials) != len(cfg['dials']):
+            raise SystemExit(f'{len(dials)} dials found for {len(cfg["dials"])} kinds')
 
     # Each kept triangle's look: the paint, glass, the plate, or a palette color; the
     # front lamps in the tail-light material are parking lamps.
@@ -533,6 +1061,12 @@ def build(car, dst):
             if name in PLATE:
                 plate_parts += [(g, p) for p in np.unique(part[sel_g])]
                 continue
+            if name in cfg.get('badges', {}):
+                badge_uv = uv[sel_g].copy()
+                badge_uv[..., 1] = 1.0 - badge_uv[..., 1]
+                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': [], 'badge': []})
+                gp['badge'].append((to_game(pos[sel_g]), normals_to_game(pos[sel_g], nrm[sel_g]), badge_uv, name))
+                continue
             for front_lamp in (False, True):
                 sel = sel_g & ((tri_z > 0) == front_lamp) if base == 'tail light' else (sel_g if not front_lamp else None)
                 if sel is None or not sel.any():
@@ -543,7 +1077,7 @@ def build(car, dst):
                 else:
                     p = to_game(pos[sel])
                     n = normals_to_game(pos[sel], nrm[sel])
-                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': []})
+                gp = groups.setdefault(g, {'palette': [], 'glass': [], 'plate': [], 'badge': []})
                 if name in GLASS:
                     gp['glass'].append((p, n))
                     continue
@@ -561,7 +1095,7 @@ def build(car, dst):
         t = to_game(pos[part == p])
         facing = 1 if t[..., 2].mean() > 0 else -1
         qp, qn, qu, size_m = plate_quad(t, facing)
-        groups.setdefault(g, {'palette': [], 'glass': [], 'plate': []})['plate'].append((qp, qn, qu))
+        groups.setdefault(g, {'palette': [], 'glass': [], 'plate': [], 'badge': []})['plate'].append((qp, qn, qu))
         plate_sizes.append(size_m)
 
     grid = math.ceil(math.sqrt(len(looks)))
@@ -589,6 +1123,24 @@ def build(car, dst):
         'alphaMode': 'OPAQUE', 'doubleSided': True}, GLASS_MATERIAL,
         {'name': 'plate', 'doubleSided': True,
          'pbrMetallicRoughness': {'baseColorTexture': {'index': 2}, 'metallicFactor': 0.3, 'roughnessFactor': 0.5}}]
+    # The badges: chrome where their image is white, cut out elsewhere (the game's paint
+    # leaves see-through materials alone).
+    badge_material = {}
+    for badge_name, image_name in cfg.get('badges', {}).items():
+        image_name, color_name = (image_name, None) if isinstance(image_name, str) else image_name
+        mask = (BADGE_MAKERS[image_name]() if image_name in BADGE_MAKERS
+                else Image.open(os.path.join(PACK, 'textures', image_name)).convert('L')).resize((BADGE_TEX, BADGE_TEX), Image.LANCZOS)
+        if color_name:
+            badge_im = Image.open(os.path.join(PACK, 'textures', color_name)).convert('RGBA').resize(mask.size, Image.LANCZOS)
+        else:
+            badge_im = Image.new('RGBA', mask.size, CHROME[0] + (255,))
+        badge_im.putalpha(mask)
+        out.images.append(png_bytes(badge_im))
+        out.textures.append(len(out.images) - 1)
+        badge_material[badge_name] = len(out.materials)
+        out.materials.append({'name': 'badge', 'doubleSided': True, 'alphaMode': 'MASK', 'alphaCutoff': 0.5,
+                              'pbrMetallicRoughness': {'baseColorTexture': {'index': len(out.textures) - 1},
+                                                       'metallicFactor': 1.0, 'roughnessFactor': 0.15}})
 
     def primitives(g, frame=None):
         gp = groups.get(g)
@@ -616,6 +1168,12 @@ def build(car, dst):
             u = np.concatenate([c for _, _, c in gp['plate']]).reshape(-1, 2).astype(np.float32)
             p, n, u, idx = share_corners(p, n, u)
             prims.append(out.primitive(p, n, idx, 2, u))
+        for badge_name in sorted({k for _, _, _, k in gp['badge']}):
+            these = [(a, b, c) for a, b, c, k in gp['badge'] if k == badge_name]
+            p, n = place(np.concatenate([a for a, _, _ in these]), np.concatenate([b for _, b, _ in these]))
+            u = np.concatenate([c for _, _, c in these]).reshape(-1, 2).astype(np.float32)
+            p, n, u, idx = share_corners(p, n, u)
+            prims.append(out.primitive(p, n, idx, badge_material[badge_name], u))
         return prims
 
     steer = np.concatenate([a for a, _, _ in groups['driving_wheel']['palette']]).reshape(-1, 3)
@@ -633,13 +1191,7 @@ def build(car, dst):
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
     pods = []
     if cfg.get('dials'):
-        import variety_pack_dash as dash
-        face_mat = names.index(DIAL_FACE)
-        # The driver's dials only: the same face is on a small dial (a clock) across the dash.
-        dials = [dash.dial_frame(to_game(pos[keep & (mat == face_mat) & (part == p)]))
-                 for p in np.unique(part[keep & (mat == face_mat)])]
-        dials = [d for d in dials if d[0][0] > 0]
-        pods = dash.build(dials, cfg['dials'])
+        pods = dash.build(dials, cfg['dials'], cfg.get('dial_order') == 'size')
         looks_mat = {}
         for key, material in dash.NEEDLE_MATERIALS.items():
             looks_mat[key] = len(out.materials)
@@ -647,11 +1199,11 @@ def build(car, dst):
         for name, center, basis, kind, radius, parts in pods:
             children = []
             if kind:
-                out.images.append(dash.face_png(kind))
+                out.images.append(dash.face_png(kind, radius))
                 out.textures.append(len(out.images) - 1)
                 face_index = len(out.materials)
                 out.materials.append(dash.face_material(kind, len(out.textures) - 1))
-                ft, fn, fu = dash.disk(radius, dash.FACE_LIFT)
+                ft, fn, fu = dash.face_mesh(kind, radius)
                 p, n, u, idx = share_corners(ft.reshape(-1, 3).astype(np.float32), fn.reshape(-1, 3).astype(np.float32),
                                              fu.reshape(-1, 2).astype(np.float32))
                 children.append(out.node(f'{name}_face', mesh=out.mesh(f'{name}_face', [out.primitive(p, n, idx, face_index, u)])))
@@ -686,7 +1238,7 @@ def build(car, dst):
     print('ground clearance in the model %.3f m' % (-w[:, 1].min()))
     print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
     for name, center, basis, kind, radius, _ in pods:
-        print(f'{name}: {kind or "needle"} at {center.round(3)}, face radius {radius:.4f}')
+        print(f'{name}: {kind or "needle"} at {center.round(3)}, face size {np.round(radius, 4)}')
 
 if __name__ == '__main__':
     argv = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else sys.argv[1:]

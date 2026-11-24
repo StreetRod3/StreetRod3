@@ -107,6 +107,105 @@
       "hp": 155.0,
       "color": [0.55, 0.06, 0.05, 1.0],
       "car_file": "res://assets/cars/buick-special-1952.car"
+    },
+    {
+      "id": "ford-custom-1950",
+      "name": "1950 Ford Custom",
+      "price": 900,
+      "vmax": 170.0,
+      "hp": 150.0,
+      "color": [0.12, 0.26, 0.18, 1.0],
+      "car_file": "res://assets/cars/ford-custom-1950.car"
+    },
+    {
+      "id": "packard-clipper-1955",
+      "name": "1955 Packard Clipper",
+      "price": 1050,
+      "vmax": 195.0,
+      "hp": 230.0,
+      "color": [0.62, 0.07, 0.07, 1.0],
+      "car_file": "res://assets/cars/packard-clipper-1955.car"
+    },
+    {
+      "id": "packard-patrician-1955",
+      "name": "1955 Packard Patrician",
+      "price": 1150,
+      "vmax": 195.0,
+      "hp": 230.0,
+      "color": [0.36, 0.06, 0.07, 1.0],
+      "car_file": "res://assets/cars/packard-patrician-1955.car"
+    },
+    {
+      "id": "ford-country-squire-1950",
+      "name": "1950 Ford Country Squire",
+      "price": 950,
+      "vmax": 170.0,
+      "hp": 150.0,
+      "color": [0.55, 0.08, 0.07, 1.0],
+      "car_file": "res://assets/cars/ford-country-squire-1950.car"
+    },
+    {
+      "id": "buick-special-1954",
+      "name": "1954 Buick Special",
+      "price": 1000,
+      "vmax": 195.0,
+      "hp": 230.0,
+      "color": [0.12, 0.3, 0.7, 1.0],
+      "car_file": "res://assets/cars/buick-special-1954.car"
+    },
+    {
+      "id": "buick-special-1950",
+      "name": "1950 Buick Special",
+      "price": 900,
+      "vmax": 170.0,
+      "hp": 155.0,
+      "color": [0.05, 0.05, 0.06, 1.0],
+      "car_file": "res://assets/cars/buick-special-1950.car"
+    },
+    {
+      "id": "buick-estate-wagon-1954",
+      "name": "1954 Buick Special Estate Wagon",
+      "price": 1050,
+      "vmax": 190.0,
+      "hp": 230.0,
+      "color": [0.82, 0.68, 0.5, 1.0],
+      "car_file": "res://assets/cars/buick-estate-wagon-1954.car"
+    },
+    {
+      "id": "buick-super-convertible-1952",
+      "name": "1952 Buick Super Convertible",
+      "price": 1100,
+      "vmax": 170.0,
+      "hp": 155.0,
+      "color": [0.12, 0.17, 0.24, 1.0],
+      "car_file": "res://assets/cars/buick-super-convertible-1952.car"
+    },
+    {
+      "id": "packard-caribbean-1955",
+      "name": "1955 Packard Caribbean",
+      "price": 1300,
+      "vmax": 195.0,
+      "hp": 230.0,
+      "color": [0.33, 0.6, 0.92, 1.0],
+      "car_file": "res://assets/cars/packard-caribbean-1955.car"
+    },
+    {
+      "id": "ford-f100-panel-1956",
+      "name": "1956 Ford F-100 Panel",
+      "price": 850,
+      "vmax": 185.0,
+      "hp": 260.0,
+      "color": [0.2, 0.42, 0.72, 1.0],
+      "car_file": "res://assets/cars/ford-f100-panel-1956.car"
+    },
+    {
+      "id": "jeep-dispatcher-1965",
+      "name": "1965 Jeep Dispatcher",
+      "price": 650,
+      "vmax": 140.0,
+      "hp": 135.0,
+      "color": [0.1, 0.14, 0.35, 1.0],
+      "car_file": "res://assets/cars/jeep-dispatcher-1965.car"
     }
   ]
 }

@@ -1,0 +1,78 @@
+{
+  "id": "packard-clipper-1955",
+  "name": "Packard Clipper 1955",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/packard-clipper-1955.glb",
+    "position": [0.0, 0.206, 0.0],
+    "height": 1.3296,
+    "ground_clearance": 0.206,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.786, 0.335, 1.846],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.786, 0.335, 1.846],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.786, 0.335, -1.253],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.786, 0.335, -1.253],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "v8-265",
+    "transmission": "gb_auto3",
+    "wheels": "wheel-std"
+  },
+  "driver": {
+    "position": [0.448, 1.15, 0.09]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.58, -10.8],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.86, -6.4],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.448, 1.2, 0.09],
+      "pitch": -1.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.56, 2.84],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 40.0},
+    "rear": {"node": "bumper_rear", "mass": 36.0}
+  },
+  "chassis": {
+    "mass": 1770,
+    "wheelbase": 3.099,
+    "cg_height": 0.54,
+    "front_axle_fraction": 0.55,
+    "max_steer_deg": 30
+  }
+}

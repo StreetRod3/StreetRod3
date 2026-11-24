@@ -1,0 +1,78 @@
+{
+  "id": "ford-f100-panel-1956",
+  "name": "Ford F-100 Panel 1956",
+  "make": "Ford",
+  "model": {
+    "path": "res://assets/cars/ford-f100-panel-1956.glb",
+    "position": [0.0, 0.154, 0.0],
+    "height": 1.8027,
+    "ground_clearance": 0.154,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.785, 0.335, 1.561],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.785, 0.335, 1.561],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.785, 0.335, -1.233],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.785, 0.335, -1.233],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "ford-292",
+    "transmission": "gb_man3-ford",
+    "wheels": "wheel-std"
+  },
+  "driver": {
+    "position": [0.346, 1.49, 0.06]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.9, -10.4],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 2.15, -6.2],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.346, 1.54, 0.06],
+      "pitch": -1.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.62, 2.68],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "bumpers": {
+    "front": {"node": "bumper_front", "mass": 30.0},
+    "rear": {"node": "bumper_rear", "mass": 26.0}
+  },
+  "chassis": {
+    "mass": 1524,
+    "wheelbase": 2.794,
+    "cg_height": 0.55,
+    "front_axle_fraction": 0.53,
+    "max_steer_deg": 30
+  }
+}
