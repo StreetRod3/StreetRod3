@@ -2063,24 +2063,36 @@ static func _part_matches_book_product(part: Dictionary, product: String) -> boo
 func _active_car_has_book_product(product: String) -> bool:
 	if not has_active_car() or product.is_empty():
 		return false
-	if has_engine() and _part_matches_book_product(get_equipped_engine(), product):
-		return true
-	if has_gearbox() and _part_matches_book_product(get_equipped_gearbox(), product):
-		return true
-	if has_wheels() and _part_matches_book_product(get_equipped_wheel(), product):
-		return true
-	for part_id: String in equipped_part_ids:
-		if _part_matches_book_product(listing_by_id(PARTS, part_id), product):
-			return true
-	for slot: String in active_slots():
-		if _part_matches_book_product(slot_part(slot), product):
-			return true
-	return false
+	return _build_has_book_product(
+		product,
+		get_equipped_engine() if has_engine() else {},
+		get_equipped_gearbox() if has_gearbox() else {},
+		get_equipped_wheel() if has_wheels() else {},
+		equipped_part_ids,
+		slot_part_ids,
+		equipped_engine_id,
+	)
 
 
 ## Bonus from owned books for `param` ("hp", "grip", "vmax", ...) on the active owned car.
 func book_car_bonus(param: String) -> float:
 	if not has_active_car() or param.is_empty():
+		return 0.0
+	return _book_bonus_for(
+		param,
+		get_equipped_engine() if has_engine() else {},
+		get_equipped_gearbox() if has_gearbox() else {},
+		get_equipped_wheel() if has_wheels() else {},
+		equipped_part_ids,
+		slot_part_ids,
+		equipped_engine_id,
+	)
+
+
+## The same bonus for a car that is not the one in the bay. `engine` is empty when that
+## car has none, and likewise the gearbox and the wheels.
+func _book_bonus_for(param: String, engine: Dictionary, gearbox: Dictionary, wheel: Dictionary, part_ids: Array[String], slots: Dictionary, engine_id: String) -> float:
+	if param.is_empty():
 		return 0.0
 	var total := 0.0
 	for book: Dictionary in owned_books():
@@ -2088,17 +2100,36 @@ func book_car_bonus(param: String) -> float:
 			continue
 		var family := str(book.get("family", "")).strip_edges()
 		if not family.is_empty():
-			if not has_engine() or engine_family(get_equipped_engine()) != family:
+			if engine.is_empty() or engine_family(engine) != family:
 				continue
 		var product := str(book.get("product", "")).strip_edges()
 		if not product.is_empty():
 			if param == "grip":
-				if not has_tires() or not _part_matches_book_product(slot_part(SLOT_TIRES), product):
+				var tires := listing_by_id(PARTS, str(slots.get(SLOT_TIRES, NO_PART_ID)))
+				if not _part_matches_book_product(tires, product):
 					continue
-			elif not _active_car_has_book_product(product):
+			elif not _build_has_book_product(product, engine, gearbox, wheel, part_ids, slots, engine_id):
 				continue
 		total += book_value(book)
 	return total
+
+
+func _build_has_book_product(product: String, engine: Dictionary, gearbox: Dictionary, wheel: Dictionary, part_ids: Array[String], slots: Dictionary, engine_id: String) -> bool:
+	if product.is_empty():
+		return false
+	if not engine.is_empty() and _part_matches_book_product(engine, product):
+		return true
+	if not gearbox.is_empty() and _part_matches_book_product(gearbox, product):
+		return true
+	if not wheel.is_empty() and _part_matches_book_product(wheel, product):
+		return true
+	for part_id: String in part_ids:
+		if _part_matches_book_product(listing_by_id(PARTS, part_id), product):
+			return true
+	for slot: String in _slots_in_use(engine_id, slots):
+		if _part_matches_book_product(listing_by_id(PARTS, str(slots.get(slot, NO_PART_ID))), product):
+			return true
+	return false
 
 
 ## Bonus from owned books for `param` on a specific part entry.
@@ -2394,42 +2425,206 @@ func refresh_car_stats() -> void:
 		vmax_kmh = 0.0
 		engine_power_hp = 0.0
 		return
-	vmax_kmh = float(car.get("vmax", vmax_kmh))
-	engine_power_hp = float(car.get("hp", engine_power_hp))
 	var engine := get_equipped_engine()
+	if not engine.is_empty() and model == DEFAULT_CAR_ID:
+		car_name = str(car_spec.get("name", car_name))
+	var perf := _performance_of(model, equipped_engine_id, engine_tune, equipped_gearbox_id, equipped_wheel_id, equipped_part_ids, slot_part_ids)
+	vmax_kmh = float(perf["vmax"])
+	engine_power_hp = float(perf["hp"])
+
+
+## Horsepower in x and top speed in km/h in y, for any owned car. Top speed is after the
+## gearbox and the rear end, the same figure the parts board shows.
+func owned_car_performance(instance_id: String) -> Vector2:
+	if instance_id == current_car_id and has_active_car():
+		var live := _performance_of(car_model_id(current_car_id), equipped_engine_id, engine_tune, equipped_gearbox_id, equipped_wheel_id, equipped_part_ids, slot_part_ids)
+		return Vector2(float(live["hp"]), float(live["top"]))
+	var stored: Variant = car_records.get(instance_id, null)
+	if typeof(stored) != TYPE_DICTIONARY:
+		return Vector2.ZERO
+	var rec: Dictionary = stored
+	var perf := _performance_of(
+		str(rec.get("model_id", car_model_id(instance_id))),
+		str(rec.get("engine_id", NO_ENGINE_ID)),
+		clampi(int(rec.get("engine_tune", ENGINE_TUNE_DEFAULT)), ENGINE_TUNE_MIN, ENGINE_TUNE_MAX),
+		str(rec.get("gearbox_id", DEFAULT_GEARBOX_ID)),
+		str(rec.get("wheel_id", "")),
+		_string_array(rec.get("part_ids", [])),
+		_slots_from(rec.get("slot_parts", null)),
+	)
+	return Vector2(float(perf["hp"]), float(perf["top"]))
+
+
+## Body paint, then the cove or accent paint when that zone is its own color.
+func owned_car_paints(instance_id: String) -> Array[Color]:
+	var body := _owned_body_color(instance_id)
+	var accent := _owned_accent_color(instance_id, body)
+	var paints: Array[Color] = [body]
+	if accent.a > 0.0 and not accent.is_equal_approx(body):
+		paints.append(accent)
+	return paints
+
+
+func _owned_body_color(instance_id: String) -> Color:
+	if instance_id == current_car_id and has_active_car():
+		return car_color
+	var stored: Variant = car_records.get(instance_id, null)
+	if typeof(stored) == TYPE_DICTIONARY:
+		var paint: Variant = (stored as Dictionary).get("color", null)
+		if paint is Color:
+			return paint
+	return _listed_color(car_model_id(instance_id))
+
+
+func _owned_cove_color(instance_id: String) -> Color:
+	if instance_id == current_car_id and has_active_car():
+		return car_cove_color
+	var stored: Variant = car_records.get(instance_id, null)
+	if typeof(stored) == TYPE_DICTIONARY:
+		var paint: Variant = (stored as Dictionary).get("cove_color", null)
+		if paint is Color:
+			return paint
+	return NO_COVE_PAINT
+
+
+## The cove or accent color, or a transparent color when the car has neither. An unpainted
+## cove follows the body, so it does not count as a second color.
+func _owned_accent_color(instance_id: String, body: Color) -> Color:
+	var spec := _CarFile.load_path(car_file_path(car_model_id(instance_id)))
+	var model: Variant = spec.get("model", {})
+	if typeof(model) != TYPE_DICTIONARY:
+		return Color(0, 0, 0, 0)
+	var block: Dictionary = model
+	var painted := _owned_cove_color(instance_id)
+	if block.has("accent"):
+		var zone: Variant = block.get("accent", {})
+		var stock := body
+		if typeof(zone) == TYPE_DICTIONARY and (zone as Dictionary).get("color", null) is Color:
+			stock = (zone as Dictionary)["color"]
+		return painted if painted.a > 0.0 else stock
+	if block.has("cove"):
+		return painted if painted.a > 0.0 else body
+	return Color(0, 0, 0, 0)
+
+
+## "hp" and "vmax" are the engine figures. "top" is top speed after the gearbox and the rear end.
+func _performance_of(model_id: String, engine_id: String, tune: int, gearbox_id: String, wheel_id: String, part_ids: Array[String], slots: Dictionary) -> Dictionary:
+	var none := {"hp": 0.0, "vmax": 0.0, "top": 0.0}
+	if engine_id == NO_ENGINE_ID:
+		return none
+	var car: Dictionary = listing_by_id(USED_CARS, model_id)
+	if car.is_empty():
+		car = listing_by_id(USED_CARS, DEFAULT_CAR_ID)
+	var hp := float(car.get("hp", 280.0))
+	var vmax := float(car.get("vmax", 220.0))
+	var engine := _engine_for(model_id, engine_id)
 	if not engine.is_empty():
-		if model == DEFAULT_CAR_ID:
-			car_name = str(car_spec.get("name", car_name))
-		vmax_kmh = float(engine.get("vmax", vmax_kmh))
-		engine_power_hp = float(engine.get("hp", engine_power_hp))
-	var tune_scale := engine_tune_scale(engine_tune, engine_sweet_tune())
-	vmax_kmh *= tune_scale
-	engine_power_hp *= tune_scale
-	for part_id in equipped_part_ids:
-		_add_part_stats(listing_by_id(PARTS, part_id), 1.0)
+		hp = float(engine.get("hp", hp))
+		vmax = float(engine.get("vmax", vmax))
+	var sweet := 6 if engine_id.is_empty() else engine_sweet_tune(engine_id)
+	var tune_scale := engine_tune_scale(tune, sweet)
+	hp *= tune_scale
+	vmax *= tune_scale
+	for part_id: String in part_ids:
+		var bolt_on := listing_by_id(PARTS, part_id)
+		hp += float(bolt_on.get("hp", 0.0))
+		vmax += float(bolt_on.get("vmax", 0.0))
 	# Each muffler of a dual exhaust does half the work, and each carburetor of a
 	# multi-carb intake its share.
-	var muffler_share := 1.0 / float(muffler_slots().size())
-	var carb_share := 1.0 / float(maxi(carb_slots().size(), 1))
-	for slot in active_slots():
+	var carbs := _carb_ids(slots)
+	var carb_share := 1.0 / float(maxi(carbs.size(), 1))
+	var dual := bool(listing_by_id(PARTS, str(slots.get(SLOT_EXHAUST, NO_PART_ID))).get("dual", false))
+	var muffler_share := 0.5 if dual else 1.0
+	for slot: String in _slots_in_use(engine_id, slots):
 		var share := 1.0
 		if spot_kind(slot) == SLOT_MUFFLER:
 			share = muffler_share
 		elif spot_kind(slot) == SLOT_CARB:
 			share = carb_share
-		_add_part_stats(slot_part(slot), share)
-	var flow := carb_flow_factor()
-	vmax_kmh *= flow
-	engine_power_hp *= flow
-	vmax_kmh += book_car_bonus("vmax")
-	engine_power_hp += book_car_bonus("hp")
+		var part := listing_by_id(PARTS, str(slots.get(slot, NO_PART_ID)))
+		hp += float(part.get("hp", 0.0)) * share
+		vmax += float(part.get("vmax", 0.0)) * share
+	var flow := _carb_flow(engine, slots)
+	hp *= flow
+	vmax *= flow
+	var gearbox := _gearbox_for(model_id, gearbox_id)
+	var wheel := listing_by_id(WHEELS, wheel_id)
+	hp += _book_bonus_for("hp", engine, gearbox, wheel, part_ids, slots, engine_id)
+	vmax += _book_bonus_for("vmax", engine, gearbox, wheel, part_ids, slots, engine_id)
+	var diff := listing_by_id(PARTS, str(slots.get(SLOT_DIFFERENTIAL, NO_PART_ID)))
+	var top := vmax * float(gearbox.get("top_speed", 1.0)) * float(diff.get("top_speed", 1.0))
+	return {"hp": hp, "vmax": vmax, "top": top}
 
 
-func _add_part_stats(part: Dictionary, share: float) -> void:
-	if part.is_empty():
-		return
-	vmax_kmh += float(part.get("vmax", 0.0)) * share
-	engine_power_hp += float(part.get("hp", 0.0)) * share
+func _engine_for(model_id: String, engine_id: String) -> Dictionary:
+	if engine_id == NO_ENGINE_ID:
+		return {}
+	var engine: Dictionary = listing_by_id(ENGINES, engine_id)
+	if not engine.is_empty():
+		return engine
+	var stock: Variant = _CarFile.load_path(car_file_path(model_id)).get("engine", {})
+	return stock if typeof(stock) == TYPE_DICTIONARY else {}
+
+
+func _gearbox_for(model_id: String, gearbox_id: String) -> Dictionary:
+	if gearbox_id == NO_GEARBOX_ID:
+		return {}
+	var stock: Variant = _CarFile.load_path(car_file_path(model_id)).get("transmission", {})
+	var stock_box: Dictionary = stock if typeof(stock) == TYPE_DICTIONARY else {}
+	if gearbox_id == str(stock_box.get("id", "")) and not stock_box.is_empty():
+		return stock_box
+	var box: Dictionary = listing_by_id(GEARBOXES, gearbox_id)
+	if box.is_empty():
+		if not stock_box.is_empty():
+			return stock_box
+		return listing_by_id(GEARBOXES, DEFAULT_GEARBOX_ID)
+	return box
+
+
+func _carb_ids(slots: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	var intake := listing_by_id(PARTS, str(slots.get(SLOT_INTAKE, NO_PART_ID)))
+	if intake.is_empty():
+		return out
+	for i in clampi(int(intake.get("carbs", 1)), 1, CARB_SLOTS.size()):
+		out.append(CARB_SLOTS[i])
+	return out
+
+
+func _carb_flow(engine: Dictionary, slots: Dictionary) -> float:
+	var cfm := 0.0
+	for slot: String in _carb_ids(slots):
+		cfm += float(listing_by_id(PARTS, str(slots.get(slot, NO_PART_ID))).get("cfm", 0.0))
+	if cfm <= 0.0:
+		return 1.0
+	var ratio := cfm / (float(cid_of(engine)) * CFM_PER_CID)
+	if ratio < CARB_STARVED:
+		return maxf(1.0 - 0.8 * (CARB_STARVED - ratio), 0.5)
+	if ratio > CARB_BOGGED:
+		return maxf(1.0 - 0.08 * (ratio - CARB_BOGGED), 0.9)
+	return 1.0
+
+
+## Slots in use on a car with `engine_id` and `slots`, matching `active_slots()` for the
+## car in the bay.
+func _slots_in_use(engine_id: String, slots: Dictionary) -> Array[String]:
+	var has_eng := engine_id != NO_ENGINE_ID
+	var dual := bool(listing_by_id(PARTS, str(slots.get(SLOT_EXHAUST, NO_PART_ID))).get("dual", false))
+	var out: Array[String] = []
+	for slot: String in UNDER_CAR_SLOTS:
+		if slot == SLOT_MUFFLER_LEFT and not dual:
+			continue
+		if slot == SLOT_MANIFOLD and not has_eng:
+			continue
+		out.append(slot)
+	out.append(SLOT_TIRES)
+	if not has_eng:
+		return out
+	var carbs := _carb_ids(slots)
+	for slot: String in HOOD_SLOTS:
+		if not CARB_SLOTS.has(slot) or carbs.has(slot) or (slot == SLOT_CARB and carbs.is_empty()):
+			out.append(slot)
+	return out
 
 
 func set_engine_tune(step: int) -> void:

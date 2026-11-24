@@ -17,6 +17,9 @@ const _BOOKS_PAGE_SCROLL_H := 520.0
 const _SR3_LOGO := preload("res://assets/sr3logo.png")
 const _SR3_LOGO_SIZE := Vector2(320, 155)
 const _SR3_LOGO_MARGIN := 18.0
+## Wide enough for the name on the left and horsepower, top speed, and the paint on the right.
+const _CAR_LIST_HALF_W := 350.0
+const _CAR_LIST_INNER_W := 640.0
 
 @onready var _car_pivot: Node3D = $CarPivot
 @onready var _camera_pivot: Node3D = $CameraPivot
@@ -2586,30 +2589,30 @@ func _build_car_list() -> void:
 	root.visible = false
 	root.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	root.offset_left = -220.0
+	root.offset_left = -_CAR_LIST_HALF_W
 	root.offset_top = 48.0
-	root.offset_right = 220.0
+	root.offset_right = _CAR_LIST_HALF_W
 	root.offset_bottom = 48.0
 	root.add_theme_stylebox_override(&"panel", _car_list_style())
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override(&"separation", 8)
 	root.add_child(box)
 	var title := _car_list_label("Cars in the garage")
-	title.custom_minimum_size = Vector2(400, 24)
+	title.custom_minimum_size = Vector2(_CAR_LIST_INNER_W, 24)
 	box.add_child(title)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.custom_minimum_size = Vector2(400, 36)
+	scroll.custom_minimum_size = Vector2(_CAR_LIST_INNER_W, 36)
 	box.add_child(scroll)
 	_car_list_rows = VBoxContainer.new()
 	_car_list_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_car_list_rows.add_theme_constant_override(&"separation", 6)
 	scroll.add_child(_car_list_rows)
 	_car_list_count = _car_list_label("")
-	_car_list_count.custom_minimum_size = Vector2(400, 22)
+	_car_list_count.custom_minimum_size = Vector2(_CAR_LIST_INNER_W, 22)
 	box.add_child(_car_list_count)
 	_car_list_status = _car_list_label("")
-	_car_list_status.custom_minimum_size = Vector2(400, 22)
+	_car_list_status.custom_minimum_size = Vector2(_CAR_LIST_INNER_W, 22)
 	box.add_child(_car_list_status)
 	_car_list_group = ButtonGroup.new()
 	var actions := HBoxContainer.new()
@@ -2724,11 +2727,11 @@ func _rebuild_car_list() -> void:
 	var rows_height := float(rows * 36 + (rows - 1) * 6)
 	var scroll := _car_list_rows.get_parent() as Control
 	if scroll != null:
-		scroll.custom_minimum_size = Vector2(400, rows_height)
+		scroll.custom_minimum_size = Vector2(_CAR_LIST_INNER_W, rows_height)
 	# Margins, title, count, status line, one row of action buttons, and the gaps between them.
 	var chrome := 20.0 + 24.0 + 22.0 + 22.0 + 36.0 + 4.0 * 8.0
-	_car_list.offset_left = -220.0
-	_car_list.offset_right = 220.0
+	_car_list.offset_left = -_CAR_LIST_HALF_W
+	_car_list.offset_right = _CAR_LIST_HALF_W
 	_car_list.offset_top = 48.0
 	_car_list.offset_bottom = 48.0 + chrome + rows_height
 
@@ -2749,13 +2752,77 @@ func _car_list_row(car_id: String, index: int) -> Button:
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.custom_minimum_size = Vector2(0, 36)
+	btn.clip_contents = true
 	var label := GameState.car_display_name(car_id)
 	if car_id == GameState.current_car_id:
 		label = "%s    ·    in the bay" % label
-	btn.text = "%d.  %s" % [index + 1, label]
+	var row := HBoxContainer.new()
+	row.set_anchors_preset(Control.PRESET_FULL_RECT)
+	row.offset_left = 8.0
+	row.offset_right = -8.0
+	row.add_theme_constant_override(&"separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(row)
+	var ink := btn.get_theme_color(&"font_color", &"Button")
+	var name_clip := Control.new()
+	name_clip.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_clip.clip_contents = true
+	name_clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.add_child(name_clip)
+	var name := Label.new()
+	name.set_anchors_preset(Control.PRESET_FULL_RECT)
+	name.text = "%d.  %s" % [index + 1, label]
+	name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	name.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	name.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name.focus_mode = Control.FOCUS_NONE
+	name.add_theme_color_override(&"font_color", ink)
+	name_clip.add_child(name)
+	var perf := GameState.owned_car_performance(car_id)
+	var stats := Label.new()
+	stats.custom_minimum_size = Vector2(176, 0)
+	stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	stats.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	stats.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stats.focus_mode = Control.FOCUS_NONE
+	stats.add_theme_color_override(&"font_color", ink)
+	stats.text = "%.0f hp · %s" % [perf.x, GameState.speed_text(perf.y)]
+	row.add_child(stats)
+	var paints := GameState.owned_car_paints(car_id)
+	var swatch := _PaintSwatch.new()
+	swatch.body = paints[0]
+	if paints.size() > 1:
+		swatch.accent = paints[1]
+	row.add_child(swatch)
 	btn.toggled.connect(_on_car_list_row_toggled.bind(car_id))
 	btn.set_pressed_no_signal(car_id == _car_list_selected)
 	return btn
+
+
+## One paint fills the box. A cove or accent of its own color takes the other triangle.
+class _PaintSwatch extends Control:
+	var body: Color = Color.WHITE
+	var accent: Color = Color(0, 0, 0, 0)
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(22, 22)
+		mouse_filter = MOUSE_FILTER_IGNORE
+		focus_mode = FOCUS_NONE
+
+	func _draw() -> void:
+		var box := Rect2(Vector2.ZERO, size)
+		var split := accent.a > 0.0 and not accent.is_equal_approx(body)
+		if split:
+			draw_colored_polygon(PackedVector2Array([
+				Vector2.ZERO, Vector2(size.x, size.y), Vector2(0, size.y),
+			]), body)
+			draw_colored_polygon(PackedVector2Array([
+				Vector2.ZERO, Vector2(size.x, 0), Vector2(size.x, size.y),
+			]), accent)
+		else:
+			draw_rect(box, body)
+		draw_rect(box, Color(0.12, 0.09, 0.07, 1), false, 1.0)
 
 
 ## S switches, L sells, F closes. 1–9 pick those cars, and 0 picks the 10th.
