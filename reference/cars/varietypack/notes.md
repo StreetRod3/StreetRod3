@@ -63,6 +63,7 @@ This work is based on "FREE 1950s Car Variety Pack" (https://sketchfab.com/3d-mo
 | Ford: the top of the dash in the middle and the gravel pan under the grille painted with the body; the headliner along the windshield's top, which the pack has in the paint, made headliner | The dash top's ribbed image came out a grey panel and the pan black (user, 2026-11-23) |
 | Packards and the 1954 Buick: a panel added under the grille, behind the bumper (cream on the Packards, body color on the Buick) | With the bumper off there was a hole into the engine bay there (user, 2026-11-23) |
 | Ford wagon: the gravel pan under the grille painted with the body | As on the Ford sedan |
+| Ford wagon: the spare wheel on the tailgate painted with the body | The pack paints the car's wheels its red; the road wheels are the game's, the spare (a bare wheel, no tire) is the body's (user, 2026-11-23) |
 | 1954 Buick: the frame rails' ends pulled in to end inside the body | They ran out through the panels behind the bumpers and showed as brackets with the bumpers off (user, 2026-11-23) |
 | 1954 Buick: its strip speedometer and the small strip under it made a sliding speedometer (0-120 mph) and gas gauge | The game slides a needle in a `linear` pod; the speedometer's top is in the pod's name |
 | Packard: the "Packard" and "Clipper" scripts drawn as chrome lettering cut out by their image | Their image is a mask, which as one color made a dark box each (user, 2026-11-23) |

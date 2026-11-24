@@ -235,8 +235,10 @@ CARS = {
     'ford-1950-wagon': {
         'size_in': (208.0, 72.8, None),
         'wheelbase_in': 114.0,
-        # The red, and the top of the dash in the middle as on the sedan; the wood stays.
-        'paint': {'red_paint_metallic', 'bars'},
+        # The red, the top of the dash in the middle as on the sedan, and the spare's wheel
+        # on the tailgate, body colored as the pack has it (user, 2026-11-23); the wood
+        # stays.
+        'paint': {'red_paint_metallic', 'bars', 'v8wheel'},
         'tire': 'tyre black',
         'dial_face': 'textureford',
         'bumpers': {
