@@ -553,4 +553,6 @@ The variety pack's two trucks are in the newspaper: a blue 1956 Ford F-100 panel
 
 ## 2026-11-24
 
-The 1952 Buick Super Convertible no longer shows a dark band down the seam between its front fenders and doors, or a black slot at the front of each fender skirt, when seen from behind. The doors now reach in under the fenders and the rolled edges at that seam are shaded like the door beside them, and the skirts sit out against the wheel openings' lips instead of 3 cm inside them, where the gap looked into the fender.
+The 1952 Buick Super Convertible no longer shows a dark band down the seam between its front fenders and doors, or a black slot at the front of each fender skirt, when seen from behind. The doors now reach in under the fenders and the rolled edges at that seam are shaded like the door beside them, and the skirts sit out against the wheel openings' lips instead of 3 cm inside them, where the gap looked into the fender. The same dark band at the back of each door, seen from the front, is gone too.
+
+The 1955 Packard Caribbean's scripts are chrome lettering instead of plain grey plates: "Packard" on the hood and the trunk, and "Caribbean" in script on the trunk and on both front fenders behind a small chevron. The download leaves out the image for them, so the lettering is drawn by the converter in the Patrician's layout, which the Caribbean's plates share.

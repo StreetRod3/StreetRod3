@@ -75,7 +75,7 @@ IN = 0.0254
 ## added in a material's look (material, corners, outward normal); `badges`, decal
 ## materials drawn as chrome lettering cut out by their image (a mask, white where the
 ## letters are), by the image's file name in textures/ (or a mask and an image of the
-## letters' colors); `height` None scales the height as the width; `dial_order` 'size'
+## letters' colors; or the name of a mask made here, in BADGE_MAKERS); `height` None scales the height as the width; `dial_order` 'size'
 ## gives the `dials` kinds from the biggest dial down; `clamp` pulls the parts wholly
 ## inside `parts_in` in along an axis (0 X, 1 Y, 2 Z) to between `min` and `max`;
 ## `graft` takes parts from another of the pack's cars (`from`, its part numbers in
@@ -364,13 +364,13 @@ CARS = {
         'stretch': [{'parts_in': box, 'axis': 1, 'edge': -0.770, 'by': -0.015, 'span': 0.06,
                      'under': -0.776, 'inset': 0.002}
                     for box in (((-1.03, -0.80, 0.25), (-0.78, 0.47, 1.06)), ((0.78, -0.80, 0.25), (1.03, 0.47, 1.06)))],
-        # The fender's back edge and the door's front edge both roll in to the seam, so
-        # seen from behind the seam was a dark band: their corners there take the
-        # normals of the door skin just behind it, height by height.
-        'seam_normals': [{'material': 'metallic_paint', 'corners_in': ((-1.03, -0.80, 0.35), (-0.90, -0.745, 0.84)),
-                          'like': ((-1.03, -0.74, 0.30), (-0.85, 0.30, 0.90))},
-                         {'material': 'metallic_paint', 'corners_in': ((0.90, -0.80, 0.35), (1.03, -0.745, 0.84)),
-                          'like': ((0.85, -0.74, 0.30), (1.03, 0.30, 0.90))}],
+        # The panels' edges roll in to the door seams, so seen at a slant each seam was a
+        # dark band (the front one from behind, the back one from the front; user,
+        # 2026-11-24): their corners there take the door skin's normals, height by height.
+        'seam_normals': [{'material': 'metallic_paint', 'corners_in': (lo, hi),
+                          'like': ((-1.03, -0.74, 0.30), (-0.85, 0.30, 0.90)) if lo[0] < 0 else ((0.85, -0.74, 0.30), (1.03, 0.30, 0.90))}
+                         for lo, hi in (((-1.03, -0.80, 0.35), (-0.90, -0.745, 0.84)), ((0.90, -0.80, 0.35), (1.03, -0.745, 0.84)),
+                                        ((-1.03, 0.40, 0.35), (-0.90, 0.50, 0.84)), ((0.90, 0.40, 0.35), (1.03, 0.50, 0.84)))],
         # The fender skirts sit 3-4 cm in from the wheel openings' lips, which have no
         # return, so from behind the step showed the inside of the fender as a dark slot
         # at each skirt's front edge (user, 2026-11-24): out to just inside the lips.
@@ -400,6 +400,10 @@ CARS = {
         # The Clipper's opening under the grille, closed the same way.
         'fill': [('paint_white_real', ((-0.68, -2.54, 0.34), (0.68, -2.54, 0.34), (0.68, -2.54, 0.56),
                                        (-0.68, -2.54, 0.56)), (0.0, -1.0, 0.0))],
+        # "Packard" on the hood and the trunk's left, "Caribbean" on the trunk's right and
+        # the front fenders, as chrome lettering; the pack's image for them is not in the
+        # download, so they were plain grey plates (user, 2026-11-24).
+        'badges': {'packard_caribbean': 'caribbean'},
     },
     # 1956 Ford F-100 panel delivery (the pack calls it a 1953; the wraparound windshield
     # and the grille are the 1956's): 110 in wheelbase (fordf100s.com); the 1953-56 panel
@@ -485,6 +489,49 @@ BLEND = 0.35
 ## A trimmed panel edge ends up this far inside the skin it meets (m), so where the two
 ## overlap the neighbor is drawn and they don't flicker.
 TRIM_UNDER = 0.001
+def caribbean_badges():
+    """The Caribbean's lettering mask, whose image is not in the download: its plates use
+    the Patrician's layout, so the Patrician's "Packard" row (the hood and the trunk's
+    left) is kept, and "Caribbean" goes in script where the Patrician has "Patrician" (the
+    trunk's right) and on the long plate of each front fender, whose short plate ahead of
+    it (the row's first 0.291 of its width) gets a chevron."""
+    from PIL import Image, ImageDraw, ImageFont
+    size = 1024
+    src = Image.open(os.path.join(PACK, 'textures', 'patrician_alpha.png')).convert('L').resize((size, size), Image.LANCZOS)
+    im = Image.new('L', (size, size), 0)
+
+    def row(v0, v1):
+        # Rows by UV v, which runs up the image.
+        return round((1.0 - v1) * size), round((1.0 - v0) * size)
+    top, bottom = row(0.607, 0.709)
+    im.paste(src.crop((0, top, size, bottom)), (0, top))
+    font_path = '/usr/share/fonts/opentype/urw-base35/Z003-MediumItalic.otf'
+    draw = ImageDraw.Draw(im)
+    split = round(0.291 * size)
+    for (v0, v1), (u0, u1) in (((0.434, 0.607), (0, size)), ((0.203, 0.434), (split, size))):
+        top, bottom = row(v0, v1)
+        height = bottom - top
+        width = u1 - u0
+        pt = height
+        while True:
+            font = ImageFont.truetype(font_path, pt)
+            box = draw.textbbox((0, 0), 'Caribbean', font=font, stroke_width=3)
+            if box[2] - box[0] <= width * 0.92 and box[3] - box[1] <= height * 0.86:
+                break
+            pt -= 2
+        x = u0 + (width - (box[2] - box[0])) / 2 - box[0]
+        y = top + (height - (box[3] - box[1])) / 2 - box[1]
+        draw.text((x, y), 'Caribbean', font=font, fill=255, stroke_width=3, stroke_fill=255)
+    top, bottom = row(0.203, 0.434)
+    cx, cy, w, h = split / 2, (top + bottom) / 2, split * 0.36, (bottom - top) * 0.3
+    t = h * 0.8
+    draw.polygon([(cx - w, cy - h), (cx - w + t, cy - h), (cx, cy + h - t * 1.2), (cx + w - t, cy - h), (cx + w, cy - h),
+                  (cx, cy + h)], fill=255)
+    return im
+
+
+## Badge masks made here, for cars whose lettering image is not in the download.
+BADGE_MAKERS = {'caribbean': caribbean_badges}
 ## The badges' image size (px).
 BADGE_TEX = 512
 ## Clear glass with a faint green tint, as on the Studebaker.
@@ -1081,7 +1128,8 @@ def build(car, dst):
     badge_material = {}
     for badge_name, image_name in cfg.get('badges', {}).items():
         image_name, color_name = (image_name, None) if isinstance(image_name, str) else image_name
-        mask = Image.open(os.path.join(PACK, 'textures', image_name)).convert('L').resize((BADGE_TEX, BADGE_TEX), Image.LANCZOS)
+        mask = (BADGE_MAKERS[image_name]() if image_name in BADGE_MAKERS
+                else Image.open(os.path.join(PACK, 'textures', image_name)).convert('L')).resize((BADGE_TEX, BADGE_TEX), Image.LANCZOS)
         if color_name:
             badge_im = Image.open(os.path.join(PACK, 'textures', color_name)).convert('RGBA').resize(mask.size, Image.LANCZOS)
         else:
