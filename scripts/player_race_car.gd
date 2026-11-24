@@ -55,6 +55,9 @@ const CLUTCH_CATCH_RATE := 5000.0
 ## times this is the extra share of the gear's pull. Only when the hand brake comes off faster
 ## than this, in m/s, so a launch gets none.
 const CLUTCH_KICK := 1.0
+## A wheelstand this high, in radians, leaves the arcade drive no steering: the front tires are off
+## the road. The simulation needs no such rule, since its tires carry no load there.
+const WHEELSTAND_NO_STEER_RAD := 0.03
 const CLUTCH_KICK_SPEED := 5.0
 
 const CAM_FAR := 0
@@ -987,6 +990,8 @@ func _physics_arcade(delta: float) -> void:
 
 	var limits := _speed_limits()
 	_arcade.ride_grip = _dynamics.ride_grip()
+	# Up on the rear wheels the front ones steer nothing.
+	steer *= 1.0 - clampf(_dynamics.wheelstand() / WHEELSTAND_NO_STEER_RAD, 0.0, 1.0)
 	_arcade.step(
 		self,
 		delta,

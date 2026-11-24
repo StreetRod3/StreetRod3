@@ -137,14 +137,16 @@ const _SPRING_COLORS := {
 	"heavy": Color(0.62, 0.1, 0.08),
 	"lowering": Color(0.1, 0.25, 0.6),
 	"racing": Color(0.85, 0.72, 0.1),
+	"gasser": Color(0.92, 0.92, 0.9),
 }
 const _SHOCK_COLORS := {
 	"stock": Color(0.3, 0.3, 0.3),
 	"gas": Color(0.8, 0.62, 0.08),
 	"racing": Color(0.7, 0.1, 0.1),
+	"drag": Color(0.1, 0.35, 0.75),
 }
 ## Leaves in a rear leaf spring, by the spring's style.
-const _SPRING_LEAVES := {"stock": 2, "heavy": 3, "lowering": 3, "racing": 4}
+const _SPRING_LEAVES := {"stock": 2, "heavy": 3, "lowering": 3, "racing": 4, "gasser": 3}
 const _COIL_RADIUS := 0.055
 const _COIL_TURNS := 5
 const _SHOCK_Z := 0.6

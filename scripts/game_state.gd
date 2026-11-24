@@ -2060,7 +2060,7 @@ static func _part_matches_book_product(part: Dictionary, product: String) -> boo
 		return true
 	if product == SLOT_TIRES and str(part.get("slot", "")) == SLOT_TIRES:
 		var style := str(part.get("style", ""))
-		return style == "slick" or style == "racing"
+		return style == "slick" or style == "racing" or style == "drag"
 	return false
 
 
@@ -2284,6 +2284,7 @@ func opponent_chassis(opp: Dictionary) -> Dictionary:
 	var chassis: Dictionary = (stored as Dictionary).duplicate()
 	chassis["mass"] = float(chassis.get("mass", 1360.0)) + bumper_mass_delta_kg(spec, bumper_ends(opp.get("bumpers_off", [])))
 	_put_on_suspension(chassis, listing_by_id(PARTS, str(opp.get("springs", ""))), listing_by_id(PARTS, str(opp.get("shocks", ""))), 1.0, 1.0)
+	chassis["launch_grip"] = launch_grip_of(opponent_tires(opp))
 	return chassis
 
 
@@ -2311,6 +2312,18 @@ func _put_on_suspension(chassis: Dictionary, springs: Dictionary, shocks: Dictio
 	var lower := float(springs.get("lower_m", 0.0))
 	chassis["ride_lower"] = lower
 	chassis["cg_height"] = float(chassis.get("cg_height", 0.48)) - lower
+	# A gasser's straight axle stands the nose up and its engine sits further back, which puts
+	# more of the weight on the rear tires.
+	chassis["front_axle_fraction"] = float(chassis.get("front_axle_fraction", 0.46)) + float(springs.get("weight_back", 0.0))
+	# Drag shocks let the nose rise freely: their front ones hardly damp as they extend, and
+	# the rear ones let the back squat.
+	chassis["front_rebound"] = float(shocks.get("front_rebound", 1.0))
+	chassis["rear_bump"] = float(shocks.get("rear_bump", 1.0))
+
+
+## How many times their grip a set of tires gives the drive, for a launch: drag slicks hook up.
+static func launch_grip_of(tires: Dictionary) -> float:
+	return maxf(float(tires.get("launch_grip", 1.0)), 0.1)
 
 
 func _grip_of(tires: Dictionary) -> float:
@@ -2342,6 +2355,7 @@ func race_chassis() -> Dictionary:
 	var chassis: Dictionary = (spec as Dictionary).duplicate()
 	chassis["mass"] = float(chassis.get("mass", 1360.0)) + mass_delta_kg()
 	_put_on_suspension(chassis, slot_part(SLOT_SPRINGS), slot_part(SLOT_SHOCKS), mount_condition("slot:" + SLOT_SPRINGS), mount_condition("slot:" + SLOT_SHOCKS), true)
+	chassis["launch_grip"] = launch_grip_of(slot_part(SLOT_TIRES)) if has_tires() else 1.0
 	return chassis
 
 
@@ -3184,10 +3198,13 @@ func _part_stats_text(part: Dictionary) -> String:
 		var spring_rate := float(part["spring_rate"]) + book_part_bonus(part, "spring_rate")
 		var lower_cm := roundi(float(part.get("lower_m", 0.0)) * 100.0)
 		var stiffer := "stock rate" if is_equal_approx(spring_rate, 1.0) else "%d%% stiffer" % roundi((spring_rate - 1.0) * 100.0)
+		if lower_cm < 0:
+			return "%s   raises %s" % [stiffer, short_length_text(-lower_cm)]
 		return "%s   lowers %s" % [stiffer, short_length_text(lower_cm)] if lower_cm > 0 else stiffer
 	if part.has("shock_rate"):
 		var shock_rate := float(part["shock_rate"]) + book_part_bonus(part, "shock_rate")
-		return "stock damping" if is_equal_approx(shock_rate, 1.0) else "%d%% more damping" % roundi((shock_rate - 1.0) * 100.0)
+		var damping := "stock damping" if is_equal_approx(shock_rate, 1.0) else "%d%% more damping" % roundi((shock_rate - 1.0) * 100.0)
+		return "%s   nose rises freely" % damping if float(part.get("front_rebound", 1.0)) < 1.0 else damping
 	if part.has("accel"):
 		return "%d%% more pull · %d%% top speed" % [
 			roundi((float(part.get("accel", 1.0)) - 1.0) * 100.0),
@@ -3198,6 +3215,8 @@ func _part_stats_text(part: Dictionary) -> String:
 		if part.has("grip")
 		else "+%d hp" % roundi(float(part.get("hp", 0)) + book_part_bonus(part, "hp"))
 	]
+	if float(part.get("launch_grip", 1.0)) > 1.0:
+		bits.append("hooks up off the line")
 	var vmax := int(part.get("vmax", 0))
 	if vmax != 0:
 		bits.append(speed_change_text(vmax))
