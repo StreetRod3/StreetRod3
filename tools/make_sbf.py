@@ -202,22 +202,24 @@ INTAKE_ENDS = (-10.7, 9.6)      # the floor's front and back
 INTAKE_FLOOR_T = 0.55
 RUNNER_BENDS = (1.0, 1.0)
 RUNNER_CORNER = 0.38
+RUNNER_BURY = 0.3       # each runner starts this far back inside the flange
 ALUMINUM_RUNNER_CORNER = 0.6    # the aluminum intake's rounder runners
 # The runners of the dual plane: (cylinder front to back, bank, top over the ports, across,
 # deep, how far out from the middle each turns along into the plenum (None: straight in
 # from its side), where it ends: along from the pad's middle, or out from the middle for
-# the straight ones). As on make_sbc.py's, every runner turns into an end of the plenum, the
+# the straight ones; how steeply it climbs out of its port, the high ones steeper to rise
+# in the narrow valley of the 302's deck). As on make_sbc.py's, every runner turns into an end of the plenum, the
 # front two of each bank into its front and the back two into its back: the end cylinders'
 # high, over the middle ones' low; the middle cylinders' ports are under the pad, so theirs
 # rise into its sides before they turn. Under each runner the casting runs down to the
 # floor, so none shows an underside.
 INTAKE_RUNNERS = [
-    (0, 1, 2.7, 1.45, 1.45, 0.85, -1.85), (1, 1, 1.2, 1.3, 1.3, 1.6, -0.6),
-    (0, -1, 2.7, 1.45, 1.45, 0.85, -1.85), (1, -1, 1.2, 1.3, 1.3, 1.6, -0.6),
-    (2, 1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, 1, 2.7, 1.45, 1.45, 0.85, 1.85),
-    (2, -1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, -1, 2.7, 1.45, 1.45, 0.85, 1.85),
+    (0, 1, 2.7, 1.45, 1.45, 0.85, -1.85, 65), (1, 1, 1.2, 1.3, 1.3, 1.4, -0.6, 45),
+    (0, -1, 2.7, 1.45, 1.45, 0.85, -1.85, 65), (1, -1, 1.2, 1.3, 1.3, 1.4, -0.6, 45),
+    (2, 1, 1.2, 1.3, 1.3, 1.4, 0.6, 45), (3, 1, 2.7, 1.45, 1.45, 0.85, 1.85, 65),
+    (2, -1, 1.2, 1.3, 1.3, 1.4, 0.6, 45), (3, -1, 2.7, 1.45, 1.45, 0.85, 1.85, 65),
 ]
-WATER_CROSSOVER = (-9.8, 0.9, 1.3)      # x, its axis over the ports, diameter
+WATER_CROSSOVER = (-9.25, 0.9, 1.3)     # x, its axis over the ports, diameter (on both flanges)
 HEAT_CROSSOVER = (8.0, 0.75, 1.0)       # the exhaust heat crossover at the back, likewise
 # The choke's stove well on the right of the plenum: x from the pad's middle, in from the
 # flange's face, its top under the pad.
@@ -242,7 +244,7 @@ PAD = (2.65, 2.6, 0.4)  # half long, half wide, thick
 PLENUM_FLOOR = 1.1
 DIST = (-9.34, -0.89)   # the distributor's axis (x, y), the reference's
 DIST_VACUUM = (-0.5, -0.86, 0.0)
-THERMOSTAT = (-10.29, 2.58)
+THERMOSTAT = (-9.8, 2.4)    # the reference's is at (-10.29, 2.58), on its later intake
 COIL = (-11.6, -5.0, 9.4)
 
 # The stock exhaust: a flange on each port's pad, a log out past them (out from the pads,
@@ -825,19 +827,28 @@ def web_plan(d, name, path, w, top):
     d.extrude(sk, name, top - zf)
 
 
-def runner(d, name, x, s, top, w, h, entry_y, to_x):
+def runner(d, name, x, s, top, w, h, entry_y, to_x, climb):
     """make_sbc.py's runner: a square runner with rounded corners from bank s's port at x,
-    straight up and in out of the port, a bend over level, across, then (entry_y given) a
-    turn along X into the plenum at entry_y ending at to_x; else straight on to y = to_x."""
-    y0, z0, climb = runner_port()
+    straight up and in out of the port at climb degrees, a bend over level, across, then
+    (entry_y given) a turn along X into the plenum at entry_y ending at to_x; else straight
+    on to y = to_x. It starts RUNNER_BURY back inside the flange, so one climbing steeper
+    than the flange's face still sits flush on it, and its bend is kept tight enough to
+    end before the turn."""
+    yp, zp, _ = runner_port()
     th = math.radians(climb)
+    y0, z0 = yp + RUNNER_BURY * math.cos(th), zp - RUNNER_BURY * math.sin(th)
     zc = top - h / 2
     rise = zc - z0
-    r1 = min(RUNNER_BENDS[0], 0.9 * rise / (1 - math.cos(th)))
-    lead = max((rise - r1 * (1 - math.cos(th))) / math.sin(th), 0.05)
     r2 = RUNNER_BENDS[1]
-    p0 = np.array([x, s * y0, z0])
     y_turn = entry_y + s * r2 if entry_y is not None else to_x
+    room = abs(y_turn - s * y0) - 0.02
+    fit = (room - rise / math.tan(th)) / (math.sin(th) - (1 - math.cos(th)) / math.tan(th))
+    r1 = min(RUNNER_BENDS[0], 0.9 * rise / (1 - math.cos(th)), fit)
+    if r1 < 0.15:
+        sys.exit(f"{name}: no room to bend over before its turn ({room:.2f} in across for a "
+                 f"{rise:.2f} in rise at {climb} degrees); steepen it or move its turn in")
+    lead = max((rise - r1 * (1 - math.cos(th))) / math.sin(th), 0.05)
+    p0 = np.array([x, s * y0, z0])
     sk, to2d = d.plane(p0, (0.0, -s, 0.0), (s, 0, 0), f"{name} path")
     u1 = lead * np.array([math.cos(th), math.sin(th)])
     c = u1 + r1 * np.array([math.sin(th), -math.cos(th)])
@@ -879,9 +890,10 @@ def runner(d, name, x, s, top, w, h, entry_y, to_x):
     d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
     d.finish()
     d.body(f"{name}_turn", "solid.sweep", sketch=prof, path_sketch=sk, path=["a1", "l1"])
-    arc_pts_ = [centre[:2] + r2 * np.array([math.cos(a), math.sin(a)]) for a in
-                np.linspace(math.atan2(*(pt[:2] - centre[:2])[::-1]),
-                            math.atan2(*(arc_end[:2] - centre[:2])[::-1]), 9)]
+    a0 = math.atan2(*(pt[:2] - centre[:2])[::-1])
+    a1 = math.atan2(*(arc_end[:2] - centre[:2])[::-1])
+    a1 = a0 + (a1 - a0 + math.pi) % (2 * math.pi) - math.pi      # the quarter turn, not round the back
+    arc_pts_ = [centre[:2] + r2 * np.array([math.cos(a), math.sin(a)]) for a in np.linspace(a0, a1, 9)]
     web_plan(d, f"{web} (10)", [tuple(q) for q in arc_pts_] + [(to_x, arc_end[1])], w, zc)
 
 
@@ -928,19 +940,26 @@ def intake_levels():
 
 def intake_runners():
     """(x, bank, top, wide, deep, the y it turns along into the plenum or None, the x it ends
-    at, or the y for a straight one), from INTAKE_RUNNERS' (cylinder, bank, ...)."""
+    at, or the y for a straight one, climb), from INTAKE_RUNNERS' (cylinder, bank, ...)."""
     _, _, zp, _ = intake_levels()
     out = []
-    for i, s, top, w, h, entry, end in INTAKE_RUNNERS:
+    for i, s, top, w, h, entry, end, climb in INTAKE_RUNNERS:
         x = bank_x(s, BORE_X[i])
         to = PAD_X + end if entry is not None else s * end
-        out.append((x, s, zp + top, w, h, None if entry is None else s * entry, to))
+        out.append((x, s, zp + top, w, h, None if entry is None else s * entry, to, climb))
     return out
 
 
 def flange_face_y():
     """|y| of the flanges' inner faces at the floor."""
     return on_head(1, INTAKE_FACE_A + INTAKE_FLANGE[2], INTAKE_FLANGE[0])[0]
+
+
+def thermostat_seat():
+    """The thermostat's seat from above, circles ((x, y), r) counterclockwise: an ear for a
+    bolt each side of the housing."""
+    tx, ty = THERMOSTAT
+    return [((tx, ty - 1.35), 0.45), ((tx + 0.3, ty), 1.1), ((tx, ty + 1.35), 0.45), ((tx - 0.3, ty), 1.1)]
 
 
 def pad_bosses():
@@ -1064,23 +1083,23 @@ def intake(d, stock=True):
     d.cylinder(f"{nm}_distributor_boss", (dx, dy, z0 - 0.3), (0, 0, 1), 2.3, z1 - z0 + 0.6)
     tx, ty = THERMOSTAT
     seat_top = zp + WATER_CROSSOVER[1] + WATER_CROSSOVER[2] / 2 + 0.15
-    sk = d.sketch("XY", "Thermostat seat", offset=z1 - 0.05)
-    d.c += outline_commands(*hull_outline([((tx, ty - 1.5), 0.5), ((tx + 0.4, ty), 1.25),
-                                           ((tx, ty + 1.5), 0.5), ((tx - 0.3, ty), 1.25)]))
+    seat_foot = zp + WATER_CROSSOVER[1] - WATER_CROSSOVER[2] / 2     # cast onto the crossover
+    sk = d.sketch("XY", "Thermostat seat", offset=seat_foot)
+    d.c += outline_commands(*hull_outline(thermostat_seat()))
     d.finish()
-    d.extrude(sk, f"{nm}_thermostat_seat", seat_top - z1 + 0.05)
+    d.extrude(sk, f"{nm}_thermostat_seat", seat_top - seat_foot)
     if not stock:
         return
     sk = d.sketch("XY", "Thermostat housing", offset=seat_top)
-    d.c += outline_commands(*hull_outline([((tx, ty - 1.5), 0.42), ((tx + 0.05, ty), 1.12),
-                                           ((tx, ty + 1.5), 0.42), ((tx - 0.05, ty), 1.12)]))
+    d.c += outline_commands(*hull_outline([((tx, ty - 1.35), 0.38), ((tx + 0.05, ty), 1.0),
+                                           ((tx, ty + 1.35), 0.38), ((tx - 0.05, ty), 1.0)]))
     d.finish()
     d.extrude(sk, "thermostat_housing", 0.25)
     d.revolve("thermostat_dome", (tx, ty, 0.0), (0, 0, 1), (1, 0, 0),
-              [(seat_top + 0.2, 0.0), (seat_top + 0.2, 1.15), (seat_top + 0.7, 1.1),
-               (seat_top + 1.05, 0.85), (seat_top + 1.2, 0.0)])
+              [(seat_top + 0.2, 0.0), (seat_top + 0.2, 1.0), (seat_top + 0.7, 0.95),
+               (seat_top + 1.05, 0.75), (seat_top + 1.2, 0.0)])
     sk = d.sketch("XY", "Thermostat bolts", offset=seat_top + 0.25)
-    for y in (ty - 1.5, ty + 1.5):
+    for y in (ty - 1.35, ty + 1.35):
         d.hexagon((tx, y), 0.5)
     d.finish()
     d.extrude(sk, "thermostat_bolts", 0.3)
