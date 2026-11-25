@@ -74,5 +74,9 @@
     "cg_height": 0.6,
     "front_axle_fraction": 0.56,
     "max_steer_deg": 30
+  },
+  "plates": {
+    "front": {"position": [0.0, 0.11, 2.696], "bumper": true},
+    "rear": {"position": [0.0, 0.1, -2.716], "bumper": true}
   }
 }

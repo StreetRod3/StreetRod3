@@ -57,6 +57,7 @@ const _Gamepad := preload("res://scripts/gamepad.gd")
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
 const _BooksRegister := preload("res://scripts/books_register.gd")
+const _LicensePlate := preload("res://scripts/license_plate.gd")
 
 const MILES_PER_KM := 0.621371
 const POUNDS_PER_KG := 2.20462
@@ -265,6 +266,11 @@ var car_roof_chopped: bool = false
 const ROOF_CHOP_PRICE := 70
 ## The active car's stripped bumpers, by end ("front", "rear"; car file `bumpers`).
 var bumpers_off: Array[String] = []
+## The active car's plate number (scripts/license_plate.gd): a sequential one, the same
+## for a car each time, until a vanity plate is ordered for it in the garage.
+var car_plate: String = ""
+## What a vanity plate costs in the garage.
+const VANITY_PLATE_PRICE := 25
 ## Fuel in the active car's tank, in liters.
 var fuel: float = DEFAULT_TANK_L
 ## Top speed and horsepower after parts and engine tune.
@@ -1167,6 +1173,7 @@ func new_game() -> void:
 	car_paint_finish = "gloss"
 	car_roof_chopped = false
 	bumpers_off = []
+	car_plate = ""
 	fuel = DEFAULT_TANK_L
 	vmax_kmh = 220.0
 	engine_power_hp = 280.0
@@ -3567,6 +3574,42 @@ func car_roof_choppable() -> bool:
 
 ## Chops the active car's roof for ROOF_CHOP_PRICE. A chop is for good. Returns what went
 ## wrong, or "".
+## A car's plate number: its own from its record, else the sequential one for
+## `instance_id` (a car from a save from before plates has none stored).
+static func _plate_of(rec: Dictionary, instance_id: String) -> String:
+	var plate := str(rec.get("plate", ""))
+	return plate if not plate.is_empty() else _LicensePlate.serial(instance_id)
+
+
+## The plate number the active car wears.
+func active_plate() -> String:
+	return car_plate if not car_plate.is_empty() else _LicensePlate.serial(current_car_id)
+
+
+## A rival's plate number, the same for them each time.
+static func opponent_plate(opp: Dictionary) -> String:
+	return _LicensePlate.serial("rival:%s" % str(opp.get("name", opp.get("id", ""))))
+
+
+## Orders a vanity plate reading `text` for the active car. Returns why it can't be had,
+## or "" once it is on.
+func order_vanity_plate(text: String) -> String:
+	if not has_active_car():
+		return "There's no car in the garage."
+	var plate := _LicensePlate.normalize(text)
+	var problem := _LicensePlate.vanity_problem(plate)
+	if not problem.is_empty():
+		return problem
+	if plate == active_plate():
+		return "The car already wears %s." % plate
+	if money < VANITY_PLATE_PRICE:
+		return "Customization ain't free!"
+	money -= VANITY_PLATE_PRICE
+	car_plate = plate
+	_sync_record_from_active()
+	return ""
+
+
 func chop_roof() -> String:
 	if not car_roof_choppable():
 		return "This roof can't be chopped."
@@ -4449,6 +4492,7 @@ func _sync_record_from_active() -> void:
 	rec["paint_finish"] = car_paint_finish
 	rec["roof_chopped"] = car_roof_chopped
 	rec["bumpers_off"] = bumpers_off.duplicate()
+	rec["plate"] = car_plate
 	rec["fuel"] = fuel
 	rec["engine_id"] = equipped_engine_id
 	rec["gearbox_id"] = equipped_gearbox_id
@@ -4483,6 +4527,7 @@ func _apply_fields_from_record(instance_id: String) -> void:
 	car_paint_finish = paint_finish_from(rec.get("paint_finish", "gloss"))
 	car_roof_chopped = bool(rec.get("roof_chopped", false))
 	bumpers_off = bumper_ends(rec.get("bumpers_off", []))
+	car_plate = _plate_of(rec, instance_id)
 	fuel = float(rec.get("fuel", DEFAULT_TANK_L))
 	equipped_engine_id = str(rec.get("engine_id", equipped_engine_id))
 	equipped_gearbox_id = str(rec.get("gearbox_id", equipped_gearbox_id))
@@ -4528,6 +4573,7 @@ func _record_to_save(rec: Dictionary, model_id: String) -> Dictionary:
 		"paint_finish": paint_finish_from(rec.get("paint_finish", "gloss")),
 		"roof_chopped": bool(rec.get("roof_chopped", false)),
 		"bumpers_off": bumper_ends(rec.get("bumpers_off", [])),
+		"plate": str(rec.get("plate", "")),
 		"fuel": float(rec.get("fuel", fuel)),
 		"engine_id": str(rec.get("engine_id", "")),
 		"gearbox_id": str(rec.get("gearbox_id", "")),
@@ -4610,6 +4656,7 @@ func _record_from_save(row: Dictionary, model_id: String) -> Dictionary:
 		"paint_finish": paint_finish_from(row.get("paint_finish", "gloss")),
 		"roof_chopped": bool(row.get("roof_chopped", false)),
 		"bumpers_off": bumper_ends(row.get("bumpers_off", [])),
+		"plate": _LicensePlate.normalize(str(row.get("plate", ""))),
 		"fuel": float(row.get("fuel", DEFAULT_TANK_L)),
 		"engine_id": str(row.get("engine_id", "")),
 		"gearbox_id": str(row.get("gearbox_id", "")),

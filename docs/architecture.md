@@ -137,6 +137,30 @@ A register entry with `families` or `makes` as a list stands for one copy per fa
 
 A car file's `bumpers` block names the bumpers that can be stripped, as in Street Rod 2: for `front` and `rear`, the `node` in the model that is the bumper with its brackets, and its `mass` in kg. The active car's stripped ends are `GameState.bumpers_off`, saved per car as `bumpers_off`; `toggle_bumper()` strips one or puts it back for `BUMPER_JOB_PRICE` ($15). `car_vehicle_visual.gd` hides the stripped ones whenever the body loads (`apply_bumpers()`), from `GameState` for the player's car and from `prepare_preview()`'s or `preview_listing()`'s `bumpers_off` for anyone else's. The under-car scene leaves out its drawn bumper at a stripped end. The weight comes off the chassis (`bumper_mass_delta_kg()`). A rival's car comes with both bumpers stripped one time in six (`RIVAL_STRIPPED_CHANCE`, `_rival_stripped_bumpers()`), saved as the rival's `bumpers_off`, which comes off their chassis (`opponent_chassis()`) and adds to their arcade pull (`opponent_weight_accel()`). A car changing hands on pink slips keeps its bumpers as they were. The Studebaker, the 1960 Corvette, the Styleline and the F100 have `bumpers` blocks. `tools/studebaker_to_glb.py` makes the Studebaker's `bumper_front` and `bumper_rear` nodes from the source model's bumper groups; the other three had parts added after their converters ran, so `tools/split_bumpers.py` splits their finished GLBs, each car by its own rule (the Corvette's chrome pieces, the F100's low chrome at each end, the Styleline's voxels, with the body's faces against the bumper filled in), and gives the F100 the frame ends its bumpers hid.
 
+### License plates
+
+Every car wears the 1972 California plate: blue, yellow raised characters, CALIFORNIA across the top, and the red 1973 year sticker on the rear plate only (the front's sticker wells stay empty, as on the real plates). `license_plate.gd` presses the car's number into the plate images that `tools/make_plates_1972.py` draws (`assets/cars/plates/`) and lays the result over the car's plate faces with `shaders/license_plate.gdshader`. The player's car shows `GameState.car_plate`, a vanity plate bought in the garage for `VANITY_PLATE_PRICE` ($25, 2 to 6 letters and numbers, spaces allowed up to 7 places), saved per car as `plate`, or else a sequential "123 ABC" number fixed by the car (`LicensePlate.serial()`). Rivals get one fixed by their name (`opponent_plate()`), and traffic one of its own.
+
+A car gets its plates in one of two ways. Use one or the other: a car with both shows both.
+
+- **In the model.** Faces whose material is named `plate` (any case) are plates. The car's paint skips them, and the game replaces whatever texture they carry. Each plate is a 12 x 6 inch quad facing out, with its UVs over the whole plate image, upright and long side across (U across, V down). The front and the rear can share one material and even one mesh: the shader tells them apart by which side of the car's middle they are on (+Z is the nose). `tools/make_blank_plate.py` writes the blank plate the converters put on that material, so a new converter can do the same.
+- **In the car file.** For a model with no plate of its own, the car file's `plates` block places one at each end it names. The game builds the quad itself and puts it under the model's `CarBody`.
+
+```json
+"plates": {
+  "front": {"position": [0, 0.18, 2.493], "bumper": true},
+  "rear": {"position": [0, 0.32, -2.356], "normal": [0, 0.3, -1]}
+}
+```
+
+| Key | Meaning |
+| --- | --- |
+| `position` | Required. The middle of the plate's face, in meters, in the body's space as for a cove: +X the car's left (the driver's side), +Y up, +Z toward the nose. A larger front `z` moves the front plate forward; a smaller rear `z` moves the rear plate back. Leave it a few millimeters proud of the panel behind it, or the two flicker. |
+| `normal` | Optional. The way the plate faces out, any length. Straight ahead (`[0, 0, 1]`) for the front and straight behind (`[0, 0, -1]`) for the rear if left out. Tip it up or down to lie on a sloped panel, as `[0, 0.3, -1]` does. The plate stays level side to side. |
+| `bumper` | Optional, false if left out. True when the plate is on the bumper, so it goes with that bumper when it is stripped (see Bumpers). |
+
+An end left out has no plate. A change shows the next time the car loads; nothing needs importing. The car file's plate does not move a model's own plate. The police Fairlane has none.
+
 ### Transmission
 
 `transmission.gd` shows the underside of the car on a lift: the equipped engine model at real scale, a gearbox built from primitives (iron with a pan for automatics, aluminum with a rib per gear for manuals, black and red for racing boxes), two bellhousing bolts, and a transmission jack. Bolt state lives on `GameState.gearbox_bolts` (0 out to `GEARBOX_BOLT_TIGHT`) and is saved per car.

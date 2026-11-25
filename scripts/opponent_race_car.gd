@@ -605,6 +605,7 @@ func _apply_opponent_look(opp: Dictionary) -> void:
 	var stored: Variant = opp.get("color", null)
 	if stored is Color:
 		paint = stored
+	_visual.set(&"preview_plate", GameState.opponent_plate(opp))
 	if not bool(_visual.call(&"preview_listing", path, paint, GameState.bumper_ends(opp.get("bumpers_off", [])))):
 		push_warning("Opponent car failed to load: %s" % path)
 
