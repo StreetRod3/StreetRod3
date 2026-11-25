@@ -30,6 +30,8 @@ const POI_ROYAL_RODS := "royal-rods"
 
 const MUSIC_GARAGE := "res://assets/music/garage.mp3"
 const MUSIC_RACE := "res://assets/music/race.mp3"
+## Not a file. The player makes this static while the dial sits between stations.
+const RADIO_STATIC := "radio-static"
 const DEFAULT_CAR_ID := "sr1-corvette-1956"
 const MAX_OWNED_CARS := 16
 const DEFAULT_TANK_L := 60.0
@@ -47,6 +49,7 @@ const DEFAULT_OPPONENT_HEAD := "res://assets/opponents/head.glb"
 const PARTS_REGISTER := "res://assets/parts/parts.register"
 const CARS_REGISTER := "res://assets/cars/cars.register"
 const BOOKS_REGISTRY := "res://assets/books/books.registry"
+const RADIO_REGISTRY := "res://assets/music/radio.registry"
 ## On the garage shelf from the start, in this order. Not won from a rival and not given by the console.
 const BOOK_CREDITS := "credits"
 const BOOK_SHORTCUTS := "shortcuts"
@@ -58,6 +61,8 @@ const _PartsRegister := preload("res://scripts/parts_register.gd")
 const _CarsRegister := preload("res://scripts/cars_register.gd")
 const _BooksRegister := preload("res://scripts/books_register.gd")
 const _LicensePlate := preload("res://scripts/license_plate.gd")
+const _RadioRegister := preload("res://scripts/radio_register.gd")
+const _MidiSong := preload("res://scripts/midi_song.gd")
 
 const MILES_PER_KM := 0.621371
 const POUNDS_PER_KG := 2.20462
@@ -348,8 +353,27 @@ var hud_size: float = 1.0
 var rumble_strength: float = 1.0
 var _gamepad: _Gamepad
 
-## Whether background music is on. Persisted in settings; also toggled by the garage radio.
+## Whether background music is on. Persisted in settings. The garage radio's switch sets it.
 var music_enabled: bool = true
+## Music loudness from 0 to 1. The settings slider and the radio's volume knob share it.
+var music_volume: float = 1.0
+var _music_dimmed: bool = false
+var _music_dim_db: float = -16.0
+## Where the garage radio is tuned, in Hz. Starts on the first memory station.
+var radio_frequency: float = 620.0
+## Memory button that matches the dial, 1-5. 0 means the dial is not on a preset.
+var radio_preset: int = 1
+var RADIO_STATIONS: Array[Dictionary] = []
+## Five memory-button frequencies, in button order.
+var RADIO_MEMORY: Array[float] = []
+## Play time since this broadcast started. It moves only while the game is running.
+var _radio_time: float = 0.0
+var _radio_seed: int = 0
+## Station id to its schedule. The schedule keeps going while you listen to something else.
+var _broadcasts: Dictionary = {}
+var _song_lengths: Dictionary = {}
+var _music_station: String = ""
+var _music_entry_start: float = -1.0
 
 ## The name signed on the license at the start of a new game. Print it with to_upper()
 ## for the typed line, because McGee can be made from this and not from MCGEE.
@@ -444,11 +468,15 @@ var USED_CARS: Array[Dictionary] = []
 
 var _music_player: AudioStreamPlayer
 var _music_track: String = ""
+var _static_state: int = 0x6b8b4567
+var _static_low: float = 0.0
+var _static_n: int = 0
 
 
 func _ready() -> void:
 	_music_player = AudioStreamPlayer.new()
 	_music_player.name = "MusicPlayer"
+	_music_player.finished.connect(_on_music_finished)
 	add_child(_music_player)
 	_Controller.free_menu_inputs()
 	_gamepad = _Gamepad.new()
@@ -457,6 +485,9 @@ func _ready() -> void:
 	load_parts_register()
 	load_cars_register()
 	load_books_register()
+	load_radio_register()
+	_tune_radio_preset(1)
+	_prime_start_track()
 	load_player_car()
 	if not car_records.has(current_car_id):
 		set_fuel(_starting_fuel())
@@ -702,6 +733,82 @@ func load_books_register() -> void:
 		for err: String in errors:
 			push_error(str(err))
 	BOOKS = _dict_list(register.get("books", []))
+
+
+func load_radio_register() -> void:
+	var register: Dictionary = _RadioRegister.load_path(RADIO_REGISTRY)
+	var errors: Variant = register.get("errors", [])
+	if typeof(errors) == TYPE_ARRAY:
+		for err: String in errors:
+			push_error(str(err))
+	RADIO_STATIONS = _dict_list(register.get("stations", []))
+	RADIO_MEMORY = _float_list(register.get("memory", []))
+
+
+## The station the dial is close enough to hear, or empty between stations.
+func radio_station_at(freq: float) -> Dictionary:
+	var best: Dictionary = {}
+	var best_d := _RadioRegister.TUNE_SLACK + 1.0
+	for station: Dictionary in RADIO_STATIONS:
+		var d := absf(float(station.get("frequency", 0.0)) - freq)
+		if d <= _RadioRegister.TUNE_SLACK and d < best_d:
+			best_d = d
+			best = station
+	return best
+
+
+## The frequency saved on memory button `button` (1-5), or -1 when that button has none.
+func radio_memory_frequency(button: int) -> float:
+	var index := button - 1
+	if index < 0 or index >= RADIO_MEMORY.size():
+		return -1.0
+	return RADIO_MEMORY[index]
+
+
+func set_radio_frequency(freq: float) -> void:
+	var next := clampf(freq, _RadioRegister.FREQ_MIN, _RadioRegister.FREQ_MAX)
+	if is_equal_approx(next, radio_frequency):
+		_sync_radio_preset()
+		return
+	radio_frequency = next
+	_sync_radio_preset()
+	update_music()
+
+
+## Tune to a memory button. The station keeps its place, so a song already playing there continues.
+func select_radio_preset(button: int) -> void:
+	var freq := radio_memory_frequency(button)
+	var same := radio_preset == button and (freq < 0.0 or is_equal_approx(radio_frequency, clampf(freq, _RadioRegister.FREQ_MIN, _RadioRegister.FREQ_MAX)))
+	_tune_radio_preset(button)
+	if same:
+		return
+	update_music()
+
+
+## Light the memory button the dial is sitting on, if any.
+func _sync_radio_preset() -> void:
+	radio_preset = 0
+	for i in RADIO_MEMORY.size():
+		if absf(RADIO_MEMORY[i] - radio_frequency) <= _RadioRegister.TUNE_SLACK:
+			radio_preset = i + 1
+			return
+
+
+func _tune_radio_preset(button: int) -> void:
+	radio_preset = button
+	var freq := radio_memory_frequency(button)
+	if freq >= 0.0:
+		radio_frequency = clampf(freq, _RadioRegister.FREQ_MIN, _RadioRegister.FREQ_MAX)
+	_sync_radio_preset()
+
+
+func _float_list(value: Variant) -> Array[float]:
+	var rows: Array[float] = []
+	if typeof(value) != TYPE_ARRAY:
+		return rows
+	for item: Variant in value:
+		rows.append(float(item))
+	return rows
 
 
 func _dict_list(value: Variant) -> Array[Dictionary]:
@@ -1223,6 +1330,7 @@ func new_game() -> void:
 	set_fuel(_starting_fuel())
 	_sync_record_from_active()
 	roll_newspaper_wear()
+	select_radio_preset(1)
 
 
 func save_slot_path(slot: int) -> String:
@@ -1311,6 +1419,8 @@ func save_game(slot: int) -> bool:
 		"spare_conditions": spare_conditions,
 		"spare_wheel_tires": spare_wheel_tires,
 		"owned_book_ids": owned_book_ids,
+		"radio_preset": radio_preset,
+		"radio_frequency": radio_frequency,
 	}
 	var json := JSON.stringify(data)
 	var path := save_slot_path(slot)
@@ -1417,6 +1527,14 @@ func load_game(slot: int) -> bool:
 		car_name = "No car"
 	save_slot = slot
 	roll_newspaper_wear()
+	radio_preset = clampi(int(d.get("radio_preset", 1)), 0, 5)
+	if radio_preset >= 1:
+		var remembered := radio_memory_frequency(radio_preset)
+		if remembered >= 0.0:
+			radio_frequency = remembered
+	elif d.has("radio_frequency"):
+		radio_frequency = clampf(float(d["radio_frequency"]), _RadioRegister.FREQ_MIN, _RadioRegister.FREQ_MAX)
+	update_music()
 	return true
 
 
@@ -4782,6 +4900,7 @@ func save_settings() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("display", "fullscreen", _get_fullscreen())
 	cfg.set_value("audio", "master_db", AudioServer.get_bus_volume_db(0))
+	cfg.set_value("audio", "music_volume", music_volume)
 	cfg.set_value("audio", "music_enabled", music_enabled)
 	cfg.set_value("game", "arcade_drive", arcade_drive)
 	cfg.set_value("game", "imperial_units", imperial_units)
@@ -4811,8 +4930,11 @@ func load_settings() -> void:
 		)
 	if cfg.has_section_key("audio", "master_db"):
 		AudioServer.set_bus_volume_db(0, float(cfg.get_value("audio", "master_db")))
+	if cfg.has_section_key("audio", "music_volume"):
+		music_volume = clampf(float(cfg.get_value("audio", "music_volume")), 0.0, 1.0)
 	if cfg.has_section_key("audio", "music_enabled"):
 		music_enabled = bool(cfg.get_value("audio", "music_enabled"))
+	_apply_music_volume()
 	if cfg.has_section_key("game", "arcade_drive"):
 		arcade_drive = bool(cfg.get_value("game", "arcade_drive"))
 	if cfg.has_section_key("game", "imperial_units"):
@@ -4916,42 +5038,372 @@ func long_distance_text(km: float) -> String:
 	return "%.1f mi" % (km * MILES_PER_KM) if imperial_units else "%.1f km" % km
 
 
+func set_music_volume(value: float) -> void:
+	music_volume = clampf(value, 0.0, 1.0)
+	_apply_music_volume()
+
+
+## Dim rides on top of the music volume. Full volume still lands on `dimmed_db`.
 func set_music_dimmed(dimmed: bool, dimmed_db: float = -16.0) -> void:
+	_music_dimmed = dimmed
+	if dimmed:
+		_music_dim_db = dimmed_db
+	_apply_music_volume()
+
+
+func _apply_music_volume() -> void:
 	if _music_player == null:
 		return
-	_music_player.volume_db = dimmed_db if dimmed else 0.0
+	var db := linear_to_db(clampf(music_volume, 0.0001, 1.0))
+	if _music_dimmed:
+		db += _music_dim_db
+	_music_player.volume_db = db
+
+
+## This node pauses with the game, so the broadcasts pause with it too.
+func _process(delta: float) -> void:
+	_radio_time += delta
+	if _music_track != RADIO_STATIC:
+		return
+	_fill_static()
 
 
 func update_music() -> void:
+	var scene_path := _music_scene_path()
+	if scene_path == SCENE_RACE:
+		_play_track(MUSIC_RACE, 0.0, "", -1.0, true)
+		return
+	if not music_enabled:
+		_stop_music()
+		return
+	var station := radio_station_at(radio_frequency)
+	if station.is_empty():
+		if RADIO_STATIONS.is_empty():
+			_play_track(MUSIC_GARAGE, 0.0, "", -1.0, true)
+		else:
+			_play_static()
+		return
+	var air := _broadcast_at(str(station.get("id", "")))
+	if air.is_empty():
+		_play_static()
+		return
+	_play_track(str(air["path"]), float(air["offset"]), str(station.get("id", "")), float(air["start"]), false)
+
+
+func _stop_music() -> void:
+	if _music_player != null:
+		_music_player.stop()
+	_music_track = ""
+	_music_station = ""
+	_music_entry_start = -1.0
+
+
+func _play_track(path: String, offset: float, station_id: String, entry_start: float, loop: bool) -> void:
+	if _music_player == null:
+		return
+	if _music_track == path and _music_station == station_id and _music_player.playing:
+		return
+	var stream := _open_music(path)
+	if stream == null:
+		push_warning("Music track missing: " + path)
+		return
+	_arm_music_loop(stream, loop)
+	_music_player.stream = stream
+	var length := stream.get_length()
+	var from := offset
+	if length > 0.05:
+		from = clampf(offset, 0.0, length - 0.05)
+	_music_player.play(maxf(from, 0.0))
+	_music_track = path
+	_music_station = station_id
+	_music_entry_start = entry_start
+
+
+func _open_music(track: String) -> AudioStream:
+	var lower := track.to_lower()
+	if lower.ends_with(".mid") or lower.ends_with(".midi"):
+		return _MidiSong.stream(track)
+	var loaded: Variant = load(track)
+	return loaded as AudioStream
+
+
+func _arm_music_loop(stream: AudioStream, loop: bool) -> void:
+	if stream is AudioStreamMP3:
+		(stream as AudioStreamMP3).loop = loop
+		return
+	if stream is AudioStreamWAV:
+		var wav := stream as AudioStreamWAV
+		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD if loop else AudioStreamWAV.LOOP_DISABLED
+		wav.loop_begin = 0
+		var frames := wav.data.size() / 2
+		if wav.stereo:
+			frames /= 2
+		wav.loop_end = maxi(frames, 1)
+
+
+func _music_scene_path() -> String:
 	var scene_path := current_scene_path
 	var tree := get_tree()
 	if tree != null and tree.current_scene != null:
 		var loaded := tree.current_scene.scene_file_path
 		if not loaded.is_empty():
 			scene_path = loaded
-	var track := _track_for_scene(scene_path)
-	if not music_enabled or track.is_empty():
-		if _music_player != null:
-			_music_player.stop()
+	return scene_path
+
+
+func _on_music_finished() -> void:
+	if not music_enabled or _music_station.is_empty() or _music_track == MUSIC_RACE or _music_track == RADIO_STATIC or _music_track.is_empty():
+		return
+	var air := _broadcast_at(_music_station)
+	if air.is_empty():
 		_music_track = ""
+		update_music()
 		return
-	if _music_track == track and _music_player.playing:
+	if str(air["path"]) == _music_track and is_equal_approx(float(air["start"]), _music_entry_start):
+		air = _broadcast_after(_music_station, _music_entry_start)
+	_music_track = ""
+	if air.is_empty():
+		update_music()
 		return
-	var stream := load(track)
-	if stream == null:
-		push_warning("Music track missing: " + track)
+	_play_track(str(air["path"]), float(air["offset"]), _music_station, float(air["start"]), false)
+
+
+## A new game restarts the broadcasts. The game opens on preset 1, playing garage.mp3 from the top.
+func _reset_radio_broadcast(seed_value: int = -1) -> void:
+	_broadcasts.clear()
+	_radio_time = 0.0
+	_music_entry_start = -1.0
+	_music_track = ""
+	_music_station = ""
+	if seed_value > 0:
+		_radio_seed = seed_value
+	else:
+		_radio_seed = randi()
+		if _radio_seed == 0:
+			_radio_seed = 1
+
+
+## The opening station begins with garage.mp3 at the start of the song.
+func _prime_start_track() -> void:
+	var station := radio_station_at(radio_frequency)
+	if station.is_empty():
 		return
-	if stream is AudioStreamMP3:
-		(stream as AudioStreamMP3).loop = true
-	_music_player.stream = stream
+	var station_id := str(station.get("id", ""))
+	var chosen := MUSIC_GARAGE
+	for song: String in _station_songs(station_id):
+		if song.ends_with("garage.mp3"):
+			chosen = song
+			break
+	var cast := _broadcast_for(station_id)
+	var duration := _song_length(chosen)
+	cast["skew"] = 0.0
+	cast["entries"] = [{"path": chosen, "start": 0.0, "duration": duration}]
+	cast["filled"] = duration
+	cast["last"] = chosen
+	cast["primed"] = true
+
+
+## What `station_id` is broadcasting at the radio clock: path, offset, duration, start.
+func _broadcast_at(station_id: String) -> Dictionary:
+	var songs := _station_songs(station_id)
+	if songs.is_empty():
+		return {}
+	var cast := _broadcast_for(station_id)
+	_fill_schedule(cast, songs, _radio_time + float(cast["skew"]))
+	var at := _radio_time + float(cast["skew"])
+	var entries: Array = cast["entries"]
+	for entry: Variant in entries:
+		var row: Dictionary = entry
+		var start := float(row["start"])
+		var duration := float(row["duration"])
+		if at >= start and at < start + duration:
+			return {"path": str(row["path"]), "offset": at - start, "duration": duration, "start": start}
+	if entries.is_empty():
+		return {}
+	var last: Dictionary = entries.back()
+	return {
+		"path": str(last["path"]),
+		"offset": maxf(float(last["duration"]) - 0.05, 0.0),
+		"duration": float(last["duration"]),
+		"start": float(last["start"]),
+	}
+
+
+## The song that follows the slot which starts at `entry_start`.
+func _broadcast_after(station_id: String, entry_start: float) -> Dictionary:
+	var songs := _station_songs(station_id)
+	if songs.is_empty():
+		return {}
+	var cast := _broadcast_for(station_id)
+	_fill_schedule(cast, songs, entry_start + float(cast["skew"]) + 1.0)
+	var entries: Array = cast["entries"]
+	for i in entries.size():
+		var row: Dictionary = entries[i]
+		if not is_equal_approx(float(row["start"]), entry_start):
+			continue
+		if i + 1 >= entries.size():
+			_fill_schedule(cast, songs, float(cast["filled"]) + 1.0)
+			entries = cast["entries"]
+		if i + 1 >= entries.size():
+			return {}
+		var nxt: Dictionary = entries[i + 1]
+		return {"path": str(nxt["path"]), "offset": 0.0, "duration": float(nxt["duration"]), "start": float(nxt["start"])}
+	return _broadcast_at(station_id)
+
+
+func _broadcast_for(station_id: String) -> Dictionary:
+	if _radio_seed == 0:
+		_radio_seed = 1
+	if _broadcasts.has(station_id):
+		var found: Variant = _broadcasts[station_id]
+		if typeof(found) == TYPE_DICTIONARY:
+			return found
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _radio_seed ^ hash(station_id)
+	var cast := {
+		"rng": rng,
+		"entries": [],
+		"filled": 0.0,
+		"last": "",
+		"skew": 0.0,
+		"primed": false,
+	}
+	_broadcasts[station_id] = cast
+	return cast
+
+
+func _fill_schedule(cast: Dictionary, songs: Array[String], until: float) -> void:
+	if songs.is_empty():
+		return
+	if not bool(cast["primed"]):
+		var first := _pick_song(cast, songs)
+		var first_duration := _song_length(first)
+		var rng: RandomNumberGenerator = cast["rng"]
+		cast["skew"] = rng.randf() * first_duration
+		cast["entries"] = [{"path": first, "start": 0.0, "duration": first_duration}]
+		cast["filled"] = first_duration
+		cast["primed"] = true
+	var guard := 0
+	while float(cast["filled"]) < until + 0.5 and guard < 10000:
+		var path := _pick_song(cast, songs)
+		var duration := _song_length(path)
+		var entries: Array = cast["entries"]
+		entries.append({"path": path, "start": float(cast["filled"]), "duration": duration})
+		cast["filled"] = float(cast["filled"]) + duration
+		guard += 1
+
+
+func _pick_song(cast: Dictionary, songs: Array[String]) -> String:
+	var rng: RandomNumberGenerator = cast["rng"]
+	if songs.size() == 1:
+		cast["last"] = songs[0]
+		return songs[0]
+	var pick := songs[rng.randi_range(0, songs.size() - 1)]
+	var spins := 0
+	while pick == str(cast["last"]) and spins < 6:
+		pick = songs[rng.randi_range(0, songs.size() - 1)]
+		spins += 1
+	cast["last"] = pick
+	return pick
+
+
+func _song_length(path: String) -> float:
+	if _song_lengths.has(path):
+		return float(_song_lengths[path])
+	var stream := _open_music(path)
+	var length := 0.0
+	if stream != null:
+		length = stream.get_length()
+	if length < 0.5:
+		length = 30.0
+	_song_lengths[path] = length
+	return length
+
+
+func _station_songs(station_id: String) -> Array[String]:
+	var songs: Array[String] = []
+	for station: Dictionary in RADIO_STATIONS:
+		if str(station.get("id", "")) != station_id:
+			continue
+		var raw: Variant = station.get("songs", [])
+		if typeof(raw) != TYPE_ARRAY:
+			return songs
+		for item: Variant in raw:
+			var path := str(item)
+			if not path.is_empty():
+				songs.append(path)
+		return songs
+	return songs
+
+
+## Between stations the dial keeps playing, as static. Lower frequencies rumble and pop;
+## higher ones open into hiss. The bit mix shifts with the frequency, so two spots are not one loop.
+func _play_static() -> void:
+	if _music_player == null:
+		return
+	if _music_track == RADIO_STATIC and _music_player.playing and _music_player.stream is AudioStreamGenerator:
+		return
+	var gen := AudioStreamGenerator.new()
+	gen.mix_rate = 22050
+	gen.buffer_length = 0.2
+	_music_player.stream = gen
 	_music_player.play()
-	_music_track = track
+	_music_track = RADIO_STATIC
+	_music_station = ""
+	_music_entry_start = -1.0
+	_fill_static()
 
 
-func _track_for_scene(path: String) -> String:
-	if path == SCENE_RACE:
-		return MUSIC_RACE
-	return MUSIC_GARAGE
+func _fill_static() -> void:
+	if _music_player == null or not _music_player.playing:
+		return
+	var playback := _music_player.get_stream_playback() as AudioStreamGeneratorPlayback
+	if playback == null:
+		return
+	var freq := radio_frequency
+	var frames := playback.get_frames_available()
+	for _i in frames:
+		var sample := _static_sample(freq)
+		playback.push_frame(Vector2(sample, sample))
+
+
+func _static_sample(freq: float) -> float:
+	var span := maxf(_RadioRegister.FREQ_MAX - _RadioRegister.FREQ_MIN, 1.0)
+	var place := clampf((freq - _RadioRegister.FREQ_MIN) / span, 0.0, 1.0)
+	_static_state ^= (_static_state << 13) ^ int(freq)
+	_static_state ^= _static_state >> 17
+	_static_state ^= _static_state << 5
+	if _static_state == 0:
+		_static_state = 1
+	var white := float(_static_state & 65535) / 32768.0 - 1.0
+	var openness := lerpf(0.08, 0.82, place)
+	_static_low = lerpf(_static_low, white, openness)
+	_static_n += 1
+	var pop := 0.0
+	var gap := 40 + int((1.0 - place) * 180.0)
+	if _static_n % gap == 0:
+		pop = white * lerpf(0.85, 0.2, place)
+	var hiss := white * lerpf(0.2, 0.9, place)
+	var body := _static_low * lerpf(0.95, 0.25, place)
+	return clampf((body + hiss + pop) * 0.22, -1.0, 1.0)
+
+
+## A short run from a fixed start, so two dial positions can be compared.
+func _static_preview(freq: float) -> PackedFloat32Array:
+	var saved_state := _static_state
+	var saved_low := _static_low
+	var saved_n := _static_n
+	_static_state = 0x6b8b4567
+	_static_low = 0.0
+	_static_n = 0
+	var out := PackedFloat32Array()
+	out.resize(32)
+	for i in out.size():
+		out[i] = _static_sample(freq)
+	_static_state = saved_state
+	_static_low = saved_low
+	_static_n = saved_n
+	return out
 
 
 func _get_fullscreen() -> bool:

@@ -7,6 +7,7 @@
 [ext_resource type="Script" path="res://scripts/garage_view_controls.gd" id="5"]
 [ext_resource type="PackedScene" path="res://assets/locations/garage/jack.glb" id="6"]
 [ext_resource type="Script" path="res://scripts/floor_jack.gd" id="7"]
+[ext_resource type="Script" uid="uid://d21lwn2j5dxlm" path="res://scripts/radio.gd" id="8"]
 
 [sub_resource type="ProceduralSkyMaterial" id="SkyMat"]
 sky_top_color = Color(0.2, 0.25, 0.35, 1)
@@ -160,40 +161,7 @@ roughness = 0.55
 
 [sub_resource type="BoxMesh" id="RadioBodyMesh"]
 material = SubResource("RadioBodyMat")
-size = Vector3(0.4, 0.22, 0.18)
-
-[sub_resource type="StandardMaterial3D" id="RadioSpeakerMat"]
-albedo_color = Color(0.08, 0.08, 0.08, 1)
-roughness = 0.9
-
-[sub_resource type="CylinderMesh" id="RadioSpeakerMesh"]
-material = SubResource("RadioSpeakerMat")
-top_radius = 0.07
-bottom_radius = 0.07
-height = 0.02
-radial_segments = 16
-
-[sub_resource type="StandardMaterial3D" id="RadioDialMat"]
-albedo_color = Color(0.9, 0.82, 0.55, 1)
-roughness = 0.35
-
-[sub_resource type="CylinderMesh" id="RadioDialMesh"]
-material = SubResource("RadioDialMat")
-top_radius = 0.035
-bottom_radius = 0.035
-height = 0.018
-radial_segments = 16
-
-[sub_resource type="StandardMaterial3D" id="RadioKnobMat"]
-albedo_color = Color(0.12, 0.12, 0.13, 1)
-roughness = 0.45
-
-[sub_resource type="CylinderMesh" id="RadioKnobMesh"]
-material = SubResource("RadioKnobMat")
-top_radius = 0.016
-bottom_radius = 0.018
-height = 0.02
-radial_segments = 12
+size = Vector3(0.54, 0.30, 0.18)
 
 [sub_resource type="StandardMaterial3D" id="RadioAntennaMat"]
 albedo_color = Color(0.55, 0.55, 0.58, 1)
@@ -208,7 +176,7 @@ height = 0.28
 radial_segments = 8
 
 [sub_resource type="BoxShape3D" id="RadioShape"]
-size = Vector3(0.42, 0.24, 0.2)
+size = Vector3(0.56, 0.32, 0.2)
 
 [sub_resource type="StandardMaterial3D" id="WallMat"]
 albedo_color = Color(0.46, 0.43, 0.38, 1)
@@ -655,32 +623,21 @@ mesh = SubResource("ShelfBracketMesh")
 shape = SubResource("ShelfShape")
 
 [node name="Radio" type="StaticBody3D" parent="InteractDesk/Shelf" unique_id=210045006]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.25, 0.135, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.16, 0.195, 0)
 
 [node name="Body" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045007]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
 mesh = SubResource("RadioBodyMesh")
 
-[node name="Speaker" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045008]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, -0.1, 0.01, -0.09)
-mesh = SubResource("RadioSpeakerMesh")
-
-[node name="Dial" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045009]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.1, 0.035, -0.09)
-mesh = SubResource("RadioDialMesh")
-
-[node name="KnobLeft" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045010]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.07, -0.055, -0.09)
-mesh = SubResource("RadioKnobMesh")
-
-[node name="KnobRight" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045011]
-transform = Transform3D(1, 0, 0, 0, 0, 1, 0, -1, 0, 0.13, -0.055, -0.09)
-mesh = SubResource("RadioKnobMesh")
+[node name="Face" type="Node3D" parent="InteractDesk/Shelf/Radio"]
+script = ExtResource("8")
 
 [node name="Antenna" type="MeshInstance3D" parent="InteractDesk/Shelf/Radio" unique_id=210045012]
-transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0.16, 0.22, 0.04)
+transform = Transform3D(1, 0, 0, 0, 0.94, -0.342, 0, 0.342, 0.94, 0.23, 0.26, 0.04)
 mesh = SubResource("RadioAntennaMesh")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="InteractDesk/Shelf/Radio" unique_id=210045013]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.02, 0)
 shape = SubResource("RadioShape")
 
 [node name="ShelfOther" type="StaticBody3D" parent="InteractDesk" unique_id=210046001]
@@ -1193,6 +1150,16 @@ value = 1.0
 layout_mode = 2
 text = "Music"
 
+[node name="MusicVolumeLabel" type="Label" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070034]
+layout_mode = 2
+text = "Music volume"
+
+[node name="MusicSlider" type="HSlider" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070035]
+layout_mode = 2
+max_value = 1.0
+step = 0.01
+value = 1.0
+
 [node name="ArcadeCheck" type="CheckBox" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070028]
 layout_mode = 2
 text = "Arcade driving"
@@ -1445,6 +1412,7 @@ script = ExtResource("5")
 [connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn" to="." method="_on_clock_graphics_pressed"]
 [connection signal="value_changed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider" to="." method="_on_clock_master_volume_changed"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_clock_music_toggled"]
+[connection signal="value_changed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicSlider" to="." method="_on_clock_music_volume_changed"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck" to="." method="_on_clock_arcade_toggled"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck" to="." method="_on_clock_imperial_toggled"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck" to="." method="_on_clock_skip_cruise_toggled"]

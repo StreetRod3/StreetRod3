@@ -119,3 +119,7 @@ assets/parts/sbf-351-valve-covers-finned.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/sbf-351-valve-covers-finned.sc filter=lfs diff=lfs merge=lfs -text
 assets/parts/sbf-351-intake-aluminum.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/sbf-351-intake-aluminum.sc filter=lfs diff=lfs merge=lfs -text
+**/*.png filter=lfs diff=lfs merge=lfs -text
+**/*.mp3 filter=lfs diff=lfs merge=lfs -text
+**/*.mid filter=lfs diff=lfs merge=lfs -text
+**/*.midi filter=lfs diff=lfs merge=lfs -text

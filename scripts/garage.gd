@@ -36,6 +36,7 @@ var _view_port: SubViewport
 @onready var _clock_settings: Control = $GarageUI/ClockMenu/SettingsPanel
 @onready var _clock_master: HSlider = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider
 @onready var _clock_music: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck
+@onready var _clock_music_volume: HSlider = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicSlider
 @onready var _clock_arcade: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck
 @onready var _clock_imperial: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck
 @onready var _clock_skip_cruise: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
@@ -43,6 +44,7 @@ var _view_port: SubViewport
 @onready var _spray_menu: Control = $GarageUI/ColorPickerMenu
 @onready var _spray_color_picker: ColorPicker = $GarageUI/ColorPickerMenu/Panel/Margin/Body/ColorPicker
 @onready var _calendar: StaticBody3D = $InteractCalendar
+@onready var _radio: StaticBody3D = $InteractDesk/Shelf/Radio
 @onready var _calendar_hint: Label = $GarageUI/CalendarHint
 @onready var _garage_ui: CanvasLayer = $GarageUI
 @onready var _hud_top: Control = $GarageUI/HudTop
@@ -145,6 +147,20 @@ var _map_home: Transform3D
 var _map_blend: float = 0.0
 var _map_inspecting: bool = false
 var _map_tween: Tween
+var _radio_home: Transform3D
+var _radio_blend: float = 0.0
+var _radio_inspecting: bool = false
+var _radio_tween: Tween
+var _radio_tune_tween: Tween
+var _radio_hint: Label
+var _radio_drag: String = ""
+## The radio fills the view in front of the camera. It is a small set on the shelf.
+const _RADIO_INSPECT_SCALE := 4.0
+const _RADIO_INSPECT_DISTANCE := 1.42
+## Hz added for each pixel the tuning knob is dragged to the right.
+const _RADIO_DRAG_HZ := 2.2
+## Music volume added for each pixel the volume knob is dragged to the right.
+const _RADIO_DRAG_VOL := 0.004
 ## Each place on the sheet: id, marker, label center, and the label's half size.
 var _map_spots: Array[Dictionary] = []
 ## The price box's up and down, and the most its five digits hold.
@@ -375,7 +391,9 @@ func _ready() -> void:
 	$InteractBookshelf.set_meta(&"garage_interact", &"bookshelf")
 	_refresh_bookshelf_meshes()
 	$InteractDesk/InteractNewspaper.set_meta(&"garage_interact", &"newspaper")
-	$InteractDesk/Shelf/Radio.set_meta(&"garage_interact", &"radio")
+	_radio.set_meta(&"garage_interact", &"radio")
+	_radio_home = _radio.global_transform
+	_build_radio_hint()
 	$InteractDoors.set_meta(&"garage_interact", &"doors")
 	$InteractSprayPistol.set_meta(&"garage_interact", &"spray")
 	$InteractFuelCan.set_meta(&"garage_interact", &"fuel")
@@ -606,6 +624,7 @@ func _process(_delta: float) -> void:
 		_update_camera_transform()
 	_update_calendar_transform()
 	_update_map_transform()
+	_update_radio_transform()
 	_update_tooltip()
 
 
@@ -627,6 +646,8 @@ func _update_tooltip() -> void:
 
 
 func _tooltip_text_at_mouse() -> String:
+	if _radio_inspecting:
+		return _radio_tooltip()
 	if _departing or _bay_busy or _orbiting or _calendar_inspecting or _map_inspecting:
 		return ""
 	var vp := get_viewport()
@@ -803,6 +824,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_hang_calendar()
 		get_viewport().set_input_as_handled()
 		return
+	if _radio_inspecting and event.is_action_pressed(&"ui_cancel"):
+		_end_radio_drag()
+		_hang_radio()
+		get_viewport().set_input_as_handled()
+		return
 
 	if _car_list != null and _car_list.visible and _try_car_list_shortcut(event):
 		var viewport := get_viewport()
@@ -862,6 +888,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_wheel_zoom(mb)
 			get_viewport().set_input_as_handled()
 			return
+		if mb.button_index == MOUSE_BUTTON_LEFT and not mb.pressed:
+			if not _radio_drag.is_empty():
+				_end_radio_drag()
+				get_viewport().set_input_as_handled()
+			return
 		if mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
 			if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible:
 				return
@@ -881,7 +912,20 @@ func _unhandled_input(event: InputEvent) -> void:
 					_choose_map_poi(place)
 				get_viewport().set_input_as_handled()
 				return
+			if _radio_inspecting:
+				_on_radio_pressed(mb.position)
+				get_viewport().set_input_as_handled()
+				return
 			_try_interact(mb.position)
+
+	if event is InputEventMouseMotion and not _radio_drag.is_empty():
+		var drag := event as InputEventMouseMotion
+		if _radio_drag == "volume":
+			_drag_radio_volume(drag.relative.x)
+		else:
+			_drag_radio(drag.relative.x)
+		get_viewport().set_input_as_handled()
+		return
 
 	if event is InputEventMouseMotion and _orbiting:
 		var mm := event as InputEventMouseMotion
@@ -970,9 +1014,10 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 			else:
 				_bring_map_forward()
 		KEY_R:
-			GameState.toggle_music()
-			if _clock_settings.visible:
-				_clock_music.set_pressed_no_signal(GameState.music_enabled)
+			if _radio_inspecting:
+				_hang_radio()
+			else:
+				_bring_radio_forward()
 		KEY_P:
 			if _spray_menu.visible:
 				_spray_menu.visible = false
@@ -1039,7 +1084,7 @@ func _try_garage_shortcut(event: InputEvent) -> bool:
 
 ## The bay itself, or the car list already open over it. Other panels keep their own keys.
 func _car_management_available() -> bool:
-	if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or _calendar_inspecting or _map_inspecting:
+	if _clock_menu.visible or _stats_panel.visible or _spray_menu.visible or _calendar_inspecting or _map_inspecting or _radio_inspecting:
 		return false
 	if _parts_board != null and _parts_board.visible:
 		return false
@@ -1114,6 +1159,7 @@ func _gui_has_text_focus() -> bool:
 
 
 func _hide_garage_overlays() -> void:
+	_hang_radio()
 	_reset_clock_menu_page()
 	_clock_menu.visible = false
 	_stats_panel.visible = false
@@ -1143,6 +1189,7 @@ func _sync_menu_nav() -> void:
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
 			_clock_master,
 			_clock_music,
+			_clock_music_volume,
 			_clock_arcade,
 			_clock_imperial,
 			_clock_skip_cruise,
@@ -1317,9 +1364,7 @@ func _handle_interact(kind: Variant) -> void:
 		&"newspaper":
 			get_tree().change_scene_to_file(GameState.SCENE_NEWSPAPER)
 		&"radio":
-			GameState.toggle_music()
-			if _clock_settings.visible:
-				_clock_music.set_pressed_no_signal(GameState.music_enabled)
+			_bring_radio_forward()
 		&"doors":
 			_start_drive_out("")
 		&"spray":
@@ -1399,6 +1444,7 @@ func _start_drive_out(destination: String) -> void:
 	_orbiting = false
 	_snap_calendar_home()
 	_snap_map_home()
+	_snap_radio_home()
 	_hide_garage_overlays()
 	$GarageUI.visible = false
 	var door_hit := $InteractDoors/CollisionShape3D as CollisionShape3D
@@ -3832,6 +3878,7 @@ func _close_clock_settings() -> void:
 func _refresh_clock_settings() -> void:
 	_clock_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_clock_music.set_pressed_no_signal(GameState.music_enabled)
+	_clock_music_volume.set_value_no_signal(GameState.music_volume)
 	_clock_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_clock_imperial.set_pressed_no_signal(GameState.imperial_units)
 	_clock_skip_cruise.set_pressed_no_signal(GameState.skip_cruise)
@@ -3847,6 +3894,10 @@ func _on_clock_master_volume_changed(value: float) -> void:
 
 func _on_clock_music_toggled(pressed: bool) -> void:
 	GameState.set_music_enabled(pressed)
+
+
+func _on_clock_music_volume_changed(value: float) -> void:
+	GameState.set_music_volume(value)
 
 
 func _on_clock_arcade_toggled(pressed: bool) -> void:
@@ -4310,6 +4361,178 @@ func _apply_lift(t: float, node: Node3D, start_pos: Vector3, to: Vector3, start_
 func _on_stats_close_pressed() -> void:
 	_stats_panel.visible = false
 	_sync_menu_nav()
+
+
+func _build_radio_hint() -> void:
+	_radio_hint = Label.new()
+	_radio_hint.name = "RadioHint"
+	_radio_hint.visible = false
+	_radio_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_radio_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_radio_hint.offset_left = -560.0
+	_radio_hint.offset_top = -92.0
+	_radio_hint.offset_right = 560.0
+	_radio_hint.offset_bottom = -52.0
+	_radio_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_radio_hint.text = "Power, volume, presets, and tuning. R or Esc puts the radio back"
+	_radio_hint.add_theme_font_size_override(&"font_size", 22)
+	_radio_hint.add_theme_color_override(&"font_color", Color(0.96, 0.93, 0.86))
+	_garage_ui.add_child(_radio_hint)
+
+
+func _bring_radio_forward() -> void:
+	if _radio == null or _radio_inspecting or _bay_busy or _departing:
+		return
+	_hang_calendar()
+	_hang_map()
+	_hide_garage_overlays()
+	if _radio_blend <= 0.001:
+		_radio_home = _radio.global_transform
+	_radio_inspecting = true
+	if _radio_hint != null:
+		_radio_hint.visible = true
+	if _radio_tween != null:
+		_radio_tween.kill()
+	_radio_tween = create_tween()
+	_radio_tween.tween_property(self, "_radio_blend", 1.0, 0.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+
+func _hang_radio() -> void:
+	if not _radio_inspecting:
+		return
+	_radio_inspecting = false
+	_end_radio_drag()
+	if _radio_hint != null:
+		_radio_hint.visible = false
+	if _radio_tween != null:
+		_radio_tween.kill()
+	_radio_tween = create_tween()
+	_radio_tween.tween_property(self, "_radio_blend", 0.0, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
+
+
+func _snap_radio_home() -> void:
+	if _radio == null:
+		return
+	_radio_inspecting = false
+	_end_radio_drag()
+	if _radio_hint != null:
+		_radio_hint.visible = false
+	_radio_blend = 0.0
+	if _radio_tween != null:
+		_radio_tween.kill()
+	if _radio_tune_tween != null:
+		_radio_tune_tween.kill()
+	_radio.global_transform = _radio_home
+
+
+func _update_radio_transform() -> void:
+	if _radio == null:
+		return
+	if _radio_blend <= 0.0001:
+		if not _radio_inspecting:
+			_radio.global_transform = _radio_home
+		return
+	var face := _radio_home.interpolate_with(_radio_face_transform(), _radio_blend)
+	var grown := lerpf(1.0, _RADIO_INSPECT_SCALE, _radio_blend)
+	face.basis = face.basis.orthonormalized().scaled(Vector3(grown, grown, grown))
+	_radio.global_transform = face
+
+
+func _radio_face_transform() -> Transform3D:
+	var cam_xf := _camera.global_transform
+	var pos := cam_xf.origin - cam_xf.basis.z * _RADIO_INSPECT_DISTANCE
+	return Transform3D.IDENTITY.translated(pos).looking_at(cam_xf.origin, Vector3.UP)
+
+
+## "power", "tune", "volume", "1"-"5", "body" when the set itself is hit, or "" when the click misses.
+func _radio_hit(screen_pos: Vector2) -> String:
+	var hit := _raycast(screen_pos)
+	if hit.is_empty():
+		return ""
+	var node := hit.get("collider") as Node
+	while node != null and node != self:
+		if node.has_meta(&"radio_control"):
+			return str(node.get_meta(&"radio_control"))
+		if node == _radio:
+			return "body"
+		node = node.get_parent()
+	return ""
+
+
+func _radio_tooltip() -> String:
+	var part := _radio_hit(GameState.pointer_position(get_viewport()))
+	match part:
+		"power":
+			return "Switch off" if GameState.music_enabled else "Switch on"
+		"tune":
+			return "Tune"
+		"volume":
+			return "Volume"
+		"1", "2", "3", "4", "5":
+			var saved := GameState.radio_memory_frequency(int(part))
+			if saved < 0.0:
+				return "Memory %s" % part
+			var station: Dictionary = GameState.radio_station_at(saved)
+			if station.is_empty():
+				return "Memory %s, %d" % [part, int(round(saved))]
+			return "Memory %s, %s" % [part, str(station.get("id", ""))]
+		_:
+			return ""
+
+
+func _on_radio_pressed(screen_pos: Vector2) -> void:
+	var part := _radio_hit(screen_pos)
+	if part.is_empty():
+		_hang_radio()
+		return
+	if part == "body":
+		return
+	if part == "power":
+		_toggle_radio_power()
+		return
+	if part == "tune" or part == "volume":
+		if _radio_tune_tween != null:
+			_radio_tune_tween.kill()
+		_radio_drag = part
+		return
+	if part.is_valid_int():
+		_press_radio_memory(int(part))
+
+
+func _toggle_radio_power() -> void:
+	GameState.toggle_music()
+	if _clock_settings.visible:
+		_clock_music.set_pressed_no_signal(GameState.music_enabled)
+
+
+func _end_radio_drag() -> void:
+	if _radio_drag == "volume":
+		GameState.save_settings()
+	_radio_drag = ""
+
+
+func _drag_radio(dx: float) -> void:
+	if _radio_tune_tween != null:
+		_radio_tune_tween.kill()
+	GameState.set_radio_frequency(GameState.radio_frequency + dx * _RADIO_DRAG_HZ)
+
+
+func _drag_radio_volume(dx: float) -> void:
+	GameState.set_music_volume(GameState.music_volume + dx * _RADIO_DRAG_VOL)
+
+
+func _press_radio_memory(button: int) -> void:
+	var saved := GameState.radio_memory_frequency(button)
+	if saved < 0.0:
+		return
+	_slide_radio_to(saved)
+
+
+func _slide_radio_to(freq: float) -> void:
+	if _radio_tune_tween != null:
+		_radio_tune_tween.kill()
+	_radio_tune_tween = create_tween()
+	_radio_tune_tween.tween_method(Callable(GameState, "set_radio_frequency"), GameState.radio_frequency, freq, 0.55).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 
 
 func _bring_calendar_forward() -> void:
