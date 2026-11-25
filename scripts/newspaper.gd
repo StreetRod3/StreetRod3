@@ -246,7 +246,8 @@ func _make_car_card(car: Dictionary) -> Control:
 	box.add_child(_body(", ".join(bits)))
 	var btn := _ink_button()
 	btn.text = "Buy — $%d" % price
-	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
+	# A car that can't be bought for want of room says why rather than showing its photo.
+	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS or _bay_car_stuck():
 		btn.pressed.connect(_on_buy_car.bind(car_id))
 	else:
 		btn.disabled = GameState.money < price
@@ -578,6 +579,9 @@ func _on_buy_car(car_id: String) -> void:
 	if GameState.owned_car_ids.size() >= GameState.MAX_OWNED_CARS:
 		_show_no_room_line()
 		return
+	if _bay_car_stuck():
+		_show_no_room_line(GameState.NO_WHEELS_IN_BAY)
+		return
 	var err := GameState.buy_or_select_car(car_id)
 	if not err.is_empty():
 		_status.text = err
@@ -652,10 +656,18 @@ func _build_no_room_bubble() -> void:
 	_no_room = bubble
 
 
-func _show_no_room_line() -> void:
+## The car in the garage has no wheels, so it can't roll out to make room for another.
+func _bay_car_stuck() -> bool:
+	return GameState.has_active_car() and not GameState.has_wheels()
+
+
+## Shows `line` in the centered bubble, or one of the no-room lines if it is empty.
+func _show_no_room_line(line: String = "") -> void:
 	if _no_room == null:
 		return
-	_no_room.call("set_line", _NO_ROOM_LINES[randi() % _NO_ROOM_LINES.size()], Vector2(560, 56), 26)
+	if line.is_empty():
+		line = _NO_ROOM_LINES[randi() % _NO_ROOM_LINES.size()]
+	_no_room.call("set_line", line, Vector2(560, 56), 26)
 	_no_room.move_to_front()
 	_no_room.visible = true
 	_no_room.call("place")

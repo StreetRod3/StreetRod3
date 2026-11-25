@@ -106,7 +106,9 @@ const RIVAL_STRIPPED_CHANCE := 1.0 / 6.0
 const NO_GEARBOX_ID := "none"
 ## A car with its wheels off. It stays in the bay until it gets some.
 const NO_WHEEL_ID := "none"
-const NO_WHEELS_IN_BAY := "The car in the garage has no wheels, so it can't roll out."
+## Why a car can't be bought or switched in while the one in the bay has no wheels: it
+## can't roll out to make room. Two lines, for the speech bubbles that show it.
+const NO_WHEELS_IN_BAY := "Hey dummy! You can't clear out the garage\nuntil this one gets wheels!"
 ## Bellhousing bolts holding the gearbox to the engine.
 const GEARBOX_BOLT_COUNT := 2
 ## Turns that seat a bellhousing bolt. Zero is out of its hole.
