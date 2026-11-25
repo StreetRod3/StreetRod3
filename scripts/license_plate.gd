@@ -76,6 +76,36 @@ static func vanity_problem(text: String) -> String:
 	return ""
 
 
+## A plate's size, 12 x 6 inches.
+const SIZE := Vector2(0.3048, 0.1524)
+
+
+## Builds the plates a car file places (its `plates`, CarFile) under `body`, the model's
+## CarBody, unless they are there already, and shows each unless it is on a bumper that is
+## in `bumpers_off`.
+static func place(body: Node3D, plates: Dictionary, bumpers_off: Array[String]) -> void:
+	if body == null:
+		return
+	for end: String in plates.keys():
+		var spec: Dictionary = plates[end]
+		var name := "LicensePlate_" + end
+		var mi := body.get_node_or_null(name) as MeshInstance3D
+		if mi == null:
+			mi = MeshInstance3D.new()
+			mi.name = name
+			var quad := QuadMesh.new()
+			quad.size = SIZE
+			var mat := StandardMaterial3D.new()
+			mat.resource_name = PLATE_MATERIAL
+			quad.material = mat
+			mi.mesh = quad
+			var normal: Vector3 = spec["normal"]
+			var right := Vector3.UP.cross(normal).normalized()
+			mi.transform = Transform3D(Basis(right, normal.cross(right), normal), spec["position"])
+			body.add_child(mi)
+		mi.visible = not (bool(spec["bumper"]) and bumpers_off.has(end))
+
+
 ## Whether `mesh_instance`'s surface `index` is a plate, by its material's name in the model.
 static func is_plate_surface(mesh_instance: MeshInstance3D, index: int) -> bool:
 	if mesh_instance.mesh == null:

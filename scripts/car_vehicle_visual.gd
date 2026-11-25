@@ -131,9 +131,12 @@ func apply_roof() -> void:
 ## Prints the car's plate number on its plates: the player's car its own, a preview the
 ## one it was given or a sequential one from its car file.
 func apply_plates() -> void:
-	var body := get_node_or_null("CarBody")
+	var body := get_node_or_null("CarBody") as Node3D
 	if body == null:
 		return
+	var plates: Variant = _active_spec().get("plates", {})
+	if typeof(plates) == TYPE_DICTIONARY:
+		_LicensePlate.place(body, plates as Dictionary, _active_bumpers_off())
 	var number := preview_plate
 	if not _previewing:
 		number = GameState.active_plate()
