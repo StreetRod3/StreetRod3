@@ -841,55 +841,61 @@ def runner(d, name, x, s, top, w, h, entry_y, to_x, climb):
     rise = zc - z0
     r2 = RUNNER_BENDS[1]
     y_turn = entry_y + s * r2 if entry_y is not None else to_x
-    room = abs(y_turn - s * y0) - 0.02
+    room = abs(y_turn - s * y0)
     fit = (room - rise / math.tan(th)) / (math.sin(th) - (1 - math.cos(th)) / math.tan(th))
     r1 = min(RUNNER_BENDS[0], 0.9 * rise / (1 - math.cos(th)), fit)
     if r1 < 0.15:
         sys.exit(f"{name}: no room to bend over before its turn ({room:.2f} in across for a "
                  f"{rise:.2f} in rise at {climb} degrees); steepen it or move its turn in")
     lead = max((rise - r1 * (1 - math.cos(th))) / math.sin(th), 0.05)
-    p0 = np.array([x, s * y0, z0])
-    sk, to2d = d.plane(p0, (0.0, -s, 0.0), (s, 0, 0), f"{name} path")
+
+    def world(u):
+        """A point (u across, up) of the rise's plane, in the world."""
+        return [round(float(c) * MM, 4) for c in (x, s * (y0 - u[0]), z0 + u[1])]
+
     u1 = lead * np.array([math.cos(th), math.sin(th)])
     c = u1 + r1 * np.array([math.sin(th), -math.cos(th)])
     u2 = c + np.array([0.0, r1])
+    if entry_y is not None and room - u2[0] < 0.1:
+        # Too short a level run to keep: the turn starts where the bend ends.
+        y_turn = s * (y0 - u2[0])
     u3 = np.array([abs(y_turn - s * y0), u2[1]])
-    flip = np.array([1.0, -1.0])
-    d.c.append(cmd("sketch.line", infer=False, points=[skp(0.0, 0.0), skp(*(u1 * flip))]))
-    d.c.append(cmd("sketch.arc.center_point", center=skp(*(c * flip)), start="l1.end",
-                   end=skp(*(u2 * flip))))
-    path = ["l1", "a1"]
-    if u3[0] - u2[0] > 0.02:
-        d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*(u3 * flip))]))
-        path.append("l2")
+    mid = math.pi / 2 + th / 2
+    # One sweep along a 3D path (up, over, across, round the turn and along into the
+    # plenum), so the runner is one casting with no seam where the turn starts.
+    sk = d.sketch("XY", f"{name} path")
+    d.c.append(cmd("sketch.options", sketch_3d=True))
+    d.c.append(cmd("sketch.line3d", points=[world((0.0, 0.0)), world(u1)]))
+    d.c.append(cmd("sketch.arc3d", start=world(u1), through=world(c + r1 * np.array([math.cos(mid), math.sin(mid)])),
+                   end=world(u2)))
+    path = ["w1", "w2"]
+    if u3[0] - u2[0] > 0.05:
+        d.c.append(cmd("sketch.line3d", points=[world(u2), world(u3)]))
+        path.append(f"w{len(path) + 1}")
+    if entry_y is not None:
+        pt = np.array([x, y_turn, zc])
+        along = -s
+        dx = 1.0 if to_x > x else -1.0
+        centre = pt + np.array([dx * r2, 0.0, 0.0])
+        arc_end = pt + np.array([dx * r2, along * r2, 0.0])
+        through = centre + r2 * unit(unit(pt - centre) + unit(arc_end - centre))
+        end = np.array([to_x, arc_end[1], zc])
+        mm = lambda q: [round(float(v) * MM, 4) for v in q]
+        d.c.append(cmd("sketch.arc3d", start=world(u3), through=mm(through), end=mm(arc_end)))
+        d.c.append(cmd("sketch.line3d", points=[mm(arc_end), mm(end)]))
+        path += [f"w{len(path) + 1}", f"w{len(path) + 2}"]
     d.finish()
+    p0 = np.array([x, s * y0, z0])
     out = np.array([0.0, -s * math.cos(th), math.sin(th)])
     prof, to2d = d.plane(p0, (1, 0, 0), out, f"{name} section")
     cx, cy = to2d(p0)
     d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
     d.finish()
-    d.body(name, "solid.sweep", sketch=prof, path_sketch=sk, path=path, orientation=[1.0, 0.0, 0.0])
+    d.body(name, "solid.sweep", sketch=prof, path_sketch=sk, path=path)
     web = name.replace("_runner_", "_web_")
     web_under(d, web, x, w, rise_path(y0, z0, s, th, r1, lead, u3[0]))
     if entry_y is None:
         return
-    pt = np.array([x, y_turn, zc])
-    along = -s
-    dx = 1.0 if to_x > x else -1.0
-    ysign = -dx * along
-    sk, to2d = d.plane(pt, (1, 0, 0), (0, 0, ysign), f"{name} turn")
-    centre = pt + np.array([dx * r2, 0.0, 0.0])
-    arc_end = pt + np.array([dx * r2, along * r2, 0.0])
-    end = np.array([to_x, arc_end[1], zc])
-    d.c.append(cmd("sketch.arc.center_point", center=skp(*to2d(centre)), start=skp(*to2d(pt)),
-                   end=skp(*to2d(arc_end))))
-    d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*to2d(end))]))
-    d.finish()
-    prof, to2d = d.plane(pt, (1, 0, 0), (0, along, 0), f"{name} turn section")
-    cx, cy = to2d(pt)
-    d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
-    d.finish()
-    d.body(f"{name}_turn", "solid.sweep", sketch=prof, path_sketch=sk, path=["a1", "l1"])
     a0 = math.atan2(*(pt[:2] - centre[:2])[::-1])
     a1 = math.atan2(*(arc_end[:2] - centre[:2])[::-1])
     a1 = a0 + (a1 - a0 + math.pi) % (2 * math.pi) - math.pi      # the quarter turn, not round the back
