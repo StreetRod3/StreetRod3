@@ -208,16 +208,15 @@ ALUMINUM_RUNNER_CORNER = 0.6    # the aluminum intake's rounder runners
 # from its side), where it ends: along from the pad's middle, or out from the middle for
 # the straight ones). As on make_sbc.py's, every runner turns into an end of the plenum, the
 # front two of each bank into its front and the back two into its back: the end cylinders'
-# high, over the middle ones' low. The plenum is shorter than the pad, which stands over it
-# on its studs' bosses, so the middle cylinders' runners, whose ports are under the pad,
-# still turn into its ends.
+# high, over the middle ones' low; the middle cylinders' ports are under the pad, so theirs
+# rise into its sides before they turn. Under each runner the casting runs down to the
+# floor, so none shows an underside.
 INTAKE_RUNNERS = [
-    (0, 1, 2.7, 1.45, 1.45, 0.85, -1.45), (1, 1, 1.2, 1.3, 1.3, 1.6, -0.6),
-    (0, -1, 2.7, 1.45, 1.45, 0.85, -1.45), (1, -1, 1.2, 1.3, 1.3, 1.6, -0.6),
-    (2, 1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, 1, 2.7, 1.45, 1.45, 0.85, 1.45),
-    (2, -1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, -1, 2.7, 1.45, 1.45, 0.85, 1.45),
+    (0, 1, 2.7, 1.45, 1.45, 0.85, -1.85), (1, 1, 1.2, 1.3, 1.3, 1.6, -0.6),
+    (0, -1, 2.7, 1.45, 1.45, 0.85, -1.85), (1, -1, 1.2, 1.3, 1.3, 1.6, -0.6),
+    (2, 1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, 1, 2.7, 1.45, 1.45, 0.85, 1.85),
+    (2, -1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, -1, 2.7, 1.45, 1.45, 0.85, 1.85),
 ]
-PLENUM_HALF = 1.45      # the plenum's half length under the pad
 WATER_CROSSOVER = (-9.8, 0.9, 1.3)      # x, its axis over the ports, diameter
 HEAT_CROSSOVER = (8.0, 0.75, 1.0)       # the exhaust heat crossover at the back, likewise
 # The choke's stove well on the right of the plenum: x from the pad's middle, in from the
@@ -226,13 +225,12 @@ CHOKE_WELL = ((-1.0, 0.1), (1.15, 0.15), 0.75)
 FLOOR_INSET = 0.2       # the floor's ends, in from each head's ends
 # The carb pad, as make_sbc.py's: the studs' bosses at its corners (x from the pad's middle,
 # |y|) round which its outline runs, standing up from the floor; the openings into the
-# plenum, the left plane's two barrels round, the right plane's one long slot, all inside
-# the plenum's walls (the high runners end in them, the low ones under its floor).
+# plenum, the left plane's two barrels round, the right plane's one long slot.
 PAD_BOSSES = [(2.75, 2.58), (-2.85, 2.58)]
 PAD_BOSS_R = 0.55
-PAD_HOLES = [(-0.72, -0.95), (0.72, -0.95)]
-PAD_HOLE_R = 0.62
-PAD_SLOT = ((-0.72, 0.95), (0.72, 0.95), 0.62)
+PAD_HOLES = [(-0.91, -0.95), (0.91, -0.95)]
+PAD_HOLE_R = 0.8
+PAD_SLOT = ((-0.99, 0.95), (0.99, 0.95), 0.82)
 # On each head's intake face, showing with the intake off: a port where each runner meets it
 # (half long, half high, corner), the water passage's hole at the front (x along the bank,
 # up the face, radius), the bolts' holes.
@@ -788,6 +786,45 @@ def runner_port():
     return float(p[0]), float(p[1]), 45.0
 
 
+def rise_path(y0, z0, s, th, r1, lead, u3x=None, n=8):
+    """The centerline (y, z) of a runner or crossover leaving bank s's flange face at
+    (s * y0, z0): straight in and up at th, the bend over level of radius r1, and on
+    level to u3x in from the face, as points."""
+    u1 = lead * np.array([math.cos(th), math.sin(th)])
+    c = u1 + r1 * np.array([math.sin(th), -math.cos(th)])
+    a0 = math.atan2(*(u1 - c)[::-1])
+    pts = [np.zeros(2), u1] + [c + r1 * np.array([math.cos(a), math.sin(a)])
+                               for a in np.linspace(a0, math.pi / 2, n)[1:]]
+    if u3x is not None and u3x > pts[-1][0] + 0.02:
+        pts.append(np.array([u3x, pts[-1][1]]))
+    return [(s * (y0 - u[0]), z0 + u[1]) for u in pts]
+
+
+def web_under(d, name, x, w, path):
+    """The casting under a runner's rise, so it never shows an underside: in the upright
+    plane at x, w wide, from the centerline path (y, z) down to the floor and back along it
+    to the flange's face."""
+    zf = intake_levels()[1] - 0.05
+    sgn = 1.0 if path[0][0] > 0 else -1.0
+    pts = list(path) + [(path[-1][0], zf), (sgn * flange_face_y(), zf)]
+    sk = d.sketch("YZ", f"{name} web", offset=x - w / 2)
+    d.poly(ccw([(float(y), float(z)) for y, z in pts]))
+    d.finish()
+    d.extrude(sk, name, w)
+
+
+def web_plan(d, name, path, w, top):
+    """The casting under a level run (path (x, y) from above), w wide, from the floor up to
+    top, the runner's middle."""
+    from shapely.geometry import LineString
+    zf = intake_levels()[1] - 0.05
+    shape = LineString(path).buffer(w / 2, cap_style=2, join_style=1, quad_segs=4).simplify(0.005)
+    sk = d.sketch("XY", f"{name} plan", offset=zf)
+    d.poly(ccw([tuple(map(float, q)) for q in list(shape.exterior.coords)[:-1]]))
+    d.finish()
+    d.extrude(sk, name, top - zf)
+
+
 def runner(d, name, x, s, top, w, h, entry_y, to_x):
     """make_sbc.py's runner: a square runner with rounded corners from bank s's port at x,
     straight up and in out of the port, a bend over level, across, then (entry_y given) a
@@ -821,6 +858,8 @@ def runner(d, name, x, s, top, w, h, entry_y, to_x):
     d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
     d.finish()
     d.body(name, "solid.sweep", sketch=prof, path_sketch=sk, path=path, orientation=[1.0, 0.0, 0.0])
+    web = name.replace("_runner_", "_web_")
+    web_under(d, web, x, w, rise_path(y0, z0, s, th, r1, lead, u3[0]))
     if entry_y is None:
         return
     pt = np.array([x, y_turn, zc])
@@ -840,6 +879,10 @@ def runner(d, name, x, s, top, w, h, entry_y, to_x):
     d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), RUNNER_CORNER)
     d.finish()
     d.body(f"{name}_turn", "solid.sweep", sketch=prof, path_sketch=sk, path=["a1", "l1"])
+    arc_pts_ = [centre[:2] + r2 * np.array([math.cos(a), math.sin(a)]) for a in
+                np.linspace(math.atan2(*(pt[:2] - centre[:2])[::-1]),
+                            math.atan2(*(arc_end[:2] - centre[:2])[::-1]), 9)]
+    web_plan(d, f"{web} (10)", [tuple(q) for q in arc_pts_] + [(to_x, arc_end[1])], w, zc)
 
 
 def crossover(d, name, x, zc, dia):
@@ -869,6 +912,10 @@ def crossover(d, name, x, zc, dia):
     d.finish()
     d.body(name, "solid.pipe", path_sketch=sk, path=["l1", "a1", "l2", "a2", "l3"],
            diameter=inch(dia))
+    # The casting under it, from both faces to the middle.
+    for k, s in enumerate((1, -1)):
+        path = rise_path(y0, z0, s, th, r, lead, y0)
+        web_under(d, f"{name}_web ({10 + 10 * k})", x, dia * 0.9, path)
 
 
 def intake_levels():
@@ -967,11 +1014,11 @@ def intake(d, stock=True):
     d.finish()
     d.extrude(sk, f"{nm}_choke_well", pad_z - drop - z1 + 0.1, taper="-4 deg")
 
-    # The plenum, as make_sbc.py's: solid up to its dark floor, then its walls round the
-    # pad's openings up to the pad, which runs round its studs' bosses.
+    # The plenum, as make_sbc.py's: solid up to its dark floor under the whole pad, then
+    # its walls round the pad's openings up to the pad, which runs round its studs' bosses.
     px, py, pt = PAD
     floor = pad_z - PLENUM_FLOOR
-    hx = PLENUM_HALF
+    hx = px
     sk = d.sketch("XY", "Plenum", offset=z1 - 0.1)
     d.rounded((PAD_X - hx - 0.1, -py - 0.1), (PAD_X + hx + 0.1, py + 0.1), 0.8)
     d.finish()
@@ -1413,6 +1460,7 @@ REDUCE_FACTORS = [
     ("exhaust_collector", ROUND), ("exhaust_runner", "r0.08"), ("exhaust_manifold_outlet_flange", 0),
     ("exhaust_manifold_bore", ROUND), ("exhaust_manifold", "r0.2"),
     ("intake_manifold_runner", "r0.12"),
+    ("intake_manifold_web", 0), ("intake_manifold_crossover_web", 0), ("intake_manifold_heat_crossover_web", 0),
     ("intake_manifold_crossover", "r0.2"), ("intake_manifold_heat", "r0.2"), ("intake_manifold_choke", 0),
     ("intake_manifold_bolt_bosses", ROUND),
     ("intake_manifold_pad_bosses", ROUND), ("intake_manifold_pad", 0), ("intake_manifold_plenum", 0), ("intake_manifold_thermostat_seat", 0),
