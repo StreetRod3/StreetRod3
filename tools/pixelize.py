@@ -921,8 +921,10 @@ def bake_detail(atlas, rgb, filled, voxels, args):
     shade[filled] = 1.0 - args.ao_strength * (1.0 - light)
     lines = edge_texels(atlas, feature_edges(atlas.parts, args.crease)) & filled
     shade[lines] *= 1.0 - args.line_strength
-    linear = srgb_to_linear(rgb) * shade[:, None]
-    return linear_to_srgb(linear), int(lines.sum())
+    # Darkened as it looks (on the stored sRGB values), never below --darkest, so the
+    # deepest shadow is a dark midtone rather than black.
+    shade = args.darkest + (1.0 - args.darkest) * shade
+    return rgb * shade[:, None], int(lines.sum())
 
 
 # --- main -------------------------------------------------------------------------------
@@ -953,6 +955,7 @@ def main():
     ap.add_argument("--ao-strength", type=float, default=0.75, help="how dark fully hidden texels get, 0-1 (default 0.75)")
     ap.add_argument("--ao-rays", type=int, default=24, help="rays per side for the shading (default 24)")
     ap.add_argument("--line-strength", type=float, default=0.45, help="how much panel lines darken, 0-1 (default 0.45)")
+    ap.add_argument("--darkest", type=float, default=0.45, help="the darkest the drawn shading goes, 0-1 (default 0.45)")
     ap.add_argument("--crease", type=float, default=35.0, help="angle in degrees that counts as a crease (default 35)")
     ap.add_argument("--voxel", type=float, default=0.02, help="voxel size in meters for the shading (default 0.02)")
     args = ap.parse_args()
@@ -1048,10 +1051,25 @@ def main():
     plain = np.concatenate([rgb[f & (c == 0)] for _, _, _, rgb, c, f, _ in baked])
     palette = make_palette(plain, args.colors) if len(plain) else np.zeros((1, 3))
     paint = np.concatenate([rgb[f & (c > 0)] for _, _, _, rgb, c, f, _ in baked])
-    if accent and len(paint):
-        levels = make_palette(np.repeat(paint[:, :1], 3, axis=1), args.shades)[:, :1]
-    elif len(paint):
-        shades = make_palette(paint, args.shades)
+    # The paint's shades are evenly spaced steps from its darkest to its brightest, so
+    # the midtones get as many steps as the lights and darks. Its tint (for a model whose
+    # paint texels aren't grey) gets a small palette of its own.
+    levels = np.ones(1)
+    tints = np.ones((1, 3))
+    if len(paint):
+        value = paint[:, :1] if accent else paint.max(axis=1, keepdims=True)
+        lo, hi = np.percentile(value, 0.5), value.max()
+        levels = np.linspace(lo, hi, max(1, args.shades)) if hi > lo else np.array([hi])
+        if not accent:
+            tints = make_palette(np.divide(paint, value, out=np.ones_like(paint), where=value > 1e-6), 8)
+
+    def paint_shade(colors):
+        value = colors[:, 0] if accent else colors.max(axis=1)
+        step = levels[np.argmin(np.abs(value[:, None] - levels[None, :]), axis=1)]
+        if accent:
+            return step
+        tint = nearest(tints, np.divide(colors, value[:, None], out=np.ones_like(colors), where=value[:, None] > 1e-6))
+        return tint * step[:, None]
 
     for mat_index, parts, atlas, rgb, cls, filled, others in baked:
         out = np.zeros((len(rgb), 4))
@@ -1059,13 +1077,13 @@ def main():
         out[none, :3] = nearest(palette, rgb[none])
         painted = filled & (cls > 0)
         if accent:
-            r = nearest(levels, rgb[painted][:, :1])[:, 0]
+            r = paint_shade(rgb[painted])
             body = cls[painted] == 1
             out[painted, 0] = r
             out[painted, 1] = r
             out[painted, 2] = np.where(body, r, 0.0)
         else:
-            out[painted, :3] = nearest(shades, rgb[painted])
+            out[painted, :3] = paint_shade(rgb[painted])
         out[painted, 3] = 1.0
         grid = atlas.fill_empty(out, filled)
         image = Image.fromarray(np.round(grid * 255).astype(np.uint8), "RGBA")
