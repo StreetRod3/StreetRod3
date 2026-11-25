@@ -244,6 +244,9 @@ PAD = (2.65, 2.6, 0.4)  # half long, half wide, thick
 PLENUM_FLOOR = 1.1
 DIST = (-9.34, -0.89)   # the distributor's axis (x, y), the reference's
 DIST_VACUUM = (-0.5, -0.86, 0.0)
+CLAMP_WAY = (-0.87, 0.5)    # the hold-down clamp's way out from the distributor's axis, and
+CLAMP_REACH = 2.35          # how far out its bolt is: out past the cap, so it shows from above
+CLAMP_EAR_R = 0.6           # the intake's ear the bolt goes into
 THERMOSTAT = (-9.8, 2.4)    # the reference's is at (-10.29, 2.58), on its later intake
 COIL = (-11.6, -5.0, 9.4)
 
@@ -980,7 +983,7 @@ def pad_bosses():
 def floor_outline():
     """The intake's floor from above (x, y), counterclockwise: each half as long as its
     head, the halves stepping across the middle, rounded off, a lobe round the
-    distributor's boss."""
+    distributor's boss, and an ear off its front for the distributor's hold-down bolt."""
     from shapely.geometry import Point, Polygon, box
     fy = flange_face_y()
     halves = []
@@ -989,7 +992,9 @@ def floor_outline():
         y0, y1 = sorted((0.0, s * fy))
         halves.append(box(x0, y0 - 0.4 * (s == 1), x1, y1 + 0.4 * (s == -1)))
     shape = halves[0].union(halves[1]).union(Point(DIST).buffer(1.5, 16))
-    shape = shape.buffer(0.35, 4).buffer(-0.7, 4).buffer(0.35, 4).simplify(0.01)
+    shape = shape.buffer(0.35, 4).buffer(-0.7, 4).buffer(0.35, 4)
+    shape = shape.union(Point(clamp_bolt()).buffer(CLAMP_EAR_R, 12)).buffer(0.25, 4).buffer(-0.25, 4)
+    shape = shape.simplify(0.01)
     return ccw([tuple(map(float, q)) for q in list(shape.exterior.coords)[:-1]])
 
 
@@ -1092,6 +1097,9 @@ def intake(d, stock=True):
     # the front right, the housing bolted down on it, its neck forward and up.
     dx, dy = DIST
     d.cylinder(f"{nm}_distributor_boss", (dx, dy, z0 - 0.3), (0, 0, 1), 2.3, z1 - z0 + 0.6)
+    # and a pad up to the hold-down clamp under its bolt
+    bx, by = clamp_bolt()
+    d.cylinder(f"{nm}_distributor_boss (10)", (bx, by, z0), (0, 0, 1), 0.95, z1 - z0 + 0.75)
     tx, ty = THERMOSTAT
     seat_top = zp + WATER_CROSSOVER[1] + WATER_CROSSOVER[2] / 2 + 0.15
     seat_foot = zp + WATER_CROSSOVER[1] - WATER_CROSSOVER[2] / 2     # cast onto the crossover
@@ -1152,8 +1160,21 @@ def distributor(d):
     d.cylinder("distributor_vacuum", o + np.array([0, 0, za]) + 1.35 * arm, arm, 2.2, 1.1)
     d.cone("distributor_vacuum_end", o + np.array([0, 0, za]) + 2.45 * arm, arm, 1.1, 0.6, 0.35)
     d.cylinder("distributor_vacuum_nipple", o + np.array([0, 0, za]) + 2.8 * arm, arm, 0.25, 0.45)
-    d.box("distributor_clamp", (x + 0.55, y - 0.35, z + 0.45), (x + 2.0, y + 0.35, z + 0.65))
-    d.cylinder("distributor_clamp_bolt", (x + 1.55, y, z + 0.65), (0, 0, 1), 0.55, 0.3)
+    # The hold-down clamp reaches forward and right, so its bolt shows ahead of the cap
+    # from the front, clear of the vacuum advance and the thermostat housing.
+    bx, by = clamp_bolt()
+    way = unit(CLAMP_WAY)
+    sk = d.sketch("XY", "Distributor clamp", offset=z + 0.45)
+    d.c += outline_commands(*hull_outline([((x + 0.55 * way[0], y + 0.55 * way[1]), 0.35), ((bx, by), 0.35)]))
+    d.finish()
+    d.extrude(sk, "distributor_clamp", 0.2)
+    d.cylinder("distributor_clamp_bolt", (bx, by, z + 0.65), (0, 0, 1), 0.55, 0.3)
+
+
+def clamp_bolt():
+    """(x, y) of the distributor's hold-down bolt."""
+    way = unit(CLAMP_WAY)
+    return DIST[0] + CLAMP_REACH * way[0], DIST[1] + CLAMP_REACH * way[1]
 
 
 def coil(d):

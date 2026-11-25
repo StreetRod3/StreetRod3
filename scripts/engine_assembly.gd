@@ -226,11 +226,12 @@ const SBF_BANK_SHIFT := -0.419
 const SBF_BORES_X: Array[float] = [-6.57, -2.19, 2.19, 6.57]
 const SBF_BLOCK_BACK := 9.91
 const SBF_PAD := Vector3(-0.6, 0.0, 13.725)
-## The distributor's axis at the cap's foot, its towers' ring and tops, its clamp bolt.
+## The distributor's axis at the cap's foot, its towers' ring and tops, its clamp bolt
+## (ahead of it and to the right, out past the cap, where it shows from above).
 const SBF_DIST := Vector3(-9.34, -0.89, 12.02)
 const SBF_TOWER_R := 1.15
 const SBF_TOWER_TOP := 15.52
-const SBF_CLAMP_BOLT := Vector3(-7.79, -0.89, 10.87)
+const SBF_CLAMP_BOLT := Vector3(-11.377, 0.281, 10.87)
 ## The top of the coil's tower, on its bracket off the left head, and of the cap's middle one.
 const SBF_COIL_TOP := Vector3(-11.6, -4.1, 14.65)
 const SBF_CAP_MIDDLE_TOP := 15.82
