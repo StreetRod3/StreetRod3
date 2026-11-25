@@ -1203,6 +1203,7 @@ func _present_passer(opp: Dictionary, parked: bool = false) -> void:
 	_drop_rival()
 	var path := str(opp.get("car_file", ""))
 	var car := _CAR_SCENE.instantiate() as Node3D
+	car.set(&"preview_plate", GameState.opponent_plate(opp))
 	if not bool(car.call(&"prepare_preview", path, _opponent_color(opp), Color(0, 0, 0, 0), GameState.bumper_ends(opp.get("bumpers_off", [])))):
 		push_warning("Rival car failed to load: %s" % path)
 		car.free()

@@ -9,6 +9,7 @@ const _SpeechBubble := preload("res://scenes/speech_bubble.tscn")
 const _Console := preload("res://scripts/console.gd")
 const _CarSale := preload("res://scripts/car_sale.gd")
 const _SaveSlots := preload("res://scripts/save_slots.gd")
+const _LicensePlate := preload("res://scripts/license_plate.gd")
 ## The shelf list matches the parts window. An open book fills the screen above the status bar.
 const _BOOKS_LIST_SIZE := Vector2(580, 520)
 const _BOOKS_PAGE_SIZE := Vector2(1200, 680)
@@ -67,6 +68,8 @@ var _cam_distance_target: float = CAM_DISTANCE_DEFAULT
 const CAM_DISTANCE_DEFAULT := 4.8
 ## How much bigger than the bumper its click box is, in meters.
 const BUMPER_CLICK_MARGIN := 0.06
+## How much bigger than the plate itself a click on it may land.
+const PLATE_CLICK_MARGIN := 0.03
 ## How far in from the bumper's outer face its click box reaches: the bar, its ends and
 ## guards, but not the mounting irons that run back under the body to the frame.
 const BUMPER_CLICK_DEPTH := 0.45
@@ -203,8 +206,13 @@ var _bumper_panel: Control
 var _bumper_label: Label
 var _bumper_do: Button
 var _bumper_forget: Button
-## The end whose bumper the box is about, or "roof" when it offers a chop.
+## The end whose bumper the box is about, "roof" when it offers a chop, or "plate" when
+## it offers a vanity plate.
 var _bumper_end: String = ""
+## Where the vanity plate's text is typed, in the same box; shown only for the plate.
+var _plate_edit: LineEdit
+## The world box round each plate showing on the car, for clicking on them.
+var _plate_boxes: Array[AABB] = []
 ## Click box on the roof of a car whose roof can be chopped (car file model.roof).
 var _roof_target: StaticBody3D
 var _creeper: StaticBody3D
@@ -243,6 +251,7 @@ const _TOOLTIPS := {
 	&"bumper_front": "Front bumper",
 	&"bumper_rear": "Rear bumper",
 	&"roof": "Roof",
+	&"plate": "License plates",
 }
 const _TOOLTIP_CARS := "Cars (C)"
 const _TOOLTIP_NO_ENGINE := "Under the hood — no engine"
@@ -651,6 +660,8 @@ func _tooltip_text_at_mouse() -> String:
 
 func _interact_kind_at(screen_pos: Vector2) -> Variant:
 	var hit := _raycast(screen_pos)
+	if _plate_at(screen_pos, hit):
+		return &"plate"
 	if hit.is_empty():
 		return null
 	var node := hit.get("collider") as Node
@@ -660,6 +671,33 @@ func _interact_kind_at(screen_pos: Vector2) -> Variant:
 			return node.get_meta(&"garage_interact")
 		node = node.get_parent()
 	return null
+
+
+## Whether the pointer at `screen_pos` is on one of the car's plates. They sit inside the
+## bumpers' click boxes, so a plate wins over its bumper and anything else on the car; it
+## loses to whatever stands in front of it.
+func _plate_at(screen_pos: Vector2, hit: Dictionary) -> bool:
+	if _plate_boxes.is_empty() or not GameState.has_active_car():
+		return false
+	var from := _camera.project_ray_origin(screen_pos)
+	var dir := _camera.project_ray_normal(screen_pos)
+	var nearest := INF
+	for box in _plate_boxes:
+		var at: Variant = box.grow(PLATE_CLICK_MARGIN).intersects_ray(from, dir)
+		if at is Vector3:
+			nearest = minf(nearest, from.distance_to(at as Vector3))
+	if nearest == INF:
+		return false
+	if hit.is_empty():
+		return true
+	var node := hit.get("collider") as Node
+	while node != null:
+		if node.has_meta(&"garage_interact"):
+			if _bay_needs_car(node.get_meta(&"garage_interact")):
+				return true
+			break
+		node = node.get_parent()
+	return nearest <= from.distance_to(hit.get("position", from) as Vector3)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1310,11 +1348,13 @@ func _handle_interact(kind: Variant) -> void:
 			_offer_bumper_job("rear")
 		&"roof":
 			_offer_roof_job()
+		&"plate":
+			_offer_plate_job()
 
 
 func _bay_needs_car(kind: Variant) -> bool:
 	match kind:
-		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear", &"roof":
+		&"doors", &"chart", &"spares", &"spray", &"fuel", &"hood", &"lift", &"tire_machine", &"transmission", &"creeper", &"bumper_front", &"bumper_rear", &"roof", &"plate":
 			return true
 	return false
 
@@ -3274,6 +3314,7 @@ func _place_bay_targets() -> void:
 	_hood_shape.size = hood.size
 	_place_bumper_targets(body)
 	_place_roof_target(body)
+	_plate_boxes = _LicensePlate.plate_boxes(body)
 	if _under_car == null or _under_car_shape == null:
 		return
 	# Low band between the axles, just behind the engine: where the gearbox sits.
@@ -3388,6 +3429,16 @@ func _build_bumper_panel() -> void:
 	_bumper_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_bumper_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_bumper_label)
+	_plate_edit = LineEdit.new()
+	_plate_edit.max_length = _LicensePlate.VANITY_PLACES
+	_plate_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_plate_edit.custom_minimum_size = Vector2(200, 40)
+	_plate_edit.add_theme_font_size_override(&"font_size", 26)
+	_plate_edit.placeholder_text = "VANITY"
+	_plate_edit.visible = false
+	_plate_edit.text_changed.connect(_on_plate_typed)
+	_plate_edit.text_submitted.connect(func(_text: String) -> void: _on_bumper_do())
+	box.add_child(_plate_edit)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 16)
@@ -3410,6 +3461,7 @@ func _offer_bumper_job(end: String) -> void:
 	if not GameState.car_has_bumper(end):
 		return
 	_bumper_end = end
+	_plate_edit.visible = false
 	_bumper_label.text = "%s bumper" % end.capitalize()
 	var job := "Restore bumper - $%d" if GameState.bumper_stripped(end) else "Strip bumper - $%d"
 	_bumper_do.text = job % GameState.BUMPER_JOB_PRICE
@@ -3424,6 +3476,7 @@ func _offer_roof_job() -> void:
 	if not GameState.car_roof_choppable():
 		return
 	_bumper_end = "roof"
+	_plate_edit.visible = false
 	var inches := roundi(float(GameState.spec_roof(GameState.car_spec).get("chop_in", 3.0)))
 	_bumper_do.visible = not GameState.car_roof_chopped
 	if GameState.car_roof_chopped:
@@ -3439,8 +3492,47 @@ func _offer_roof_job() -> void:
 		_bumper_forget.grab_focus()
 
 
+## Offers a vanity plate, the car showing what is typed as it is typed.
+func _offer_plate_job() -> void:
+	if not GameState.has_active_car():
+		return
+	_bumper_end = "plate"
+	_bumper_label.text = "The car wears %s. A vanity plate takes %d to %d letters and numbers, with spaces if you like:" % [
+		GameState.active_plate(), _LicensePlate.VANITY_MIN, _LicensePlate.VANITY_MAX]
+	_plate_edit.text = ""
+	_plate_edit.visible = true
+	_bumper_do.text = "Order plates - $%d" % GameState.VANITY_PLATE_PRICE
+	_bumper_do.visible = true
+	_bumper_panel.visible = true
+	_sync_menu_nav()
+	_plate_edit.grab_focus()
+
+
+## Keeps what is typed to what a plate can carry, in capitals, and shows it on the car.
+func _on_plate_typed(text: String) -> void:
+	var caret := _plate_edit.caret_column
+	var kept := ""
+	for ch in text.to_upper():
+		if ch == " " or _LicensePlate.GLYPHS.contains(ch):
+			kept += ch
+	if kept != text:
+		_plate_edit.text = kept
+		_plate_edit.caret_column = mini(caret, kept.length())
+	var plate := _LicensePlate.normalize(kept)
+	_show_plate_on_car(plate if not plate.is_empty() else GameState.active_plate())
+
+
+func _show_plate_on_car(plate: String) -> void:
+	var body := _car_pivot.get_node_or_null("CarBody")
+	if body != null:
+		_LicensePlate.apply(body, plate, false)
+
+
 ## Pays for the job; without the money the box says so and only Forget it is left.
 func _on_bumper_do() -> void:
+	if _bumper_end == "plate":
+		_order_plate()
+		return
 	var err := GameState.chop_roof() if _bumper_end == "roof" else GameState.toggle_bumper(_bumper_end)
 	if not err.is_empty():
 		_bumper_label.text = err
@@ -3453,8 +3545,30 @@ func _on_bumper_do() -> void:
 	_apply_active_car_visual()
 
 
+## Orders the plate typed. A plate that can't be had says why and the box stays open to
+## type another; without the money only Forget it is left.
+func _order_plate() -> void:
+	var err := GameState.order_vanity_plate(_plate_edit.text)
+	if err.is_empty():
+		_close_bumper_panel()
+		_refresh_hud()
+		return
+	_bumper_label.text = err
+	if GameState.money < GameState.VANITY_PLATE_PRICE:
+		_plate_edit.visible = false
+		_bumper_do.visible = false
+		_sync_menu_nav()
+		_bumper_forget.grab_focus()
+	else:
+		_plate_edit.grab_focus()
+
+
 func _close_bumper_panel() -> void:
 	_bumper_panel.visible = false
+	if _bumper_end == "plate":
+		# Back to what the car wears, ordered or not.
+		_show_plate_on_car(GameState.active_plate())
+	_plate_edit.visible = false
 	_sync_menu_nav()
 
 

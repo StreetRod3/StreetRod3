@@ -11,6 +11,7 @@ extends Node3D
 
 const _CarFile := preload("res://scripts/car_file.gd")
 const _PaintShader := preload("res://shaders/car_paint_mask.gdshader")
+const _LicensePlate := preload("res://scripts/license_plate.gd")
 ## Plain white under a solid body's dithered paint; made once.
 static var _white_texture: ImageTexture
 ## Wheel parts are the wheel alone; the tires are drawn on them from this model unless the
@@ -25,6 +26,9 @@ var _preview_color: Color = Color.WHITE
 var _preview_cove: Color = Color(0, 0, 0, 0)
 ## The previewed car's stripped bumpers, by end ("front", "rear").
 var _preview_bumpers_off: Array[String] = []
+## The previewed car's plate number; empty gives it a sequential one from its car file.
+var preview_plate: String = ""
+var _preview_file: String = ""
 
 
 ## Load a catalog car for a viewport that is not the player's garage car.
@@ -68,6 +72,7 @@ func _load_preview(car_file: String, paint: Color) -> bool:
 		return false
 	_previewing = true
 	_preview_spec = spec
+	_preview_file = car_file
 	_preview_color = paint
 	return true
 
@@ -121,6 +126,20 @@ func apply_roof() -> void:
 			var skin_node := node.find_child("roof_%s_%s" % [state, skin], true, false) as Node3D
 			if skin_node != null:
 				skin_node.visible = vinyl == (skin == "vinyl")
+
+
+## Prints the car's plate number on its plates: the player's car its own, a preview the
+## one it was given or a sequential one from its car file.
+func apply_plates() -> void:
+	var body := get_node_or_null("CarBody")
+	if body == null:
+		return
+	var number := preview_plate
+	if not _previewing:
+		number = GameState.active_plate()
+	elif number.is_empty():
+		number = _LicensePlate.serial(_preview_file)
+	_LicensePlate.apply(body, number)
 
 
 ## The body paint's finish (CarFile.PAINT_FINISHES): a preview, someone else's car, is
@@ -479,6 +498,7 @@ func _apply_body_paint(car_body: MeshInstance3D) -> void:
 
 func set_car_body_color(new_color: Color) -> void:
 	apply_roof()
+	apply_plates()
 	if not _body_paintable():
 		return
 	var color := new_color
@@ -625,6 +645,8 @@ func _paint_masked_meshes(node: Node, color: Color) -> void:
 
 func _paint_masked_mesh(mesh_instance: MeshInstance3D, color: Color) -> void:
 	for i in range(mesh_instance.mesh.get_surface_count()):
+		if _LicensePlate.is_plate_surface(mesh_instance, i):
+			continue
 		var mat: Material = mesh_instance.get_surface_override_material(i)
 		if mat == null:
 			mat = mesh_instance.mesh.surface_get_material(i)

@@ -4,6 +4,7 @@ extends CharacterBody3D
 ## bump the race uses between two cars.
 
 const _CAR_SCENE := preload("res://scenes/car_vehicle_visual.tscn")
+const _LicensePlate := preload("res://scripts/license_plate.gd")
 const _WHEELS: Array[String] = ["WheelFrontLeft", "WheelFrontRight", "WheelBackLeft", "WheelBackRight"]
 const _MASS_KG := 1360.0
 const _CENTER_Z := 1.9
@@ -107,6 +108,8 @@ func setup(car_file: String, paint: Color, edge: int, distance: float, pace: flo
 	_visual.position = Vector3(0.0, 0.0, _CENTER_Z)
 	_silence(_visual)
 	if _visual.has_method(&"prepare_preview"):
+		# Each car its own plate, not one for every car of a model.
+		_visual.set(&"preview_plate", _LicensePlate.serial(str(get_instance_id())))
 		_visual.call(&"prepare_preview", car_file, paint)
 	add_child(_visual)
 	_draw_near(_visual)
