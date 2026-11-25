@@ -2976,7 +2976,8 @@ func _on_car_list_switch() -> void:
 		_show_here_bubble()
 		return
 	if GameState.has_active_car() and not GameState.has_wheels():
-		_car_list_status.text = GameState.NO_WHEELS_IN_BAY
+		_hide_car_list()
+		_say(GameState.NO_WHEELS_IN_BAY)
 		return
 	_dismiss_here_bubble()
 	_hide_car_list()
