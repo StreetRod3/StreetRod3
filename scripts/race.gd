@@ -67,6 +67,7 @@ var _race_started: bool = false
 @onready var _pause_settings: Control = $RaceUI/PauseMenu/SettingsPanel
 @onready var _pause_confirm: Control = $RaceUI/PauseMenu/ConfirmPanel
 @onready var _pause_master: HSlider = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MasterSlider
+@onready var _pause_music_volume: HSlider = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicSlider
 @onready var _pause_music: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _pause_arcade: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck
 @onready var _pause_imperial: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck
@@ -1070,6 +1071,7 @@ func _sync_pause_nav() -> void:
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
 			_pause_master,
 			_pause_music,
+			_pause_music_volume,
 			_pause_arcade,
 			_pause_imperial,
 			_pause_skip_cruise,
@@ -1112,6 +1114,7 @@ func _close_pause_settings() -> void:
 func _refresh_pause_settings() -> void:
 	_pause_master.set_value_no_signal(db_to_linear(AudioServer.get_bus_volume_db(0)))
 	_pause_music.set_pressed_no_signal(GameState.music_enabled)
+	_pause_music_volume.set_value_no_signal(GameState.music_volume)
 	_pause_arcade.set_pressed_no_signal(GameState.arcade_drive)
 	_pause_imperial.set_pressed_no_signal(GameState.imperial_units)
 	_pause_skip_cruise.set_pressed_no_signal(GameState.skip_cruise)
@@ -1139,6 +1142,10 @@ func _on_pause_master_volume_changed(value: float) -> void:
 
 func _on_pause_music_toggled(pressed: bool) -> void:
 	GameState.set_music_enabled(pressed)
+
+
+func _on_pause_music_volume_changed(value: float) -> void:
+	GameState.set_music_volume(value)
 
 
 func _on_pause_arcade_toggled(pressed: bool) -> void:

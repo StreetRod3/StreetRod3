@@ -81,6 +81,7 @@ func _on_save_editor_closed() -> void:
 
 
 func _on_new_game_pressed() -> void:
+	GameState.select_radio_preset(1)
 	get_tree().change_scene_to_file(GameState.SCENE_DRIVER_LICENSE)
 
 

@@ -65,6 +65,18 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Music"
 
+[node name="MusicVolumeLabel" type="Label" parent="Margin/VBox"]
+layout_mode = 2
+text = "Music volume"
+
+[node name="MusicSlider" type="HSlider" parent="Margin/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 0.0
+max_value = 1.0
+step = 0.01
+value = 1.0
+
 [node name="ArcadeCheck" type="CheckBox" parent="Margin/VBox"]
 unique_name_in_owner = true
 layout_mode = 2
@@ -96,6 +108,7 @@ text = "Back to main menu"
 [connection signal="pressed" from="Margin/VBox/GraphicsBtn" to="." method="_on_graphics_pressed"]
 [connection signal="value_changed" from="Margin/VBox/MasterSlider" to="." method="_on_master_volume_changed"]
 [connection signal="toggled" from="Margin/VBox/MusicCheck" to="." method="_on_music_toggled"]
+[connection signal="value_changed" from="Margin/VBox/MusicSlider" to="." method="_on_music_volume_changed"]
 [connection signal="toggled" from="Margin/VBox/ArcadeCheck" to="." method="_on_arcade_toggled"]
 [connection signal="toggled" from="Margin/VBox/ImperialCheck" to="." method="_on_imperial_toggled"]
 [connection signal="toggled" from="Margin/VBox/SkipCruiseCheck" to="." method="_on_skip_cruise_toggled"]

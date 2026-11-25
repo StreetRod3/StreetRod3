@@ -1,0 +1,45 @@
+{
+  "songs": [
+    {
+      "id": "garage",
+      "file": "garage.mp3"
+    },
+    {
+      "id": "race",
+      "file": "race.mp3"
+    },
+    {
+      "id": "sr1-1",
+      "file": "sr1-1.mid"
+    },
+    {
+      "id": "sr1-2",
+      "file": "sr1-2.mid"
+    },
+    {
+      "id": "sr1-3",
+      "file": "sr1-3.mid"
+    },
+    {
+      "id": "sr1-4",
+      "file": "sr1-4.mid"
+    },
+    {
+      "id": "sr1-5",
+      "file": "sr1-5.mid"
+    }
+  ],
+  "stations": [
+    {
+      "id": "all",
+      "frequency": 620,
+      "songs": []
+    },
+    {
+      "id": "originals",
+      "frequency": 830,
+      "songs": ["sr1-1", "sr1-2", "sr1-3", "sr1-4", "sr1-5"]
+    }
+  ],
+  "memory": [620, 830, 1040, 1240, 1460]
+}

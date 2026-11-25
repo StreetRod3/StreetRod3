@@ -10,6 +10,7 @@ var _nav := _MenuNav.new()
 func _ready() -> void:
 	%MasterSlider.value = db_to_linear(AudioServer.get_bus_volume_db(0))
 	%MusicCheck.set_pressed_no_signal(GameState.music_enabled)
+	%MusicSlider.value = GameState.music_volume
 	%ArcadeCheck.set_pressed_no_signal(GameState.arcade_drive)
 	%ImperialCheck.set_pressed_no_signal(GameState.imperial_units)
 	%SkipCruiseCheck.set_pressed_no_signal(GameState.skip_cruise)
@@ -19,6 +20,7 @@ func _ready() -> void:
 		%GraphicsBtn,
 		%MasterSlider,
 		%MusicCheck,
+		%MusicSlider,
 		%ArcadeCheck,
 		%ImperialCheck,
 		%SkipCruiseCheck,
@@ -47,6 +49,10 @@ func _on_master_volume_changed(value: float) -> void:
 
 func _on_music_toggled(pressed: bool) -> void:
 	GameState.set_music_enabled(pressed)
+
+
+func _on_music_volume_changed(value: float) -> void:
+	GameState.set_music_volume(value)
 
 
 func _on_arcade_toggled(pressed: bool) -> void:
