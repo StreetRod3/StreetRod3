@@ -29,6 +29,8 @@ shade, so the car can still be repainted.
 Glass, the dash and gauges,
 the license plate and anything else named in --skip are left as they are.
 
+Full documentation: docs/pixelize.md.
+
 Usage:
   tools/pixelize.py --car assets/cars/chevy-c10-1963.car -o out.glb
   tools/pixelize.py model.glb -o out.glb --ppm 25 --colors 48
