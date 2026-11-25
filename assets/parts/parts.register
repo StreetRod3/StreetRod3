@@ -127,6 +127,28 @@
       "model": "res://assets/parts/engine-v8-283.glb"
     },
     {
+      "id": "ford-260",
+      "make": "Ford",
+      "family": "ford-windsor",
+      "name": "260 V8",
+      "price": 1000,
+      "hp": 235,
+      "vmax": 205,
+      "cid": 260,
+      "model": "res://assets/parts/engine-sbf-302.glb"
+    },
+    {
+      "id": "ford-289",
+      "make": "Ford",
+      "family": "ford-windsor",
+      "name": "289 V8",
+      "price": 1700,
+      "hp": 290,
+      "vmax": 225,
+      "cid": 289,
+      "model": "res://assets/parts/engine-sbf-302.glb"
+    },
+    {
       "id": "ford-302",
       "make": "Ford",
       "family": "ford-windsor",
@@ -135,7 +157,18 @@
       "hp": 300,
       "vmax": 230,
       "cid": 302,
-      "model": "res://assets/parts/engine-v8-327.glb"
+      "model": "res://assets/parts/engine-sbf-302.glb"
+    },
+    {
+      "id": "ford-351w",
+      "make": "Ford",
+      "family": "ford-windsor",
+      "name": "351 Windsor V8",
+      "price": 2900,
+      "hp": 360,
+      "vmax": 258,
+      "cid": 351,
+      "model": "res://assets/parts/engine-sbf-351.glb"
     }
   ],
   "transmissions": [
@@ -308,6 +341,16 @@
       "model": "res://assets/parts/chevy-235-valve-cover-finned.glb",
       "hp": 16,
       "vmax": 2
+    },
+    {
+      "id": "heads-windsor-finned",
+      "slot": "heads",
+      "family": "ford-windsor",
+      "name": "High-performance heads, finned aluminum covers",
+      "price": 420,
+      "finish": "finned",
+      "hp": 22,
+      "vmax": 3
     }
   ],
   "intake": [
@@ -411,6 +454,18 @@
       "model": "res://assets/parts/chevy-235-intake-2x1.glb",
       "hp": 16,
       "vmax": 2
+    },
+    {
+      "id": "intake-windsor-aluminum",
+      "slot": "intake",
+      "family": "ford-windsor",
+      "style": "sbf-aluminum",
+      "carbs": 1,
+      "barrels": 4,
+      "name": "Aluminum four-barrel intake",
+      "price": 240,
+      "hp": 10,
+      "vmax": 1
     }
   ],
   "fuel": [

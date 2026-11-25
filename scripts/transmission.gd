@@ -754,12 +754,13 @@ func _build_engine() -> void:
 	add_child(engine)
 	engine.scale = Vector3.ONE * ENGINE_SCALE
 	engine.rotation.x = -PI * 0.5
-	# The small-block's and the six's models are drawn to size from the block's back face
+	# The small-blocks' and the six's models are drawn to size from the block's back face
 	# (the six's flywheel housing's).
 	var rear_x := ENGINE_REAR_X
 	var family := GameState.engine_family(GameState.get_equipped_engine())
-	if family == _EngineAssembly.SB_FAMILY:
-		rear_x = _EngineAssembly.fh(Vector3(_EngineAssembly.SB_BLOCK_BACK, 0.0, 0.0)).x
+	var sb := _EngineAssembly.small_block_of(GameState.get_equipped_engine())
+	if sb != null:
+		rear_x = _EngineAssembly.fh(Vector3(sb.block_back, 0.0, 0.0)).x
 	elif family == _EngineAssembly.STOVEBOLT_FAMILY:
 		rear_x = _EngineAssembly.fh(Vector3(13.6, 0.0, 0.0)).x
 	engine.position = Vector3(-rear_x * ENGINE_SCALE, DRIVELINE_Y - ENGINE_CRANK_Y * ENGINE_SCALE, 0.0)
