@@ -34,12 +34,21 @@ the oil filter low at the front on the left, the starter on the right. It has:
                 the valley, the intake face square to the deck; a raised two-bolt pad round
                 each exhaust port high on the face, the plugs below them leaning out,
                 forward and up
-  valve covers  stamped steel, six bolts on the flange, the oil filler cap at the front
-                of the left one and the breather at the back of the right one
-  intake        cast iron: flanges on the heads' intake faces with six bolts each, a floor
-                over the valley, runners up out of each port and over into the plenum, the
-                carb pad, the water crossover and thermostat at the front, the distributor
-                boss at the front left of the middle
+  valve covers  stamped steel on the Windsor's outline, the reference's: long sides, the
+                ends slanting in from a big round corner outside to a small one inside,
+                the outer side leaning in as it rises, the top rounded over; six bolts,
+                three down the outer side, one in the middle of the inner side and one in
+                each inner corner, the body notched round those on the sides; the oil
+                filler cap at the front of the left one, the breather at the back of the
+                right one
+  intake        cast iron, in the style of make_sbc.py's: flanges on the heads' intake faces
+                with six bolts each, a floor over the valley stepping in by each head, a
+                runner up out of each port and round into an end of the plenum (the end
+                cylinders' high, over the middle ones' low), the carb pad standing over
+                the plenum on its studs' bosses with the left plane's two barrels and the
+                right plane's slot, the choke's stove well, the water crossover and
+                thermostat at the front, the exhaust heat crossover at the back, the
+                distributor boss at the front left of the middle
   carburetor    a square-flange four-barrel under a 14 inch air cleaner (make_sbc.py's)
   distributor   standing at the front of the intake, the vacuum advance off to the left
   manifolds     cast-iron logs under the ports, a runner up into each, the outlet down
@@ -50,8 +59,8 @@ the oil filter low at the front on the left, the starter on the right. It has:
                 cover's left, the belt
   bottom        the oil pan, shallow in front and deep at the back, the oil filter, the
                 starter, the flywheel
-  finned covers (built alone) cast aluminum, fins along the top, as the reference's but
-                plain where its carry a name
+  finned covers (built alone) cast aluminum on the same outline, fins along the top, as
+                the reference's but plain where its carry a name
   aluminum intake (built alone) a dual plane like the stock one in cast aluminum
 
 Every part is a body of its own, drawn from numbers in this script; to change the engine,
@@ -155,22 +164,31 @@ PLUG_DIR = (-0.293, 0.93, 0.221)
 # The lower head bolts on the ledge, along the bank: a, and the bosses' and the bolts' tops.
 HEAD_BOLT_LEDGE = (0.62, 0.55, 1.5, 1.9)     # a, foot h, boss top h, bolt top h
 
-# Valve covers, in the rail's frame: across from its outer edge, up off it.
-COVER_FLANGE = (-0.05, 9.55, 4.95, 0.1)      # across, half length, across, thickness
-COVER_BODY = (0.3, 9.25, 4.6)                # across, half length, across
-COVER_H = 2.3
-COVER_BOLTS = [(-6.55, 0.22), (0.0, 0.22), (6.55, 0.22), (-6.55, 4.68), (0.0, 4.68), (6.55, 4.68)]
-FILLER = (-6.2, 2.45)       # the oil filler cap on the left cover (x along the bank from its
-BREATHER = (6.2, 2.45)      # middle, toward the back; across), the breather on the right one
-# The finned covers: the flange's thickness; the body's straight side, its rounded top,
-# the side's lean and the top's roll (degrees); the fins (how many across, wide, tall),
-# their runs along the cover, the plain panel's half length between them.
+# Valve covers, in the rail's frame: x along the bank from its middle toward the back on
+# the right bank (toward the front on the left: the heads, and so the covers, are one part
+# turned round), c across from the rail's outer edge, lift up off it. The Windsor's outline,
+# from the reference: long straight sides, each end a slant from a big round corner on the
+# outer side to a small one on the inner side, which is the shorter. Each outline is
+# (outer side's c, inner side's c, the tip's x, the big corner's radius, the small corner's
+# middle x, its radius); the flange's, then the body's sections up from the flange (lift,
+# outline): the outer side leans in all the way up, the ends come in, and over the top it
+# rounds off.
+COVER_FLANGE = (-0.05, 5.3, 10.1, 1.75, 8.4, 0.7)
+COVER_FLANGE_T = 0.1
+COVER_SECTIONS = [(0.0, (0.4, 4.9, 9.65, 1.6, 8.0, 0.6)), (1.5, (1.2, 5.15, 9.05, 1.45, 7.2, 0.55)),
+                  (2.3, (1.65, 5.2, 8.7, 1.3, 6.95, 0.5)), (2.65, (2.05, 4.95, 8.35, 1.1, 6.75, 0.4))]
+# Six bolts: three down the outer side, one in the middle of the inner side, one in each
+# inner corner (x, c); the body is notched round those on its sides (radius).
+COVER_BOLTS = [(-6.57, 0.5), (0.0, 0.5), (6.57, 0.5), (0.0, 4.72), (-8.95, 4.3), (8.95, 4.3)]
+COVER_NOTCH = 0.42
+FILLER = (6.0, 3.1)         # the oil filler cap at the left cover's front (x, c), the breather at
+BREATHER = (6.0, 3.1)       # the right one's back
+# The finned covers: the flange's thickness, the fins along the top (how many across, wide,
+# tall) and the plain panel's half length in the middle, where the reference's carries a name.
 FIN_FLANGE_T = 0.25
-FIN_BODY = (1.75, 0.55, 6, 38)
-FINS = 7
+FINS = 6
 FIN_W = 0.2
 FIN_H = 0.22
-FIN_RUNS = [(-8.2, -2.6), (2.6, 8.2)]
 FIN_PANEL = 2.3
 
 # Intake, in each head's frame where it sits on it: the flange on each intake face (up the
@@ -188,15 +206,38 @@ ALUMINUM_RUNNER_CORNER = 0.6    # the aluminum intake's rounder runners
 # The runners of the dual plane: (cylinder front to back, bank, top over the ports, across,
 # deep, how far out from the middle each turns along into the plenum (None: straight in
 # from its side), where it ends: along from the pad's middle, or out from the middle for
-# the straight ones). The end cylinders' turn into the plenum's ends, one plane high and
-# the other low; the middle two of each bank, which are under the pad, come in from the side.
+# the straight ones). As on make_sbc.py's, every runner turns into an end of the plenum, the
+# front two of each bank into its front and the back two into its back: the end cylinders'
+# high, over the middle ones' low. The plenum is shorter than the pad, which stands over it
+# on its studs' bosses, so the middle cylinders' runners, whose ports are under the pad,
+# still turn into its ends.
 INTAKE_RUNNERS = [
-    (0, 1, 2.5, 1.45, 1.45, 0.85, -1.85), (3, 1, 2.0, 1.4, 1.4, 1.7, 1.85),
-    (0, -1, 2.0, 1.4, 1.4, 1.7, -1.85), (3, -1, 2.5, 1.45, 1.45, 0.85, 1.85),
-    (1, 1, 1.7, 1.3, 1.35, None, 1.75), (2, 1, 2.2, 1.3, 1.35, None, 1.75),
-    (1, -1, 2.2, 1.3, 1.35, None, 1.75), (2, -1, 1.7, 1.3, 1.35, None, 1.75),
+    (0, 1, 2.7, 1.45, 1.45, 0.85, -1.45), (1, 1, 1.2, 1.3, 1.3, 1.6, -0.6),
+    (0, -1, 2.7, 1.45, 1.45, 0.85, -1.45), (1, -1, 1.2, 1.3, 1.3, 1.6, -0.6),
+    (2, 1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, 1, 2.7, 1.45, 1.45, 0.85, 1.45),
+    (2, -1, 1.2, 1.3, 1.3, 1.6, 0.6), (3, -1, 2.7, 1.45, 1.45, 0.85, 1.45),
 ]
+PLENUM_HALF = 1.45      # the plenum's half length under the pad
 WATER_CROSSOVER = (-9.8, 0.9, 1.3)      # x, its axis over the ports, diameter
+HEAT_CROSSOVER = (8.0, 0.75, 1.0)       # the exhaust heat crossover at the back, likewise
+# The choke's stove well on the right of the plenum: x from the pad's middle, in from the
+# flange's face, its top under the pad.
+CHOKE_WELL = ((-1.0, 0.1), (1.15, 0.15), 0.75)
+FLOOR_INSET = 0.2       # the floor's ends, in from each head's ends
+# The carb pad, as make_sbc.py's: the studs' bosses at its corners (x from the pad's middle,
+# |y|) round which its outline runs, standing up from the floor; the openings into the
+# plenum, the left plane's two barrels round, the right plane's one long slot, all inside
+# the plenum's walls (the high runners end in them, the low ones under its floor).
+PAD_BOSSES = [(2.75, 2.58), (-2.85, 2.58)]
+PAD_BOSS_R = 0.55
+PAD_HOLES = [(-0.72, -0.95), (0.72, -0.95)]
+PAD_HOLE_R = 0.62
+PAD_SLOT = ((-0.72, 0.95), (0.72, 0.95), 0.62)
+# On each head's intake face, showing with the intake off: a port where each runner meets it
+# (half long, half high, corner), the water passage's hole at the front (x along the bank,
+# up the face, radius), the bolts' holes.
+INTAKE_PORT = (0.62, 0.85, 0.3)
+INTAKE_WATER = (-8.6, 1.9, 0.45)
 PAD_X = -0.6            # the carb pad's middle
 PAD_RISE = 2.75         # its underside over the ports
 PAD = (2.65, 2.6, 0.4)  # half long, half wide, thick
@@ -606,104 +647,133 @@ def cover_plane(d, s, lift, name):
 
 def cover_point(s, x, c, lift):
     o, across, up = rail_frame(s)
-    return p3(bank_x(s, x), o + c * across + lift * up)
+    return p3(bank_x(s, s * x), o + c * across + lift * up)
+
+
+def arc(c, r, a0, a1, n):
+    """n points round center c (c, x) from a0 to a1 degrees, both ends included."""
+    return [(c[0] + r * math.cos(math.radians(a0 + (a1 - a0) * k / (n - 1))),
+             c[1] + r * math.sin(math.radians(a0 + (a1 - a0) * k / (n - 1)))) for k in range(n)]
+
+
+def tangent(c1, r1, c2, r2):
+    """The outer tangent between two circles on the +x side: its touching angles (degrees)."""
+    c1, c2 = np.array(c1, float), np.array(c2, float)
+    d = np.linalg.norm(c2 - c1)
+    e = (c2 - c1) / d
+    perp = np.array([-e[1], e[0]])
+    if perp[1] < 0:
+        perp = -perp
+    k = (r1 - r2) / d
+    nrm = e * k + perp * math.sqrt(1 - k * k)
+    return math.degrees(math.atan2(nrm[1], nrm[0]))
+
+
+def side(c, x0, x1, notches, inward, n=4):
+    """A straight side at c from x0 to x1, notched round each of notches (x) toward inward
+    (+1: to larger c); a fixed number of points for each notch, so sections loft."""
+    pts = [(c, x0)]
+    sign = 1.0 if x1 > x0 else -1.0
+    for xn in sorted(notches, key=lambda v: sign * v):
+        r = COVER_NOTCH
+        pts.append((c, xn - sign * r))
+        for k in range(1, n):
+            t = math.pi * k / n
+            pts.append((c + inward * r * math.sin(t), xn - sign * r * math.cos(t)))
+        pts.append((c, xn + sign * r))
+    return pts
+
+
+def cover_outline(sec, notched=True):
+    """The outline (x, c) of a cover section, counterclockwise in (c, x)."""
+    co, ci, tip, R, kx, r = sec
+    big, small = (co + R, tip - R), (ci - r, kx)
+    t = tangent(big, R, small, r)
+    outer = [x for x, c in COVER_BOLTS if c < 2.5] if notched else []
+    inner = [x for x, c in COVER_BOLTS if c > 2.5 and abs(x) < 5] if notched else []
+    pts = side(co, -(tip - R), tip - R, outer, 1)[:-1]
+    pts += arc(big, R, 180, t, 10)
+    pts += arc(small, r, t, 0, 6)
+    pts += side(ci, kx, -kx, inner, -1)[1:-1]
+    pts += arc((small[0], -small[1]), r, 0, -t, 6)
+    pts += arc((big[0], -big[1]), R, -t, -180, 10)[:-1]      # its end is the first point
+    return [(x, c) for c, x in pts]
+
+
+def cover_sketch(d, s, lift, name, outline):
+    o, across, up = rail_frame(s)
+    origin = p3(bank_x(s, 0.0), o + lift * up)
+    sk, to2d = d.plane(origin, (1, 0, 0), v3(up), name)
+    d.poly(ccw([to2d(origin + np.array([s * x, 0, 0]) + c * v3(across)) for x, c in outline]))
+    d.finish()
+    return sk
+
+
+def cover(d, s, flange_t):
+    """A cover's flange, its body lofted up through COVER_SECTIONS, its bolts."""
+    sk = cover_sketch(d, s, 0.0, f"Cover flange {s}", cover_outline(COVER_FLANGE, notched=False))
+    d.extrude(sk, f"valve_cover_{s}", flange_t)
+    sks = [cover_sketch(d, s, flange_t + lift, f"Cover {s} section {k}", cover_outline(sec))
+           for k, (lift, sec) in enumerate(COVER_SECTIONS)]
+    d.loft(f"valve_cover_body_{s}", sks)
+    for i, (x, c) in enumerate(COVER_BOLTS):
+        sk, at = cover_plane(d, s, flange_t, f"Cover bolt {s} {i}")
+        d.hexagon(at(s * x, c), 0.44)
+        d.finish()
+        d.extrude(sk, f"valve_bolt_{s}_{i}", 0.25)
+    return flange_t + COVER_SECTIONS[-1][0]
+
+
+def cap_and_breather(d, s, top):
+    """The oil filler cap on the left cover, the breather on the right."""
+    x, c = FILLER if s == -1 else BREATHER
+    p = cover_point(s, x, c, top - 0.05)
+    up = v3(rail_frame(s)[2])
+    if s == -1:
+        d.cylinder("valve_cover_filler_neck", p, up, 1.5, 0.35)
+        d.cylinder("oil_filler_cap", p + 0.35 * up, up, 2.3, 0.5)
+    else:
+        d.cylinder("valve_cover_breather_neck", p, up, 1.3, 0.3)
+        d.cylinder("valve_cover_breather", p + 0.3 * up, up, 2.0, 0.7)
 
 
 def valve_covers(d):
+    """Stamped steel covers on the Windsor's outline."""
     for s in (1, -1):
-        c0, half, c1, t = COVER_FLANGE
-        sk, at = cover_plane(d, s, 0.0, f"Cover flange {s}")
-        d.rounded(at(-half, c0), at(half, c1), 0.75)
-        d.finish()
-        d.extrude(sk, f"valve_cover_{s}", t)
-
-        # The body, a little drafted, and its top rounded over by a steep second draft.
-        c0, half, c1 = COVER_BODY
-        sk, at = cover_plane(d, s, t, f"Cover body {s}")
-        d.rounded(at(-half, c0), at(half, c1), 1.0)
-        d.finish()
-        side = COVER_H - t - 0.5
-        d.extrude(sk, f"valve_cover_body_{s}", side, taper="-3 deg")
-        shrink = side * math.tan(math.radians(3))
-        sk, at = cover_plane(d, s, t + side, f"Cover top {s}")
-        d.rounded(at(-half + shrink, c0 + shrink), at(half - shrink, c1 - shrink), 1.0 - shrink)
-        d.finish()
-        d.extrude(sk, f"valve_cover_top_{s}", 0.5, taper="-40 deg")
-
-        # Six bolts on tabs along the flange's edges.
-        for i, (x, c) in enumerate(COVER_BOLTS):
-            sk, at = cover_plane(d, s, t, f"Cover bolt {s} {i}")
-            d.hexagon(at(x, c), 0.44)
-            d.finish()
-            d.extrude(sk, f"valve_bolt_{s}_{i}", 0.25)
-
-        # The filler cap on the left, the breather on the right.
-        (x, c) = FILLER if s == -1 else BREATHER
-        top = cover_point(s, x, c, COVER_H - 0.05)
-        up = v3(rail_frame(s)[2])
-        if s == -1:
-            d.cylinder("valve_cover_filler_neck", top, up, 1.5, 0.35)
-            d.cylinder("oil_filler_cap", top + 0.35 * up, up, 2.3, 0.5)
-        else:
-            d.cylinder("valve_cover_breather_neck", top, up, 1.3, 0.3)
-            d.cylinder("valve_cover_breather", top + 0.3 * up, up, 2.0, 0.7)
+        cap_and_breather(d, s, cover(d, s, COVER_FLANGE_T))
 
 
 def finned_covers(d):
-    """Cast aluminum covers on the stock ones' footprint, after the reference's: a thick
-    flange, the sides leaning in, the top rounded over, fins along it in a run at each end
-    and a plain panel between where the reference's carries a name; the bolts, the filler
-    cap on the left and the breather on the right."""
+    """Cast aluminum covers on the same outline, after the reference's: a thick flange,
+    fins along the top in a run at each end and a plain panel between where the
+    reference's carries a name; the bolts, the filler cap on the left and the breather on
+    the right."""
+    from shapely.geometry import LineString, Polygon
     for s in (1, -1):
-        c0, half, c1, t = COVER_FLANGE
-        t = FIN_FLANGE_T
-        sk, at = cover_plane(d, s, 0.0, f"Finned cover flange {s}")
-        d.rounded(at(-half, c0), at(half, c1), 0.75)
-        d.finish()
-        d.extrude(sk, f"valve_cover_{s}", t)
-        c0, half, c1 = COVER_BODY
-        side, top, lean, roll = FIN_BODY
-        sk, at = cover_plane(d, s, t, f"Finned cover body {s}")
-        d.rounded(at(-half, c0), at(half, c1), 1.1)
-        d.finish()
-        d.extrude(sk, f"valve_cover_body_{s}", side, taper=f"-{lean} deg")
-        shrink = side * math.tan(math.radians(lean))
-        sk, at = cover_plane(d, s, t + side, f"Finned cover top {s}")
-        d.rounded(at(-half + shrink, c0 + shrink), at(half - shrink, c1 - shrink), 1.1 - shrink)
-        d.finish()
-        d.extrude(sk, f"valve_cover_top_{s}", top, taper=f"-{roll} deg")
-        # The fins and the panel on the top's flat.
-        lift = t + side + top - 0.02
-        inset = shrink + top * math.tan(math.radians(roll))
-        a0, a1 = c0 + inset + 0.15, c1 - inset - 0.15
-        sk, at = cover_plane(d, s, lift, f"Fins {s}")
-        n = FINS
-        for k in range(n):
-            c = a0 + (a1 - a0) * k / (n - 1)
-            for x0, x1 in FIN_RUNS:
-                p, q = at(x0, c - FIN_W / 2), at(x1, c + FIN_W / 2)
-                d.rounded((min(p[0], q[0]), min(p[1], q[1])), (max(p[0], q[0]), max(p[1], q[1])), FIN_W / 2 - 0.01)
+        top = cover(d, s, FIN_FLANGE_T)
+        flat = Polygon([(c, x) for x, c in cover_outline(COVER_SECTIONS[-1][1], notched=False)]).buffer(-0.2)
+        c0, x0, c1, x1 = flat.bounds
+        sk, at = cover_plane(d, s, top - 0.02, f"Fins {s}")
+        for k in range(FINS):
+            c = c0 + 0.1 + (c1 - c0 - 0.2) * k / (FINS - 1)
+            run = flat.intersection(LineString([(c, x0 - 1), (c, x1 + 1)]))
+            if run.is_empty:
+                continue
+            ya, yb = sorted(pt[1] for pt in run.coords)
+            for a, b in ((ya, -FIN_PANEL), (FIN_PANEL, yb)):
+                if b - a < 0.5:
+                    continue
+                p, q = at(s * a, c - FIN_W / 2), at(s * b, c + FIN_W / 2)
+                d.rounded((min(p[0], q[0]), min(p[1], q[1])), (max(p[0], q[0]), max(p[1], q[1])),
+                          FIN_W / 2 - 0.01)
         d.finish()
         d.extrude(sk, f"valve_cover_fins_{s}", FIN_H)
-        sk, at = cover_plane(d, s, lift, f"Panel {s}")
-        p, q = at(-FIN_PANEL, a0 - 0.05), at(FIN_PANEL, a1 + 0.05)
+        sk, at = cover_plane(d, s, top - 0.02, f"Panel {s}")
+        p, q = at(-FIN_PANEL + 0.2, c0 + 0.05), at(FIN_PANEL - 0.2, c1 - 0.05)
         d.rounded((min(p[0], q[0]), min(p[1], q[1])), (max(p[0], q[0]), max(p[1], q[1])), 0.35)
         d.finish()
         d.extrude(sk, f"valve_cover_panel_{s}", FIN_H * 0.6)
-        for i, (x, c) in enumerate(COVER_BOLTS):
-            sk, at = cover_plane(d, s, t, f"Finned cover bolt {s} {i}")
-            d.hexagon(at(x, c), 0.44)
-            d.finish()
-            d.extrude(sk, f"valve_bolt_{s}_{i}", 0.25)
-        (x, c) = FILLER if s == -1 else BREATHER
-        top_p = cover_point(s, x, c, lift + FIN_H - 0.05)
-        up = v3(rail_frame(s)[2])
-        if s == -1:
-            d.cylinder("valve_cover_filler_neck", top_p, up, 1.7, 0.3)
-            d.cylinder("oil_filler_cap", top_p + 0.3 * up, up, 2.3, 0.5)
-        else:
-            d.cylinder("valve_cover_breather_neck", top_p, up, 1.5, 0.25)
-            d.cylinder("valve_cover_breather", top_p + 0.25 * up, up, 2.0, 0.7)
+        cap_and_breather(d, s, top + FIN_H)
 
 
 # The intake.
@@ -821,6 +891,31 @@ def intake_runners():
     return out
 
 
+def flange_face_y():
+    """|y| of the flanges' inner faces at the floor."""
+    return on_head(1, INTAKE_FACE_A + INTAKE_FLANGE[2], INTAKE_FLANGE[0])[0]
+
+
+def pad_bosses():
+    return [(PAD_X + x, sy * y) for x, y in PAD_BOSSES for sy in (1, -1)]
+
+
+def floor_outline():
+    """The intake's floor from above (x, y), counterclockwise: each half as long as its
+    head, the halves stepping across the middle, rounded off, a lobe round the
+    distributor's boss."""
+    from shapely.geometry import Point, Polygon, box
+    fy = flange_face_y()
+    halves = []
+    for s in (1, -1):
+        x0, x1 = bank_x(s, -HEAD_HALF) + FLOOR_INSET, bank_x(s, HEAD_HALF) - FLOOR_INSET
+        y0, y1 = sorted((0.0, s * fy))
+        halves.append(box(x0, y0 - 0.4 * (s == 1), x1, y1 + 0.4 * (s == -1)))
+    shape = halves[0].union(halves[1]).union(Point(DIST).buffer(1.5, 16))
+    shape = shape.buffer(0.35, 4).buffer(-0.7, 4).buffer(0.35, 4).simplify(0.01)
+    return ccw([tuple(map(float, q)) for q in list(shape.exterior.coords)[:-1]])
+
+
 def intake(d, stock=True):
     """The dual-plane four-barrel intake: the stock cast-iron one with the thermostat housing
     on it, or (stock False) the aluminum one, its runners rounder, the housing left on the
@@ -830,11 +925,11 @@ def intake(d, stock=True):
     nm = "intake_manifold"
     if not stock:
         RUNNER_CORNER = ALUMINUM_RUNNER_CORNER
-    # The floor over the valley between the flanges' inner faces.
-    fy = on_head(1, INTAKE_FACE_A + INTAKE_FLANGE[2], INTAKE_FLANGE[0])[0]
-    x0, x1 = INTAKE_ENDS
+    # The floor over the valley between the flanges' inner faces, its ends stepping in by
+    # each head (the right one starts and ends ahead of the left), a lobe round the
+    # distributor's boss at the front.
     sk = d.sketch("XY", "Intake floor", offset=z0)
-    d.rounded((x0, -fy), (x1, fy), 0.4)
+    d.poly(floor_outline())
     d.finish()
     d.extrude(sk, nm, z1 - z0)
 
@@ -863,34 +958,58 @@ def intake(d, stock=True):
     # The water crossover across the front, between the heads' front water ports.
     crossover(d, f"{nm}_crossover", WATER_CROSSOVER[0], zp + WATER_CROSSOVER[1], WATER_CROSSOVER[2])
 
-    # The plenum, solid up to its dark floor, its walls round the pad's openings up to the
-    # pad, the pad's studs' bosses at its corners.
+    # The exhaust heat crossover at the back, the choke's stove well on the right.
+    crossover(d, f"{nm}_heat_crossover", HEAT_CROSSOVER[0], zp + HEAT_CROSSOVER[1], HEAT_CROSSOVER[2])
+    fy = flange_face_y()
+    (cx0, ci0), (cx1, ci1), drop = CHOKE_WELL
+    sk = d.sketch("XY", "Choke well", offset=z1 - 0.1)
+    d.rounded((PAD_X + cx0, fy - 1.2 + ci0), (PAD_X + cx1, fy - ci1), 0.3)
+    d.finish()
+    d.extrude(sk, f"{nm}_choke_well", pad_z - drop - z1 + 0.1, taper="-4 deg")
+
+    # The plenum, as make_sbc.py's: solid up to its dark floor, then its walls round the
+    # pad's openings up to the pad, which runs round its studs' bosses.
     px, py, pt = PAD
     floor = pad_z - PLENUM_FLOOR
+    hx = PLENUM_HALF
     sk = d.sketch("XY", "Plenum", offset=z1 - 0.1)
-    d.rounded((PAD_X - px - 0.1, -py - 0.1), (PAD_X + px + 0.1, py + 0.1), 0.8)
+    d.rounded((PAD_X - hx - 0.1, -py - 0.1), (PAD_X + hx + 0.1, py + 0.1), 0.8)
     d.finish()
     d.extrude(sk, f"{nm}_plenum", floor - z1 + 0.1)
 
-    def openings():
-        for x in (-0.91, 0.91):
-            for y in (-0.95, 0.95):
-                d.circle((PAD_X + x, y), 0.78)
+    def openings(first):
+        # The slot's lines and arcs are numbered on from the outline's, so it goes before
+        # the circles, which take arc numbers of their own.
+        (sx0, sy0), (sx1, sy1), sr = PAD_SLOT
+        d.c += outline_commands(*hull_outline([((PAD_X + sx0, sy0), sr), ((PAD_X + sx1, sy1), sr)]),
+                                first=first)
+        for x, y in PAD_HOLES:
+            d.circle((PAD_X + x, y), PAD_HOLE_R)
 
+    corners = [((PAD_X + sx * (hx + 0.1 - 0.8), sy * (py + 0.1 - 0.8)), 0.8)
+               for sx, sy in ((1, -1), (1, 1), (-1, 1), (-1, -1))]
     sk = d.sketch("XY", "Plenum walls", offset=floor)
-    d.rounded((PAD_X - px - 0.1, -py - 0.1), (PAD_X + px + 0.1, py + 0.1), 0.8)
-    openings()
+    d.c += outline_commands(*hull_outline(corners))
+    openings(5)
     d.finish()
     d.extrude(sk, f"{nm}_plenum_walls", pad_z - floor)
     sk = d.sketch("XY", "Plenum floor", offset=floor)
-    openings()
+    openings(1)
     d.finish()
     d.extrude(sk, f"{nm}_plenum_floor", 0.02)
+    bosses = pad_bosses()
     sk = d.sketch("XY", "Carb pad", offset=pad_z)
-    d.rounded((PAD_X - px, -py), (PAD_X + px, py), 0.5)
-    openings()
+    mid = np.mean(bosses, axis=0)
+    ring = sorted(bosses, key=lambda q: math.atan2(q[1] - mid[1], q[0] - mid[0]))
+    d.c += outline_commands(*hull_outline([(q, PAD_BOSS_R) for q in ring]))
+    openings(5)
     d.finish()
     d.extrude(sk, f"{nm}_pad", pt)
+    sk = d.sketch("XY", "Pad bosses", offset=z1 - 0.1)
+    for q in bosses:
+        d.circle(q, 0.45)
+    d.finish()
+    d.extrude(sk, f"{nm}_pad_bosses", pad_z + pt + 0.12 - (z1 - 0.1))
 
     # The distributor's boss at the front, and the thermostat's seat on the crossover at
     # the front right, the housing bolted down on it, its neck forward and up.
@@ -1281,7 +1400,7 @@ def bottom(d):
 ROUND = "r0.35"
 REDUCE_FACTORS = [
     ("engine_block_deck", 0), ("engine_block_filter", ROUND), ("engine_block_", 1), ("engine_block", 0),
-    ("cylinder_head", 0), ("spark_plug", ROUND), ("head_bolts", 0), ("exhaust_port_bolts", 0),
+    ("cylinder_head", 0), ("valve_cover_body", 0), ("valve_cover_fins", 0), ("spark_plug", ROUND), ("head_bolts", 0), ("exhaust_port_bolts", 0),
     ("valve_cover_breather", ROUND), ("valve_cover_filler", ROUND), ("oil_filler", ROUND),
     ("air_cleaner_element", 0), ("alternator_fan_vanes", 0), ("air_cleaner", ROUND),
     ("crank_pulley", ROUND), ("upper_pulley", ROUND), ("alternator", ROUND), ("harmonic_balancer", ROUND),
@@ -1294,9 +1413,9 @@ REDUCE_FACTORS = [
     ("exhaust_collector", ROUND), ("exhaust_runner", "r0.08"), ("exhaust_manifold_outlet_flange", 0),
     ("exhaust_manifold_bore", ROUND), ("exhaust_manifold", "r0.2"),
     ("intake_manifold_runner", "r0.12"),
-    ("intake_manifold_crossover", "r0.2"),
+    ("intake_manifold_crossover", "r0.2"), ("intake_manifold_heat", "r0.2"), ("intake_manifold_choke", 0),
     ("intake_manifold_bolt_bosses", ROUND),
-    ("intake_manifold_pad", 0), ("intake_manifold_plenum", 0), ("intake_manifold_thermostat_seat", 0),
+    ("intake_manifold_pad_bosses", ROUND), ("intake_manifold_pad", 0), ("intake_manifold_plenum", 0), ("intake_manifold_thermostat_seat", 0),
     ("intake_manifold_distributor", ROUND),
     ("fan_blades", 2), ("belt", 3), ("oil_pan_body", 0), ("oil_pan_drain", ROUND),
 ]
@@ -1354,6 +1473,20 @@ def internals_meshes(bore, stroke, rod):
                 h = (top[1:] - deck_edge(s)) @ bank(s)[0]
                 rods.append(em.cylinder(top, u, PUSHROD_R, 0.6 - h, 6))
         out[f"cylinder_head_{s}_pushrods"] = em.merge(rods)
+
+        # The head's intake face: a port where each runner meets it, the water passage's
+        # hole at the front, the intake bolts' holes.
+        inn = v3(bank(s)[2])
+        ports = []
+        hl, hh, cr = INTAKE_PORT
+        for x in BORE_X:
+            ports.append(em.rounded_rect(p3(bank_x(s, x), on_head(s, INTAKE_FACE_A + 0.004, INTAKE_PORT_H)),
+                                         inn, (1, 0, 0), hl, hh, cr))
+        wx, wh, wr = INTAKE_WATER
+        ports.append(em.disc(p3(bank_x(s, wx), on_head(s, INTAKE_FACE_A + 0.004, wh)), inn, wr, 12))
+        for x in INTAKE_BOLT_X:
+            ports.append(em.disc(p3(bank_x(s, x), on_head(s, INTAKE_FACE_A + 0.004, INTAKE_BOLT_T)), inn, 0.2, 8))
+        out[f"cylinder_head_{s}_ports"] = em.merge(ports)
     out.update({"cylinder_bores": em.merge(walls), "engine_block_deck_holes": em.merge(floors),
                 "engine_block_lifters": em.merge(lifters)})
     return out
