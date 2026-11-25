@@ -53,6 +53,12 @@ extends RefCounted
 ## mesh in the model that is the bumper with its brackets, and `mass` what it weighs in
 ## kg, which comes off the chassis mass when it is stripped. A car without the block has
 ## no bumpers to strip.
+##
+## `plates` places license plates on a model that has none of its own (a model's own are
+## the faces on its material named `plate`): `front` and `rear`, each a `position`, the
+## middle of the plate's face in the body's space as for a cove, the `normal` it faces out
+## along (straight ahead or behind if left out), and `bumper` true when it is on the
+## bumper and goes with it when that bumper is stripped.
 
 const _PartsRegister := preload("res://scripts/parts_register.gd")
 ## Most points a cove outline may have (car_paint_mask.gdshader's cove_outline).
@@ -133,6 +139,7 @@ static func parse_text(text: String, source: String = "") -> Dictionary:
 	_parse_parts(root, result)
 	_parse_chassis(root, result)
 	_parse_bumpers(root, result)
+	_parse_plates(root, result)
 	_parse_driver(root, result)
 	_parse_cameras(root, result)
 	return result
@@ -326,6 +333,29 @@ static func _parse_bumpers(root: Dictionary, result: Dictionary) -> void:
 		}
 
 
+static func _parse_plates(root: Dictionary, result: Dictionary) -> void:
+	var plates: Variant = root.get("plates", {})
+	if typeof(plates) != TYPE_DICTIONARY:
+		result.errors.append("Car plates must be an object.")
+		return
+	for end: String in (plates as Dictionary).keys():
+		var item: Variant = (plates as Dictionary)[end]
+		if end not in BUMPER_ENDS:
+			result.errors.append("Car plate end must be front or rear, not %s." % end)
+			continue
+		if typeof(item) != TYPE_DICTIONARY or not (item as Dictionary).has("position"):
+			result.errors.append("Car %s plate needs a position." % end)
+			continue
+		var block: Dictionary = item
+		var ahead := Vector3(0.0, 0.0, 1.0 if end == "front" else -1.0)
+		var normal := _vec3(block.get("normal", null))
+		result.plates[end] = {
+			"position": _vec3(block["position"]),
+			"normal": normal.normalized() if normal.length() > 0.001 else ahead,
+			"bumper": bool(block.get("bumper", false)),
+		}
+
+
 static func _parse_driver(root: Dictionary, result: Dictionary) -> void:
 	var fallback := Vector3(-0.35, 1.05, 0.2)
 	var driver: Variant = root.get("driver", null)
@@ -418,6 +448,7 @@ static func _empty_result() -> Dictionary:
 		"transmission": {},
 		"chassis": {},
 		"bumpers": {},
+		"plates": {},
 		"driver": {},
 		"cameras": _default_cameras_copy(),
 		"errors": [],

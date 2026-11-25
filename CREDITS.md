@@ -43,4 +43,4 @@ Work by others in Street Rod 3, and the licenses it is used under. Source files 
 | --- | --- |
 | Homemade Apple (`assets/fonts`) | Apache License 2.0, `assets/fonts/HomemadeApple-LICENSE.txt` |
 | Special Elite (`assets/fonts`) | Apache License 2.0, `assets/fonts/SpecialElite-LICENSE.txt` |
-| Routed Gothic by Darren Embry (https://github.com/dse/routed-gothic), drawn into the gas pumps' side plates; the font file is in `reference/buildings/PAD_GasPumps/font/` | SIL Open Font License 1.1, `reference/buildings/PAD_GasPumps/font/LICENSE.md` |
+| Routed Gothic by Darren Embry (https://github.com/dse/routed-gothic), drawn into the gas pumps' side plates and the license plates' lettering (`tools/make_plates_1972.py`); the font file is in `reference/buildings/PAD_GasPumps/font/` | SIL Open Font License 1.1, `reference/buildings/PAD_GasPumps/font/LICENSE.md` |
