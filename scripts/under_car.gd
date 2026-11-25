@@ -33,15 +33,6 @@ const _FH_OUTLET := Vector3(-8.375, 9.042, 0.45)
 const _FH_LOG_X := Vector2(-9.375, 9.8)
 const _FH_LOG_Z := 3.951
 const _FH_BELL_BACK := 15.3
-## The Chevy small-block, from tools/make_sbc.py in inches on the right bank (x before the
-## bank's offset): where each exhaust's outlet takes the head pipe, under the cast-iron
-## manifold's center or at the end of a header's collector. Its exhaust is the manifold
-## slot's, from its model or the headers' own.
-const _SB_OUTLETS := {
-	"log": Vector3(0.0, 10.55, 3.3),
-	"shorty": Vector3(6.6, 11.4, -6.43),
-	"long-tube": Vector3(13.6, 10.4, -11.21),
-}
 ## The Stovebolt, from tools/make_235.py in inches from its block's middle: where each
 ## exhaust outlet's flange takes a head pipe (the stock manifold's one under the
 ## carburetor, the split headers' two), the manifold's run along the head for its hot
@@ -821,23 +812,43 @@ func _is_six(engine: Dictionary = {}) -> bool:
 	return GameState.engine_family(engine) == _EngineAssembly.STOVEBOLT_FAMILY
 
 
-## Whether `engine` (the fitted one when empty) is the Chevy small-block.
+## Whether `engine` (the fitted one when empty) is a small-block drawn from its own model
+## (the Chevy's or the Ford's).
 func _is_sbc(engine: Dictionary = {}) -> bool:
+	return _small_block(engine) != null
+
+
+## The small-block layout of `engine` (the fitted one when empty), or null. Its exhaust is
+## the manifold slot's, from its model or the headers' own.
+func _small_block(engine: Dictionary = {}) -> _EngineAssembly.SmallBlock:
 	if engine.is_empty():
 		if not GameState.has_engine():
-			return false
+			return null
 		engine = GameState.get_equipped_engine()
-	return GameState.engine_family(engine) == _EngineAssembly.SB_FAMILY
+	return _EngineAssembly.small_block_of(engine)
+
+
+## The small-block a manifold part is drawn on: the fitted engine when it is of the part's
+## family, else the first engine listed of it; null for the others'.
+func _part_layout(part: Dictionary) -> _EngineAssembly.SmallBlock:
+	var family := GameState.engine_family(part)
+	var fitted := _small_block()
+	if fitted != null and fitted.family == family:
+		return fitted
+	for engine: Dictionary in GameState.ENGINES:
+		if GameState.engine_family(engine) == family and _EngineAssembly.small_block_of(engine) != null:
+			return _EngineAssembly.small_block_of(engine)
+	return null
 
 
 ## Engine model units to this scene, as the engine is placed: stood up, its block's back
 ## face (a flathead's bell housing) at `_engine_rear`.
-func _engine_xform(flathead: bool = _is_flathead(), sbc: bool = _is_sbc(), six: bool = _is_six()) -> Transform3D:
+func _engine_xform(flathead: bool = _is_flathead(), sb: _EngineAssembly.SmallBlock = _small_block(), six: bool = _is_six()) -> Transform3D:
 	var rear_x := ENGINE_REAR_X
 	if flathead:
 		rear_x = _EngineAssembly.fh(Vector3(_FH_BELL_BACK, 0.0, 0.0)).x
-	elif sbc:
-		rear_x = _EngineAssembly.fh(Vector3(_EngineAssembly.SB_BLOCK_BACK, 0.0, 0.0)).x
+	elif sb != null:
+		rear_x = _EngineAssembly.fh(Vector3(sb.block_back, 0.0, 0.0)).x
 	elif six:
 		rear_x = _EngineAssembly.fh(Vector3(_SIX_BACK, 0.0, 0.0)).x
 	var basis := Basis(Vector3.RIGHT, -PI * 0.5).scaled(Vector3.ONE * ENGINE_SCALE)
@@ -851,7 +862,7 @@ func _fh_point(p: Vector3, side: float) -> Vector3:
 
 ## A point of the six in inches from its block's middle, placed.
 func _six_point(p: Vector3) -> Vector3:
-	return _engine_xform(false, false, true) * _EngineAssembly.six(p)
+	return _engine_xform(false, null, true) * _EngineAssembly.six(p)
 
 
 ## The six's exhaust outlets for its manifold part's style, front to back, placed.
@@ -863,11 +874,20 @@ func _six_outlets() -> Array[Vector3]:
 	return out
 
 
-## A point of the small-block in inches on the right bank, moved to the scene's `side`'s
-## bank and placed.
+## A point of the fitted small-block in inches on the right bank (x before the bank's
+## offset), moved to the scene's `side`'s bank and placed.
 func _sb_point(p: Vector3, side: float) -> Vector3:
-	var x := _EngineAssembly.sb_bank_x(-side, p.x)
-	return _engine_xform(false, true) * _EngineAssembly.fh(Vector3(x, -side * p.y, p.z))
+	var sb := _small_block()
+	return _engine_xform(false, sb) * _EngineAssembly.fh(Vector3(sb.bank_x(-side, p.x), -side * p.y, p.z))
+
+
+## Where the fitted small-block's exhaust outlet of manifold style `style` is on the scene's
+## `side`, placed: each bank's own, as its layout has them.
+func _sb_outlet(style: String, side: float) -> Vector3:
+	var sb := _small_block()
+	var both: Array = sb.outlets.get(style, sb.outlets["log"])
+	var p: Vector3 = both[0] if -side > 0.0 else both[1]
+	return _engine_xform(false, sb) * _EngineAssembly.fh(p)
 
 
 ## Gearbox (seen from below, it is changed on the lift), driveshaft, and axle housing.
@@ -1033,7 +1053,7 @@ func _pipe_start(side: float) -> Vector3:
 		return _fh_point(_FH_OUTLET, side)
 	if _is_sbc():
 		var style := str(GameState.slot_part(GameState.SLOT_MANIFOLD).get("style", "log"))
-		return _sb_point(_SB_OUTLETS.get(style, _SB_OUTLETS["log"]), side)
+		return _sb_outlet(style, side)
 	return Vector3(_engine_rear + 0.28, PIPE_Y, PIPE_Z * side)
 
 
@@ -1052,8 +1072,9 @@ func _build_zones() -> void:
 			_zone(GameState.SLOT_MANIFOLD, Vector3(back.x - front.x + 0.06, 0.2, 0.14), (front + back) * 0.5 + Vector3(0.0, -0.03, 0.0))
 		elif _is_sbc():
 			# Along the exhaust face, down to the manifold's outlet.
-			var front := _sb_point(Vector3(-9.0, 10.5, 6.0), side)
-			var back := _sb_point(Vector3(9.0, 10.5, 6.0), side)
+			var run := _small_block().exhaust_run
+			var front := _sb_point(Vector3(-run.x, run.y, run.z), side)
+			var back := _sb_point(run, side)
 			_zone(GameState.SLOT_MANIFOLD, Vector3(back.x - front.x, 0.24, 0.16), (front + back) * 0.5)
 		else:
 			_zone(GameState.SLOT_MANIFOLD, Vector3(0.82, 0.3, 0.16), Vector3(_engine_rear - 0.18, CRANK_Y - 0.05, 0.3 * side))
@@ -1100,7 +1121,7 @@ func build_preview(part: Dictionary) -> Node3D:
 				return rig
 			var model := _family_model(part)
 			for side: float in [-1.0, 1.0]:
-				_build_manifold(rig, style, side, model)
+				_build_manifold(rig, style, side, model, _part_layout(part))
 		GameState.SLOT_EXHAUST:
 			_build_exhaust(rig, bool(part.get("dual", false)))
 		GameState.SLOT_MUFFLER:
@@ -1154,7 +1175,7 @@ func _rebuild_rig(slot: String) -> Node3D:
 				return rig
 			var model := _family_model(part)
 			for side: float in [-1.0, 1.0]:
-				_build_manifold(rig, style, side, model)
+				_build_manifold(rig, style, side, model, _part_layout(part))
 		GameState.SLOT_EXHAUST:
 			_build_exhaust(rig, bool(part.get("dual", false)))
 		GameState.SLOT_MUFFLER, GameState.SLOT_MUFFLER_LEFT:
@@ -1180,10 +1201,19 @@ func _port(i: int, side: float) -> Vector3:
 ## the others', which are drawn here.
 func _family_model(part: Dictionary) -> String:
 	if GameState.engine_family(part) != _EngineAssembly.FH_FAMILY:
-		if not _is_sbc():
+		var sb := _part_layout(part)
+		if sb == null:
 			return ""
-		var headers := str(_EngineAssembly.SB_HEADERS.get(str(part.get("style", "")), ""))
-		return headers if not headers.is_empty() else str(GameState.get_equipped_engine().get("model", ""))
+		var headers := str(sb.headers.get(str(part.get("style", "")), ""))
+		if not headers.is_empty():
+			return headers
+		var fitted := _small_block()
+		if fitted == sb:
+			return str(GameState.get_equipped_engine().get("model", ""))
+		for engine: Dictionary in GameState.ENGINES:
+			if _EngineAssembly.small_block_of(engine) == sb:
+				return str(engine.get("model", ""))
+		return ""
 	if _is_flathead():
 		return str(GameState.get_equipped_engine().get("model", ""))
 	for engine: Dictionary in GameState.ENGINES:
@@ -1196,9 +1226,9 @@ func _family_model(part: Dictionary) -> String:
 ## tubes into a collector by the bellhousing; long tubes run ceramic-gray clear back. A
 ## flathead's are its model's cast logs on that side, a small-block's its model's iron or
 ## the headers' (`model`).
-func _build_manifold(rig: Node3D, style: String, side: float, model: String = "") -> void:
+func _build_manifold(rig: Node3D, style: String, side: float, model: String = "", sb: _EngineAssembly.SmallBlock = null) -> void:
 	if not model.is_empty():
-		_build_model_manifold(rig, side, model)
+		_build_model_manifold(rig, side, model, sb)
 		return
 	var start := _pipe_start(side)
 	var flange := _mat(_STEEL.darkened(0.2), 0.7, 0.4)
@@ -1257,11 +1287,11 @@ func _build_six_manifold(rig: Node3D, part: Dictionary) -> void:
 		if not str(node.name).begins_with("exhaust"):
 			node.get_parent().remove_child(node)
 			node.free()
-	model.transform = _engine_xform(false, false, true)
+	model.transform = _engine_xform(false, null, true)
 	rig.add_child(model)
 
 
-func _build_model_manifold(rig: Node3D, side: float, path: String) -> void:
+func _build_model_manifold(rig: Node3D, side: float, path: String, sb: _EngineAssembly.SmallBlock) -> void:
 	var packed := load(path) as PackedScene
 	if packed == null:
 		push_warning("Engine model missing: %s" % path)
@@ -1274,7 +1304,7 @@ func _build_model_manifold(rig: Node3D, side: float, path: String) -> void:
 			node.get_parent().remove_child(node)
 			node.free()
 	var flathead := path.get_file().contains("flathead")
-	model.transform = _engine_xform(flathead, not flathead)
+	model.transform = _engine_xform(flathead, sb)
 	rig.add_child(model)
 
 
