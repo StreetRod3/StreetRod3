@@ -18,6 +18,14 @@ occlusion, emissive and normal textures are all remade in the new layout. A
 normal map is where most of a low-poly model's shape lives (bevels, creases,
 panel lines), so it is turned into car-space normals through the old layout's
 tangents and back through the new one's, a texel at a time like the colors.
+A model whose surfaces are flat colors with no normal map has nothing for big
+texels to show, so for those (or with --detail on) the shape is drawn into
+the texture the way a PSX artist painted it: the light that reaches each texel
+(ambient occlusion, found by marching rays through a voxel copy of the car)
+darkens grooves, seams, wheel wells and the underside, and a one-texel line
+darkens panel edges, sharp creases and open borders. Both go into the paint's
+shade, so the car can still be repainted.
+
 Glass, the dash and gauges,
 the license plate and anything else named in --skip are left as they are.
 
@@ -745,6 +753,178 @@ def nearest(palette, colors):
     return palette[idx]
 
 
+# --- detail drawn from the shape -------------------------------------------------------
+
+
+def solid_triangles(glb, placements):
+    """Every opaque triangle in the scene, in car space, as (n, 3, 3)."""
+    g = glb.json
+    tris = []
+    for mesh_index, places in placements.items():
+        for prim in g["meshes"][mesh_index]["primitives"]:
+            if prim.get("mode", 4) != 4:
+                continue
+            mat = g["materials"][prim["material"]] if "material" in prim else {}
+            if mat.get("alphaMode") == "BLEND":
+                continue
+            local = glb.floats(prim["attributes"]["POSITION"])
+            faces = (
+                glb.accessor(prim["indices"]).reshape(-1, 3).astype(np.int64)
+                if "indices" in prim
+                else np.arange(len(local)).reshape(-1, 3)
+            )
+            for _, world in places:
+                tris.append((local @ world[:3, :3].T + world[:3, 3])[faces])
+    return np.concatenate(tris)
+
+
+class Voxels:
+    """Which cubes of a grid the car's surfaces pass through."""
+
+    def __init__(self, tris, size):
+        self.size = size
+        self.origin = tris.reshape(-1, 3).min(axis=0) - 2 * size
+        top = tris.reshape(-1, 3).max(axis=0) + 2 * size
+        self.shape = tuple(np.ceil((top - self.origin) / size).astype(int) + 1)
+        self.grid = np.zeros(self.shape, dtype=bool)
+        # Points over every triangle no further apart than half a cube.
+        longest = np.max(np.linalg.norm(tris - np.roll(tris, 1, axis=1), axis=2), axis=1)
+        steps = np.maximum(1, np.ceil(longest / (0.5 * size)).astype(int))
+        for n in np.unique(steps):
+            group = tris[steps == n]
+            i, j = np.meshgrid(np.arange(n + 1), np.arange(n + 1))
+            keep = i + j <= n
+            a, b = i[keep] / n, j[keep] / n
+            pts = group[:, None, 0] * (1 - a - b)[None, :, None] + group[:, None, 1] * a[None, :, None] + group[:, None, 2] * b[None, :, None]
+            cells = np.floor((pts.reshape(-1, 3) - self.origin) / size).astype(int)
+            self.grid[cells[:, 0], cells[:, 1], cells[:, 2]] = True
+
+    def blocked(self, pts):
+        cells = np.floor((pts - self.origin) / self.size).astype(int)
+        inside = np.all((cells >= 0) & (cells < self.shape), axis=1)
+        out = np.zeros(len(pts), dtype=bool)
+        c = cells[inside]
+        out[inside] = self.grid[c[:, 0], c[:, 1], c[:, 2]]
+        return out
+
+
+def hemisphere(count):
+    """Cosine-weighted directions about +z (a Fibonacci spiral), as (count, 3)."""
+    k = np.arange(count) + 0.5
+    r = np.sqrt(k / count)
+    phi = k * math.pi * (3 - math.sqrt(5))
+    return np.stack([r * np.cos(phi), r * np.sin(phi), np.sqrt(1 - r * r)], axis=1)
+
+
+def ambient_light(voxels, pos, normal, rays=24, reach=0.6):
+    """How open each point is to the sky around it, 0 to 1: the share of rays that leave
+    without hitting the car within `reach` meters. Rays go to both sides and the more
+    open side counts, since a model's normals may point inward."""
+    dirs = hemisphere(rays)
+    n = _unit(normal)
+    helper = np.where(np.abs(n[:, :1]) < 0.9, [[1.0, 0, 0]], [[0, 1.0, 0]])
+    t = _unit(np.cross(helper, n))
+    b = np.cross(n, t)
+    # Turn each point's rays by its own angle, so the pattern doesn't repeat in bands.
+    spin = (np.arange(len(pos)) * 0.618034 % 1.0)[:, None] * 2 * math.pi
+    c, s_ = np.cos(spin), np.sin(spin)
+    # Each side's rays start a little off the surface along the normal, so a ray at a
+    # grazing angle doesn't hit the cubes of the surface it leaves.
+    lift = 2.0 * voxels.size
+    marks = np.arange(0.5 * voxels.size, reach, 0.75 * voxels.size)
+    best = np.zeros(len(pos))
+    for side in (1.0, -1.0):
+        free = np.zeros(len(pos))
+        for d in dirs:
+            dx = d[0] * c - d[1] * s_
+            dy = d[0] * s_ + d[1] * c
+            ray = (t * dx + b * dy + n * (d[2] * side))
+            hit = np.zeros(len(pos), dtype=bool)
+            for m in marks:
+                todo = ~hit
+                if not todo.any():
+                    break
+                hit[todo] = voxels.blocked(pos[todo] + n[todo] * (lift * side) + ray[todo] * m)
+            free += ~hit
+        best = np.maximum(best, free / len(dirs))
+    return best
+
+
+def feature_edges(parts, crease_degrees):
+    """Face sides that lie on a panel edge: an open border (one face), a sharp crease
+    (faces meeting at more than `crease_degrees`) or where more than two faces meet.
+    A face repeated with its winding reversed (a double-sided model) counts once.
+    Returns (part, face, corner a, corner b) for each such side."""
+    all_pos = np.concatenate([p.pos for p in parts])
+    _, weld = np.unique(np.round(all_pos / 1e-5).astype(np.int64), axis=0, return_inverse=True)
+    weld = weld.ravel()
+    offsets = np.cumsum([0] + [p.n_verts for p in parts])
+    welded = [weld[part.faces + offsets[pi]] for pi, part in enumerate(parts)]
+    _, face_uid = np.unique(np.sort(np.concatenate(welded), axis=1), axis=0, return_inverse=True)
+    face_uid = face_uid.ravel()
+    uid_offsets = np.cumsum([0] + [len(p.faces) for p in parts])
+    rows = []
+    normals = []
+    for pi, part in enumerate(parts):
+        w = welded[pi]
+        c = part.pos[part.faces]
+        normals.append(_unit(np.cross(c[:, 1] - c[:, 0], c[:, 2] - c[:, 0])))
+        f = np.arange(len(part.faces))
+        uid = face_uid[uid_offsets[pi] : uid_offsets[pi + 1]]
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            lo = np.minimum(w[:, a], w[:, b])
+            hi = np.maximum(w[:, a], w[:, b])
+            rows.append(np.column_stack([lo, hi, np.full_like(f, pi), f, np.full_like(f, a), np.full_like(f, b), uid]))
+    rows = np.concatenate(rows)
+    rows = rows[np.lexsort((rows[:, 1], rows[:, 0]))]
+    starts = np.flatnonzero(np.r_[True, np.any(rows[1:, :2] != rows[:-1, :2], axis=1)])
+    counts = np.diff(np.r_[starts, len(rows)])
+    limit = math.cos(math.radians(crease_degrees))
+    out = []
+    for start, count in zip(starts, counts):
+        group = rows[start : start + count]
+        _, first = np.unique(group[:, 6], return_index=True)
+        if len(first) == 2:
+            (p0, f0), (p1, f1) = group[first, 2:4]
+            n0, n1 = normals[p0][f0], normals[p1][f1]
+            # Ignore which way the faces are wound: a fold back on itself isn't a crease,
+            # and a face too small to have a direction doesn't make one.
+            if not n0.any() or not n1.any() or abs(np.dot(n0, n1)) >= limit:
+                continue
+        out.extend(map(tuple, group[:, 2:6]))
+    return out
+
+
+def edge_texels(atlas, edges):
+    """The texels a one-texel line along each edge side covers, just inside its face."""
+    marked = np.zeros(atlas.width * atlas.height, dtype=bool)
+    for pi, f, a, b in edges:
+        corners = atlas.atlas_corners[(pi, f)]
+        p, q, centre = corners[a], corners[b], corners.mean(axis=0)
+        steps = max(2, int(np.ceil(np.linalg.norm(q - p) * 3)) + 1)
+        pts = p + (q - p) * np.linspace(0, 1, steps)[:, None]
+        inward = centre - pts
+        dist = np.linalg.norm(inward, axis=1, keepdims=True)
+        pts = pts + np.divide(inward, dist, out=np.zeros_like(inward), where=dist > 1e-9) * np.minimum(dist, 0.4)
+        x = np.clip(np.floor(pts[:, 0]).astype(int), 0, atlas.width - 1)
+        y = np.clip(np.floor(pts[:, 1]).astype(int), 0, atlas.height - 1)
+        marked[y * atlas.width + x] = True
+    return marked
+
+
+def bake_detail(atlas, rgb, filled, voxels, args):
+    """Darken the baked colors by the light each texel gets and along panel edges."""
+    pos, _ = atlas.average(atlas.interpolate(lambda part, f: part.pos[part.faces[f]]))
+    nrm, _ = atlas.average(atlas.interpolate(lambda part, f: part.normal[part.faces[f]]))
+    shade = np.ones(len(rgb))
+    light = ambient_light(voxels, pos[filled], nrm[filled], rays=args.ao_rays)
+    shade[filled] = 1.0 - args.ao_strength * (1.0 - light)
+    lines = edge_texels(atlas, feature_edges(atlas.parts, args.crease)) & filled
+    shade[lines] *= 1.0 - args.line_strength
+    linear = srgb_to_linear(rgb) * shade[:, None]
+    return linear_to_srgb(linear), int(lines.sum())
+
+
 # --- main -------------------------------------------------------------------------------
 
 
@@ -764,6 +944,17 @@ def main():
     ap.add_argument("--skip", default=",".join(DEFAULT_SKIP), help="name parts to leave alone, comma-separated")
     ap.add_argument("--accent", action=argparse.BooleanOptionalAction, help="keep the accent paint mark")
     ap.add_argument("--atlas-dir", help="also save each new texture as a PNG here")
+    ap.add_argument(
+        "--detail",
+        choices=("auto", "on", "off"),
+        default="auto",
+        help="draw shading and panel lines from the shape (auto: for materials with no normal map)",
+    )
+    ap.add_argument("--ao-strength", type=float, default=0.75, help="how dark fully hidden texels get, 0-1 (default 0.75)")
+    ap.add_argument("--ao-rays", type=int, default=24, help="rays per side for the shading (default 24)")
+    ap.add_argument("--line-strength", type=float, default=0.45, help="how much panel lines darken, 0-1 (default 0.45)")
+    ap.add_argument("--crease", type=float, default=35.0, help="angle in degrees that counts as a crease (default 35)")
+    ap.add_argument("--voxel", type=float, default=0.02, help="voxel size in meters for the shading (default 0.02)")
     args = ap.parse_args()
 
     car = {}
@@ -822,6 +1013,7 @@ def main():
     )
     sampler = len(g["samplers"]) - 1
     float_cache = {}
+    voxels = None
 
     # Bake every material first, then choose one palette for the whole car.
     baked = []
@@ -833,6 +1025,11 @@ def main():
         color_tex = mat["pbrMetallicRoughness"]["baseColorTexture"]["index"]
         src = load_float_image(glb, g["textures"][color_tex]["source"], float_cache)
         rgb, cls, filled = bake_color(atlas, src, cutoff, accent)
+        if args.detail == "on" or (args.detail == "auto" and "normalTexture" not in mat):
+            if voxels is None:
+                voxels = Voxels(solid_triangles(glb, placements), args.voxel)
+            rgb, n_lines = bake_detail(atlas, rgb, filled, voxels, args)
+            print(f"  {mat.get('name')}: shading drawn from the shape, {n_lines} edge texels")
         others = {}
         for slot, info in _texture_slots(mat):
             if slot == "baseColorTexture" or info["index"] in others:
