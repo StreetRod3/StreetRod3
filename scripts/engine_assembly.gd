@@ -262,12 +262,12 @@ const SBF_PORT := Vector3(3.292, 10.575, 45.0)
 const SBF_FLOOR := Vector3(9.07, 9.62, 2.232)
 const SBF_THERMOSTAT := Vector2(-9.8, 2.4)
 const SBF_DIST_BOSS_TOP := 9.92
-## Under the car: each bank's log manifold's outlet (at the back on the right, the front on
-## the left), its run along the face, and the header collectors' ends on the right bank
-## (x before the bank's offset), which do not move with the deck.
-const SBF_LOG_OUTLET := Vector3(6.845, 10.237, 4.61)
-const SBF_LOG_OUTLET_LEFT_X := -8.037
-const SBF_EXHAUST_RUN := Vector3(8.5, 10.24, 7.0)
+## Under the car: each bank's cast-iron manifold's outlet flange (at the back on the right,
+## the front on the left), its run along the face, and the header collectors' ends on the
+## right bank (x before the bank's offset), which do not move with the deck.
+const SBF_LOG_OUTLET := Vector3(7.645, 9.119, 2.385)
+const SBF_LOG_OUTLET_LEFT_X := -8.837
+const SBF_EXHAUST_RUN := Vector3(8.5, 9.12, 5.8)
 const SBF_COLLECTOR_ENDS := {
 	"shorty": Vector3(6.6, 11.2, -6.425),
 	"long-tube": Vector3(13.6, 10.6, -11.211),

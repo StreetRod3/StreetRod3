@@ -247,13 +247,18 @@ DIST_VACUUM = (-0.5, -0.86, 0.0)
 THERMOSTAT = (-9.8, 2.4)    # the reference's is at (-10.29, 2.58), on its later intake
 COIL = (-11.6, -5.0, 9.4)
 
-# The stock exhaust: a flange on each port's pad, a log out past them (out from the pads,
-# down from the ports' middles, diameter), stubs out into it, the outlet down at one end
-# (diameter, length).
+# The stock exhaust, as Ford cast it: a flange on each port's pad, a short runner out of
+# each and down into a body running along well under the ports, so between the runners,
+# under the flanges and over the body, there is an opening each plug sits in. The body
+# (out from the pads, down the face from the ports' middles, its half sizes out and up, the
+# corners' radius), how far it runs past the end ports and, at the outlet's end, past that
+# end port; the runners' bend; the outlet down at that end (diameter, length below the body).
 MANIFOLD_FLANGE_T = 0.45
-MANIFOLD_LOG = (1.5, 0.25, 2.0)
-MANIFOLD_RUNNER_D = 1.6
-MANIFOLD_OUTLET = (2.3, 2.2)
+MANIFOLD_BODY = (1.2, 2.7, 0.75, 0.8, 0.45)
+MANIFOLD_ENDS = (0.4, 2.0)
+MANIFOLD_RUNNER_D = 1.5
+MANIFOLD_BEND = 0.8
+MANIFOLD_OUTLET = (2.0, 1.4)
 # Headers, as make_sbc.py's: the collectors' front ends (x along the bank, |y|, z) and axis.
 COLLECTOR = {"long": ((9.0, 10.6, -6.8), (0.72, 0.0, -0.69)),
              "shorty": ((1.5, 11.2, -2.6), (0.8, 0.0, -0.6))}
@@ -1168,9 +1173,29 @@ def coil(d):
 
 # Exhaust manifolds and headers.
 
+def manifold_body(s):
+    """Bank s's stock manifold's body: its middle (y, z), and the face's way up and out."""
+    _, up, n = exhaust_face(s)
+    out, drop = MANIFOLD_BODY[:2]
+    pad = port_center(s) + PORT_PAD_T * n
+    return pad + out * n - drop * up, up, n
+
+
+def manifold_outlet(s):
+    """Where bank s's stock manifold's outlet is: x, the body's middle (y, z), and the
+    flange's underside z. It is at the back on the right, the front on the left."""
+    xs = port_xs(s)
+    tail = MANIFOLD_ENDS[1] - 0.9
+    ox = max(xs) + tail if s == 1 else min(xs) - tail
+    body, _, _ = manifold_body(s)
+    return ox, body, body[1] - MANIFOLD_BODY[3] - MANIFOLD_OUTLET[1]
+
+
 def iron_manifolds(d):
-    """Cast-iron logs: a short runner out of each port down into a log along the bank below
-    the ports, the outlet down out of it at one end to a round two-bolt flange."""
+    """Cast-iron manifolds as Ford's: a flange on each port's pad, a runner out of each and
+    down into a body along the bank well under the ports, so each plug sits in the opening
+    between two runners; the outlet down at one end to a round two-bolt flange."""
+    out, drop, half_out, half_up, corner = MANIFOLD_BODY
     for s in (1, -1):
         _, up, n = exhaust_face(s)
         pc = port_center(s)
@@ -1185,32 +1210,57 @@ def iron_manifolds(d):
             first += len(pts)
         d.finish()
         d.extrude(sk, f"exhaust_manifold_{s}", MANIFOLD_FLANGE_T, start_offset=inch(PORT_PAD_T))
-        out, drop, dia = MANIFOLD_LOG
-        log_yz = pc + (PORT_PAD_T + out) * n + np.array([0.0, -drop])
-        lo, hi = min(xs) - 0.9, max(xs) + 0.9
-        d.cylinder(f"exhaust_manifold_log_{s}", p3(lo, log_yz), (1, 0, 0), dia, hi - lo)
+
+        # The body, along the bank: its ends drawn in round.
+        body, _, _ = manifold_body(s)
+        end, outlet_end = MANIFOLD_ENDS
+        lo = min(xs) - (outlet_end if s == -1 else end)
+        hi = max(xs) + (outlet_end if s == 1 else end)
+        sk, to2d = d.plane(p3(lo, body), v3(n), (1, 0, 0), f"Manifold body {s}")
+        cx, cy = to2d(p3(lo, body))
+        d.rounded((cx - half_out, cy - half_up), (cx + half_out, cy + half_up), corner)
+        d.finish()
+        d.extrude(sk, f"exhaust_manifold_body_{s}", hi - lo)
+        for k, (x, way) in enumerate(((lo, (-1, 0, 0)), (hi, (1, 0, 0)))):
+            sk, to2d = d.plane(p3(x, body), v3(n), way, f"Manifold body end {s} {k}")
+            cx, cy = to2d(p3(x, body))
+            d.rounded((cx - half_out, cy - half_up), (cx + half_out, cy + half_up), corner)
+            d.finish()
+            d.extrude(sk, f"exhaust_manifold_body_{s} ({10 + 10 * k})", 0.45, taper="-40 deg")
+
+        # Each runner: out of its port, bent over and down into the body.
+        pad = pc + PORT_PAD_T * n
+        r = MANIFOLD_BEND
         for k, x in enumerate(xs):
-            start = p3(x, pc + PORT_PAD_T * n)
-            end = p3(x, log_yz)
-            dirn = unit(end - start)
-            d.cylinder(f"exhaust_manifold_{s} ({10 + 10 * k})", start, dirn, MANIFOLD_RUNNER_D,
-                       float(np.linalg.norm(end - start)))
-        for k, x in enumerate((lo, hi)):
-            d.sphere(f"exhaust_manifold_{s} ({60 + 10 * k})", p3(x, log_yz), dia)
-        # The outlet down at the back on the right, at the front on the left.
-        ox = hi - 0.6 if s == 1 else lo + 0.6
-        top = p3(ox, log_yz)
-        d.cylinder(f"exhaust_manifold_outlet_{s}", top, (0, 0, -1), MANIFOLD_OUTLET[0], MANIFOLD_OUTLET[1])
-        fz = log_yz[1] - MANIFOLD_OUTLET[1]
+            start = p3(x, pad - 0.05 * n)
+            p1 = p3(x, pad + (out - r) * n)
+            centre = p3(x, pad + (out - r) * n - r * up)
+            through = centre + r * (v3(up) + v3(n)) / math.sqrt(2)
+            p2 = p3(x, pad + out * n - r * up)
+            mm = lambda q: [round(float(v) * MM, 4) for v in q]
+            name = f"exhaust_manifold_{s} ({100 + 10 * k})"
+            sk = d.sketch("XY", f"{name} path")
+            d.c.append(cmd("sketch.options", sketch_3d=True))
+            d.c.append(cmd("sketch.line3d", points=[mm(start), mm(p1)]))
+            d.c.append(cmd("sketch.arc3d", start=mm(p1), through=mm(through), end=mm(p2)))
+            d.c.append(cmd("sketch.line3d", points=[mm(p2), mm(p3(x, body))]))
+            d.finish()
+            d.body(name, "solid.pipe", path_sketch=sk, path=["w1", "w2", "w3"],
+                   diameter=inch(MANIFOLD_RUNNER_D))
+
+        # The outlet down out of the body's end, to its flange.
+        ox, body, fz = manifold_outlet(s)
+        d.cylinder(f"exhaust_manifold_outlet_{s}", p3(ox, body), (0, 0, -1), MANIFOLD_OUTLET[0],
+                   body[1] - fz)
         sk = d.sketch("XY", f"Manifold outlet flange {s}", offset=fz)
-        oy = log_yz[0]
-        d.c += outline_commands(*hull_outline([((ox, oy - 0.35), 1.15), ((ox + 1.9, oy), 0.42),
-                                               ((ox, oy + 0.35), 1.15), ((ox - 1.9, oy), 0.42)]))
-        d.circle((ox, oy), MANIFOLD_OUTLET[0] / 2 - 0.25)
+        oy = body[0]
+        d.c += outline_commands(*hull_outline([((ox, oy - 0.35), 1.05), ((ox + 1.75, oy), 0.42),
+                                               ((ox, oy + 0.35), 1.05), ((ox - 1.75, oy), 0.42)]))
+        d.circle((ox, oy), MANIFOLD_OUTLET[0] / 2 - 0.2)
         d.finish()
         d.extrude(sk, f"exhaust_manifold_outlet_flange_{s}", 0.4)
         d.cylinder(f"exhaust_manifold_bore_{s}", (ox, oy, fz + 0.6), (0, 0, 1),
-                   MANIFOLD_OUTLET[0] - 0.55, 0.02)
+                   MANIFOLD_OUTLET[0] - 0.45, 0.02)
 
 
 def headers(d, style):
