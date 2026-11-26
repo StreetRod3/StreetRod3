@@ -85,6 +85,7 @@ A car in more than one game is listed once. The 1963 Corvette is SR1's car 5, Th
 
 ## Street Rod 3
 
+- [x] 1949 Cadillac Series 62 Convertible
 - [x] 1950 Buick Special
 - [x] 1950 Ford Country Squire
 - [x] 1950 Ford Custom
@@ -97,6 +98,7 @@ A car in more than one game is listed once. The 1963 Corvette is SR1's car 5, Th
 - [x] 1955 Packard Caribbean
 - [x] 1955 Packard Clipper
 - [x] 1955 Packard Patrician
+- [x] 1956 Chevy Nomad
 - [x] 1956 Ford F-100 Panel
 - [x] 1957 Ford Fairlane 500 police car
 - [x] 1960 Corvette
