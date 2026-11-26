@@ -154,10 +154,10 @@ HEAD_BOLT_LEDGE = (0.55, 0.4, 2.3, 2.7)
 
 # Valve covers, in the rail's frame: x along the bank from its middle, c across from the
 # rail's outer edge toward the valley, lift up off it. The section (c, lift), the same all
-# along but for the ends, from the sculpt: the outer side leaning in up to a tall rounded
-# edge, the top falling toward the valley. The flange runs round it, out past the body.
-COVER_SECTION = [(8.15, 0.0), (0.1, 0.0), (0.2, 0.45), (1.75, 1.9), (2.05, 2.15), (2.5, 2.28),
-                 (3.6, 2.3), (5.6, 1.98), (7.15, 1.45), (7.7, 1.12), (8.0, 0.7), (8.15, 0.25)]
+# along but for the ends, after the sculpt's but deeper: the outer side leaning in up to a
+# tall rounded edge, the top falling toward the valley. The flange runs round it, out past the body.
+COVER_SECTION = [(8.15, 0.0), (0.1, 0.0), (0.2, 0.6), (1.6, 2.75), (1.95, 3.1), (2.5, 3.25),
+                 (3.6, 3.28), (5.6, 2.85), (7.15, 2.15), (7.7, 1.7), (8.0, 1.1), (8.15, 0.4)]
 COVER_HALF = 10.0
 COVER_END = 1.3         # the body rounds off over this much at each end
 COVER_END_SECTIONS = [(0.0, 1.0, 1.0), (0.55, 0.97, 0.88), (1.0, 0.86, 0.5)]   # along, across, up
@@ -1005,8 +1005,11 @@ def primaries(d, s, front, axis, name, dia, out, mid_z, spread, lean=PRIMARY_LEA
         corner = p0 + (out[0] + out[1]) * n
         mid = corner + (corner[2] - mid_z) * dropv / -dropv[2]
         down = None
+        # The bend back into the mouth is kept inside the room there is: a back port's drop
+        # ends close to its mouth, and a bend wider than that makes no tube at all.
+        back = min(3.0, 0.4 * float(np.linalg.norm(target - mid)))
         for part, (start, out_dir, end, lead, radius) in enumerate((
-                (p0, n, mid, out[0], out[1]), (mid, None, target, 0.05, 3.0))):
+                (p0, n, mid, out[0], out[1]), (mid, None, target, 0.05, back))):
             if out_dir is None:
                 out_dir = down
             e1, e2, (a0, a1, c, q, t) = tube_path(start, out_dir, end, lead, radius)
@@ -1457,6 +1460,12 @@ def main():
         thin = os.path.join(tmp, "thin.obj")
         reduce_obj(obj, thin, blender)
         bodies = read_tris(thin)
+    # SolidCraft can skip a body it cannot make without failing the run: name any missing.
+    made = {n.replace(" ", "_") for n in bodies}
+    wanted = {c["params"]["body_name"] for c in d.c if "body_name" in c.get("params", {})}
+    missing = sorted(w for w in wanted if w.replace(" ", "_") not in made)
+    if missing:
+        print("missing bodies: " + ", ".join(missing))
 
     merged = {}
     for name, (p, t) in bodies.items():
