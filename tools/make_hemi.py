@@ -259,17 +259,23 @@ ALT_PULLEY_R = 1.45
 FUEL_PUMP = (-11.9, 5.2, 2.0)
 
 # Bottom: the flywheel (front face, thickness, radius), the starter's axis (y, z), the oil
-# pan (the flange's ends and half width, the pan's half width, its side profile (x, z) from
-# the sculpt: deep at the front, shallower toward the back), the drain, the oil pump and
-# filter on the left.
+# pan, the drain, the oil pump and filter on the left. The pan as the sculpt's: the flange
+# on the rail (its ends and half width), a tray under it the full width (its ends, half
+# width, bottom), and the sump below lofted through sections along the crank (x, half
+# width, bottom, the bottom corners' radius): the front deep and wide with a rounded front
+# wall ending under the timing cover, stepping in narrower behind the middle and climbing
+# toward the back, its corners rounder there, curving up into the back wall.
 FLYWHEEL = (12.25, 0.9, 7.2)
 STARTER = (8.8, -2.4)
 PAN_FLANGE = (-12.4, 10.9)
 PAN_FLANGE_Y = 7.3
-PAN_Y = 6.3
-PAN_PROFILE = [(-12.5, -3.15), (10.7, -3.15), (10.7, -4.4), (8.0, -9.5), (3.5, -10.6), (-3.0, -12.3),
-               (-11.4, -12.3), (-12.5, -10.8)]
-PAN_DRAIN = (-7.0, -12.3)
+PAN_TRAY = (-12.3, 10.8, 6.3, -3.85)
+PAN_SECTIONS = [(-12.4, 5.4, -4.8, 0.6), (-12.2, 5.6, -8.0, 0.8), (-11.7, 5.7, -10.6, 0.9),
+                (-10.9, 5.8, -11.9, 0.9), (-9.8, 5.8, -12.5, 0.9), (-3.0, 5.8, -12.5, 0.9),
+                (-1.6, 5.0, -12.0, 1.0), (0.0, 4.8, -11.5, 1.1), (4.0, 5.2, -10.4, 1.8),
+                (8.0, 5.0, -9.6, 2.2), (9.8, 4.8, -8.4, 2.2), (10.6, 4.6, -6.0, 1.6),
+                (11.0, 4.5, -4.4, 0.4)]
+PAN_DRAIN = (-7.0, -12.5)
 OIL_FILTER = (-8.5, -7.6, -2.6)
 OIL_FILTER_DIR = (0.0, -0.42, -0.91)
 
@@ -1062,7 +1068,7 @@ def iron_manifolds(d):
                   MANIFOLD_MID_Z, 0.75, MANIFOLD_LEAN, direct=(2, 3))
         r0, r1, length = MANIFOLD_FLARE
         d.cone(f"exhaust_manifold_collector_{s}", front - (length - 1.6) * axis, axis, r0, r1, length)
-        d.cylinder(f"exhaust_manifold_outlet_{s}", front + 2.0 * axis, axis, 2.2, 1.2)
+        d.cylinder(f"exhaust_manifold_outlet_{s}", front + 1.4 * axis, axis, 2.2, 1.8)    # from inside the cone
         end = front + 3.2 * axis
         across = unit(np.cross(axis, [0, 0, 1]))
         sk, to2d = d.plane(end, across, axis, f"Manifold outlet flange {s}")
@@ -1254,6 +1260,20 @@ def fuel_pump(d):
 
 # The bottom.
 
+def pan_section(w, top, bottom_z, r, n=6):
+    """The sump's section across (y, z): straight sides w out from the middle from top down
+    to the bottom's corners, rounded at r, the same number of points whatever the size."""
+    pts = [(w, top)]
+    for k in range(n + 1):
+        a = -k * (math.pi / 2) / n
+        pts.append((w - r + r * math.cos(a), bottom_z + r + r * math.sin(a)))
+    for k in range(n + 1):
+        a = -math.pi / 2 - k * (math.pi / 2) / n
+        pts.append((-w + r + r * math.cos(a), bottom_z + r + r * math.sin(a)))
+    pts.append((-w, top))
+    return pts
+
+
 def bottom(d):
     fx, ft, fr = FLYWHEEL
     d.cylinder("flywheel", (fx, 0, 0), (1, 0, 0), 2 * fr, ft)
@@ -1275,10 +1295,18 @@ def bottom(d):
     d.rounded((x0, -PAN_FLANGE_Y), (x1, PAN_FLANGE_Y), 0.6)
     d.finish()
     d.extrude(sk, "oil_pan", 0.16, "negative")
-    sk = d.sketch("XZ", "Pan", offset=0.0)
-    d.poly(ccw([(x, -z) for x, z in PAN_PROFILE]))
+    tx0, tx1, ty, tz = PAN_TRAY
+    sk = d.sketch("XY", "Pan tray", offset=RAIL_Z - 0.16)
+    d.rounded((tx0, -ty), (tx1, ty), 1.0)
     d.finish()
-    d.extrude(sk, "oil_pan_body", 2 * PAN_Y, "symmetric")
+    d.extrude(sk, "oil_pan_tray", RAIL_Z - 0.16 - tz, "negative")
+    sks = []
+    for k, (x, w, bz, r) in enumerate(PAN_SECTIONS):
+        sk = d.sketch("YZ", f"Pan section {k}", offset=x)
+        d.poly(ccw(pan_section(w, tz + 0.15, bz, r)))
+        d.finish()
+        sks.append(sk)
+    d.loft("oil_pan_body", sks)
     bx, bz = PAN_DRAIN
     d.cylinder("oil_pan_drain", (bx, 0.0, bz), (0, 0, -1), 0.9, 0.3)
 
@@ -1326,7 +1354,7 @@ REDUCE_FACTORS = [
     ("intake_manifold_runner", "r0.12"), ("intake_manifold_web", 0),
     ("intake_manifold_bolt_bosses", ROUND), ("intake_manifold_pad_bosses", ROUND),
     ("intake_manifold_pad", 0), ("intake_manifold_plenum", 0), ("intake_manifold_neck", 0),
-    ("fan_blades", 2), ("belt", 3), ("oil_pan_body", 0), ("oil_pan_drain", ROUND),
+    ("fan_blades", 2), ("belt", 3), ("oil_pan_body", 0), ("oil_pan_tray", 0), ("oil_pan_drain", ROUND),
 ]
 
 FINISHES = [
