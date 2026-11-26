@@ -213,9 +213,11 @@ CLAMP_REACH = 1.6
 COIL = (-12.4, -5.6, 12.0)
 
 # The stock exhaust, as the 1966 photo's: cast iron shaped like headers. A flange on each
-# port's pad, a thick runner out of each (straight out, then the bend's radius), down to
-# MANIFOLD_MID_Z, then back into a cast collector behind the back port (its mouth: x along
-# the bank, |y|, z; its axis, down and back to the outlet's flange).
+# port's pad, a thick runner out of each (straight out, then the bend's radius); the front
+# two down to MANIFOLD_MID_Z, then back, the back two straight down and back, into a cast
+# collector behind the back port (its mouth: x along the bank, |y|, z; its axis, down and
+# back to the outlet's flange), flared open toward the runners (radius at the mouth and at
+# the outlet, length).
 MANIFOLD_FLANGE_T = 0.45
 MANIFOLD_RUNNER_D = 1.75
 MANIFOLD_OUT = (0.5, 1.2)
@@ -223,6 +225,7 @@ MANIFOLD_MID_Z = 4.6
 MANIFOLD_LEAN = (-0.15, 0.0, 0.0, 0.25)
 MANIFOLD_COLLECTOR = ((9.3, 12.2, 2.6), (0.8, 0.0, -0.6))
 MANIFOLD_OUTLET_D = 2.2
+MANIFOLD_FLARE = (3.0, 1.15, 3.6)
 # Headers, as make_sbf.py's: the collectors' front ends (x along the bank, |y|, z) and axis.
 COLLECTOR = {"long": ((10.0, 12.8, -5.5), (0.75, 0.0, -0.66)),
              "shorty": ((3.5, 13.4, -0.5), (0.8, 0.0, -0.6))}
@@ -986,10 +989,11 @@ def coil(d):
 
 # Exhaust manifolds and headers.
 
-def primaries(d, s, front, axis, name, dia, out, mid_z, spread, lean=PRIMARY_LEAN):
+def primaries(d, s, front, axis, name, dia, out, mid_z, spread, lean=PRIMARY_LEAN, direct=()):
     """Four tubes from bank s's ports, each out of its port, bent down to mid_z and then
     one bend back into a mouth at front, the four mouths two by two, spread apart, round
-    the collector's axis."""
+    the collector's axis. Those in direct (counted front to back) bend once out of their
+    port and run straight to their mouth instead."""
     n = v3(exhaust_face(s)[2])
     pc = port_center(s)
     xs = port_xs(s)
@@ -1001,6 +1005,16 @@ def primaries(d, s, front, axis, name, dia, out, mid_z, spread, lean=PRIMARY_LEA
     mouth_order = sorted(range(4), key=lambda k: (mouths[k][0], -s * mouths[k][1]))
     for k_port, k_mouth in zip(order, mouth_order):
         p0, target = ports[k_port], mouths[k_mouth]
+        if order.index(k_port) in direct:
+            e1, e2, (a0, a1, c, q, t) = tube_path(p0, n, target, out[0], out[1])
+            nm = f"{name}_{s}_{k_port}_0"
+            sk, _ = d.plane(p0, e1, np.cross(e1, e2), f"{nm} path")
+            d.c.append(cmd("sketch.line", infer=False, points=[skp(*a0), skp(*a1)]))
+            d.c.append(cmd("sketch.arc.center_point", center=skp(*c), start="l1.end", end=skp(*q)))
+            d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*t)]))
+            d.finish()
+            d.body(nm, "solid.pipe", path_sketch=sk, path=["l1", "a1", "l2"], diameter=inch(dia))
+            continue
         dropv = unit([lean[order.index(k_port)], 0.0, -1.0])
         corner = p0 + (out[0] + out[1]) * n
         mid = corner + (corner[2] - mid_z) * dropv / -dropv[2]
@@ -1045,8 +1059,9 @@ def iron_manifolds(d):
 
         front = np.array([bank_x(s, cx), s * cy, cz])
         primaries(d, s, front, axis, "exhaust_manifold_runner", MANIFOLD_RUNNER_D, MANIFOLD_OUT,
-                  MANIFOLD_MID_Z, 0.75, MANIFOLD_LEAN)
-        d.cone(f"exhaust_manifold_collector_{s}", front - 0.5 * axis, axis, 2.6, 2.0, 2.6)
+                  MANIFOLD_MID_Z, 0.75, MANIFOLD_LEAN, direct=(2, 3))
+        r0, r1, length = MANIFOLD_FLARE
+        d.cone(f"exhaust_manifold_collector_{s}", front - (length - 1.6) * axis, axis, r0, r1, length)
         d.cylinder(f"exhaust_manifold_outlet_{s}", front + 2.0 * axis, axis, 2.2, 1.2)
         end = front + 3.2 * axis
         across = unit(np.cross(axis, [0, 0, 1]))
