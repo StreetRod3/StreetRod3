@@ -4,16 +4,24 @@ extends RefCounted
 ## Stations for the garage radio, from `assets/music/radio.registry`.
 ## Songs are a catalog of id and file. A station lists those ids.
 ## A station with an empty song list plays every song in that catalog.
+## News is a separate catalog. A station plays only the bulletins it lists.
+## newsInterval is the minutes from the end of one bulletin to the next. Absent means 15.
+## firstNewsAfter is the minutes until the first bulletin. Absent means the same gap. 0 starts the station on news.
 
 const SONGS := "songs"
+const NEWS := "news"
 const STATIONS := "stations"
 const MEMORY := "memory"
 const MUSIC_DIR := "res://assets/music"
+const NEWS_DIR := "res://assets/music/news"
 const FREQ_MIN := 540.0
 const FREQ_MAX := 1600.0
 ## How close the dial must be, in Hz, before a station comes in.
 const TUNE_SLACK := 28.0
 const MEMORY_BUTTONS := 5
+## Minutes from the end of a bulletin to the next one, when a station sets no newsInterval.
+const NEWS_EVERY_MINUTES := 15.0
+const NEWS_EVERY := NEWS_EVERY_MINUTES * 60.0
 
 static var _cache: Dictionary = {}
 
@@ -52,38 +60,39 @@ static func _read(path: String) -> Dictionary:
 		result.errors.append("Radio registry root must be a JSON object.")
 		return result
 	var root: Dictionary = json.data
-	var catalog := _catalog(root.get(SONGS, []), result)
-	result.stations = _rows(root.get(STATIONS, []), result, catalog)
+	var catalog := _catalog(root.get(SONGS, []), result, SONGS, MUSIC_DIR)
+	var news := _catalog(root.get(NEWS, []), result, NEWS, NEWS_DIR)
+	result.stations = _rows(root.get(STATIONS, []), result, catalog, news)
 	result.memory = _memory(root.get(MEMORY, null), result)
 	return result
 
 
-static func _catalog(value: Variant, result: Dictionary) -> Dictionary:
+static func _catalog(value: Variant, result: Dictionary, label: String, folder: String) -> Dictionary:
 	var catalog: Dictionary = {}
 	if typeof(value) != TYPE_ARRAY:
-		result.errors.append("Radio registry '%s' must be a list." % SONGS)
+		result.errors.append("Radio registry '%s' must be a list." % label)
 		return catalog
 	for item: Variant in value as Array:
 		if typeof(item) != TYPE_DICTIONARY:
-			result.errors.append("A song entry must be an object.")
+			result.errors.append("A %s entry must be an object." % _singular(label))
 			continue
 		var song: Dictionary = item
 		var song_id := str(song.get("id", "")).strip_edges()
 		var file := str(song.get("file", "")).strip_edges()
 		if song_id.is_empty():
-			result.errors.append("A song entry is missing an id.")
+			result.errors.append("A %s entry is missing an id." % _singular(label))
 			continue
 		if catalog.has(song_id):
-			result.errors.append("Duplicate song id '%s'." % song_id)
+			result.errors.append("Duplicate %s id '%s'." % [_singular(label), song_id])
 			continue
 		if file.is_empty():
-			result.errors.append("Song '%s' is missing a file." % song_id)
+			result.errors.append("%s '%s' is missing a file." % [_singular(label).capitalize(), song_id])
 			continue
-		catalog[song_id] = _song_path(file)
+		catalog[song_id] = _media_path(folder, file)
 	return catalog
 
 
-static func _rows(value: Variant, result: Dictionary, catalog: Dictionary) -> Array[Dictionary]:
+static func _rows(value: Variant, result: Dictionary, catalog: Dictionary, news: Dictionary) -> Array[Dictionary]:
 	var rows: Array[Dictionary] = []
 	if typeof(value) != TYPE_ARRAY:
 		result.errors.append("Radio registry '%s' must be a list." % STATIONS)
@@ -110,10 +119,14 @@ static func _rows(value: Variant, result: Dictionary, catalog: Dictionary) -> Ar
 			result.errors.append("Station '%s' frequency %s is outside %d-%d." % [station_id, str(raw_freq), int(FREQ_MIN), int(FREQ_MAX)])
 			freq = clampf(freq, FREQ_MIN, FREQ_MAX)
 		seen[station_id] = true
+		var news_every := _news_interval(station.get("newsInterval", null), result, station_id)
 		rows.append({
 			"id": station_id,
 			"frequency": freq,
 			"songs": _songs(station.get("songs", []), result, station_id, catalog),
+			"news": _news(station.get("news", null), result, station_id, news),
+			"news_interval": news_every,
+			"first_news": _first_news(station.get("firstNewsAfter", null), result, station_id, news_every),
 		})
 	return rows
 
@@ -173,10 +186,65 @@ static func _catalog_songs(catalog: Dictionary) -> Array[String]:
 	return songs
 
 
-static func _song_path(name: String) -> String:
+## Minutes in the registry, seconds here. A missing first bulletin uses the station's news interval. 0 starts on news.
+static func _first_news(value: Variant, result: Dictionary, station_id: String, every: float) -> float:
+	if value == null:
+		return every
+	if typeof(value) != TYPE_FLOAT and typeof(value) != TYPE_INT:
+		result.errors.append("Station '%s' firstNewsAfter must be a number of minutes." % station_id)
+		return every
+	var minutes := float(value)
+	if minutes < 0.0:
+		result.errors.append("Station '%s' firstNewsAfter cannot be negative." % station_id)
+		return every
+	return minutes * 60.0
+
+
+## Minutes in the registry, seconds here. A missing interval stays at `NEWS_EVERY`.
+static func _news_interval(value: Variant, result: Dictionary, station_id: String) -> float:
+	if value == null:
+		return NEWS_EVERY
+	if typeof(value) != TYPE_FLOAT and typeof(value) != TYPE_INT:
+		result.errors.append("Station '%s' newsInterval must be a number of minutes." % station_id)
+		return NEWS_EVERY
+	var minutes := float(value)
+	if minutes < 0.0:
+		result.errors.append("Station '%s' newsInterval cannot be negative." % station_id)
+		return NEWS_EVERY
+	return minutes * 60.0
+
+
+## Ids from the news catalog. No list, or an empty one, means the station has no news.
+static func _news(value: Variant, result: Dictionary, station_id: String, catalog: Dictionary) -> Array[String]:
+	if value == null:
+		return []
+	if typeof(value) != TYPE_ARRAY:
+		result.errors.append("Station '%s' news must be a list of news ids." % station_id)
+		return []
+	var bulletins: Array[String] = []
+	for item: Variant in value as Array:
+		var news_id := str(item).strip_edges()
+		if news_id.is_empty():
+			continue
+		if not catalog.has(news_id):
+			result.errors.append("Station '%s' lists unknown news '%s'." % [station_id, news_id])
+			continue
+		bulletins.append(str(catalog[news_id]))
+	return bulletins
+
+
+static func _media_path(folder: String, name: String) -> String:
 	if name.begins_with("res://"):
 		return name
-	return "%s/%s" % [MUSIC_DIR, name.get_file()]
+	return "%s/%s" % [folder, name.get_file()]
+
+
+static func _singular(label: String) -> String:
+	if label == NEWS:
+		return "news"
+	if label.ends_with("s"):
+		return label.substr(0, label.length() - 1)
+	return label
 
 
 static func _empty() -> Dictionary:

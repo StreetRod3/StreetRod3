@@ -27,6 +27,72 @@
     {
       "id": "sr1-5",
       "file": "sr1-5.mid"
+    },
+    {
+      "id": "sr2-1",
+      "file": "sr2-1.mid"
+    },
+    {
+      "id": "sr2-2",
+      "file": "sr2-2.mid"
+    },
+    {
+      "id": "sr2-3",
+      "file": "sr2-3.mid"
+    },
+    {
+      "id": "sr2-4",
+      "file": "sr2-4.mid"
+    },
+    {
+      "id": "sr2-5",
+      "file": "sr2-5.mid"
+    },
+    {
+      "id": "sr2-6",
+      "file": "sr2-6.mid"
+    },
+    {
+      "id": "00sOpenRoadAnthem1",
+      "file": "00sOpenRoadAnthem1.mp3"
+    },
+    {
+      "id": "60sOpenRoadDooWop1",
+      "file": "60sOpenRoadDooWop1.mp3"
+    },
+    {
+      "id": "70sOpenRoadDisco1",
+      "file": "70sOpenRoadDisco1.mp3"
+    },
+    {
+      "id": "80sOpenRoadGlory1",
+      "file": "80sOpenRoadGlory1.mp3"
+    },
+    {
+      "id": "90sOpenRoaDGrunge1",
+      "file": "90sOpenRoaDGrunge1.mp3"
+    }
+  ],
+  "news": [
+    {
+      "id": "classic1",
+      "file": "classic-news-1.mp3",
+      "voicePrompt": "John - Funny West Coast MC, speed 1.05, stability 73%, similarity 75%, style exaggeration 49%, audio effects: old radio"
+    },
+    {
+      "id": "classic2",
+      "file": "classic-news-2.mp3",
+      "voicePrompt": "John - Funny West Coast MC, speed 1.05, stability 73%, similarity 75%, style exaggeration 49%, audio effects: old radio"
+    },
+    {
+      "id": "nationwide1",
+      "file": "nationwide-news-1.mp3",
+      "voicePrompt": "Andrew - Fifties Announcer, speed 1.00, stability 50%, similarity 75%, style exaggeration 0%, audio effects: old radio"
+    },
+    {
+      "id": "nationwide2",
+      "file": "nationwide-news-2.mp3",
+      "voicePrompt": "Andrew - Fifties Announcer, speed 1.00, stability 50%, similarity 75%, style exaggeration 0%, audio effects: old radio"
     }
   ],
   "stations": [
@@ -38,7 +104,18 @@
     {
       "id": "originals",
       "frequency": 830,
-      "songs": ["sr1-1", "sr1-2", "sr1-3", "sr1-4", "sr1-5"]
+      "songs": ["sr1-1", "sr1-2", "sr1-3", "sr1-4", "sr1-5", "sr2-1", "sr2-2", "sr2-3", "sr2-4", "sr2-5", "sr2-6"],
+      "news": ["classic1", "classic1"],
+      "newsInterval": 40,
+      "firstNewsAfter": 10
+    },
+    {
+      "id": "VaelorsKeep",
+      "frequency": 1040,
+      "songs": ["00sOpenRoadAnthem1", "60sOpenRoadDooWop1", "70sOpenRoadDisco1", "80sOpenRoadGlory1", "90sOpenRoaDGrunge1"],
+      "news": ["nationwide1", "nationwide2"],
+      "newsInterval": 30,
+      "firstNewsAfter": 0
     }
   ],
   "memory": [620, 830, 1040, 1240, 1460]

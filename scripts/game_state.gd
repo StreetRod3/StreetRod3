@@ -5253,6 +5253,8 @@ func _prime_start_track() -> void:
 	if station.is_empty():
 		return
 	var station_id := str(station.get("id", ""))
+	if _station_first_news(station_id) <= 0.0 and not _station_news(station_id).is_empty():
+		return
 	var chosen := MUSIC_GARAGE
 	for song: String in _station_songs(station_id):
 		if song.ends_with("garage.mp3"):
@@ -5273,7 +5275,7 @@ func _broadcast_at(station_id: String) -> Dictionary:
 	if songs.is_empty():
 		return {}
 	var cast := _broadcast_for(station_id)
-	_fill_schedule(cast, songs, _radio_time + float(cast["skew"]))
+	_fill_schedule(cast, songs, _station_news(station_id), _radio_time + float(cast["skew"]))
 	var at := _radio_time + float(cast["skew"])
 	var entries: Array = cast["entries"]
 	for entry: Variant in entries:
@@ -5299,14 +5301,15 @@ func _broadcast_after(station_id: String, entry_start: float) -> Dictionary:
 	if songs.is_empty():
 		return {}
 	var cast := _broadcast_for(station_id)
-	_fill_schedule(cast, songs, entry_start + float(cast["skew"]) + 1.0)
+	var news := _station_news(station_id)
+	_fill_schedule(cast, songs, news, entry_start + float(cast["skew"]) + 1.0)
 	var entries: Array = cast["entries"]
 	for i in entries.size():
 		var row: Dictionary = entries[i]
 		if not is_equal_approx(float(row["start"]), entry_start):
 			continue
 		if i + 1 >= entries.size():
-			_fill_schedule(cast, songs, float(cast["filled"]) + 1.0)
+			_fill_schedule(cast, songs, news, float(cast["filled"]) + 1.0)
 			entries = cast["entries"]
 		if i + 1 >= entries.size():
 			return {}
@@ -5324,6 +5327,8 @@ func _broadcast_for(station_id: String) -> Dictionary:
 			return found
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _radio_seed ^ hash(station_id)
+	var every := _station_news_every(station_id)
+	var first := _station_first_news(station_id)
 	var cast := {
 		"rng": rng,
 		"entries": [],
@@ -5331,30 +5336,60 @@ func _broadcast_for(station_id: String) -> Dictionary:
 		"last": "",
 		"skew": 0.0,
 		"primed": false,
+		"news_due": first,
+		"news_every": every,
+		"news_first": first,
+		"last_news": "",
 	}
 	_broadcasts[station_id] = cast
 	return cast
 
 
-func _fill_schedule(cast: Dictionary, songs: Array[String], until: float) -> void:
+func _fill_schedule(cast: Dictionary, songs: Array[String], news: Array[String], until: float) -> void:
 	if songs.is_empty():
 		return
 	if not bool(cast["primed"]):
-		var first := _pick_song(cast, songs)
-		var first_duration := _song_length(first)
-		var rng: RandomNumberGenerator = cast["rng"]
-		cast["skew"] = rng.randf() * first_duration
-		cast["entries"] = [{"path": first, "start": 0.0, "duration": first_duration}]
-		cast["filled"] = first_duration
+		if not news.is_empty() and float(cast["news_due"]) <= 0.0:
+			var opening := _pick_news(cast, news)
+			var opening_duration := _song_length(opening)
+			cast["skew"] = 0.0
+			cast["entries"] = [{"path": opening, "start": 0.0, "duration": opening_duration, "news": true}]
+			cast["filled"] = opening_duration
+			cast["news_due"] = opening_duration + float(cast["news_every"])
+		else:
+			var first := _pick_song(cast, songs)
+			var first_duration := _song_length(first)
+			var rng: RandomNumberGenerator = cast["rng"]
+			cast["skew"] = rng.randf() * first_duration
+			cast["entries"] = [{"path": first, "start": 0.0, "duration": first_duration}]
+			cast["filled"] = first_duration
 		cast["primed"] = true
 	var guard := 0
 	while float(cast["filled"]) < until + 0.5 and guard < 10000:
-		var path := _pick_song(cast, songs)
+		var bulletin := not news.is_empty() and float(cast["filled"]) >= float(cast["news_due"])
+		var path := _pick_news(cast, news) if bulletin else _pick_song(cast, songs)
 		var duration := _song_length(path)
 		var entries: Array = cast["entries"]
-		entries.append({"path": path, "start": float(cast["filled"]), "duration": duration})
-		cast["filled"] = float(cast["filled"]) + duration
+		var start := float(cast["filled"])
+		entries.append({"path": path, "start": start, "duration": duration, "news": bulletin})
+		cast["filled"] = start + duration
+		if bulletin:
+			cast["news_due"] = float(cast["filled"]) + float(cast["news_every"])
 		guard += 1
+
+
+func _pick_news(cast: Dictionary, news: Array[String]) -> String:
+	var rng: RandomNumberGenerator = cast["rng"]
+	var last := str(cast["last_news"])
+	var choices: Array[String] = []
+	for item: String in news:
+		if item != last:
+			choices.append(item)
+	if choices.is_empty():
+		choices = news
+	var pick := choices[rng.randi_range(0, choices.size() - 1)]
+	cast["last_news"] = pick
+	return pick
 
 
 func _pick_song(cast: Dictionary, songs: Array[String]) -> String:
@@ -5382,6 +5417,38 @@ func _song_length(path: String) -> float:
 		length = 30.0
 	_song_lengths[path] = length
 	return length
+
+
+func _station_first_news(station_id: String) -> float:
+	for station: Dictionary in RADIO_STATIONS:
+		if str(station.get("id", "")) != station_id:
+			continue
+		return float(station.get("first_news", _station_news_every(station_id)))
+	return _station_news_every(station_id)
+
+
+func _station_news_every(station_id: String) -> float:
+	for station: Dictionary in RADIO_STATIONS:
+		if str(station.get("id", "")) != station_id:
+			continue
+		return float(station.get("news_interval", _RadioRegister.NEWS_EVERY))
+	return _RadioRegister.NEWS_EVERY
+
+
+func _station_news(station_id: String) -> Array[String]:
+	var bulletins: Array[String] = []
+	for station: Dictionary in RADIO_STATIONS:
+		if str(station.get("id", "")) != station_id:
+			continue
+		var raw: Variant = station.get("news", [])
+		if typeof(raw) != TYPE_ARRAY:
+			return bulletins
+		for item: Variant in raw:
+			var path := str(item)
+			if not path.is_empty():
+				bulletins.append(path)
+		return bulletins
+	return bulletins
 
 
 func _station_songs(station_id: String) -> Array[String]:

@@ -10,9 +10,10 @@ func _initialize() -> void:
 func _run() -> void:
 	var state := root.get_node("GameState")
 	var stations: Array = state.get("RADIO_STATIONS")
-	assert(stations.size() == 2)
+	assert(stations.size() == 3)
 	var all: Dictionary = stations[0]
 	var originals: Dictionary = stations[1]
+	var vaelor: Dictionary = stations[2]
 	assert(str(all["id"]) == "all")
 	assert(is_equal_approx(float(all["frequency"]), 620.0))
 	assert(str(originals["id"]) == "originals")
@@ -21,15 +22,36 @@ func _run() -> void:
 	assert(memory.size() == 5)
 	assert(is_equal_approx(float(memory[0]), float(all["frequency"])))
 	var all_songs: Array = all["songs"]
-	assert(all_songs.size() == 7)
+	assert(all_songs.size() == 18)
 	assert(str(all_songs[0]).ends_with("garage.mp3"))
 	assert(str(all_songs[1]).ends_with("race.mp3"))
 	assert(str(all_songs[2]).ends_with("sr1-1.mid"))
 	assert(str(all_songs[6]).ends_with("sr1-5.mid"))
+	assert(str(all_songs[7]).ends_with("sr2-1.mid"))
+	assert(str(all_songs[12]).ends_with("sr2-6.mid"))
+	assert(str(all_songs[17]).ends_with("90sOpenRoaDGrunge1.mp3"))
+	assert((all["news"] as Array).is_empty())
+	assert(is_equal_approx(float(all["first_news"]), 15.0 * 60.0))
 	var original_songs: Array = originals["songs"]
-	assert(original_songs.size() == 5)
+	assert(original_songs.size() == 11)
 	assert(str(original_songs[0]).ends_with("sr1-1.mid"))
-	assert(str(original_songs[4]).ends_with("sr1-5.mid"))
+	assert(str(original_songs[10]).ends_with("sr2-6.mid"))
+	var original_news: Array = originals["news"]
+	assert(original_news.size() == 2)
+	assert(str(original_news[0]).ends_with("news/classic-news-1.mp3"))
+	assert(str(original_news[1]).ends_with("news/classic-news-1.mp3"))
+	assert(is_equal_approx(float(originals["news_interval"]), 40.0 * 60.0))
+	assert(is_equal_approx(float(originals["first_news"]), 10.0 * 60.0))
+	assert(is_equal_approx(float(all["news_interval"]), 15.0 * 60.0))
+	assert(str(vaelor["id"]) == "VaelorsKeep")
+	assert(is_equal_approx(float(vaelor["frequency"]), 1040.0))
+	assert((vaelor["songs"] as Array).size() == 5)
+	var vaelor_news: Array = vaelor["news"]
+	assert(vaelor_news.size() == 2)
+	assert(str(vaelor_news[0]).ends_with("news/nationwide-news-1.mp3"))
+	assert(str(vaelor_news[1]).ends_with("news/nationwide-news-2.mp3"))
+	assert(is_equal_approx(float(vaelor["news_interval"]), 30.0 * 60.0))
+	assert(is_equal_approx(float(vaelor["first_news"]), 0.0))
 	var midi := load("res://scripts/midi_song.gd").call("stream", str(original_songs[0])) as AudioStreamWAV
 	assert(midi != null)
 	assert(midi.mix_rate == 22050)
@@ -67,6 +89,9 @@ func _run() -> void:
 	var fresh: Dictionary = load("res://scripts/radio_register.gd").call("load_path", empty_path)
 	assert((fresh["errors"] as Array).is_empty())
 	var fresh_songs: Array = (fresh["stations"] as Array)[0]["songs"]
+	assert(((fresh["stations"] as Array)[0]["news"] as Array).is_empty())
+	assert(is_equal_approx(float((fresh["stations"] as Array)[0]["news_interval"]), 15.0 * 60.0))
+	assert(is_equal_approx(float((fresh["stations"] as Array)[0]["first_news"]), 15.0 * 60.0))
 	assert(fresh_songs.size() == 3)
 	assert(str(fresh_songs[0]).ends_with("garage.mp3"))
 	assert(str(fresh_songs[1]).ends_with("sr1-1.mid"))
@@ -77,14 +102,21 @@ func _run() -> void:
 	var listed_path := "/tmp/radio-listed-%d.json" % Time.get_ticks_usec()
 	var listed_file := FileAccess.open(listed_path, FileAccess.WRITE)
 	assert(listed_file != null)
-	listed_file.store_string('{"songs":[{"id":"garage","file":"garage.mp3"},{"id":"race","file":"race.mp3"}],"stations":[{"id":"one","frequency":900,"songs":["garage"]},{"id":"two","frequency":910,"songs":["race","missing"]}],"memory":[900,"nope",2000]}')
+	listed_file.store_string('{"songs":[{"id":"garage","file":"garage.mp3"},{"id":"race","file":"race.mp3"}],"news":[{"id":"bulletin","file":"classic-news-1.mp3"}],"stations":[{"id":"one","frequency":900,"songs":["garage"],"news":["bulletin"],"newsInterval":2,"firstNewsAfter":0},{"id":"two","frequency":910,"songs":["race","missing"],"news":["nope"],"newsInterval":"soon","firstNewsAfter":"early"}],"memory":[900,"nope",2000]}')
 	listed_file.close()
 	var listed: Dictionary = load("res://scripts/radio_register.gd").call("load_path", listed_path)
 	var listed_errors: Array = listed["errors"]
-	assert(listed_errors.size() >= 3)
+	assert(listed_errors.size() >= 6)
 	var listed_stations: Array = listed["stations"]
 	assert(listed_stations.size() == 2)
 	assert((listed_stations[0]["songs"] as Array).size() == 1)
+	assert((listed_stations[0]["news"] as Array).size() == 1)
+	assert(str((listed_stations[0]["news"] as Array)[0]).ends_with("news/classic-news-1.mp3"))
+	assert(is_equal_approx(float(listed_stations[0]["news_interval"]), 120.0))
+	assert(is_equal_approx(float(listed_stations[0]["first_news"]), 0.0))
+	assert((listed_stations[1]["news"] as Array).is_empty())
+	assert(is_equal_approx(float(listed_stations[1]["news_interval"]), 15.0 * 60.0))
+	assert(is_equal_approx(float(listed_stations[1]["first_news"]), 15.0 * 60.0))
 	var listed_memory: Array = listed["memory"]
 	assert(listed_memory.size() == 5)
 	assert(is_equal_approx(float(listed_memory[0]), 900.0))
@@ -183,6 +215,13 @@ func _run() -> void:
 	assert(str(nxt["path"]) != str(first["path"]))
 	var originals_now: Dictionary = state.call("_broadcast_at", "originals")
 	assert(str(originals_now["path"]).ends_with(".mid"))
+	var clock := float(state.get("_radio_time"))
+	state.set("_radio_time", 90.0 * 60.0)
+	state.call("_broadcast_at", "originals")
+	_assert_news_waits(state, "originals", true)
+	state.call("_broadcast_at", "VaelorsKeep")
+	_assert_news_waits(state, "VaelorsKeep", true)
+	state.set("_radio_time", clock)
 	state.set("music_enabled", true)
 	state.call("set_radio_frequency", 1000.0)
 	assert(int(state.get("radio_preset")) == 0)
@@ -210,6 +249,53 @@ func _run() -> void:
 
 	print("radio register ok")
 	quit(0)
+
+
+## The first bulletin waits for firstNewsAfter. Later ones wait for newsInterval. A song already on the air keeps its full length.
+func _assert_news_waits(state: Node, station_id: String, expect_news: bool) -> void:
+	var casts: Dictionary = state.get("_broadcasts")
+	var cast: Dictionary = casts[station_id]
+	var entries: Array = cast["entries"]
+	var every := float(cast["news_every"])
+	var first_at := float(cast["news_first"])
+	var distinct: Dictionary = {}
+	for item: Variant in state.call("_station_news", station_id):
+		distinct[str(item)] = true
+	assert(not entries.is_empty())
+	var cursor := 0.0
+	var news_count := 0
+	var last_news_end := -1.0
+	var prev: Dictionary = {}
+	var prev_news := ""
+	for entry: Variant in entries:
+		var row: Dictionary = entry
+		var start := float(row["start"])
+		var duration := float(row["duration"])
+		var path := str(row["path"])
+		assert(is_equal_approx(start, cursor))
+		assert(is_equal_approx(duration, float(state.call("_song_length", path))))
+		if bool(row.get("news", false)):
+			assert(path.contains("/news/"))
+			assert(start + 0.01 >= first_at)
+			if news_count == 0 and first_at <= 0.0:
+				assert(prev.is_empty())
+			elif news_count == 0:
+				assert(not prev.is_empty())
+				assert(float(prev["start"]) < first_at)
+				assert(not bool(prev.get("news", false)))
+			else:
+				assert(start + 0.01 >= last_news_end + every)
+			if distinct.size() > 1 and not prev_news.is_empty():
+				assert(path != prev_news)
+			prev_news = path
+			last_news_end = start + duration
+			news_count += 1
+		prev = row
+		cursor = start + duration
+	if expect_news:
+		assert(news_count >= 1)
+	else:
+		assert(news_count == 0)
 
 
 ## One beat of A4, 120 bpm, 480 ticks to a quarter note. Half a second of square wave.
