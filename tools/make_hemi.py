@@ -1322,39 +1322,39 @@ def bottom(d):
 
 
 # Run inside Blender: thin each body to a budget by its size, as make_sbc.py does.
-# Small round parts: SolidCraft meshes a cylinder in rows of 128 facets however small it is.
-ROUND = "r0.35"
-SMALL = "r0.08"
+# Budgets, first match wins: a number scales make_sbc.py's budget by the body's size, 0 keeps
+# it whole, "rN" collapses it to N of its triangles. SolidCraft meshes every cylinder in rows
+# of 128 facets however small it is, and lofts and tapers as finely, so most curved bodies
+# here are collapsed hard.
+ROUND = "r0.2"
+SMALL = "r0.05"
 REDUCE_FACTORS = [
-    ("cylinder_head_1_bosses", SMALL), ("cylinder_head_-1_bosses", SMALL), ("spark_plug_boot", SMALL),
-    ("valve_cover_well", SMALL), ("air_cleaner_stud", SMALL), ("air_cleaner_wingnut", SMALL),
-    ("engine_block_distributor", SMALL), ("intake_manifold_pad_bosses", SMALL),
-    ("intake_manifold_bolt_bosses", SMALL), ("intake_manifold_plenum_walls", ROUND), ("fuel_pump_fitting", SMALL),
-    ("thermostat_neck", SMALL), ("thermostat_bead", SMALL), ("water_pump_heater", SMALL), ("water_pump_inlet", SMALL),
-    ("distributor_cap_tower", SMALL), ("distributor_cap_coil", SMALL), ("distributor_vacuum", SMALL),
-    ("carb_throat", SMALL), ("carburetor_bowl_screw", SMALL), ("oil_filter", "r0.15"), ("ignition_coil", "r0.15"),
-    ("exhaust_manifold_runner", "r0.08"), ("exhaust_manifold_collector", "r0.15"),
-    ("exhaust_manifold_outlet_flange", 0), ("exhaust_manifold_outlet", "r0.15"),
-    ("engine_block_deck", 0), ("engine_block_oil_pump", ROUND), ("engine_block_distributor", ROUND),
+    ("cylinder_head_1_bosses", "r0.03"), ("cylinder_head_-1_bosses", "r0.03"), ("spark_plug_boot", SMALL),
+    ("valve_cover_well", SMALL), ("valve_cover_body", "r0.3"),
+    ("air_cleaner_stud", SMALL), ("air_cleaner_wingnut", SMALL), ("air_cleaner_element", 0), ("air_cleaner", 0),
+    ("engine_block_distributor", SMALL), ("engine_block_oil_pump", ROUND), ("engine_block_deck", 0),
     ("engine_block_", 1), ("engine_block", 0), ("valley_cover", 0),
-    ("cylinder_head", 0), ("valve_cover_body", 0), ("valve_cover_well", ROUND), ("spark_plug_boot", ROUND),
-    ("head_bolts", 0), ("exhaust_port_bolts", 0),
-    ("valve_cover_breather", ROUND), ("valve_cover_filler", ROUND), ("oil_filler", ROUND),
-    ("air_cleaner_element", 0), ("alternator_fan_vanes", 0), ("air_cleaner_stud", ROUND),
-    ("air_cleaner_wingnut", ROUND), ("air_cleaner", 0),
-    ("crank_pulley", ROUND), ("upper_pulley", ROUND), ("alternator", ROUND), ("harmonic_balancer", ROUND),
-    ("crank_bolt", ROUND), ("distributor_clamp", 1), ("distributor", ROUND), ("ignition_coil_strap", 1),
-    ("ignition_coil", ROUND), ("oil_filter", ROUND), ("thermostat", ROUND),
-    ("starter_nose_mount", 1), ("starter", ROUND),
-    ("flywheel", ROUND), ("fan_spacer", ROUND), ("fan_hub", ROUND), ("water_pump_snout", ROUND),
-    ("water_pump_inlet", ROUND), ("water_pump_heater", ROUND), ("fuel_pump", ROUND),
-    ("carburetor_ring", ROUND), ("carb_throat", ROUND), ("carburetor_bowl_screw", ROUND),
-    ("exhaust_collector", ROUND), ("exhaust_runner", "r0.08"), ("exhaust_manifold_outlet_flange", 0),
+    ("intake_manifold_pad_bosses", "r0.04"), ("intake_manifold_bolt_bosses", SMALL),
+    ("intake_manifold_plenum_walls", ROUND), ("intake_manifold_plenum_floor", "r0.3"),
+    ("intake_manifold_plenum", 0), ("intake_manifold_pad", "r0.3"), ("intake_manifold_neck", ROUND),
+    ("intake_manifold_runner", "r0.08"), ("intake_manifold_web", 0),
+    ("fuel_pump_fitting", SMALL), ("fuel_pump", ROUND),
+    ("thermostat_neck", SMALL), ("thermostat_bead", SMALL), ("thermostat", ROUND),
+    ("water_pump_heater", SMALL), ("water_pump_inlet", SMALL), ("water_pump_snout", ROUND),
+    ("distributor_cap_tower", SMALL), ("distributor_cap_coil", SMALL), ("distributor_vacuum", SMALL),
+    ("distributor_clamp", 1), ("distributor", ROUND),
+    ("carb_throat", SMALL), ("carburetor_bowl_screw", SMALL), ("carburetor_ring", ROUND),
+    ("oil_filter", "r0.12"), ("ignition_coil_strap", 1), ("ignition_coil", "r0.12"),
+    ("exhaust_manifold_runner", "r0.06"), ("exhaust_manifold_collector", "r0.12"),
+    ("exhaust_manifold_outlet_flange", ROUND), ("exhaust_manifold_outlet", "r0.12"),
     ("exhaust_manifold_bore", ROUND), ("exhaust_manifold", "r0.2"),
-    ("intake_manifold_runner", "r0.12"), ("intake_manifold_web", 0),
-    ("intake_manifold_bolt_bosses", ROUND), ("intake_manifold_pad_bosses", ROUND),
-    ("intake_manifold_pad", 0), ("intake_manifold_plenum", 0), ("intake_manifold_neck", 0),
-    ("fan_blades", 2), ("belt", 3), ("oil_pan_body", 0), ("oil_pan_tray", 0), ("oil_pan_drain", ROUND),
+    ("exhaust_collector", ROUND), ("exhaust_runner", "r0.06"),
+    ("cylinder_head", 0), ("head_bolts", 0), ("exhaust_port_bolts", 0),
+    ("valve_cover_breather", ROUND), ("valve_cover_filler", ROUND), ("oil_filler", ROUND),
+    ("alternator_fan_vanes", 0), ("crank_pulley", ROUND), ("upper_pulley", ROUND), ("alternator", ROUND),
+    ("harmonic_balancer", ROUND), ("crank_bolt", ROUND), ("starter_nose_mount", 1), ("starter", "r0.12"),
+    ("flywheel", ROUND), ("fan_spacer", "r0.1"), ("fan_hub", ROUND),
+    ("fan_blades", 2), ("belt", 3), ("oil_pan_body", "r0.1"), ("oil_pan_tray", 0), ("oil_pan_drain", ROUND),
 ]
 
 FINISHES = [
@@ -1458,6 +1458,8 @@ def main():
     ap.add_argument("--sc", help="design file (default resources/engines/STEM.sc)")
     ap.add_argument("--glb", help="mesh (default assets/parts/STEM.glb)")
     ap.add_argument("--obj", help="also keep SolidCraft's unthinned OBJ here (for comparing to the reference)")
+    ap.add_argument("--obj-in", help="thin this OBJ, kept with --obj from an earlier run, instead of building "
+                                     "in SolidCraft again (to try budgets; the .sc is left as it is)")
     ap.add_argument("--solidcraft", default="solidcraft-cli",
                     help="solidcraft-cli, or the SolidCraft AppImage")
     ap.add_argument("--blender", default="blender", help="Blender, which thins the mesh")
@@ -1495,9 +1497,12 @@ def main():
         with open(script, "w") as f:
             json.dump({"commands": d.c}, f)
         os.makedirs(os.path.dirname(sc), exist_ok=True)
-        print(f"building {stem}")
-        SolidCraft(tool).run(script, "--save", sc)
-        if args.obj:
+        if args.obj_in:
+            obj = args.obj_in
+        else:
+            print(f"building {stem}")
+            SolidCraft(tool).run(script, "--save", sc)
+        if args.obj and not args.obj_in:
             shutil.copy(obj, args.obj)
         print("thinning the mesh")
         thin = os.path.join(tmp, "thin.obj")
