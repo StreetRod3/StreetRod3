@@ -14,7 +14,7 @@ extends RefCounted
 ## `model.ground_clearance` is how far the body's lowest point sits above the
 ## floor when it is snapped there, for bodies without wheels of their own.
 ##
-## `make` is who built the car ("GM", "Ford"): its engine must be that make unless the
+## `make` is who built the car ("GM", "Ford", "Chrysler"): its engine must be that make unless the
 ## car has mounts for another one, and so must its rear end.
 ##
 ## `wheels.size` multiplies the size of whatever wheels are fitted, for a car

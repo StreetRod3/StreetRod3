@@ -523,7 +523,7 @@ func load_parts_register() -> void:
 # distributor, and exhaust manifolds fit only their engine family. The rules are checked
 # when a part goes on, so a car from an older save keeps what it has.
 
-## Who built the car `instance_or_model` ("GM", "Ford"), or "" if it does not say.
+## Who built the car `instance_or_model` ("GM", "Ford", "Chrysler"), or "" if it does not say.
 func car_make(instance_or_model: String) -> String:
 	if instance_or_model == current_car_id and not car_spec.is_empty():
 		return str(car_spec.get("make", ""))

@@ -33,13 +33,14 @@ filter low on the left, the starter on the right. It has:
                 a two-bolt pad round each port, leaning out above them to the valve cover
                 rail, the rail falling toward the valley, the intake face high over it
   valve covers  crinkle black on the rail, the outer side tall and the top falling toward
-                the valley; bolts round the flange; a well over each plug with its wire's
-                boot in it; the oil filler on the left, the breather on the right
+                the valley; bolts round the flange; a well over each plug for its wire's
+                boot (the game draws the wires and boots); the oil filler on the left, the
+                breather on the right
   intake        aluminum, painted: a flange on each head's intake face, a floor between
                 them, a runner up out of each port into one long plenum, two carb pads on
                 it one behind the other
-  carburetors   two square-flange four-barrels (make_sbc.py's) under one long oval air
-                cleaner
+  carburetors   a square-flange four-barrel (make_sbc.py's) on the front pad, which the
+                game sets on both, under one long oval air cleaner over the two
   distributor   at the right front of the valley, the coil on the left head's front
   manifolds     cast iron shaped like headers, as the 1966 photo's: a flange on each port,
                 a thick runner out of each, down and back into a cast collector behind the
@@ -627,14 +628,13 @@ def valve_covers(d):
         d.finish()
         d.extrude(sk, f"valve_bolt_{s}", 0.25)
 
-        # A well over each plug: a raised ring, the dark hole, the wire's boot in it.
+        # A well over each plug: a raised ring and the dark hole. The game draws the wires
+        # and their boots (engine_assembly.gd).
         pc, pr = PLUG_WELL
         for i, x in enumerate(BORE_X):
             p, n = cover_top(s, x, pc)
             d.cylinder(f"valve_cover_well_{s}_{i}", p - 0.1 * n, n, 2 * pr + 0.3, 0.25)
             d.cylinder(f"valve_cover_well_hole_{s}_{i}", p + 0.15 * n, n, 2 * pr - 0.05, 0.02)
-            d.cylinder(f"spark_plug_boot_{s}_{i}", p - 0.1 * n, n, 0.8, 1.05)
-            d.cone(f"spark_plug_boot_{s}_{i} (10)", p + 0.95 * n, n, 0.4, 0.22, 0.6)
 
         # The oil filler cap on the left cover, the breather on the right.
         x, c = FILLER if s == -1 else BREATHER
@@ -1329,7 +1329,7 @@ def bottom(d):
 ROUND = "r0.2"
 SMALL = "r0.05"
 REDUCE_FACTORS = [
-    ("cylinder_head_1_bosses", "r0.03"), ("cylinder_head_-1_bosses", "r0.03"), ("spark_plug_boot", SMALL),
+    ("cylinder_head_1_bosses", "r0.03"), ("cylinder_head_-1_bosses", "r0.03"),
     ("valve_cover_well", SMALL), ("valve_cover_body", "r0.3"),
     ("air_cleaner_stud", SMALL), ("air_cleaner_wingnut", SMALL), ("air_cleaner_element", 0), ("air_cleaner", 0),
     ("engine_block_distributor", SMALL), ("engine_block_oil_pump", ROUND), ("engine_block_deck", 0),
@@ -1363,7 +1363,7 @@ FINISHES = [
     ("cylinder_head_1_ports", BLACK), ("cylinder_head_-1_ports", BLACK),
     ("exhaust_port_bolts", STEEL), ("head_bolts", STEEL),
     ("valve_bolt", STEEL), ("valve_cover_well_hole", BLACK), ("valve_cover_breather", BLACK),
-    ("oil_filler", BLACK), ("valve_cover", CRINKLE), ("spark_plug_boot", RUBBER),
+    ("oil_filler", BLACK), ("valve_cover", CRINKLE),
     ("freeze_plug", STEEL),
     ("intake_bolts", STEEL), ("intake_manifold_plenum_floor", BLACK),
     ("thermostat_neck_bore", BLACK), ("water_pump_inlet_bore", BLACK), ("water_pump_heater_bore", BLACK),
@@ -1483,7 +1483,8 @@ def main():
         heads(d)
         valve_covers(d)
         intake(d)
-        air_cleaner(d, max(carburetor(d, x, j) for j, x in enumerate(PADS_X)))
+        # One carburetor, on the front pad: the game sets it on each pad of the intake.
+        air_cleaner(d, carburetor(d, PADS_X[0], 0))
         distributor(d)
         coil(d)
         iron_manifolds(d)

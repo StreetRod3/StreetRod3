@@ -4,7 +4,7 @@ extends RefCounted
 ## Catalog of engines, transmissions, wheels, and bolt-on parts.
 ## `.car` files reference entries by id instead of copying them.
 ##
-## Makes and engine families: an engine has a `make` ("GM", "Ford") and a `family`
+## Makes and engine families: an engine has a `make` ("GM", "Ford", "Chrysler") and a `family`
 ## (a key of the register's `families`, each with a name and a make). Parts that bolt to
 ## an engine have the `family` they fit; transmissions and rear ends have a `make`.
 ## Anything with neither fits every car.
