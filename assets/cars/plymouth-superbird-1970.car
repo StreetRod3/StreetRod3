@@ -1,0 +1,78 @@
+{
+  "id": "plymouth-superbird-1970",
+  "name": "Plymouth Superbird 1970",
+  "make": "GM",
+  "model": {
+    "path": "res://assets/cars/plymouth-superbird-1970.glb",
+    "position": [0.0, 0.165, 0.0],
+    "height": 1.395,
+    "ground_clearance": 0.165,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "size": 1.121,
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.722, 0.354, 1.467],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.722, 0.354, 1.467],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.732, 0.378, -1.467],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.732, 0.378, -1.467],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "v8-350",
+    "transmission": "gb_man4",
+    "wheels": "wheel-std"
+  },
+  "driver": {
+    "position": [0.4, 1.11, -0.2]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.62, -11.0],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.89, -6.6],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.4, 1.16, -0.2],
+      "pitch": -3.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.55, 2.95],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "chassis": {
+    "mass": 1740,
+    "wheelbase": 2.934,
+    "cg_height": 0.5,
+    "front_axle_fraction": 0.56,
+    "max_steer_deg": 30
+  },
+  "plates": {
+    "rear": {"position": [0.0, 0.342, -2.801]}
+  }
+}

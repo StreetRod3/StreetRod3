@@ -49,3 +49,7 @@ This work is based on "1956 - Chevrolet Bel Air Nomad" (https://sketchfab.com/3d
 | The model, after conversion | 197.5 in | 74.0 in over the paint | 60.8 in to the top of the paint | 113.9 in between the tires | `tools/fva_to_glb.py` |
 
 The model's tires are 25.2 in across; the game draws its wheels 0.983 times their size to fill the wells. The real car's were 6.70-15.
+
+## Review
+
+The user's marked-up renders from the conversion are in `review/` (review.md).

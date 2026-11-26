@@ -46,6 +46,11 @@ var _speedo_linear_travel := 0.0
 var _tach_needle: Node3D
 var _tach_rest := Transform3D.IDENTITY
 var _tach_angle := 0.0
+## The tach's sweep and the rpm at its two ends: 250 degrees for 0 to 7000 rpm, or the pod
+## name's "arch_N" and "_rpm_LOW_HIGH".
+var _tach_sweep_rad := _GAUGE_SWEEP_RAD
+var _tach_low_rpm := 0.0
+var _tach_max_rpm := _GAUGE_MAX_RPM
 ## Set by the player's car only: its gas gauge follows GameState.fuel. A rival's stays at
 ## full, since nothing about a rival may read the player's car.
 var shows_fuel := false
@@ -235,8 +240,25 @@ func _refresh_steering_wheel() -> void:
 				if top_mph > 0.0:
 					_speedo_max_mph = top_mph
 	_tach_needle = model_root.find_child("tach_needle", true, false) as Node3D if model_root != null else null
+	_tach_sweep_rad = _GAUGE_SWEEP_RAD
+	_tach_low_rpm = 0.0
+	_tach_max_rpm = _GAUGE_MAX_RPM
 	if _tach_needle != null:
 		_tach_rest = _tach_needle.transform
+		var tach_pod := _tach_needle.get_parent()
+		if tach_pod != null:
+			# A pod named "dash_tach_arch_279_rpm_2000_9000_pod" sweeps 279 degrees from
+			# 2000 to 9000 rpm, its needle resting at 2000 below that.
+			var tach_name := String(tach_pod.name)
+			if tach_name.contains("arch_"):
+				var tach_sweep := tach_name.split("arch_")[1].get_slice("_", 0).to_float()
+				if tach_sweep > 0.0:
+					_tach_sweep_rad = deg_to_rad(tach_sweep)
+			if tach_name.contains("_rpm_"):
+				var ends := tach_name.split("_rpm_")[1].split("_")
+				if ends.size() >= 3 and ends[1].to_float() > ends[0].to_float():
+					_tach_low_rpm = ends[0].to_float()
+					_tach_max_rpm = ends[1].to_float()
 	# A gas gauge's pointer rests at F inside a pod named for its travel, as
 	# "dash_fuel_linear_0.0288_pod" (Godot turns the point into "_"), or for a round
 	# gauge's sweep, as "dash_fuel_arch_90_pod", whose needle turns back toward E about
@@ -292,7 +314,7 @@ func _pose_gauges(dt: float, speed: float, rpm: float) -> void:
 		_speedo_angle = lerpf(_speedo_angle, speedo_target, blend)
 		if _speedo_needle != null and is_instance_valid(_speedo_needle):
 			_speedo_needle.transform = _speedo_rest * Transform3D(Basis(Vector3.UP, _speedo_angle), Vector3.ZERO)
-	var tach_target := clampf(rpm / _GAUGE_MAX_RPM, 0.0, 1.0) * _GAUGE_SWEEP_RAD
+	var tach_target := clampf((rpm - _tach_low_rpm) / (_tach_max_rpm - _tach_low_rpm), 0.0, 1.0) * _tach_sweep_rad
 	_tach_angle = lerpf(_tach_angle, tach_target, blend)
 	if _tach_needle != null and is_instance_valid(_tach_needle):
 		_tach_needle.transform = _tach_rest * Transform3D(Basis(Vector3.UP, _tach_angle), Vector3.ZERO)
