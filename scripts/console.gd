@@ -1,10 +1,10 @@
 extends Control
 
 ## A one-line command prompt along the bottom of the screen, opened with ~ on the main
-## menu. The opener registers its commands with `add_command()`. A command's callable
-## returns "" when it has done its job, which closes the prompt, or a line to show
-## above the prompt, which keeps it open. `help` lists the commands. ~ or Esc closes it
-## and emits `closed`; the opener frees it.
+## menu. The opener registers its commands with `add_command()`. `retro` is built in, so
+## every prompt has it. A command's callable returns "" when it has done its job, which
+## closes the prompt, or a line to show above the prompt, which keeps it open. `help`
+## lists the commands. ~ or Esc closes it and emits `closed`; the opener frees it.
 
 signal closed
 
@@ -22,6 +22,7 @@ func add_command(command: String, about: String, run: Callable) -> void:
 
 
 func _ready() -> void:
+	add_command("retro", "colored characters: retro, retro high, or retro low", _on_retro)
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var panel := PanelContainer.new()
@@ -75,6 +76,33 @@ func _input(event: InputEvent) -> void:
 ## ~ (the key left of 1, with or without shift) opens and closes the prompt.
 static func is_toggle_key(key: InputEventKey) -> bool:
 	return key.physical_keycode == KEY_QUOTELEFT or key.keycode == KEY_QUOTELEFT or key.unicode == 0x7e or key.unicode == 0x60
+
+
+## No argument toggles retro mode and keeps the last size. `high` or `low` turns it on at that size.
+func _on_retro(arg: String) -> String:
+	var which := arg.strip_edges().to_lower()
+	if which.is_empty():
+		GameState.set_retro_mode(not GameState.retro_mode)
+	elif which == "high":
+		GameState.set_retro_position(1)
+	elif which == "low":
+		GameState.set_retro_position(2)
+	else:
+		return "Usage: retro [high|low]"
+	GameState.save_settings()
+	_refresh_retro_switches()
+	if not GameState.retro_mode:
+		return "Retro mode is off."
+	return "Retro mode is on, %s resolution." % ("high" if GameState.retro_high else "low")
+
+
+func _refresh_retro_switches() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var label := GameState.retro_switch_text()
+	for node: Node in tree.root.find_children("RetroSwitch", "Button", true, false):
+		(node as Button).text = label
 
 
 func _on_submitted(text: String) -> void:
