@@ -1107,7 +1107,6 @@ func _open_console() -> void:
 	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
 	console.set("bottom_margin", _hud_bottom.size.y if _hud_bottom.visible else 0.0)
 	console.call("add_command", "inherit", "an uncle dies and leaves you money", _on_inherit)
-	console.call("add_command", "retro", "colored characters: retro, retro high, or retro low", _on_retro)
 	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
 	_console = console
 	_garage_ui.add_child(console)
@@ -1153,30 +1152,6 @@ func _on_showme() -> String:
 ## The console's `tiger`. The line stays on the prompt.
 func _on_tiger() -> String:
 	return GameState.fill_tank_free()
-
-
-## The console's `retro`. No argument toggles it. `high` or `low` turns it on at that size.
-func _on_retro(arg: String) -> String:
-	var which := arg.strip_edges().to_lower()
-	if which.is_empty():
-		GameState.set_retro_mode(not GameState.retro_mode)
-	elif which == "high":
-		GameState.set_retro_position(1)
-	elif which == "low":
-		GameState.set_retro_position(2)
-	else:
-		return "Usage: retro [high|low]"
-	GameState.save_settings()
-	_refresh_retro_switches()
-	if not GameState.retro_mode:
-		return "Retro mode is off."
-	return "Retro mode is on, %s resolution." % ("high" if GameState.retro_high else "low")
-
-
-func _refresh_retro_switches() -> void:
-	var label := GameState.retro_switch_text()
-	for node in find_children("RetroSwitch", "Button", true, false):
-		(node as Button).text = label
 
 
 func _gui_has_text_focus() -> bool:
