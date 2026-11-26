@@ -1,8 +1,8 @@
 extends CanvasLayer
 
-## The graphics page, opened from all three settings menus: fullscreen, and what the driving HUD
-## shows and how big. A preview of the race screen beside it changes as the settings do. Sits over
-## the whole screen, and takes the menu's keys while it is up.
+## The graphics page, opened from all three settings menus: fullscreen, retro mode, and what the
+## driving HUD shows and how big. A preview of the race screen beside it changes as the settings
+## do. Sits over the whole screen, and takes the menu's keys while it is up.
 
 const _MenuNav := preload("res://scripts/menu_nav.gd")
 const _DrivingHud := preload("res://scripts/driving_hud.gd")
@@ -11,6 +11,7 @@ const _Player := preload("res://scripts/player_race_car.gd")
 const _Controller := preload("res://scripts/controller.gd")
 
 const SIZE_HELP := "Shrinks the whole panel in the corner, text and spacing alike, and the rev counter with it."
+const RETRO_HELP := "Draws the world in colored characters. Menus and the driving HUD stay as they are."
 ## The preview is the race screen at half size.
 const PREVIEW_SCALE := 0.5
 const SCREEN := Vector2(1280.0, 720.0)
@@ -21,6 +22,10 @@ var _host: Node
 var _page: Control
 var _return_focus: Control
 var _fullscreen: CheckBox
+var _retro: CheckBox
+var _retro_sky: ColorRect
+var _retro_road: ColorRect
+var _retro_panel: StyleBoxFlat
 var _size_label: Label
 var _size: HSlider
 var _shows: Dictionary[String, CheckBox] = {}
@@ -39,7 +44,7 @@ func open(host: Node, page: Control, return_focus: Control) -> void:
 	_build()
 	_page.visible = false
 	host.add_child(self)
-	var items: Array = [_fullscreen, _size]
+	var items: Array = [_fullscreen, _retro, _size]
 	for item: String in _DrivingHud.ITEMS:
 		items.append(_shows[item])
 	items.append(_back_button)
@@ -73,6 +78,18 @@ func _build() -> void:
 	_fullscreen.set_pressed_no_signal(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	box.add_child(_fullscreen)
+	_retro = CheckBox.new()
+	_retro.name = "RetroMode"
+	_retro.text = "Retro mode"
+	_retro.set_pressed_no_signal(GameState.retro_mode)
+	_retro.toggled.connect(_on_retro_toggled)
+	box.add_child(_retro)
+	var retro_help := Label.new()
+	retro_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	retro_help.custom_minimum_size = Vector2(320.0, 0.0)
+	retro_help.modulate = Color(1.0, 1.0, 1.0, 0.7)
+	retro_help.text = RETRO_HELP
+	box.add_child(retro_help)
 	_size_label = Label.new()
 	box.add_child(_size_label)
 	_size = HSlider.new()
@@ -140,6 +157,10 @@ func _build_preview() -> Control:
 	road.position = Vector2(0.0, SCREEN.y * 0.32)
 	road.size = Vector2(SCREEN.x, SCREEN.y * 0.68)
 	screen.add_child(road)
+	_retro_sky = _retro_plate(sky.color, sky.position, sky.size)
+	_retro_road = _retro_plate(road.color, road.position, road.size)
+	screen.add_child(_retro_sky)
+	screen.add_child(_retro_road)
 	_preview_panel = PanelContainer.new()
 	_preview_panel.anchor_left = 1.0
 	_preview_panel.anchor_right = 1.0
@@ -185,9 +206,33 @@ func _build_preview() -> Control:
 	return holder
 
 
+func _retro_plate(ink: Color, at: Vector2, plate_size: Vector2) -> ColorRect:
+	var plate := ColorRect.new()
+	plate.position = at
+	plate.size = plate_size
+	plate.color = Color.WHITE
+	plate.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	plate.visible = GameState.retro_mode
+	var layer := GameState.get_node(^"RetroMode")
+	var mat: Material = layer.call(&"ink_material", ink)
+	plate.material = mat
+	return plate
+
+
 func _update_preview() -> void:
 	(_preview_panel.get_node("Margin/VBox/HintLabel") as Control).visible = GameState.hud_shows(_DrivingHud.HINTS)
 	_DrivingHud.apply(_preview_panel, _preview_meter)
+	_retro_sky.visible = GameState.retro_mode
+	_retro_road.visible = GameState.retro_mode
+	# The preview panel is translucent, and a field of characters behind it swallows the
+	# lines. While retro mode is on, give it a solid back so the HUD preview stays readable.
+	if GameState.retro_mode:
+		if _retro_panel == null:
+			_retro_panel = StyleBoxFlat.new()
+			_retro_panel.bg_color = Color(0.1, 0.11, 0.14, 1.0)
+		_preview_panel.add_theme_stylebox_override("panel", _retro_panel)
+	else:
+		_preview_panel.remove_theme_stylebox_override("panel")
 
 
 func _exit_tree() -> void:
@@ -205,6 +250,11 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _show_size() -> void:
 	_size_label.text = "Driving HUD size: %d%%" % roundi(GameState.hud_size * 100.0)
+
+
+func _on_retro_toggled(pressed: bool) -> void:
+	GameState.set_retro_mode(pressed)
+	_update_preview()
 
 
 func _on_fullscreen_toggled(pressed: bool) -> void:

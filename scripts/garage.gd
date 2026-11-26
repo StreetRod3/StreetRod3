@@ -38,6 +38,7 @@ var _view_port: SubViewport
 @onready var _clock_music: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _clock_music_volume: HSlider = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicSlider
 @onready var _clock_arcade: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ArcadeCheck
+@onready var _clock_retro: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/RetroCheck
 @onready var _clock_imperial: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/ImperialCheck
 @onready var _clock_skip_cruise: CheckBox = $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
 @onready var _stats_panel: Control = $GarageUI/StatsPanel
@@ -1106,6 +1107,7 @@ func _open_console() -> void:
 	console.call("add_command", "tiger", "fill the gas tank with premium gas", _on_tiger)
 	console.set("bottom_margin", _hud_bottom.size.y if _hud_bottom.visible else 0.0)
 	console.call("add_command", "inherit", "an uncle dies and leaves you money", _on_inherit)
+	console.call("add_command", "retro", "draw the world in colored characters (again to turn off)", _on_retro)
 	console.closed.connect(_on_console_closed, CONNECT_DEFERRED)
 	_console = console
 	_garage_ui.add_child(console)
@@ -1153,6 +1155,17 @@ func _on_tiger() -> String:
 	return GameState.fill_tank_free()
 
 
+## The console's `retro`. Toggles the setting and leaves the news on the prompt.
+func _on_retro() -> String:
+	GameState.set_retro_mode(not GameState.retro_mode)
+	GameState.save_settings()
+	_clock_retro.set_pressed_no_signal(GameState.retro_mode)
+	var box := find_child("RetroMode", true, false) as CheckBox
+	if box != null:
+		box.set_pressed_no_signal(GameState.retro_mode)
+	return "Retro mode is on." if GameState.retro_mode else "Retro mode is off."
+
+
 func _gui_has_text_focus() -> bool:
 	var focus := get_viewport().gui_get_focus_owner()
 	return focus is LineEdit or focus is TextEdit
@@ -1187,6 +1200,7 @@ func _sync_menu_nav() -> void:
 	elif _clock_menu.visible and _clock_settings.visible:
 		_nav.setup([
 			$GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
+			_clock_retro,
 			_clock_master,
 			_clock_music,
 			_clock_music_volume,
@@ -1289,6 +1303,10 @@ func _build_view_above_status() -> void:
 	_fit_view_above_status()
 	root.size_changed.connect(_fit_view_above_status)
 	_view_holder.resized.connect(_fit_view_above_status)
+	# This view is a viewport of its own, so retro mode restyles the container itself.
+	var retro := GameState.get_node_or_null(^"RetroMode")
+	if retro != null and retro.has_method(&"cover_view"):
+		retro.call(&"cover_view", _view_holder)
 
 
 func _fit_view_above_status() -> void:
@@ -3880,12 +3898,19 @@ func _refresh_clock_settings() -> void:
 	_clock_music.set_pressed_no_signal(GameState.music_enabled)
 	_clock_music_volume.set_value_no_signal(GameState.music_volume)
 	_clock_arcade.set_pressed_no_signal(GameState.arcade_drive)
+	_clock_retro.set_pressed_no_signal(GameState.retro_mode)
 	_clock_imperial.set_pressed_no_signal(GameState.imperial_units)
 	_clock_skip_cruise.set_pressed_no_signal(GameState.skip_cruise)
 
 
 func _on_clock_graphics_pressed() -> void:
-	_GraphicsSetup.new().open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
+	var page := _GraphicsSetup.new()
+	page.tree_exited.connect(func() -> void: _clock_retro.set_pressed_no_signal(GameState.retro_mode))
+	page.open(self, _clock_settings, $GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
+
+
+func _on_clock_retro_toggled(pressed: bool) -> void:
+	GameState.set_retro_mode(pressed)
 
 
 func _on_clock_master_volume_changed(value: float) -> void:

@@ -87,6 +87,8 @@ func _on_submitted(text: String) -> void:
 	if tab_at >= 0 and (split_at < 0 or tab_at < split_at):
 		split_at = tab_at
 	var command := (trimmed if split_at < 0 else trimmed.left(split_at)).to_lower()
+	if command.begins_with("/"):
+		command = command.substr(1)
 	var arg := "" if split_at < 0 else trimmed.substr(split_at + 1).strip_edges()
 	if command == "help":
 		_show(_help())
