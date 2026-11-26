@@ -1136,9 +1136,9 @@ horizontal_alignment = 1
 layout_mode = 2
 text = "Graphics"
 
-[node name="RetroCheck" type="CheckBox" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox"]
+[node name="RetroSwitch" type="Button" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox"]
 layout_mode = 2
-text = "Retro mode"
+text = "Retro: off"
 
 [node name="MasterLabel" type="Label" parent="GarageUI/ClockMenu/SettingsPanel/Margin/VBox" unique_id=210070025]
 layout_mode = 2
@@ -1414,7 +1414,7 @@ script = ExtResource("5")
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/QuitBtn" to="." method="_on_clock_quit_menu_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/Panel/Margin/VBox/CloseBtn" to="." method="_on_clock_close_pressed"]
 [connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/GraphicsBtn" to="." method="_on_clock_graphics_pressed"]
-[connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/RetroCheck" to="." method="_on_clock_retro_toggled"]
+[connection signal="pressed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/RetroSwitch" to="." method="_on_clock_retro_switch_pressed"]
 [connection signal="value_changed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MasterSlider" to="." method="_on_clock_master_volume_changed"]
 [connection signal="toggled" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_clock_music_toggled"]
 [connection signal="value_changed" from="GarageUI/ClockMenu/SettingsPanel/Margin/VBox/MusicSlider" to="." method="_on_clock_music_volume_changed"]

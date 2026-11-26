@@ -48,10 +48,12 @@ layout_mode = 2
 size_flags_horizontal = 0
 text = "Graphics"
 
-[node name="RetroCheck" type="CheckBox" parent="Margin/VBox"]
+[node name="RetroSwitch" type="Button" parent="Margin/VBox"]
 unique_name_in_owner = true
+custom_minimum_size = Vector2(200, 40)
 layout_mode = 2
-text = "Retro mode"
+size_flags_horizontal = 0
+text = "Retro: off"
 
 [node name="MasterLabel" type="Label" parent="Margin/VBox"]
 layout_mode = 2
@@ -111,7 +113,7 @@ size_flags_horizontal = 0
 text = "Back to main menu"
 
 [connection signal="pressed" from="Margin/VBox/GraphicsBtn" to="." method="_on_graphics_pressed"]
-[connection signal="toggled" from="Margin/VBox/RetroCheck" to="." method="_on_retro_toggled"]
+[connection signal="pressed" from="Margin/VBox/RetroSwitch" to="." method="_on_retro_switch_pressed"]
 [connection signal="value_changed" from="Margin/VBox/MasterSlider" to="." method="_on_master_volume_changed"]
 [connection signal="toggled" from="Margin/VBox/MusicCheck" to="." method="_on_music_toggled"]
 [connection signal="value_changed" from="Margin/VBox/MusicSlider" to="." method="_on_music_volume_changed"]

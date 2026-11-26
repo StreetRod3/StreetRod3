@@ -74,10 +74,16 @@ void fragment() {
 		ix = mod(ix + floor(hx * cell_px.x), cell_px.x);
 		iy = mod(iy + floor(hy * cell_px.y), cell_px.y);
 	}
-	float tx = ix / max(cell_px.x - 1.0, 1.0);
-	float ty = iy / max(cell_px.y - 1.0, 1.0);
-	float lx = clamp(floor(mix(1.0, max(glyph_w - 2.0, 1.0), tx)), 0.0, glyph_w - 1.0);
-	float ly = clamp(floor(mix(1.0, max(atlas_px.y - 2.0, 1.0), ty)), 0.0, atlas_px.y - 1.0);
+	// The fine grid is smaller than the bitmap, so the ink is spread across the cell.
+	// The coarse grid is the bitmap's own size, one texel to a pixel, as it was first drawn.
+	float lx = clamp(ix, 0.0, glyph_w - 1.0);
+	float ly = clamp(iy, 0.0, atlas_px.y - 1.0);
+	if (cell_px.x < glyph_w) {
+		float tx = ix / max(cell_px.x - 1.0, 1.0);
+		float ty = iy / max(cell_px.y - 1.0, 1.0);
+		lx = clamp(floor(mix(1.0, max(glyph_w - 2.0, 1.0), tx)), 0.0, glyph_w - 1.0);
+		ly = clamp(floor(mix(1.0, max(atlas_px.y - 2.0, 1.0), ty)), 0.0, atlas_px.y - 1.0);
+	}
 	vec2 sample_px = vec2(index * glyph_w + lx + 0.5, ly + 0.5);
 	float mask = texture(glyph_tex, sample_px / atlas_px).r;
 	COLOR = vec4(ink * mask, 1.0);

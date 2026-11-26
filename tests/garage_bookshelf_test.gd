@@ -173,15 +173,26 @@ func _run() -> void:
 	assert(console_out.text.begins_with("Unknown book:"))
 	assert((state.call("owned_books") as Array).is_empty())
 
-	# `/retro` toggles the setting and then puts it back.
+	# `/retro` toggles. `high` and `low` turn it on at that size, then it is put back.
 	var retro_was: bool = bool(state.get("retro_mode"))
+	var high_was: bool = bool(state.get("retro_high"))
 	console.call("_on_submitted", "/retro")
 	assert(bool(state.get("retro_mode")) == (not retro_was))
-	assert(console_out.text == ("Retro mode is on." if not retro_was else "Retro mode is off."))
+	if bool(state.get("retro_mode")):
+		assert(console_out.text.begins_with("Retro mode is on"))
+	else:
+		assert(console_out.text == "Retro mode is off.")
+	console.call("_on_submitted", "/retro high")
+	assert(bool(state.get("retro_mode")) and bool(state.get("retro_high")))
+	assert(console_out.text == "Retro mode is on, high resolution.")
+	console.call("_on_submitted", "/retro low")
+	assert(bool(state.get("retro_mode")) and not bool(state.get("retro_high")))
+	assert(console_out.text == "Retro mode is on, low resolution.")
 	console.call("_on_submitted", "retro now")
-	assert(console_out.text.begins_with("Unknown command:"))
-	console.call("_on_submitted", "retro")
-	assert(bool(state.get("retro_mode")) == retro_was)
+	assert(console_out.text.begins_with("Usage:"))
+	state.call("set_retro_mode", retro_was)
+	state.call("set_retro_high", high_was)
+	state.call("save_settings")
 
 	# Existing zero-arg console commands still work, and reject stray args.
 	var cash_before: int = int(state.get("money"))

@@ -5,9 +5,11 @@ extends CanvasLayer
 ## view is a viewport of its own; cover_view() restyles that container instead of the window.
 
 const _SHADER := preload("res://shaders/retro_mode.gdshader")
-## On-screen cell. Half the old 8×16, so a 1280×720 view is 320×90 characters instead of 160×45.
-const CELL := Vector2i(4, 8)
-## The drawn glyph. Scaled into `CELL` by the shader.
+## Finer grid: a 1280×720 view is 320×90 characters.
+const CELL_HIGH := Vector2i(4, 8)
+## The original, larger characters: 160×45 on that same view.
+const CELL_LOW := Vector2i(8, 16)
+## The drawn glyph. Scaled into the cell by the shader.
 const _GLYPH := Vector2i(8, 16)
 ## Dark to light. Each glyph is denser than the one before it, so a brighter cell reads brighter.
 const _RAMP := " .:-=+*#@"
@@ -42,6 +44,19 @@ func ink_material(ink: Color) -> ShaderMaterial:
 
 func set_enabled(_on: bool) -> void:
 	_apply()
+
+
+## High or low, on the materials already drawing.
+func apply_resolution() -> void:
+	var cell := cell_size()
+	if _screen_mat != null:
+		_screen_mat.set_shader_parameter("cell_px", cell)
+	if _texture_mat != null:
+		_texture_mat.set_shader_parameter("cell_px", cell)
+
+
+func cell_size() -> Vector2:
+	return Vector2(CELL_HIGH if GameState.retro_high else CELL_LOW)
 
 
 ## The garage draws its world into `holder` rather than the window. Restyle that, and keep the
@@ -83,7 +98,7 @@ func _make_material(mode: float, ink: Color) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
 	mat.shader = _SHADER
 	mat.set_shader_parameter("glyph_tex", _atlas)
-	mat.set_shader_parameter("cell_px", Vector2(CELL))
+	mat.set_shader_parameter("cell_px", cell_size())
 	mat.set_shader_parameter("glyph_count", float(_RAMP.length()))
 	mat.set_shader_parameter("source_mode", mode)
 	mat.set_shader_parameter("flat_ink", ink)
