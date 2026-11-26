@@ -95,6 +95,7 @@ A car in more than one game is listed once. The 1963 Corvette is SR1's car 5, Th
 - [x] 1952 Buick Super Convertible
 - [x] 1954 Buick Special
 - [x] 1954 Buick Special Estate Wagon
+- [x] 1954 Chevy Bel Air
 - [x] 1955 Packard Caribbean
 - [x] 1955 Packard Clipper
 - [x] 1955 Packard Patrician
@@ -107,3 +108,4 @@ A car in more than one game is listed once. The 1963 Corvette is SR1's car 5, Th
 - [x] 1967 Chevy Impala
 - [x] 1970 Dodge Challenger
 - [x] 1970 Ford F100
+- [x] 1970 Plymouth Superbird

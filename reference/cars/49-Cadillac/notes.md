@@ -47,3 +47,7 @@ This work is based on "1949 - Cadillac Series 62" (https://sketchfab.com/3d-mode
 | The model, after conversion | 215.1 in | 80.1 in over the paint | 62.0 in to the top of the top | 126.6 in between the tires | `tools/fva_to_glb.py` |
 
 The model's tires are 28.3 in across; the game draws its wheels 1.104 times their size to fill the wells. The real car's were 8.00-15.
+
+## Review
+
+The user's marked-up renders from the conversion are in `review/` (review.md).

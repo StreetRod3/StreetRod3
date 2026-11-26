@@ -3,20 +3,23 @@
 
     python3 -I tools/fva_to_glb.py nomad-1956 assets/cars/chevy-nomad-1956.glb
     python3 -I tools/fva_to_glb.py cadillac-1949 assets/cars/cadillac-series-62-1949.glb
+    python3 -I tools/fva_to_glb.py superbird-1970 assets/cars/plymouth-superbird-1970.glb
 
-Sources (both CC-BY-4.0, by Free Vehicle Archive, https://sketchfab.com/free-vehicle-archive):
+Sources (all CC-BY-4.0, by Free Vehicle Archive, https://sketchfab.com/free-vehicle-archive):
   * "1956 - Chevrolet Bel Air Nomad",
     https://sketchfab.com/3d-models/1956-chevrolet-bel-air-nomad-efd82e3b0a5e415a921853c88e2a18ab
   * "1949 - Cadillac Series 62",
     https://sketchfab.com/3d-models/1949-cadillac-series-62-9a480a4c86ab435188897915759e8aab
+  * "1970 - Plymouth Superbird - Free Vehicle Archive" (the NASCAR car),
+    https://sketchfab.com/3d-models/1970-plymouth-superbird-free-vehicle-archive-3a593f93fc9343ebacc9986714f8b06e
 
-The first argument names an entry in CARS. Both models are made in Blender the same way:
+The first argument names an entry in CARS. The models are made in Blender the same way:
 one object per part, flat-colored materials for most of the car and small images for
 the lamps, badges, gauges and interior. Blender opens the source (this script runs
 itself under `blender -b` for that, so Blender must be on the PATH) and hands back every
 triangle with its object, material and UVs, the materials' settings and the images'
-pixels; the rest is plain Python. In both models the nose points along -Y, Z is up and
-the driver's side is +X.
+pixels; the rest is plain Python. In all of them the nose points along -Y, Z is up and the
+driver's side is +X. Objects are named after the model (`base`, or the file's name).
 
 What goes where is set per car in CARS, by object (the number Blender put after the
 model's name, '' for the one without):
@@ -80,6 +83,7 @@ WELD = 0.0005
 
 NOMAD = 'reference/cars/56-nomad'
 CADILLAC = 'reference/cars/49-Cadillac'
+SUPERBIRD = 'reference/cars/70-superbird'
 
 CARS = {
     'nomad-1956': {
@@ -191,6 +195,50 @@ CARS = {
     },
 }
 
+CARS['superbird-1970'] = {
+    'source': (SUPERBIRD + '/source/1970 Plymouth Superbird.glb', None),
+    # The objects are named after the model, not the file.
+    'base': '1970 - Plymouth Superbird [NASCAR]',
+    # 221.0 in long, 76.4 in wide, 61.4 in to the top of the wing, 115.8 in wheelbase
+    # (Aero Warriors, Superbird specifications).
+    'length': 221.0, 'width': 76.4, 'height': 61.4, 'wheelbase': 115.8,
+    'roof': 'paint',
+    'paint': {'Vehicle - Body - Paint'},
+    'accent': set(),
+    'tires': ['019', '023', '028', '031'],
+    'drop': [
+        # Tires, rims, hub caps.
+        '019', '023', '028', '031', '020', '024', '027', '030', '021', '025', '029', '032',
+        # The rear axle and the exhaust.
+        '076', '069',
+    ],
+    # The floor, suspension, transmission, driveshaft and exhaust pipe are one object; the
+    # floor pan and the trunk's pan stay.
+    'split': {
+        '022': [
+            ((-0.742, -2.068, 0.177), (0.742, 0.855, 0.402)),
+            ((-0.762, 1.727, 0.289), (0.763, 2.402, 0.378)),
+        ],
+    },
+    'clamp': {},
+    # The rear bumper stays on: the nose has none, and under the tail panel the body is
+    # open behind it.
+    'bumpers': {},
+    'steering': ['074', '075'],
+    # The rear plate on the middle of the bumper, between the exhaust holes; the nose has
+    # no place for one.
+    'plates': {'rear': (0.0, 2.596, 0.48)},
+    # The race panel: a tach (2,000 to 9,000 rpm round from the bottom), fuel pressure, oil
+    # temperature, water temperature and oil pressure, their needles printed on their faces.
+    # The tach's red needle is painted out for one that works; the thin tell-tale beside
+    # it stays, as do the other gauges.
+    'gauges': {
+        'tach': {'face': ('066', 'RPM'), 'pivot': (257, 258), 'zero': (259, 480), 'full': (480, 291),
+                 'tip': (259, 463), 'rpm': (2000, 9000), 'color': (176, 26, 30),
+                 'erase': {'line': [(257, 258), (341, 29)], 'width': 6, 'ring': 199}},
+    },
+}
+
 ## Clear glass with a faint green tint, as on the Studebaker.
 GLASS_MATERIAL = {
     'name': 'glass',
@@ -210,8 +258,13 @@ LOOKS = {
     'Rim': ((200, 204, 208), 0.2, 1.0),
     'Headlight-Base': (None, 0.15, 1.0),
 }
-## The palette cell of a gas gauge's own pointer (tools/fva_dash.py).
-POINTER = '__pointer__'
+
+
+def needle_cell(color):
+    """The palette cell of a needle or pointer of its own (tools/fva_dash.py), by its color."""
+    return '__needle_%d_%d_%d__' % tuple(color)
+
+
 ## A flat material's metallic when LOOKS doesn't give it.
 METALLIC = 0.0
 
@@ -235,6 +288,9 @@ def dump(src, out, base, tires_only):
     if src.endswith('.glb'):
         bpy.ops.wm.read_factory_settings(use_empty=True)
         bpy.ops.import_scene.gltf(filepath=src)
+    elif src.lower().endswith('.fbx'):
+        bpy.ops.wm.read_factory_settings(use_empty=True)
+        bpy.ops.import_scene.fbx(filepath=src)
     else:
         bpy.ops.wm.open_mainfile(filepath=src, load_ui=False)
     want = set(tires_only.split(',')) if tires_only else None
@@ -740,7 +796,7 @@ def build(car_name, dst):
             src = os.path.join(tmp, inner)
         else:
             src = path
-        base = os.path.splitext(os.path.basename(inner or path))[0].replace(' - Stripped', '')
+        base = car.get('base') or os.path.splitext(os.path.basename(inner or path))[0].replace(' - Stripped', '')
         npz = os.path.join(tmp, 'pieces.npz')
         run_dump(src, npz, base)
         pieces = load_pieces(npz)
@@ -754,10 +810,17 @@ def build(car_name, dst):
         else:
             tire_pos = np.concatenate([p['pos'] for (obj, _), p in pieces.items() if obj in car['tires']])
 
-    gauges = car.get('gauges')
-    if gauges and 'erase' in gauges.get('fuel', {}):
-        image = materials[gauges['face'][1]]['image']
-        images[image] = fva_dash.erase(images[image], gauges['fuel']['erase'])
+    # Printed pointers and needles that get working ones of their own are painted out.
+    gauges = car.get('gauges') or {}
+    for part in ('speedo', 'tach', 'fuel'):
+        spec = gauges.get(part, {})
+        if 'erase' in spec:
+            image = materials[spec.get('face', gauges.get('face'))[1]]['image']
+            if isinstance(spec['erase'], dict):
+                e = spec['erase']
+                images[image] = fva_dash.erase_needle(images[image], e['line'], e['width'], spec['pivot'], e['ring'])
+            else:
+                images[image] = fva_dash.erase(images[image], spec['erase'])
 
     # Leave out the dropped objects and the loose parts of split objects not kept.
     kept = {}
@@ -812,14 +875,14 @@ def build(car_name, dst):
     # its own, the turn that rests the needle), and which group each needle object is in.
     pods, pod_of = [], {}
     if gauges:
-        face_obj, face_mat = gauges['face']
-        fp = pieces[(face_obj, face_mat)]
-        face = (to_game(fp['pos']).reshape(-1, 3, 3), fp['uv'].reshape(-1, 3, 2))
-        px = images[materials[face_mat]['image']]
+        def faces(key):
+            fp = pieces[tuple(key)]
+            px = images[materials[key[1]]['image']]
+            return (to_game(fp['pos']).reshape(-1, 3, 3), fp['uv'].reshape(-1, 3, 2)), (px.shape[1], px.shape[0])
         objects = [o for part in ('speedo', 'fuel') for o in gauges.get(part, {}).get('objects', [])]
         needles = {o: to_game(np.concatenate([p['pos'] for (o2, _), p in kept.items() if o2 == o]))
                    for o in objects}
-        pods = fva_dash.build(gauges, face, (px.shape[1], px.shape[0]), needles)
+        pods = fva_dash.build(gauges, faces, needles)
         for i, pod in enumerate(pods):
             if isinstance(pod[4], list):
                 pod_of.update({o: f'pod{i}' for o in pod[4]})
@@ -841,8 +904,9 @@ def build(car_name, dst):
                 imaged.append(m)
         elif m not in flat:
             flat.append(m)
-    if any(not isinstance(pod[4], list) for pod in pods):
-        flat.append(POINTER)
+    # A cell for each color of the needles and pointers of their own.
+    own = {needle_cell(pod[4][2]): pod[4][2] for pod in pods if not isinstance(pod[4], list)}
+    flat += sorted(own)
     cells = ['__paint__', '__accent__'] + sorted(flat)
     side = 1
     while side * side < len(cells):
@@ -856,8 +920,8 @@ def build(car_name, dst):
             color, rough, metal, alpha = (255, 255, 255), 0.3, 0.0, 255
         elif name == '__accent__':
             color, rough, metal, alpha = (255, 255, 0), 0.3, 0.0, 255
-        elif name == POINTER:
-            color, rough, metal, alpha = fva_dash.POINTER_COLOR, 0.4, 0.0, 0
+        elif name in own:
+            color, rough, metal, alpha = own[name], 0.4, 0.0, 0
         else:
             color, rough, metal = look(name, materials[name])
             alpha = 0
@@ -964,7 +1028,7 @@ def build(car_name, dst):
             prims = primitives(f'pod{i}', (at, basis @ fva_dash.turn(rest)))
         else:
             pp, nn, uu, index = share_corners(made[0].astype(np.float32), made[1].astype(np.float32),
-                                              np.tile(cell_uv[POINTER], (len(made[0]), 1)).astype(np.float32))
+                                              np.tile(cell_uv[needle_cell(made[2])], (len(made[0]), 1)).astype(np.float32))
             prims = [out.primitive(pp, nn, index, mat_index['palette'], uu)]
         needle = out.node(needle_name, mesh=out.mesh(needle_name, prims))
         roots.append(out.node(pod_name, translation=at, rotation=quaternion(basis), children=[needle]))
