@@ -206,6 +206,24 @@
       "hp": 135.0,
       "color": [0.1, 0.14, 0.35, 1.0],
       "car_file": "res://assets/cars/jeep-dispatcher-1965.car"
+    },
+    {
+      "id": "chevy-nomad-1956",
+      "name": "1956 Chevy Nomad",
+      "price": 1200,
+      "vmax": 190.0,
+      "hp": 230.0,
+      "color": [0.9, 0.88, 0.8, 1.0],
+      "car_file": "res://assets/cars/chevy-nomad-1956.car"
+    },
+    {
+      "id": "cadillac-series-62-1949",
+      "name": "1949 Cadillac Series 62",
+      "price": 1250,
+      "vmax": 190.0,
+      "hp": 230.0,
+      "color": [0.05, 0.25, 0.17, 1.0],
+      "car_file": "res://assets/cars/cadillac-series-62-1949.car"
     }
   ]
 }

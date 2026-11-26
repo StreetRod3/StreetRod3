@@ -34,6 +34,9 @@ model's name, '' for the one without):
     bumper wraps round the fins' ends and covers the gap under the trunk): the paint's
     open bottom edges there carried down and tucked in under the car, straight down or
     flowing on from the panel (see rear_skirt);
+  * `plates`: where the game's plates go (model space), printed in the game's space for
+    the car file;
+  * `gauges`: the working gauges (tools/fva_dash.py);
   * `steering`: the steering wheel, as its own `driving_wheel` node with +Z down the
     column, scaled evenly so it stays round;
   * `tires`: the tire objects that set the wheel positions printed at the end (from
@@ -126,6 +129,19 @@ CARS = {
         },
         # Rim and spokes (in the body paint), the horn ring, the horn button.
         'steering': ['041', '043', '042', '040'],
+        # Where the plates go (model space, the middle of the plate's face): the rear on
+        # the bumper where the model's plain black plate was, the front on the middle of
+        # the front bumper's bar, which the model leaves bare.
+        'plates': {'front': (0.0, -2.512, 0.40), 'rear': (0.0, 2.326, 0.451)},
+        # The fan-shaped speedometer (its face printed in the Gauge image; the pixels are
+        # the image as the model holds it, the reference copy upside down) with its red
+        # needle; the gas gauge's pointer is printed in its window, under GASOLINE at the
+        # top right of the fan, so it gets one of its own.
+        'gauges': {
+            'face': ('112', 'Gauge'),
+            'speedo': {'objects': ['044'], 'mph': 110, 'marks': [(290, 257), (397, 226), (465, 254)]},
+            'fuel': {'slide': [(409, 189), (459, 201)], 'erase': [(443, 202), (448, 194)]},
+        },
     },
     'cadillac-1949': {
         # The user's copy with the wheels, suspension, engine, exhaust and the rest of the
@@ -159,6 +175,19 @@ CARS = {
             'bumper_rear': ['017', '104', '018', '106', '041'],
         },
         'steering': ['111'],
+        # The rear plate on the black face of the bumper's plate housing, the front on the
+        # middle of the front bumper's bar between its guards.
+        'plates': {'front': (0.0, -2.52, 0.405), 'rear': (0.0, 2.744, 0.6055)},
+        # The arched speedometer over the white plate, its needle turning from the
+        # plate's middle (where its 0 and 110 ticks point); the gas gauge at the far
+        # left, E to F across the top of its window. The temperature, battery and oil
+        # needles stay put.
+        'gauges': {
+            'face': ('124', 'Dials'),
+            'speedo': {'objects': ['125'], 'mph': 110, 'marks': [(281, 171), (476, 110), (752, 186)],
+                       'pivot': (519, 240)},
+            'fuel': {'objects': ['128'], 'pivot': (97, 283), 'empty': (78, 262), 'full': (116, 262)},
+        },
     },
 }
 
@@ -181,6 +210,8 @@ LOOKS = {
     'Rim': ((200, 204, 208), 0.2, 1.0),
     'Headlight-Base': (None, 0.15, 1.0),
 }
+## The palette cell of a gas gauge's own pointer (tools/fva_dash.py).
+POINTER = '__pointer__'
 ## A flat material's metallic when LOOKS doesn't give it.
 METALLIC = 0.0
 
@@ -667,19 +698,20 @@ def rear_skirt(kept, car, spec):
         # faces up or down), facing round the way its own shape does.
         shade = np.concatenate(o['shade'])
         given = ~np.isnan(shade[:, 0])
-        flat_way = vn[given] * np.array([1, 1, 0])
-        flat_way /= np.maximum(np.linalg.norm(flat_way, axis=1, keepdims=True), 1e-12)
-        # Up against the panel ahead, on its side, facing as that panel's side does.
-        at_side = pos[given]
-        ahead = np.stack([np.sign(at_side[:, 0]) * np.interp(at_side[:, 2], heights, cut[:, 1]),
-                          np.interp(at_side[:, 2], heights, cut[:, 3]), np.zeros(len(at_side))], 1)
-        ahead /= np.maximum(np.linalg.norm(ahead, axis=1, keepdims=True), 1e-12)
-        near_it = (np.clip(1 - (at_side[:, 1] - spec['section']) / SKIRT_MEET, 0, 1)
-                   * (np.abs(at_side[:, 0]) > spec['center'][0]))[:, None]
-        flat_way = flat_way * (1 - near_it) + ahead * near_it
-        flat_way /= np.maximum(np.linalg.norm(flat_way, axis=1, keepdims=True), 1e-12)
-        vn[given] = (flat_way * np.linalg.norm(shade[given][:, :2], axis=1, keepdims=True)
-                     + shade[given] * np.array([0, 0, 1]))
+        if given.any():
+            flat_way = vn[given] * np.array([1, 1, 0])
+            flat_way /= np.maximum(np.linalg.norm(flat_way, axis=1, keepdims=True), 1e-12)
+            # Up against the panel ahead, on its side, facing as that panel's side does.
+            at_side = pos[given]
+            ahead = np.stack([np.sign(at_side[:, 0]) * np.interp(at_side[:, 2], heights, cut[:, 1]),
+                              np.interp(at_side[:, 2], heights, cut[:, 3]), np.zeros(len(at_side))], 1)
+            ahead /= np.maximum(np.linalg.norm(ahead, axis=1, keepdims=True), 1e-12)
+            near_it = (np.clip(1 - (at_side[:, 1] - spec['section']) / SKIRT_MEET, 0, 1)
+                       * (np.abs(at_side[:, 0]) > spec['center'][0]))[:, None]
+            flat_way = flat_way * (1 - near_it) + ahead * near_it
+            flat_way /= np.maximum(np.linalg.norm(flat_way, axis=1, keepdims=True), 1e-12)
+            vn[given] = (flat_way * np.linalg.norm(shade[given][:, :2], axis=1, keepdims=True)
+                         + shade[given] * np.array([0, 0, 1]))
         # Where the valance meets its panel, it is shaded as the panel is there.
         for i, q in enumerate(pos):
             n = tops.get(tuple(np.round(q, 6)))
@@ -695,6 +727,7 @@ def build(car_name, dst):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from studebaker_to_glb import Gltf, ring_axis, share_corners, png_bytes
     from studebaker_dash import quaternion
+    import fva_dash
     import zipfile
 
     car = CARS[car_name]
@@ -720,6 +753,11 @@ def build(car_name, dst):
             tire_pos = np.concatenate([v for v in np.load(wnpz).values()])
         else:
             tire_pos = np.concatenate([p['pos'] for (obj, _), p in pieces.items() if obj in car['tires']])
+
+    gauges = car.get('gauges')
+    if gauges and 'erase' in gauges.get('fuel', {}):
+        image = materials[gauges['face'][1]]['image']
+        images[image] = fva_dash.erase(images[image], gauges['fuel']['erase'])
 
     # Leave out the dropped objects and the loose parts of split objects not kept.
     kept = {}
@@ -770,6 +808,23 @@ def build(car_name, dst):
     def to_game(q):
         return (q - origin) * scale
 
+    # The working gauges' pods: (name, needle's name, origin, basis, objects or a mesh of
+    # its own, the turn that rests the needle), and which group each needle object is in.
+    pods, pod_of = [], {}
+    if gauges:
+        face_obj, face_mat = gauges['face']
+        fp = pieces[(face_obj, face_mat)]
+        face = (to_game(fp['pos']).reshape(-1, 3, 3), fp['uv'].reshape(-1, 3, 2))
+        px = images[materials[face_mat]['image']]
+        objects = [o for part in ('speedo', 'fuel') for o in gauges.get(part, {}).get('objects', [])]
+        needles = {o: to_game(np.concatenate([p['pos'] for (o2, _), p in kept.items() if o2 == o]))
+                   for o in objects}
+        pods = fva_dash.build(gauges, face, (px.shape[1], px.shape[0]), needles)
+        for i, pod in enumerate(pods):
+            if isinstance(pod[4], list):
+                pod_of.update({o: f'pod{i}' for o in pod[4]})
+            print(f'gauge {pod[0]}: {pod[1]} at {pod[2].round(3)}, turned {pod[5]:.1f} degrees to rest')
+
     steer_all = np.concatenate([p['pos'] for (o, m), p in kept.items() if o in car['steering']])
     rim = to_game(steer_all)
     rim_mid = (rim.min(0) + rim.max(0)) / 2
@@ -786,6 +841,8 @@ def build(car_name, dst):
                 imaged.append(m)
         elif m not in flat:
             flat.append(m)
+    if any(not isinstance(pod[4], list) for pod in pods):
+        flat.append(POINTER)
     cells = ['__paint__', '__accent__'] + sorted(flat)
     side = 1
     while side * side < len(cells):
@@ -799,6 +856,8 @@ def build(car_name, dst):
             color, rough, metal, alpha = (255, 255, 255), 0.3, 0.0, 255
         elif name == '__accent__':
             color, rough, metal, alpha = (255, 255, 0), 0.3, 0.0, 255
+        elif name == POINTER:
+            color, rough, metal, alpha = fva_dash.POINTER_COLOR, 0.4, 0.0, 0
         else:
             color, rough, metal = look(name, materials[name])
             alpha = 0
@@ -860,7 +919,7 @@ def build(car_name, dst):
             pos = to_game(p['pos'])
             nrm = p['nrm'] / scale
             nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-12)
-        group = 'driving_wheel' if obj in car['steering'] else next(
+        group = 'driving_wheel' if obj in car['steering'] else pod_of.get(obj) or next(
             (g for g, objs in car['bumpers'].items() if obj in objs), 'body')
         uv = p['uv'].copy()
         if 'Glass' in m:
@@ -900,6 +959,15 @@ def build(car_name, dst):
     wheel_mesh = out.mesh('driving_wheel_mesh', primitives('driving_wheel', (hub, wheel_basis)))
     roots.append(out.node('driving_wheel', translation=hub, rotation=quaternion(wheel_basis),
                           children=[out.node('driving_wheel_mesh', mesh=wheel_mesh)]))
+    for i, (pod_name, needle_name, at, basis, made, rest) in enumerate(pods):
+        if isinstance(made, list):
+            prims = primitives(f'pod{i}', (at, basis @ fva_dash.turn(rest)))
+        else:
+            pp, nn, uu, index = share_corners(made[0].astype(np.float32), made[1].astype(np.float32),
+                                              np.tile(cell_uv[POINTER], (len(made[0]), 1)).astype(np.float32))
+            prims = [out.primitive(pp, nn, index, mat_index['palette'], uu)]
+        needle = out.node(needle_name, mesh=out.mesh(needle_name, prims))
+        roots.append(out.node(pod_name, translation=at, rotation=quaternion(basis), children=[needle]))
     out.write(dst, roots)
 
     size_m = (hi - lo) * scale
@@ -921,6 +989,9 @@ def build(car_name, dst):
     print('wheelbase %.1f in (real %.1f), track %.1f in' % (wb, car['wheelbase'], (centers[0, 0] - centers[2, 0]) / IN))
     print('ground clearance in the model %.3f m' % (-w[:, 1].min()))
     print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
+    print('model height %.4f m' % (size_m[1]))
+    for end, at in car.get('plates', {}).items():
+        print(f'{end} plate at {to_game(np.array(to_yup(np.array(at)))).round(3)}')
 
 
 if __name__ == '__main__':
