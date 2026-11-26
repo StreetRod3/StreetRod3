@@ -3,6 +3,8 @@
 
     python3 tools/make_hemi.py                             # the Street Hemi
     python3 tools/make_hemi.py headers --headers shorty    # a set of headers alone
+    python3 tools/make_hemi.py cover                       # the finned aluminum valve covers alone
+    python3 tools/make_hemi.py intake --intake crossram    # an intake alone: aluminum or crossram
 
 The 426 Hemi is an engine of its own, not one of the B or RB wedges: its block is its
 own casting, with cross-bolted mains and its own head bolts and engine mounts, but it is
@@ -46,6 +48,14 @@ filter low on the left, the starter on the right. It has:
                 a thick runner out of each, down and back into a cast collector behind the
                 back port, the outlet down at the back
   headers       (built alone) long tubes or shorties, as make_sbf.py's
+  finned covers (built alone) cast aluminum on the same outline with a thicker flange and
+                fins along the top inside the plug wells
+  aluminum intake (built alone) the stock intake's floor, flanges and runners in natural
+                aluminum with one four-barrel pad in the plenum's middle
+  cross-ram     (built alone) the race intake: a plenum along each side of the valley
+                high over it with a four-barrel on each, staggered so the two fit, each
+                bank's runners climbing across the valley into the other side's plenum,
+                narrow and tall so the two banks' runners pass between each other
   front         the timing cover, the water pump's big housing high on it with the
                 thermostat on top, the balancer and crank pulley, the pump pulley and fan,
                 the alternator on the right, the fuel pump on the right, the belt
@@ -57,7 +67,8 @@ change the numbers and run it again. The helpers are make_sbf.py's, make_sbc.py'
 make_flathead.py's.
 
 Writes resources/engines/STEM.sc, the SolidCraft design, and assets/parts/STEM.glb, STEM
-being engine-hemi-426 for the engine, hemi-426-headers-long and -shorty for the headers.
+being engine-hemi-426 for the engine, hemi-426-headers-long and -shorty for the headers,
+hemi-426-valve-covers-finned, hemi-426-intake-aluminum and hemi-426-intake-crossram.
 Needs SolidCraft's command line and Blender, as tools/make_flathead.py does.
 
 The design is in inches with the crank on the X axis: +X toward the back of the car, +Y
@@ -80,7 +91,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from make_flathead import (  # noqa: E402
-    BLACK, CAST_ALUMINUM, CAST_IRON, MACHINED, MM, PORCELAIN, RUBBER, S45, STEEL, ZINC,
+    BLACK, CAST_ALUMINUM, CAST_IRON, MACHINED, MM, PORCELAIN, RUBBER, S45, SATIN_ALUMINUM, STEEL, ZINC,
     crease_normals, hull_outline, inch, outline_commands, read_tris, skp)
 from make_sbc import (  # noqa: E402
     BLENDER_REDUCE, CHROME, FILTER, FILTER_CAN, HEADER, SBC, ccw, hose_neck, lerp,
@@ -167,6 +178,12 @@ COVER_FLANGE = (-0.5, 8.6, 10.35, 1.2, 0.12)    # c from, to, half long, corner,
 COVER_BOLTS = ([(x, -0.22) for x in (-9.3, -4.8, 0.0, 4.8, 9.3)] +
                [(x, 8.38) for x in (-7.2, 0.0, 7.2)])
 PLUG_WELL = (3.0, 0.78)     # across, radius: a well over each plug, its boot in it
+# The finned aluminum covers: the flange's thickness, the fins along the top inside the
+# plug wells (across from the rail's outer edge), wide, tall.
+FIN_FLANGE_T = 0.25
+FIN_C = [4.3, 5.0, 5.7, 6.4, 7.1]
+FIN_W = 0.22
+FIN_H = 0.3
 FILLER = (-8.0, 5.9)        # the oil filler on the left cover (x, c), the breather on the right
 BREATHER = (8.0, 5.9)
 
@@ -200,6 +217,17 @@ PAD_HOLES = [(-0.91, -0.95), (0.91, -0.95)]
 PAD_HOLE_R = 0.8
 PAD_SLOT = ((-0.99, 0.95), (0.99, 0.95), 0.82)
 PLENUM_FLOOR = 1.1
+# The aluminum single four-barrel intake's pad, in the plenum's middle.
+PAD_SINGLE_X = -0.5
+# The race cross-ram: a plenum along each side of the valley high over it (from x, to x,
+# its inner and outer |y|, bottom, top, corners' radius), a pad on each (x, y), staggered so
+# the carburetors fit, their pads' underside; each runner (wide, deep, straight out of its
+# port, its bend) climbs across into the other side's plenum (its end there: |y|, z).
+CROSSRAM_PLENUM = (-9.8, 8.9, 1.2, 5.0, 19.4, 22.0, 0.8)
+CROSSRAM_PADS = [(-3.1, -3.1), (3.1, 3.1)]
+CROSSRAM_PAD_Z = 23.1
+CROSSRAM_RUNNER = (0.8, 2.2, 0.4, 1.5)
+CROSSRAM_ENTRY = (3.0, 20.4)
 # On each head's intake face, showing with the intake off: a port where each runner meets
 # it (half long, half high, corner).
 INTAKE_PORT = (0.85, 0.95, 0.35)
@@ -564,12 +592,12 @@ def rail_point(s, c, lift):
     return o + c * across + lift * up
 
 
-def cover_section(s, scale=(1.0, 1.0)):
+def cover_section(s, scale=(1.0, 1.0), flange_t=None):
     """The cover's section across (y, z) on top of the flange, scaled toward the middle of
     its foot (across, up) for the ends."""
     kc, kl = scale
     cm = 4.1
-    flange_t = COVER_FLANGE[4]
+    flange_t = COVER_FLANGE[4] if flange_t is None else flange_t
     return [tuple(rail_point(s, cm + (c - cm) * kc, flange_t + lift * kl)) for c, lift in COVER_SECTION]
 
 
@@ -583,18 +611,23 @@ def top_lift(c):
     raise ValueError(c)
 
 
-def cover_top(s, x, c):
+def cover_top(s, x, c, flange_t=None):
     """A point on bank s's cover's top at x along the bank and c across, and the top's
     outward normal there, both in 3D."""
     lift, slope = top_lift(c)
     _, across, up = rail_frame(s)
-    p = p3(bank_x(s, x), rail_point(s, c, COVER_FLANGE[4] + lift))
+    flange_t = COVER_FLANGE[4] if flange_t is None else flange_t
+    p = p3(bank_x(s, x), rail_point(s, c, flange_t + lift))
     n = unit(v3(up) - slope * v3(across))
     return p, n
 
 
-def valve_covers(d):
+def valve_covers(d, finned=False):
+    """The covers on the rails: crinkle-black stamped steel, or (finned) cast aluminum with a
+    thicker flange and fins along the top inside the plug wells."""
     c0, c1, half, corner, thick = COVER_FLANGE
+    if finned:
+        thick = FIN_FLANGE_T
     for s in (1, -1):
         o, across, up = rail_frame(s)
         origin = p3(bank_x(s, 0.0), o)
@@ -609,14 +642,14 @@ def valve_covers(d):
         e = COVER_END
         xa, xb = bank_x(s, -(COVER_HALF - e)), bank_x(s, COVER_HALF - e)
         sk = d.sketch("YZ", f"Cover {s}", offset=xa)
-        d.poly(ccw(cover_section(s)))
+        d.poly(ccw(cover_section(s, flange_t=thick)))
         d.finish()
         d.extrude(sk, f"valve_cover_body_{s}", xb - xa)
         for k, (x_in, way) in enumerate(((xa, -1), (xb, 1))):
             sks = []
             for j, (along, kc, kl) in enumerate(COVER_END_SECTIONS):
                 sk = d.sketch("YZ", f"Cover {s} end {k} section {j}", offset=x_in + way * along * e)
-                d.poly(ccw(cover_section(s, (kc, kl))))
+                d.poly(ccw(cover_section(s, (kc, kl), thick)))
                 d.finish()
                 sks.append(sk)
             d.loft(f"valve_cover_body_{s} ({10 + 10 * k})", sks)
@@ -632,19 +665,40 @@ def valve_covers(d):
         # and their boots (engine_assembly.gd).
         pc, pr = PLUG_WELL
         for i, x in enumerate(BORE_X):
-            p, n = cover_top(s, x, pc)
+            p, n = cover_top(s, x, pc, thick)
             d.cylinder(f"valve_cover_well_{s}_{i}", p - 0.1 * n, n, 2 * pr + 0.3, 0.25)
             d.cylinder(f"valve_cover_well_hole_{s}_{i}", p + 0.15 * n, n, 2 * pr - 0.05, 0.02)
 
+        if finned:
+            cover_fins(d, s, thick)
+
         # The oil filler cap on the left cover, the breather on the right.
         x, c = FILLER if s == -1 else BREATHER
-        p, n = cover_top(s, x, c)
+        p, n = cover_top(s, x, c, thick)
+        if finned:
+            p = p + FIN_H * n
         if s == -1:
             d.cylinder("valve_cover_filler_neck", p - 0.1 * n, n, 1.5, 0.45)
             d.cylinder("oil_filler_cap", p + 0.35 * n, n, 2.3, 0.5)
         else:
             d.cylinder("valve_cover_breather_neck", p - 0.1 * n, n, 1.3, 0.4)
             d.cylinder("valve_cover_breather", p + 0.3 * n, n, 2.0, 0.7)
+
+
+def cover_fins(d, s, flange_t):
+    """Fins along bank s's cover top, inside the plug wells, each standing square to the top
+    and running the length of the straight middle."""
+    half = COVER_HALF - COVER_END
+    sk = d.sketch("YZ", f"Cover fins {s}", offset=bank_x(s, -half))
+    for c in FIN_C:
+        pts = []
+        for dc, up in ((-FIN_W / 2, 0.0), (FIN_W / 2, 0.0), (FIN_W / 2, FIN_H), (-FIN_W / 2, FIN_H)):
+            p, n = cover_top(s, 0.0, c + dc, flange_t)
+            q = p - 0.03 * n + up * n
+            pts.append((float(q[1]), float(q[2])))
+        d.poly(ccw(pts))
+    d.finish()
+    d.extrude(sk, f"valve_cover_fins_{s}", 2 * half)
 
 
 # The intake.
@@ -755,7 +809,10 @@ def plenum_outline():
     return ccw([tuple(map(float, q)) for q in list(shape.exterior.coords)[:-1]])
 
 
-def intake(d):
+def intake(d, style="stock"):
+    """The Street Hemi's dual-quad intake (stock), the aluminum single four-barrel
+    (aluminum) or the race cross-ram (crossram): the same floor, flanges and bolts on the
+    heads, and each style's runners, plenum and pads."""
     z0, z1, zp, pad_z = intake_levels()
     nm = "intake_manifold"
     sk = d.sketch("XY", "Intake floor", offset=z0)
@@ -786,55 +843,102 @@ def intake(d):
         d.finish()
         d.extrude(sk, f"intake_bolts_{s}", 0.28, start_offset=inch(0.1))
 
+    if style == "crossram":
+        cross_ram(d)
+        return
+
     for k, (i, s, top, w, h, end, climb) in enumerate(INTAKE_RUNNERS):
         runner(d, f"{nm}_runner_{k}", bank_x(s, BORE_X[i]), s, zp + top, w, h, s * end, climb)
 
-    # The plenum along the middle, from the floor up.
+    # The plenum along the middle, from the floor up, and the pads on it.
     sk = d.sketch("XY", "Plenum", offset=z1 - 0.1)
     d.poly(plenum_outline())
     d.finish()
     d.extrude(sk, f"{nm}_plenum", PLENUM_TOP - z1 + 0.1)
+    pads = [(x, 0.0) for x in PADS_X] if style == "stock" else [(PAD_SINGLE_X, 0.0)]
+    for j, (cx, cy) in enumerate(pads):
+        carb_pad(d, j, cx, cy, PLENUM_TOP, pad_z)
 
-    # Each carb pad, as make_sbf.py's: a neck up off the plenum, its walls round the pad's
-    # openings up to the pad, which runs round its studs' bosses.
+
+def carb_pad(d, j, cx, cy, under, pad_z):
+    """A carb pad at (cx, cy), as make_sbf.py's: a neck up off what is under it (from
+    `under`), its walls round the pad's openings up to the pad, which runs round its
+    studs' bosses."""
+    nm = "intake_manifold"
     px, py, pt = PAD
     floor = pad_z - PLENUM_FLOOR
-    for j, cx in enumerate(PADS_X):
-        def openings(first):
-            (sx0, sy0), (sx1, sy1), sr = PAD_SLOT
-            d.c += outline_commands(*hull_outline([((cx + sx0, sy0), sr), ((cx + sx1, sy1), sr)]),
-                                    first=first)
-            for x, y in PAD_HOLES:
-                d.circle((cx + x, y), PAD_HOLE_R)
 
-        sk = d.sketch("XY", f"Pad neck {j}", offset=PLENUM_TOP - 0.1)
-        d.rounded((cx - px - 0.1, -py - 0.1), (cx + px + 0.1, py + 0.1), 0.8)
+    def openings(first):
+        (sx0, sy0), (sx1, sy1), sr = PAD_SLOT
+        d.c += outline_commands(*hull_outline([((cx + sx0, cy + sy0), sr), ((cx + sx1, cy + sy1), sr)]),
+                                first=first)
+        for x, y in PAD_HOLES:
+            d.circle((cx + x, cy + y), PAD_HOLE_R)
+
+    if floor - under > 0.15:
+        sk = d.sketch("XY", f"Pad neck {j}", offset=under - 0.1)
+        d.rounded((cx - px - 0.1, cy - py - 0.1), (cx + px + 0.1, cy + py + 0.1), 0.8)
         d.finish()
-        d.extrude(sk, f"{nm}_neck ({10 + j})", floor - PLENUM_TOP + 0.1, taper="3 deg")
-        corners = [((cx + sx * (px + 0.1 - 0.8), sy * (py + 0.1 - 0.8)), 0.8)
-                   for sx, sy in ((1, -1), (1, 1), (-1, 1), (-1, -1))]
-        sk = d.sketch("XY", f"Plenum walls {j}", offset=floor)
-        d.c += outline_commands(*hull_outline(corners))
-        openings(5)
+        d.extrude(sk, f"{nm}_neck ({10 + j})", floor - under + 0.1, taper="3 deg")
+    corners = [((cx + sx * (px + 0.1 - 0.8), cy + sy * (py + 0.1 - 0.8)), 0.8)
+               for sx, sy in ((1, -1), (1, 1), (-1, 1), (-1, -1))]
+    sk = d.sketch("XY", f"Plenum walls {j}", offset=floor)
+    d.c += outline_commands(*hull_outline(corners))
+    openings(5)
+    d.finish()
+    d.extrude(sk, f"{nm}_plenum_walls ({10 + j})", pad_z - floor)
+    sk = d.sketch("XY", f"Plenum floor {j}", offset=floor)
+    openings(1)
+    d.finish()
+    d.extrude(sk, f"{nm}_plenum_floor ({10 + j})", 0.02)
+    bosses = [(cx + x, cy + sy * y) for x, y in PAD_BOSSES for sy in (1, -1)]
+    sk = d.sketch("XY", f"Carb pad {j}", offset=pad_z)
+    mid = np.mean(bosses, axis=0)
+    ring = sorted(bosses, key=lambda q: math.atan2(q[1] - mid[1], q[0] - mid[0]))
+    d.c += outline_commands(*hull_outline([(q, PAD_BOSS_R) for q in ring]))
+    openings(5)
+    d.finish()
+    d.extrude(sk, f"{nm}_pad ({10 + j})", pt)
+    sk = d.sketch("XY", f"Pad bosses {j}", offset=under - 0.1)
+    for q in bosses:
+        d.circle(q, 0.45)
+    d.finish()
+    d.extrude(sk, f"{nm}_pad_bosses ({10 + j})", pad_z + pt + 0.12 - (under - 0.1))
+
+
+def cross_ram(d):
+    """The race cross-ram: a plenum box along each side of the valley high over it, a
+    four-barrel on each, staggered so the two fit; each bank's runners climb out of its
+    ports and across the valley into the other side's plenum, narrow and tall so the two
+    banks' runners pass between each other where they cross."""
+    nm = "intake_manifold"
+    yp, zp, _ = runner_port()
+    w, h, lead, bend = CROSSRAM_RUNNER
+    x0, x1, y_in, y_out, z_bottom, z_top, corner = CROSSRAM_PLENUM
+    for k, (i, s) in enumerate((i, s) for s in (1, -1) for i in range(4)):
+        x = bank_x(s, BORE_X[i])
+        out = np.array([0.0, -s * S45, S45])
+        p0 = np.array([x, s * yp, zp]) - RUNNER_BURY * out
+        target = np.array([x, -s * CROSSRAM_ENTRY[0], CROSSRAM_ENTRY[1]])
+        e1, e2, (a0, a1, c, q, tt) = tube_path(p0, out, target, lead, bend)
+        name = f"{nm}_runner_{k}"
+        sk, _ = d.plane(p0, e1, np.cross(e1, e2), f"{name} path")
+        d.c.append(cmd("sketch.line", infer=False, points=[skp(*a0), skp(*a1)]))
+        d.c.append(cmd("sketch.arc.center_point", center=skp(*c), start="l1.end", end=skp(*q)))
+        d.c.append(cmd("sketch.line", infer=False, points=["a1.end", skp(*tt)]))
         d.finish()
-        d.extrude(sk, f"{nm}_plenum_walls ({10 + j})", pad_z - floor)
-        sk = d.sketch("XY", f"Plenum floor {j}", offset=floor)
-        openings(1)
+        prof, to2d = d.plane(p0, (1, 0, 0), out, f"{name} section")
+        cx, cy = to2d(p0)
+        d.rounded((cx - w / 2, cy - h / 2), (cx + w / 2, cy + h / 2), 0.3)
         d.finish()
-        d.extrude(sk, f"{nm}_plenum_floor ({10 + j})", 0.02)
-        bosses = [(cx + x, sy * y) for x, y in PAD_BOSSES for sy in (1, -1)]
-        sk = d.sketch("XY", f"Carb pad {j}", offset=pad_z)
-        mid = np.mean(bosses, axis=0)
-        ring = sorted(bosses, key=lambda q: math.atan2(q[1] - mid[1], q[0] - mid[0]))
-        d.c += outline_commands(*hull_outline([(q, PAD_BOSS_R) for q in ring]))
-        openings(5)
+        d.body(name, "solid.sweep", sketch=prof, path_sketch=sk, path=["l1", "a1", "l2"])
+    for j, s in enumerate((-1, 1)):
+        sk = d.sketch("XY", f"Cross-ram plenum {j}", offset=z_bottom)
+        d.rounded((x0, min(s * y_in, s * y_out)), (x1, max(s * y_in, s * y_out)), corner)
         d.finish()
-        d.extrude(sk, f"{nm}_pad ({10 + j})", pt)
-        sk = d.sketch("XY", f"Pad bosses {j}", offset=PLENUM_TOP - 0.1)
-        for q in bosses:
-            d.circle(q, 0.45)
-        d.finish()
-        d.extrude(sk, f"{nm}_pad_bosses ({10 + j})", pad_z + pt + 0.12 - (PLENUM_TOP - 0.1))
+        d.extrude(sk, f"{nm}_plenum ({10 + j})", z_top - z_bottom)
+        cx, cy = CROSSRAM_PADS[j]
+        carb_pad(d, j, cx, cy, z_top, CROSSRAM_PAD_Z)
 
 
 def carburetor(d, x, j):
@@ -1330,7 +1434,7 @@ ROUND = "r0.2"
 SMALL = "r0.05"
 REDUCE_FACTORS = [
     ("cylinder_head_1_bosses", "r0.03"), ("cylinder_head_-1_bosses", "r0.03"),
-    ("valve_cover_well", SMALL), ("valve_cover_body", "r0.3"),
+    ("valve_cover_well", SMALL), ("valve_cover_body", "r0.3"), ("valve_cover_fins", 0),
     ("air_cleaner_stud", SMALL), ("air_cleaner_wingnut", SMALL), ("air_cleaner_element", 0), ("air_cleaner", 0),
     ("engine_block_distributor", SMALL), ("engine_block_oil_pump", ROUND), ("engine_block_deck", 0),
     ("engine_block_", 1), ("engine_block", 0), ("valley_cover", 0),
@@ -1442,7 +1546,11 @@ def reduce_obj(src, dst, blender):
         sys.exit(f"blender: {r.stderr.strip() or r.stdout.strip()}")
 
 
-def finish_for(name):
+def finish_for(name, what="engine"):
+    if what == "cover" and name.startswith("valve_cover") and not name.startswith(("valve_cover_well_hole", "valve_cover_breather")):
+        return SATIN_ALUMINUM
+    if what == "intake" and name.startswith("intake_manifold") and not name.startswith("intake_manifold_plenum_floor"):
+        return SATIN_ALUMINUM
     for prefix, mat in FINISHES:
         if name.startswith(prefix):
             return mat
@@ -1451,10 +1559,13 @@ def finish_for(name):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "headers"),
-                    help="the whole engine with its cast-iron manifolds (default), or a set of headers alone")
+    ap.add_argument("what", nargs="?", default="engine", choices=("engine", "headers", "cover", "intake"),
+                    help="the whole engine with its cast-iron manifolds (default); or alone: a set of "
+                         "headers, the finned aluminum valve covers, an intake")
     ap.add_argument("--headers", default="long", choices=sorted(COLLECTOR),
                     help="which headers: long tubes (default) or shorties")
+    ap.add_argument("--intake", default="aluminum", choices=("aluminum", "crossram"),
+                    help="which intake: the aluminum single four-barrel (default) or the race cross-ram")
     ap.add_argument("--sc", help="design file (default resources/engines/STEM.sc)")
     ap.add_argument("--glb", help="mesh (default assets/parts/STEM.glb)")
     ap.add_argument("--obj", help="also keep SolidCraft's unthinned OBJ here (for comparing to the reference)")
@@ -1464,7 +1575,8 @@ def main():
                     help="solidcraft-cli, or the SolidCraft AppImage")
     ap.add_argument("--blender", default="blender", help="Blender, which thins the mesh")
     args = ap.parse_args()
-    stem = STEM if args.what == "engine" else f"hemi-426-headers-{args.headers}"
+    stem = {"engine": STEM, "headers": f"hemi-426-headers-{args.headers}", "cover": "hemi-426-valve-covers-finned",
+            "intake": f"hemi-426-intake-{args.intake}"}[args.what]
     sc = os.path.abspath(args.sc or os.path.join(ROOT, "resources", "engines", stem + ".sc"))
     glb = os.path.abspath(args.glb or os.path.join(ROOT, "assets", "parts", stem + ".glb"))
     tool = shutil.which(args.solidcraft) or args.solidcraft
@@ -1477,6 +1589,10 @@ def main():
     d = Hemi()
     if args.what == "headers":
         headers(d, args.headers)
+    elif args.what == "cover":
+        valve_covers(d, finned=True)
+    elif args.what == "intake":
+        intake(d, args.intake)
     else:
         block(d)
         deck(d)
@@ -1530,7 +1646,7 @@ def main():
     parts = []
     for name, (p, nr, i) in merged.items():
         p = p * 0.001 / 0.22 + np.array([0.0, 0.0, -0.36])
-        parts.append((name, p, nr, i, finish_for(name)))
+        parts.append((name, p, nr, i, finish_for(name, args.what)))
     write_glb(glb, parts)
     allp = np.concatenate([p for _, p, *_ in parts])
     print(f"{os.path.relpath(sc, ROOT)}\n{os.path.relpath(glb, ROOT)}: {len(parts)} bodies, "

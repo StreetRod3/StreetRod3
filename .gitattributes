@@ -131,3 +131,13 @@ resources/engines/sbf-351-intake-aluminum.sc filter=lfs diff=lfs merge=lfs -text
 **/*.midi filter=lfs diff=lfs merge=lfs -text
 assets/parts/engine-hemi-426.glb filter=lfs diff=lfs merge=lfs -text
 resources/engines/engine-hemi-426.sc filter=lfs diff=lfs merge=lfs -text
+resources/engines/hemi-426-valve-covers-finned.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/hemi-426-headers-long.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/hemi-426-headers-shorty.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/hemi-426-valve-covers-finned.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/hemi-426-intake-aluminum.glb filter=lfs diff=lfs merge=lfs -text
+resources/engines/hemi-426-headers-long.sc filter=lfs diff=lfs merge=lfs -text
+resources/engines/hemi-426-headers-shorty.sc filter=lfs diff=lfs merge=lfs -text
+resources/engines/hemi-426-intake-aluminum.sc filter=lfs diff=lfs merge=lfs -text
+resources/engines/hemi-426-intake-crossram.sc filter=lfs diff=lfs merge=lfs -text
+assets/parts/hemi-426-intake-crossram.glb filter=lfs diff=lfs merge=lfs -text
