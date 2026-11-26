@@ -6,8 +6,8 @@
 | `24470110-B-RB-ENGINE.pdf` | Chrysler Direct Connection Race Bulletin #2 (P4007910, 1980), the B and RB wedge engines' racing manual: the raised block's dimensions, which the Hemi's own block shares, and notes on what Hemi parts interchange with the wedges (water pump, bellhousing, distributor by adapter, main bearings, oil and fuel pumps). Kept also for the 383 and 440 wedges planned later |
 | `Hemi-cross-section.gif` | A cutaway across a race Hemi (cross-ram, headers): the heads' general shape, the plug tubes |
 | `BB_Mopar_bell4.jpg` | The B/RB (and Hemi) bellhousing bolt pattern |
-| `https:⁄⁄www.allpar.com⁄attachments⁄street-hemi-jpg.53141⁄…` | Chrysler's original design layout of the Hemi, July 1963 (titled "RB Hemi", allpar.com, courtesy of Willem Weertman): the head in plan, the intake flange and ports |
-| `https:⁄⁄www.allpar.com⁄attachments⁄neon-20-jpg.53149⁄…` | A photo of a 1966 Street Hemi with tandem four-barrels (allpar.com via W. Weertman): the colors, the valve covers, the exhaust manifolds, the front |
+| `allpar-hemi-layout-1963.jpg` | Chrysler's original design layout of the Hemi, July 1963 (titled "RB Hemi", allpar.com, courtesy of Willem Weertman): the head in plan, the intake flange and ports |
+| `allpar-street-hemi-1966.jpg` | A photo of a 1966 Street Hemi with tandem four-barrels (allpar.com via W. Weertman): the colors, the valve covers, the exhaust manifolds, the front |
 
 No link or license was given for the STL. A CGTrader listing ("vintage-hemi-engine") was also suggested; its page would not load for a script, so nothing was taken from it.
 
