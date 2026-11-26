@@ -12,12 +12,14 @@ func _ready() -> void:
 	%MusicCheck.set_pressed_no_signal(GameState.music_enabled)
 	%MusicSlider.value = GameState.music_volume
 	%ArcadeCheck.set_pressed_no_signal(GameState.arcade_drive)
+	%RetroCheck.set_pressed_no_signal(GameState.retro_mode)
 	%ImperialCheck.set_pressed_no_signal(GameState.imperial_units)
 	%SkipCruiseCheck.set_pressed_no_signal(GameState.skip_cruise)
 	GameState.update_music()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_nav.setup([
 		%GraphicsBtn,
+		%RetroCheck,
 		%MasterSlider,
 		%MusicCheck,
 		%MusicSlider,
@@ -40,7 +42,13 @@ func _on_back_pressed() -> void:
 
 
 func _on_graphics_pressed() -> void:
-	_GraphicsSetup.new().open(self, $Margin, %GraphicsBtn)
+	var page := _GraphicsSetup.new()
+	page.tree_exited.connect(func() -> void: %RetroCheck.set_pressed_no_signal(GameState.retro_mode))
+	page.open(self, $Margin, %GraphicsBtn)
+
+
+func _on_retro_toggled(pressed: bool) -> void:
+	GameState.set_retro_mode(pressed)
 
 
 func _on_master_volume_changed(value: float) -> void:

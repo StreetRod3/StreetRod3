@@ -408,9 +408,9 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -180.0
-offset_top = -180.0
+offset_top = -220.0
 offset_right = 180.0
-offset_bottom = 180.0
+offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -433,6 +433,10 @@ horizontal_alignment = 1
 [node name="GraphicsBtn" type="Button" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
 layout_mode = 2
 text = "Graphics"
+
+[node name="RetroCheck" type="CheckBox" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
+layout_mode = 2
+text = "Retro mode"
 
 [node name="MasterLabel" type="Label" parent="RaceUI/PauseMenu/SettingsPanel/Margin/VBox"]
 layout_mode = 2
@@ -531,6 +535,7 @@ text = "Leave race"
 [connection signal="pressed" from="RaceUI/PauseMenu/Panel/Margin/VBox/SettingsBtn" to="." method="_on_pause_settings_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/Panel/Margin/VBox/ExitBtn" to="." method="_on_pause_exit_pressed"]
 [connection signal="pressed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn" to="." method="_on_pause_graphics_pressed"]
+[connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/RetroCheck" to="." method="_on_pause_retro_toggled"]
 [connection signal="value_changed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MasterSlider" to="." method="_on_pause_master_volume_changed"]
 [connection signal="toggled" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck" to="." method="_on_pause_music_toggled"]
 [connection signal="value_changed" from="RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicSlider" to="." method="_on_pause_music_volume_changed"]

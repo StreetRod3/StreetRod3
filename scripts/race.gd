@@ -70,6 +70,7 @@ var _race_started: bool = false
 @onready var _pause_music_volume: HSlider = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicSlider
 @onready var _pause_music: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/MusicCheck
 @onready var _pause_arcade: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ArcadeCheck
+@onready var _pause_retro: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/RetroCheck
 @onready var _pause_imperial: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/ImperialCheck
 @onready var _pause_skip_cruise: CheckBox = $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/SkipCruiseCheck
 
@@ -1069,6 +1070,7 @@ func _sync_pause_nav() -> void:
 	elif _pause_settings.visible:
 		_nav.setup([
 			$RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn,
+			_pause_retro,
 			_pause_master,
 			_pause_music,
 			_pause_music_volume,
@@ -1116,12 +1118,19 @@ func _refresh_pause_settings() -> void:
 	_pause_music.set_pressed_no_signal(GameState.music_enabled)
 	_pause_music_volume.set_value_no_signal(GameState.music_volume)
 	_pause_arcade.set_pressed_no_signal(GameState.arcade_drive)
+	_pause_retro.set_pressed_no_signal(GameState.retro_mode)
 	_pause_imperial.set_pressed_no_signal(GameState.imperial_units)
 	_pause_skip_cruise.set_pressed_no_signal(GameState.skip_cruise)
 
 
 func _on_pause_graphics_pressed() -> void:
-	_GraphicsSetup.new().open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
+	var page := _GraphicsSetup.new()
+	page.tree_exited.connect(func() -> void: _pause_retro.set_pressed_no_signal(GameState.retro_mode))
+	page.open(self, _pause_settings, $RaceUI/PauseMenu/SettingsPanel/Margin/VBox/GraphicsBtn)
+
+
+func _on_pause_retro_toggled(pressed: bool) -> void:
+	GameState.set_retro_mode(pressed)
 
 
 ## The HUD as set on the graphics page. Also called when that page closes.

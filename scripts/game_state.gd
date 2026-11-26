@@ -63,6 +63,7 @@ const _BooksRegister := preload("res://scripts/books_register.gd")
 const _LicensePlate := preload("res://scripts/license_plate.gd")
 const _RadioRegister := preload("res://scripts/radio_register.gd")
 const _MidiSong := preload("res://scripts/midi_song.gd")
+const _RetroMode := preload("res://scripts/retro_mode.gd")
 
 const MILES_PER_KM := 0.621371
 const POUNDS_PER_KG := 2.20462
@@ -349,6 +350,8 @@ var control_pad: Dictionary = {}
 ## not in `hud_items` is shown.
 var hud_items: Dictionary = {}
 var hud_size: float = 1.0
+## When on, the 3D view is drawn in colored characters. Menus and the driving HUD are not.
+var retro_mode: bool = false
 ## How hard a gamepad rumbles, from 0 for off to 1. Persisted in settings.
 var rumble_strength: float = 1.0
 var _gamepad: _Gamepad
@@ -482,6 +485,9 @@ func _ready() -> void:
 	_gamepad = _Gamepad.new()
 	add_child(_gamepad)
 	load_settings()
+	var retro := _RetroMode.new()
+	retro.name = "RetroMode"
+	add_child(retro)
 	load_parts_register()
 	load_cars_register()
 	load_books_register()
@@ -4914,6 +4920,9 @@ func save_settings() -> void:
 	cfg.set_value("input", "rumble_strength", rumble_strength)
 	cfg.set_value("display", "hud_items", hud_items)
 	cfg.set_value("display", "hud_size", hud_size)
+	cfg.set_value("display", "retro_mode", retro_mode)
+	if cfg.has_section_key("display", "matrix_mode"):
+		cfg.erase_section_key("display", "matrix_mode")
 	cfg.set_value("input", "keys", control_keys)
 	cfg.set_value("input", "pad", control_pad)
 	cfg.save(SETTINGS_PATH)
@@ -4955,6 +4964,10 @@ func load_settings() -> void:
 	if cfg.get_value("display", "hud_items", {}) is Dictionary:
 		hud_items = cfg.get_value("display", "hud_items", {})
 	hud_size = clampf(float(cfg.get_value("display", "hud_size", hud_size)), 0.6, 1.0)
+	if cfg.has_section_key("display", "retro_mode"):
+		retro_mode = bool(cfg.get_value("display", "retro_mode"))
+	else:
+		retro_mode = bool(cfg.get_value("display", "matrix_mode", false))
 
 
 func hud_shows(item: String) -> bool:
@@ -4989,6 +5002,13 @@ func set_imperial_units(enabled: bool) -> void:
 func set_skip_cruise(enabled: bool) -> void:
 	skip_cruise = enabled
 	save_settings()
+
+
+func set_retro_mode(enabled: bool) -> void:
+	retro_mode = enabled
+	var layer := get_node_or_null(^"RetroMode")
+	if layer != null:
+		layer.call(&"set_enabled", enabled)
 
 
 func speed_text(kmh: float) -> String:

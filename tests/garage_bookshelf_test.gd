@@ -173,6 +173,16 @@ func _run() -> void:
 	assert(console_out.text.begins_with("Unknown book:"))
 	assert((state.call("owned_books") as Array).is_empty())
 
+	# `/retro` toggles the setting and then puts it back.
+	var retro_was: bool = bool(state.get("retro_mode"))
+	console.call("_on_submitted", "/retro")
+	assert(bool(state.get("retro_mode")) == (not retro_was))
+	assert(console_out.text == ("Retro mode is on." if not retro_was else "Retro mode is off."))
+	console.call("_on_submitted", "retro now")
+	assert(console_out.text.begins_with("Unknown command:"))
+	console.call("_on_submitted", "retro")
+	assert(bool(state.get("retro_mode")) == retro_was)
+
 	# Existing zero-arg console commands still work, and reject stray args.
 	var cash_before: int = int(state.get("money"))
 	console.call("_on_submitted", "inherit")
