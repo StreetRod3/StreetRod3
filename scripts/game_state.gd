@@ -352,6 +352,8 @@ var hud_items: Dictionary = {}
 var hud_size: float = 1.0
 ## When on, the 3D view is drawn in colored characters. Menus and the driving HUD are not.
 var retro_mode: bool = false
+## Finer characters. Off is the original, larger ones.
+var retro_high: bool = true
 ## How hard a gamepad rumbles, from 0 for off to 1. Persisted in settings.
 var rumble_strength: float = 1.0
 var _gamepad: _Gamepad
@@ -4921,6 +4923,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "hud_items", hud_items)
 	cfg.set_value("display", "hud_size", hud_size)
 	cfg.set_value("display", "retro_mode", retro_mode)
+	cfg.set_value("display", "retro_high", retro_high)
 	if cfg.has_section_key("display", "matrix_mode"):
 		cfg.erase_section_key("display", "matrix_mode")
 	cfg.set_value("input", "keys", control_keys)
@@ -4968,6 +4971,7 @@ func load_settings() -> void:
 		retro_mode = bool(cfg.get_value("display", "retro_mode"))
 	else:
 		retro_mode = bool(cfg.get_value("display", "matrix_mode", false))
+	retro_high = bool(cfg.get_value("display", "retro_high", true))
 
 
 func hud_shows(item: String) -> bool:
@@ -5009,6 +5013,46 @@ func set_retro_mode(enabled: bool) -> void:
 	var layer := get_node_or_null(^"RetroMode")
 	if layer != null:
 		layer.call(&"set_enabled", enabled)
+
+
+func set_retro_high(high: bool) -> void:
+	retro_high = high
+	var layer := get_node_or_null(^"RetroMode")
+	if layer != null:
+		layer.call(&"apply_resolution")
+
+
+## 0 is off, 1 is high, 2 is low.
+func retro_position() -> int:
+	if not retro_mode:
+		return 0
+	return 1 if retro_high else 2
+
+
+func retro_switch_text() -> String:
+	match retro_position():
+		1:
+			return "Retro: high"
+		2:
+			return "Retro: low"
+		_:
+			return "Retro: off"
+
+
+## One step around off, high, low.
+func cycle_retro() -> void:
+	set_retro_position((retro_position() + 1) % 3)
+
+
+func set_retro_position(position: int) -> void:
+	if position == 1:
+		set_retro_high(true)
+		set_retro_mode(true)
+	elif position == 2:
+		set_retro_high(false)
+		set_retro_mode(true)
+	else:
+		set_retro_mode(false)
 
 
 func speed_text(kmh: float) -> String:

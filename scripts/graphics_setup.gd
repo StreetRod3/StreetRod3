@@ -22,7 +22,7 @@ var _host: Node
 var _page: Control
 var _return_focus: Control
 var _fullscreen: CheckBox
-var _retro: CheckBox
+var _retro: Button
 var _retro_sky: ColorRect
 var _retro_road: ColorRect
 var _retro_panel: StyleBoxFlat
@@ -78,11 +78,11 @@ func _build() -> void:
 	_fullscreen.set_pressed_no_signal(DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	_fullscreen.toggled.connect(_on_fullscreen_toggled)
 	box.add_child(_fullscreen)
-	_retro = CheckBox.new()
-	_retro.name = "RetroMode"
-	_retro.text = "Retro mode"
-	_retro.set_pressed_no_signal(GameState.retro_mode)
-	_retro.toggled.connect(_on_retro_toggled)
+	_retro = Button.new()
+	_retro.name = "RetroSwitch"
+	_retro.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_retro.pressed.connect(_on_retro_switch_pressed)
+	_show_retro_switch()
 	box.add_child(_retro)
 	var retro_help := Label.new()
 	retro_help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -224,6 +224,11 @@ func _update_preview() -> void:
 	_DrivingHud.apply(_preview_panel, _preview_meter)
 	_retro_sky.visible = GameState.retro_mode
 	_retro_road.visible = GameState.retro_mode
+	var cell: Vector2 = GameState.get_node(^"RetroMode").call(&"cell_size")
+	for plate: ColorRect in [_retro_sky, _retro_road]:
+		var mat := plate.material as ShaderMaterial
+		if mat != null:
+			mat.set_shader_parameter("cell_px", cell)
 	# The preview panel is translucent, and a field of characters behind it swallows the
 	# lines. While retro mode is on, give it a solid back so the HUD preview stays readable.
 	if GameState.retro_mode:
@@ -252,9 +257,14 @@ func _show_size() -> void:
 	_size_label.text = "Driving HUD size: %d%%" % roundi(GameState.hud_size * 100.0)
 
 
-func _on_retro_toggled(pressed: bool) -> void:
-	GameState.set_retro_mode(pressed)
+func _on_retro_switch_pressed() -> void:
+	GameState.cycle_retro()
+	_show_retro_switch()
 	_update_preview()
+
+
+func _show_retro_switch() -> void:
+	_retro.text = GameState.retro_switch_text()
 
 
 func _on_fullscreen_toggled(pressed: bool) -> void:
