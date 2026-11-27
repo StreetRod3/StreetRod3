@@ -332,6 +332,25 @@ const HEMI_THERMOSTAT := Vector2(-13.6, -2.0)
 ## bolt on, and the run along the exhaust face the under-car hot spot covers.
 const HEMI_LOG_OUTLETS: Array[Vector3] = [Vector3(12.19, 12.2, 0.56), Vector3(11.25, -12.2, 0.56)]
 const HEMI_EXHAUST_RUN := Vector3(9.0, 13.0, 7.0)
+## The headers' collector ends (x along the bank, before its offset; |y|, z), where the
+## head pipes bolt on.
+const HEMI_COLLECTOR_ENDS := {
+	"shorty": Vector3(8.62, 13.4, -4.34),
+	"long-tube": Vector3(14.8, 12.8, -9.73),
+}
+## The speed parts' own models, and the pads of the intakes that are not the stock one's.
+const HEMI_HEADERS := {
+	"shorty": "res://assets/parts/hemi-426-headers-shorty.glb",
+	"long-tube": "res://assets/parts/hemi-426-headers-long.glb",
+}
+const HEMI_COVERS := {"finned": "res://assets/parts/hemi-426-valve-covers-finned.glb"}
+const HEMI_INTAKES := {
+	"hemi-aluminum": "res://assets/parts/hemi-426-intake-aluminum.glb",
+	"hemi-crossram": "res://assets/parts/hemi-426-intake-crossram.glb",
+}
+const HEMI_ALUMINUM_PADS: Array[Vector3] = [Vector3(-0.5, 0.0, 21.0)]
+## The cross-ram's two, one on each side's plenum, staggered.
+const HEMI_CROSSRAM_PADS: Array[Vector3] = [Vector3(-3.1, -3.1, 23.5), Vector3(3.1, 3.1, 23.5)]
 const _HEMI_NODES_HEADS: Array[String] = ["cylinder_head", "valve_cover", "valve_bolt", "head_bolts", "valve_cover_body", "valve_cover_well", "valve_cover_well_hole"]
 const _HEMI_NODES_INTAKE: Array[String] = ["intake_manifold", "intake_bolts"]
 
@@ -607,10 +626,16 @@ static func _hemi_layout() -> SmallBlock:
 	sb.thermostat = HEMI_THERMOSTAT
 	sb.dist_boss_top = HEMI_DIST.z
 	sb.stock_intake = "hemi-dualquad"
-	sb.style_pads = {"hemi-dualquad": HEMI_PADS}
+	sb.style_pads = {"hemi-dualquad": HEMI_PADS, "hemi-aluminum": HEMI_ALUMINUM_PADS, "hemi-crossram": HEMI_CROSSRAM_PADS}
+	sb.headers = HEMI_HEADERS
+	sb.covers = HEMI_COVERS
+	sb.intakes = HEMI_INTAKES
 	sb.cleaner_carbs = 2
 	sb.badge = HEMI_BADGE
 	sb.outlets["log"] = HEMI_LOG_OUTLETS
+	for style: String in HEMI_COLLECTOR_ENDS:
+		var p: Vector3 = HEMI_COLLECTOR_ENDS[style]
+		sb.outlets[style] = [Vector3(sb.bank_x(1.0, p.x), p.y, p.z), Vector3(sb.bank_x(-1.0, p.x), -p.y, p.z)]
 	sb.exhaust_run = HEMI_EXHAUST_RUN
 	sb.nodes_heads = _HEMI_NODES_HEADS
 	sb.nodes_cover_right = _SBF_NODES_COVER_RIGHT
@@ -1480,9 +1505,11 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 			_add_model_nodes(rig, sb.nodes_intake, true)
 		elif not cast.is_empty() and ResourceLoader.exists(cast):
 			# An intake of its own cast to the stock one's pattern, under the engine's own
-			# thermostat housing.
+			# thermostat housing where the stock intake carries it (the Hemi's is on its
+			# water pump, so stays with the block).
 			_add_model_filtered(rig, cast, func(n: String) -> bool: return _begins_any(n, sb.nodes_intake))
-			_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return n.begins_with("thermostat"))
+			if sb.nodes_intake.has("thermostat"):
+				_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return n.begins_with("thermostat"))
 		else:
 			_build_sbc_intake(rig, style)
 		return

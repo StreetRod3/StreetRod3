@@ -370,6 +370,16 @@
       "finish": "finned",
       "hp": 22,
       "vmax": 3
+    },
+    {
+      "id": "heads-hemi-finned",
+      "slot": "heads",
+      "family": "chrysler-hemi",
+      "name": "High-performance Hemi heads, finned aluminum covers",
+      "price": 460,
+      "finish": "finned",
+      "hp": 22,
+      "vmax": 3
     }
   ],
   "intake": [
@@ -498,6 +508,30 @@
       "price": 320,
       "hp": 0,
       "vmax": 0
+    },
+    {
+      "id": "intake-hemi-aluminum",
+      "slot": "intake",
+      "family": "chrysler-hemi",
+      "style": "hemi-aluminum",
+      "carbs": 1,
+      "barrels": 4,
+      "name": "Aluminum Hemi four-barrel intake",
+      "price": 260,
+      "hp": 6,
+      "vmax": 1
+    },
+    {
+      "id": "intake-hemi-crossram",
+      "slot": "intake",
+      "family": "chrysler-hemi",
+      "style": "hemi-crossram",
+      "carbs": 2,
+      "barrels": 4,
+      "name": "Race Hemi cross-ram intake",
+      "price": 860,
+      "hp": 34,
+      "vmax": 5
     }
   ],
   "fuel": [
@@ -745,7 +779,7 @@
     {
       "id": "exhaust",
       "slot": "manifold",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "style": "shorty",
       "name": "Tube headers",
       "price": 380,
@@ -755,7 +789,7 @@
     {
       "id": "headers-long",
       "slot": "manifold",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "style": "long-tube",
       "name": "Long-tube headers, ceramic coated",
       "price": 690,
