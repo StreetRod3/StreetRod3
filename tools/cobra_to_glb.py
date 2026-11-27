@@ -85,8 +85,9 @@ END_RISE = 0.6
 ## Parts of INTERIOR by their boxes (raw units, the model's frame).
 ## A part wholly inside a tire's box is that wheel's (tire, rim, spinner): left out.
 WHEEL_BOX = 0.2   # past the tire's radius along X and above its top
-## The steering wheel (rim, spokes and hub): wholly inside this box.
-STEERING = ((-0.1, 0.45), (0.2, 1.35), (-2.55, -0.8))
+## The steering wheel: its wood rim and its spokes with the hub, each wholly inside
+## this box (the column reaches on into the dash and stays).
+STEERING = ((-0.1, 0.6), (0.1, 2.0), (-2.65, -0.7))
 ## The texture: where the rear plate's face is (px; the part also holds its bracket), and
 ## where the dials are painted (px, the left edge of the texture), for picking their faces
 ## out of the dash.
