@@ -192,9 +192,14 @@ const SB_HEADERS := {
 const BLOWER := "blower"
 const SB_BLOWER := "res://assets/parts/blower-sbc.glb"
 const SB_BLOWER_PADS: Array[Vector3] = [Vector3(-6.6, 0.0, 21.65), Vector3(1.9, 0.0, 21.65)]
+## Its two hold-down bolts, on the case's front right and back left studs' bosses (their
+## nuts left out of the model): the intake's flange bolts are under the case.
+const SB_BLOWER_BOLTS: Array[Vector3] = [Vector3(-6.97, 4.85, 14.95), Vector3(2.27, -4.85, 14.95)]
 const SBF_BLOWER := "res://assets/parts/blower-sbf-%s.glb"
 const SBF_BLOWER_PADS: Array[Vector3] = [Vector3(-1.15, 0.0, 22.35), Vector3(7.35, 0.0, 22.35)]
+const SBF_BLOWER_BOLTS: Array[Vector3] = [Vector3(-1.52, 4.85, 15.65), Vector3(7.72, -4.85, 15.65)]
 const HEMI_BLOWER_PADS: Array[Vector3] = [Vector3(-1.15, 0.0, 25.85), Vector3(7.35, 0.0, 25.85)]
+const HEMI_BLOWER_BOLTS: Array[Vector3] = [Vector3(-1.52, 4.85, 19.15), Vector3(7.72, -4.85, 19.15)]
 ## Under the car: where each exhaust's outlet takes the head pipe on the right bank (x
 ## before the bank's offset), under the cast-iron manifold's middle or at the end of a
 ## header's collector; and the manifolds' run along the exhaust face.
@@ -435,6 +440,8 @@ class SmallBlock:
 	var nodes_cover_right: Array[String] = []
 	var nodes_cover_left: Array[String] = []
 	var nodes_intake: Array[String]
+	## The blower's two hold-down bolts (in place of the intake's flange bolts).
+	var blower_bolts: Array[Vector3] = []
 
 	## `x` along the engine as the bores are numbered, moved to bank `side`'s bores.
 	func bank_x(side: float, x: float) -> float:
@@ -517,6 +524,7 @@ static func _chevy_layout() -> SmallBlock:
 	sb.headers = SB_HEADERS
 	sb.intakes = {BLOWER: SB_BLOWER}
 	sb.style_pads = {BLOWER: SB_BLOWER_PADS}
+	sb.blower_bolts = SB_BLOWER_BOLTS
 	for style: String in SB_OUTLETS:
 		var p: Vector3 = SB_OUTLETS[style]
 		sb.outlets[style] = [Vector3(sb.bank_x(1.0, p.x), p.y, p.z), Vector3(sb.bank_x(-1.0, p.x), -p.y, p.z)]
@@ -586,6 +594,8 @@ static func _windsor_layout(deck: String) -> SmallBlock:
 	for p: Vector3 in SBF_BLOWER_PADS:
 		blower_pads.append(p + up)
 	sb.style_pads = {BLOWER: blower_pads}
+	for p: Vector3 in SBF_BLOWER_BOLTS:
+		sb.blower_bolts.append(p + up)
 	var outlet := SBF_LOG_OUTLET + Vector3(0.0, lift, lift)
 	sb.outlets["log"] = [outlet, Vector3(SBF_LOG_OUTLET_LEFT_X, -outlet.y, outlet.z)]
 	for style: String in SBF_COLLECTOR_ENDS:
@@ -646,6 +656,7 @@ static func _hemi_layout() -> SmallBlock:
 	sb.headers = HEMI_HEADERS
 	sb.covers = HEMI_COVERS
 	sb.intakes = HEMI_INTAKES
+	sb.blower_bolts = HEMI_BLOWER_BOLTS
 	sb.cleaner_carbs = 2
 	sb.badge = HEMI_BADGE
 	sb.outlets["log"] = HEMI_LOG_OUTLETS
@@ -1044,14 +1055,20 @@ func _sb_bolt_spots(key: String) -> Array[Transform3D]:
 				var way := Vector3(sb.mount_dir.x, sb.mount_dir.y * side, sb.mount_dir.z)
 				out.append(Transform3D(_axis_basis(way), fh(Vector3(sb.mount.x, sb.mount.y * side, sb.mount.z))))
 		GameState.SLOT_CAM:
-			for y: float in [-1.0, 1.0]:
-				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(sb.cam.x + 0.8, y, sb.cam.z + 0.4))))
+			# None where the cam is out of reach (the Hemi's, under its tappet cover).
+			if GameState.cam_bolt_count(_view_engine()) > 0:
+				for y: float in [-1.0, 1.0]:
+					out.append(Transform3D(Basis.IDENTITY, fh(Vector3(sb.cam.x + 0.8, y, sb.cam.z + 0.4))))
 		GameState.SLOT_HEADS:
 			for side in head_sides():
 				var normal := Vector3(0.0, sb.intake_normal.x * side, sb.intake_normal.y)
 				for x: float in [-sb.head_bolt_x, sb.head_bolt_x]:
 					out.append(Transform3D(_axis_basis(normal), fh(Vector3(sb.bank_x(side, x), sb.head_bolt.x * side, sb.head_bolt.y))))
 		GameState.SLOT_INTAKE:
+			if has_blower():
+				for p in sb.blower_bolts:
+					out.append(Transform3D(Basis.IDENTITY, fh(p)))
+				return out
 			for side: float in [1.0, -1.0]:
 				var normal := Vector3(0.0, sb.intake_normal.x * side, sb.intake_normal.y)
 				var at := Vector3(sb.bank_x(side, -sb.intake_bolt_x * side), sb.intake_bolt.x * side, sb.intake_bolt.y)
@@ -1376,7 +1393,12 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
 			lobe.scale.x = 0.62
 			phase += 2.4
-	var plate := bolt_spots(GameState.SLOT_CAM)[0].origin if flathead or sbc else CAM_BOLTS[0]
+	var plate := CAM_BOLTS[0]
+	if flathead:
+		plate = bolt_spots(GameState.SLOT_CAM)[0].origin
+	elif sbc:
+		# Where its bolts are, whether or not they can be reached.
+		plate = fh(_sb().cam + Vector3(0.8, 0.0, 0.4))
 	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(plate.x, 0.0, plate.z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 
 

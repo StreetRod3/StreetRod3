@@ -79,6 +79,10 @@ RIB = (0.3, 0.35)
 BOSS_AT = [0.2, 0.4, 0.6, 0.8]
 BOSS = (4.85, 0.42, 1.35)
 NUT = (0.56, 0.35)
+# Two bosses carry no nut in the model (x fraction, side): the game draws the blower's two
+# hold-down bolts there (engine_assembly.gd's `blower_bolts`), the flange bolts it draws for
+# other intakes being under the case.
+GAME_BOLTS = [(0.2, 1), (0.8, -1)]
 # The inlet flange on the top (half wide, thick, in from the ends), the inlet plate on it
 # (half long, half wide, thick), the four-barrel pads on it (x from the case's middle), and
 # a pad's throttle bores as make_sbc.py's.
@@ -249,7 +253,8 @@ def case(d):
     sk = d.sketch("XY", "Case nuts", offset=zb + btop)
     for f in BOSS_AT:
         for s in (1, -1):
-            d.hexagon((x0 + f * CASE_LEN, s * by), af)
+            if (f, s) not in GAME_BOLTS:
+                d.hexagon((x0 + f * CASE_LEN, s * by), af)
     d.finish()
     d.extrude(sk, "blower_nuts", nh)
 

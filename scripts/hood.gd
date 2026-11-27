@@ -605,6 +605,8 @@ func _on_target(target: Array) -> void:
 
 func _part_hint(key: String) -> String:
 	var blocker := GameState.hood_part_blocker(key)
+	if key == GameState.SLOT_CAM and blocker == GameState.HOOD_ENGINE:
+		return "The camshaft is out of reach in the block: it comes out with the engine."
 	if blocker == "wires":
 		return "Pull the plug wires off before the %s can come out." % str(PART_NAMES[key]).to_lower()
 	if not blocker.is_empty():
@@ -987,6 +989,9 @@ func _refresh_peek_ui() -> void:
 
 func _bolt_state(key: String) -> String:
 	var bolts := GameState.hood_bolts(key)
+	# Only a camshaft out of reach has none.
+	if bolts.is_empty():
+		return "in the block"
 	if bolts.min() >= GameState.GEARBOX_BOLT_TIGHT:
 		return "tight"
 	if bolts.max() == 0:
