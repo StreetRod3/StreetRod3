@@ -22,8 +22,7 @@
     },
     "chrysler-hemi": {
       "name": "Chrysler Hemi",
-      "make": "Chrysler",
-      "cam_bolts": 0
+      "make": "Chrysler"
     }
   },
   "engines": [

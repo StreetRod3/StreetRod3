@@ -959,9 +959,6 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in MOUNT_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
-		GameState.SLOT_CAM:
-			for p in CAM_BOLTS:
-				out.append(Transform3D(Basis.IDENTITY, p))
 		GameState.SLOT_HEADS:
 			var slope := HEAD_DECK_OUT - HEAD_DECK_IN
 			var z := HEAD_DECK_IN.y + slope.y * (HEAD_BOLT_Y - HEAD_DECK_IN.x) / slope.x
@@ -993,9 +990,6 @@ func _fh_bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in FH_MOUNTS:
 				out.append(Transform3D(Basis.IDENTITY, fh(p)))
-		GameState.SLOT_CAM:
-			for y: float in [-0.12, 0.12]:
-				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(FH_CAM.x + 1.0, 0.0, FH_CAM.z)) + Vector3(0.0, y, -0.035)))
 		GameState.SLOT_HEADS:
 			var top := float(FH_HEAD_TOP.get(str(_view_part(GameState.SLOT_HEADS).get("finish", "")), FH_HEAD_TOP[""]))
 			for side in head_sides():
@@ -1024,9 +1018,6 @@ func _six_bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in SIX_MOUNTS:
 				out.append(Transform3D(Basis.IDENTITY, six(p)))
-		GameState.SLOT_CAM:
-			for y: float in [-0.9, 0.9]:
-				out.append(Transform3D(Basis.IDENTITY, six(Vector3(SIX_CAM.x + 0.6, SIX_CAM.y + y, SIX_CAM.z + 0.1))))
 		GameState.SLOT_HEADS:
 			for p in SIX_HEAD_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, six(p)))
@@ -1054,11 +1045,6 @@ func _sb_bolt_spots(key: String) -> Array[Transform3D]:
 			for side: float in [1.0, -1.0]:
 				var way := Vector3(sb.mount_dir.x, sb.mount_dir.y * side, sb.mount_dir.z)
 				out.append(Transform3D(_axis_basis(way), fh(Vector3(sb.mount.x, sb.mount.y * side, sb.mount.z))))
-		GameState.SLOT_CAM:
-			# None where the cam is out of reach (the Hemi's, under its tappet cover).
-			if GameState.cam_bolt_count(_view_engine()) > 0:
-				for y: float in [-1.0, 1.0]:
-					out.append(Transform3D(Basis.IDENTITY, fh(Vector3(sb.cam.x + 0.8, y, sb.cam.z + 0.4))))
 		GameState.SLOT_HEADS:
 			for side in head_sides():
 				var normal := Vector3(0.0, sb.intake_normal.x * side, sb.intake_normal.y)
@@ -1393,11 +1379,11 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
 			lobe.scale.x = 0.62
 			phase += 2.4
+	# The retainer plate at the front (the cam has no bolts to turn under the hood).
 	var plate := CAM_BOLTS[0]
 	if flathead:
-		plate = bolt_spots(GameState.SLOT_CAM)[0].origin
+		plate = fh(Vector3(FH_CAM.x + 1.0, 0.0, FH_CAM.z)) + Vector3(0.0, 0.0, -0.035)
 	elif sbc:
-		# Where its bolts are, whether or not they can be reached.
 		plate = fh(_sb().cam + Vector3(0.8, 0.0, 0.4))
 	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(plate.x, 0.0, plate.z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 

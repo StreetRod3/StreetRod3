@@ -191,9 +191,10 @@ const STOCK_SLOT_PARTS := {
 const HOOD_ENGINE := "engine"
 ## Bolts holding each part under the hood. They turn like the bellhousing bolts, out
 ## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each and the air cleaner one per carburetor (`hood_bolt_count()`).
+## The camshaft has none: with the heads off it lifts out when clicked.
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
-	SLOT_CAM: 2,
+	SLOT_CAM: 0,
 	SLOT_HEADS: 4,
 	SLOT_INTAKE: 2,
 	SLOT_CARB: 2,
@@ -465,8 +466,7 @@ const DEFAULT_GEARBOX_ID := "gb_auto3"
 var PARTS: Array[Dictionary] = []
 var GEARBOXES: Array[Dictionary] = []
 var ENGINES: Array[Dictionary] = []
-## Engine families by id: {name, make}, and `cam_bolts` where the camshaft's retainer
-## plate cannot be reached under the hood (`cam_bolt_count()`).
+## Engine families by id: {name, make}.
 var FAMILIES: Dictionary = {}
 var WHEELS: Array[Dictionary] = []
 var USED_CARS: Array[Dictionary] = []
@@ -923,16 +923,6 @@ static func hood_click_box(car: AABB) -> AABB:
 
 
 ## Heads on this engine and no other: an empty one does not mean the active car's.
-## Bolts holding `engine`'s camshaft under the hood: none where its family says so (the
-## Hemi's cam lies under the tappet cover in its valley, out of reach, so it stays in the
-## block and comes out with the engine), else `HOOD_BOLT_COUNTS`'.
-func cam_bolt_count(engine: Dictionary) -> int:
-	var row: Variant = FAMILIES.get(engine_family(engine), {})
-	if typeof(row) == TYPE_DICTIONARY and (row as Dictionary).has("cam_bolts"):
-		return int((row as Dictionary)["cam_bolts"])
-	return int(HOOD_BOLT_COUNTS[SLOT_CAM])
-
-
 static func heads_on(engine: Dictionary) -> int:
 	return clampi(int(engine.get("heads", 2)), 1, 2)
 
@@ -940,8 +930,6 @@ static func heads_on(engine: Dictionary) -> int:
 ## How many bolts hold a part under the hood: `HEAD_BOLTS` on each head, a wing nut on
 ## each carburetor's air cleaner, and `HOOD_BOLT_COUNTS` for the rest.
 func hood_bolt_count(key: String) -> int:
-	if key == SLOT_CAM:
-		return cam_bolt_count(get_equipped_engine())
 	if key == SLOT_HEADS:
 		return HEAD_BOLTS * engine_head_count()
 	if key == SLOT_AIR_CLEANER:
@@ -1006,9 +994,6 @@ func hood_part_blocker(key: String) -> String:
 			if not slot_part(SLOT_HEADS).is_empty():
 				return SLOT_HEADS
 		SLOT_CAM:
-			# A camshaft with no bolts to reach comes out only with the engine.
-			if hood_bolt_count(SLOT_CAM) == 0:
-				return HOOD_ENGINE
 			if not slot_part(SLOT_HEADS).is_empty():
 				return SLOT_HEADS
 		SLOT_HEADS:

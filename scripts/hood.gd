@@ -67,7 +67,6 @@ const PART_NAMES := {
 }
 const BOLT_NAMES := {
 	"engine": ["Right engine mount bolt", "Left engine mount bolt"],
-	"cam": ["Right cam retainer bolt", "Left cam retainer bolt"],
 	"heads": ["Right head, front bolt", "Right head, rear bolt", "Left head, front bolt", "Left head, rear bolt"],
 	"intake": ["Front intake bolt", "Rear intake bolt"],
 	"carb": ["Front carburetor nut", "Rear carburetor nut"],
@@ -468,7 +467,9 @@ func _settle() -> void:
 		for key in TOP_DOWN:
 			if not GameState.is_hood_part_fitted(key) or not GameState.hood_part_blocker(key).is_empty():
 				continue
-			if GameState.hood_bolts(key).max() > 0:
+			# A part with no bolts (the camshaft) waits to be clicked.
+			var bolts := GameState.hood_bolts(key)
+			if bolts.is_empty() or bolts.max() > 0:
 				continue
 			await _lift_out(key)
 			again = true
@@ -597,16 +598,19 @@ func _on_target(target: Array) -> void:
 		return
 	# A part left free with its bolts out, as an older save can have it, lifts off when
 	# clicked.
-	if not _busy and GameState.hood_part_blocker(key).is_empty() and GameState.hood_bolts(key).max() <= 0:
-		await _settle_now()
+	var bolts := GameState.hood_bolts(key)
+	if not _busy and GameState.hood_part_blocker(key).is_empty() and (bolts.is_empty() or bolts.max() <= 0):
+		if bolts.is_empty():
+			# A part with no bolts (the camshaft) lifts out itself, which settling leaves to the click.
+			await _lift_now(key)
+		else:
+			await _settle_now()
 		return
 	_hint.text = _part_hint(key)
 
 
 func _part_hint(key: String) -> String:
 	var blocker := GameState.hood_part_blocker(key)
-	if key == GameState.SLOT_CAM and blocker == GameState.HOOD_ENGINE:
-		return "The camshaft is out of reach in the block: it comes out with the engine."
 	if blocker == "wires":
 		return "Pull the plug wires off before the %s can come out." % str(PART_NAMES[key]).to_lower()
 	if not blocker.is_empty():
@@ -809,6 +813,16 @@ func _settle_now() -> void:
 	_refresh_ui()
 
 
+func _lift_now(key: String) -> void:
+	_busy = true
+	_refresh_ui()
+	await _lift_out(key)
+	if not is_instance_valid(self):
+		return
+	_busy = false
+	_refresh_ui()
+
+
 func _on_tune_pressed() -> void:
 	if _busy:
 		return
@@ -989,9 +1003,9 @@ func _refresh_peek_ui() -> void:
 
 func _bolt_state(key: String) -> String:
 	var bolts := GameState.hood_bolts(key)
-	# Only a camshaft out of reach has none.
+	# The camshaft has none.
 	if bolts.is_empty():
-		return "in the block"
+		return "in place"
 	if bolts.min() >= GameState.GEARBOX_BOLT_TIGHT:
 		return "tight"
 	if bolts.max() == 0:
