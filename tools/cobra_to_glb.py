@@ -1,34 +1,48 @@
 #!/usr/bin/env python3
-"""Seal the bottom of super7's AC Cobra and fix its materials.
+"""Convert super7's AC Cobra 427 into a car body GLB.
 
-    python3 -I tools/cobra_to_glb.py reference/cars/cobra/cobra-sealed.glb
+    python3 -I tools/cobra_to_glb.py assets/cars/shelby-cobra-1966.glb
 
 Source: "AC Cobra classic" by super7, CC-BY-4.0,
 https://sketchfab.com/3d-models/ac-cobra-classic-e6a38042e6e84189bc158682478e8b24
-(reference/cars/cobra/source). A 2018 THREE.GLTFExporter file: four meshes under a
-root node that scales them by 0.25 and lifts them so the tires stand on Y = 0. In the
-meshes' own frame Y is up, the nose points along +X and the car is centered on Z.
+(reference/cars/cobra/source). A 2018 THREE.GLTFExporter file: four meshes, all on one
+2048 px texture set (color and normal map): the interior with the tires, wheels, seats,
+dash, side pipes and lamps (INTERIOR), the windscreen, the rest of the glass, and the
+body shell (BODY). In the meshes' frame Y is up, the nose points along +X and the
+driver sits on -Z.
 
-The bottom of the car is open or single-sided: the body shell has no floor through
-the wheel arches, and where it has one the faces point up into the car, so a viewer
-that culls back faces (Godot, most glTF viewers) shows the cockpit, the engine bay and
-the inside of the hood from below. The interior mesh already holds the wheel tubs and
-the cockpit floor. This adds one plain mesh, "underbody", in a dark matte material: a
-floor the length of the car, facing down, that
+What the model needs that it doesn't have:
 
-  * sits at the sills' bottom between the wheels and just inside the body's underside
-    ahead of the front wheels and behind the rear ones;
-  * through each wheel arch runs out to the existing tub walls and slopes between the
-    heights on either side of the arch;
-  * stops short of the tips of the nose and tail, which are closed underneath.
+  * a bottom. The body shell has no floor through the wheel arches, and where it has
+    one the faces point up into the car, so with back faces culled (as the game draws)
+    you look up into the cockpit and the engine bay. A plain dark floor, facing down, is
+    added (build_underbody): at the sills' bottom between the wheels, just inside the
+    body's underside ahead of and behind them, through each wheel arch out to the
+    interior's own wheel tubs and sloping between the heights on either side of the
+    arch, and stopping short of the tips of the nose and tail, which are closed
+    underneath. Its edges come from cross-sections of the body shell, so it ends on
+    the skin.
+  * working gauges: the dials are painted into the texture (tools/cobra_dash.py).
 
-Its edges are found by cutting the body shell (and through the arches the interior's
-tub walls) across at each station, so it ends on the skin and on the tubs.
+The GLB is laid out like the Impala's (tools/impala_to_glb.py):
 
-The materials are also put right: the export made the paint fully metallic and the
-interior half metallic with no map, dimmed every color to 80%, and drew a scratch
-texture on the glass at half opacity. Here nothing is metallic, colors are full,
-the glass is a plain clear, and every material is two-sided.
+  * Y up, nose along +Z, driver's side +X;
+  * centered on X over the body and on Z over the whole car, lowest point at Y = 0;
+  * real size in meters: the 427's 156 in length and 68 in width (over the body, not
+    the side pipes), each on its own; the height is scaled as the two are on average
+    (the model stands 11% under the published 49 in, which would stretch it);
+    the steering wheel is scaled evenly so it stays round;
+  * the texture with the paint as a mask for car_paint_mask.gdshader: the body's blue
+    is white with alpha 1, the white stripes the same with blue 0 (the accent, the car
+    file's model.accent), the dirt and rust left off; everything else has alpha 0 and
+    keeps its colors; the plate's lettering is painted out;
+  * an ORM texture (R = AO, G = roughness, B = metallic) and the model's normal map;
+  * the glass as its own clear material, so the paint shader never touches it;
+  * the overriders as `bumper_front` and `bumper_rear` nodes so the game can strip them;
+  * the steering wheel as its own `driving_wheel` node, its +Z down the column.
+
+The wheels, their spinners and the rear plate are left out: the game mounts its own
+wheels and plates. The numbers the .car file needs are printed at the end.
 """
 import json
 import os
@@ -39,12 +53,17 @@ import numpy as np
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 SOURCE = 'reference/cars/cobra/source/AC Cobra 1.glb'
+IN = 0.0254
+## The 1965-67 Cobra 427 (AC Cars / Shelby American): 156 in long, 68 in wide.
+LENGTH_M = 156.0 * IN
+WIDTH_M = 68.0 * IN
 
-## Meshes of the source (all in the same frame).
+## Meshes of the source (all in the same frame) and their materials.
 INTERIOR = 0  # interior, tires, wheels, pipes, lamps
+WINDSCREEN = 1
+GLASS = 2     # lamp and gauge lenses, wind wings, the windscreen's other side
 BODY = 3      # the outer body shell
-## The node all four meshes hang under.
-PARENT_NODE = 4
+TEXTURE_IMAGE = 0  # color; image 1 is its normal map
 
 ## Raw units (0.25 m each). The ground is at the tires' lowest point.
 STEP = 0.1          # floor station spacing along X
@@ -57,6 +76,31 @@ ARCH_CLEAR = 0.3    # the floor narrows this far ahead of and behind each tire
 ## the floor would show through the grille.
 END_RISE = 0.6
 
+## Parts of INTERIOR by their boxes (raw units, the model's frame).
+## A part wholly inside a tire's box is that wheel's (tire, rim, spinner): left out.
+WHEEL_BOX = 0.2   # past the tire's radius along X and above its top
+## The overriders: the parts starting ahead of FRONT_X down low, and the parts reaching
+## back past REAR_X (nothing else does).
+FRONT_X = 9.2
+REAR_X = -9.9
+## The steering wheel (rim, spokes and hub): wholly inside this box.
+STEERING = ((-0.1, 0.45), (0.2, 1.35), (-2.55, -0.8))
+## The texture: where the rear plate's face is (px; the part also holds its bracket), and
+## where the dials are painted (px, the left edge of the texture), for picking their faces
+## out of the dash.
+PLATE = (512, 1838, 541, 1911)
+DIALS = (0, 1230, 130, 1610)
+## A part with at least this share of its area on the plate's face is the plate.
+PLATE_SHARE = 0.5
+## The paint: texels the body shell covers. Of those, the white stripes are bright and
+## grey (ACCENT_LIGHT, ACCENT_GREY); openings and gaps are dark (DARK) and stay as they are.
+ACCENT_LIGHT = 150
+ACCENT_GREY = 30
+DARK = 22
+## Roughness of everything that isn't paint (the shader's own paint settings rule there).
+ROUGHNESS = 0.6
+## The glass: a plain clear.
+GLASS_COLOR = [0.9, 0.93, 0.95, 0.18]
 UNDERBODY_COLOR = [0.05, 0.05, 0.05, 1.0]
 
 
@@ -71,17 +115,6 @@ def read_glb(path):
     blen, btype = struct.unpack_from('<I4s', data, off)
     assert btype == b'BIN\x00'
     return gltf, bytearray(data[off + 8:off + 8 + blen])
-
-
-def write_glb(path, gltf, binary):
-    js = json.dumps(gltf, separators=(',', ':')).encode()
-    js += b' ' * (-len(js) % 4)
-    binary = bytes(binary) + b'\x00' * (-len(binary) % 4)
-    total = 12 + 8 + len(js) + 8 + len(binary)
-    with open(path, 'wb') as f:
-        f.write(struct.pack('<4sII', b'glTF', 2, total))
-        f.write(struct.pack('<I4s', len(js), b'JSON') + js)
-        f.write(struct.pack('<I4s', len(binary), b'BIN\x00') + binary)
 
 
 TYPES = {5126: np.float32, 5125: np.uint32, 5123: np.uint16}
@@ -234,78 +267,272 @@ def build_underbody(body, interior, tires):
     return np.array(quads, dtype=np.float64), sill
 
 
-def quads_to_mesh(quads):
-    tris = np.concatenate([quads[:, [0, 1, 2]], quads[:, [0, 2, 3]]])
-    n = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
-    length = np.linalg.norm(n, axis=1)
-    keep = length > 1e-9
-    tris, n = tris[keep], n[keep] / length[keep, None]
-    pos = tris.reshape(-1, 3).astype(np.float32)
-    nor = np.repeat(n, 3, axis=0).astype(np.float32)
-    return pos, nor
+def load(gltf, binary, mesh):
+    """A mesh's triangle corners: positions, normals and UVs (raw, the model's frame)."""
+    prim = gltf['meshes'][mesh]['primitives'][0]
+    idx = accessor(gltf, binary, prim['indices']).ravel()
+    a = prim['attributes']
+    return {k: accessor(gltf, binary, a[name])[idx].reshape(-1, 3, n).astype(np.float64)
+            for k, name, n in (('pos', 'POSITION', 3), ('nrm', 'NORMAL', 3), ('uv', 'TEXCOORD_0', 2))}
 
 
-def add_view(gltf, binary, data, target=None):
-    while len(binary) % 4:
-        binary.append(0)
-    view = {'buffer': 0, 'byteOffset': len(binary), 'byteLength': len(data)}
-    if target:
-        view['target'] = target
-    binary.extend(data)
-    gltf['bufferViews'].append(view)
-    return len(gltf['bufferViews']) - 1
+def source_image(gltf, binary, material, slot):
+    """A material's texture as a PIL image: slot 'base' or 'normal'."""
+    import io
+    from PIL import Image
+    mat = gltf['materials'][material]
+    ref = mat['pbrMetallicRoughness']['baseColorTexture'] if slot == 'base' else mat['normalTexture']
+    img = gltf['images'][gltf['textures'][ref['index']]['source']]
+    view = gltf['bufferViews'][img['bufferView']]
+    start = view.get('byteOffset', 0)
+    return Image.open(io.BytesIO(bytes(binary[start:start + view['byteLength']]))).convert('RGB')
 
 
-def fix_materials(gltf):
-    for m in gltf['materials']:
-        pbr = m['pbrMetallicRoughness']
-        pbr['metallicFactor'] = 0.0
-        if m.get('alphaMode') == 'BLEND':
-            pbr['baseColorFactor'] = [1.0, 1.0, 1.0, 0.25]
-            pbr['roughnessFactor'] = 0.05
+def pick(mesh, idx):
+    return {k: v[idx] for k, v in mesh.items()}
+
+
+def join(*meshes):
+    return {k: np.concatenate([m[k] for m in meshes]) for k in ('pos', 'nrm', 'uv')}
+
+
+def split_interior(interior, tires, size):
+    """INTERIOR's triangle indices by group: body, wheels, bumper_front, bumper_rear,
+    driving_wheel, plate."""
+    from impala_dash import islands
+    groups = {g: [] for g in ('body', 'wheels', 'bumper_front', 'bumper_rear', 'driving_wheel', 'plate')}
+    x0, y0, x1, y1 = PLATE
+    for idx in islands(interior['pos']):
+        q = interior['pos'][idx].reshape(-1, 3)
+        lo, hi = q.min(0), q.max(0)
+        uv = interior['uv'][idx].mean(1) * size
+        t = interior['pos'][idx]
+        area = np.linalg.norm(np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]), axis=1)
+        on = (uv[:, 0] > x0) & (uv[:, 0] < x1) & (uv[:, 1] > y0) & (uv[:, 1] < y1)
+        on_plate = area[on].sum() / max(area.sum(), 1e-12)
+        if any(lo[0] >= t['x'] - t['r'] - WHEEL_BOX and hi[0] <= t['x'] + t['r'] + WHEEL_BOX
+               and lo[2] * hi[2] > 0 and min(abs(lo[2]), abs(hi[2])) >= t['inner'] - 0.05
+               and hi[1] <= t['top'] + WHEEL_BOX for t in tires):
+            group = 'wheels'
+        elif lo[0] > FRONT_X and lo[1] < -1.5:
+            group = 'bumper_front'
+        elif lo[0] < REAR_X:
+            group = 'bumper_rear'
+        elif all(a <= l and h <= b for (a, b), l, h in zip(STEERING, lo, hi)):
+            group = 'driving_wheel'
+        elif on_plate >= PLATE_SHARE:
+            group = 'plate'
         else:
-            pbr['baseColorFactor'] = [1.0, 1.0, 1.0, 1.0]
-        m['doubleSided'] = True
+            group = 'body'
+        groups[group].append(idx)
+    return {g: np.concatenate(v) if v else np.zeros(0, np.int64) for g, v in groups.items()}
 
 
-def main():
-    if len(sys.argv) != 2:
-        sys.exit(__doc__)
+def dial_faces(interior, body_idx, size):
+    """The dials' painted faces in the dash: triangles of the body group drawn from the
+    dials' corner of the texture, one array of corners per dial."""
+    from impala_dash import islands
+    x0, y0, x1, y1 = DIALS
+    uv = interior['uv'][body_idx].mean(1) * size
+    cen = interior['pos'][body_idx].mean(1)
+    sel = body_idx[(uv[:, 0] >= x0) & (uv[:, 0] < x1) & (uv[:, 1] >= y0) & (uv[:, 1] < y1)
+                   & (cen[:, 0] > 0.4) & (cen[:, 0] < 0.9) & (cen[:, 1] > 0.6)]
+    return [sel[i] for i in islands(interior['pos'][sel])]
+
+
+def paint_mask(base, body_uv):
+    """The car's texture with the paint as a mask (see the module's notes): RGBA."""
+    from PIL import Image, ImageDraw, ImageFilter
+    size = base.size[0]
+    cover = Image.new('L', base.size, 0)
+    draw = ImageDraw.Draw(cover)
+    for tri in body_uv * size:
+        draw.polygon([tuple(p) for p in tri], fill=255)
+    cover = np.asarray(cover.filter(ImageFilter.MaxFilter(5))) > 0
+    rgb = np.asarray(base).copy()
+    f = rgb.astype(np.int64)
+    light = f.mean(2)
+    grey = f.max(2) - f.min(2)
+    accent = cover & (light >= ACCENT_LIGHT) & (grey <= ACCENT_GREY)
+    paint = cover & ~accent & (light > DARK)
+    rgb[paint] = 255
+    rgb[accent] = (255, 255, 0)
+    # The plate's face: its own median color with a fine grain, so it carries no
+    # registration (the part is left out, but the texture ships with the car).
+    x0, y0, x1, y1 = PLATE
+    face = rgb[y0:y1, x0:x1].astype(np.float64)
+    grain = np.random.default_rng(427).normal(0.0, 3.0, face.shape[:2])[..., None]
+    rgb[y0:y1, x0:x1] = np.clip(np.median(face.reshape(-1, 3), 0) + grain, 0, 255).astype(np.uint8)
+    alpha = np.uint8((paint | accent) * 255)
+    return Image.merge('RGBA', [*Image.fromarray(rgb).split(), Image.fromarray(alpha)])
+
+
+def build(dst):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from PIL import Image
+    from studebaker_to_glb import Gltf, png_bytes, ring_axis, share_corners
+    from studebaker_dash import quaternion
+    import cobra_dash as dash
+
     gltf, binary = read_glb(os.path.join(ROOT, SOURCE))
-    body = triangles(gltf, binary, BODY)
-    interior = triangles(gltf, binary, INTERIOR)
-    tires = find_tires(interior)
-    quads, sill = build_underbody(body, interior, tires)
-    pos, nor = quads_to_mesh(quads)
+    interior = load(gltf, binary, INTERIOR)
+    body_shell = load(gltf, binary, BODY)
+    glass = join(load(gltf, binary, WINDSCREEN), load(gltf, binary, GLASS))
+    base = source_image(gltf, binary, INTERIOR, 'base')
+    normal = source_image(gltf, binary, INTERIOR, 'normal')
+    size = base.size[0]
 
-    fix_materials(gltf)
-    gltf['materials'].append({
-        'name': 'underbody',
-        'pbrMetallicRoughness': {'baseColorFactor': UNDERBODY_COLOR,
-                                 'metallicFactor': 0.0, 'roughnessFactor': 0.9},
-        'doubleSided': True,
-    })
-    pv = add_view(gltf, binary, pos.tobytes(), 34962)
-    nv = add_view(gltf, binary, nor.tobytes(), 34962)
-    gltf['accessors'] += [
-        {'bufferView': pv, 'componentType': 5126, 'count': len(pos), 'type': 'VEC3',
-         'min': pos.min(0).tolist(), 'max': pos.max(0).tolist()},
-        {'bufferView': nv, 'componentType': 5126, 'count': len(nor), 'type': 'VEC3'},
+    tires = find_tires(interior['pos'])
+    quads, _ = build_underbody(body_shell['pos'], interior['pos'], tires)
+    floor = np.concatenate([quads[:, [0, 1, 2]], quads[:, [0, 2, 3]]])
+    fn = np.cross(floor[:, 1] - floor[:, 0], floor[:, 2] - floor[:, 0])
+    fn /= np.linalg.norm(fn, axis=1, keepdims=True)
+    underbody = {'pos': floor, 'nrm': np.repeat(fn[:, None], 3, 1), 'uv': np.zeros(floor.shape[:2] + (2,))}
+
+    parts = split_interior(interior, tires, size)
+    faces = dial_faces(interior, parts['body'], size)
+    groups = {
+        'body': join(body_shell, pick(interior, parts['body'])),
+        'bumper_front': pick(interior, parts['bumper_front']),
+        'bumper_rear': pick(interior, parts['bumper_rear']),
+        'driving_wheel': pick(interior, parts['driving_wheel']),
+    }
+
+    # The model's frame (Y up, nose +X, driver -Z) to the game's (Y up, nose +Z,
+    # driver +X): a quarter turn about Y.
+    def axes(a):
+        return np.stack([-a[..., 2], a[..., 1], a[..., 0]], -1)
+
+    kept = np.concatenate([axes(m['pos']).reshape(-1, 3) for m in (*groups.values(), glass, underbody)])
+    shell = axes(body_shell['pos']).reshape(-1, 3)
+    lo, hi = kept.min(0), kept.max(0)
+    scale = np.array([WIDTH_M / np.ptp(shell[:, 0]), 0.0, LENGTH_M / (hi[2] - lo[2])])
+    scale[1] = (scale[0] + scale[2]) / 2
+    origin = np.array([(shell[:, 0].min() + shell[:, 0].max()) / 2, lo[1], (lo[2] + hi[2]) / 2])
+
+    def to_game(q):
+        return (axes(q) - origin) * scale
+
+    def normals_to_game(n):
+        n = axes(n) / scale
+        return n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-12)
+
+    out = Gltf()
+
+    def add_image(im):
+        out.images.append(png_bytes(im))
+        out.textures.append(len(out.images) - 1)
+        return len(out.textures) - 1
+
+    albedo = add_image(paint_mask(base, body_shell['uv'].reshape(-1, 3, 2)))
+    orm = add_image(Image.merge('RGB', [Image.new('L', base.size, 255),
+                                        Image.new('L', base.size, int(ROUGHNESS * 255)),
+                                        Image.new('L', base.size, 0)]))
+    nrm_tex = add_image(normal)
+    out.materials += [
+        {'name': 'cobra', 'doubleSided': True,
+         'pbrMetallicRoughness': {'baseColorTexture': {'index': albedo},
+                                  'metallicRoughnessTexture': {'index': orm},
+                                  'metallicFactor': 1.0, 'roughnessFactor': 1.0},
+         'occlusionTexture': {'index': orm}, 'normalTexture': {'index': nrm_tex}},
+        {'name': 'cobra_glass', 'doubleSided': True, 'alphaMode': 'BLEND',
+         'pbrMetallicRoughness': {'baseColorFactor': GLASS_COLOR, 'metallicFactor': 0.0,
+                                  'roughnessFactor': 0.05}},
+        {'name': 'underbody', 'doubleSided': True,
+         'pbrMetallicRoughness': {'baseColorFactor': UNDERBODY_COLOR, 'metallicFactor': 0.0,
+                                  'roughnessFactor': 0.9}},
     ]
-    gltf['meshes'].append({'name': 'underbody', 'primitives': [{
-        'attributes': {'POSITION': len(gltf['accessors']) - 2,
-                       'NORMAL': len(gltf['accessors']) - 1},
-        'material': len(gltf['materials']) - 1}]})
-    gltf['nodes'].append({'name': 'underbody', 'mesh': len(gltf['meshes']) - 1})
-    gltf['nodes'][PARENT_NODE]['children'].append(len(gltf['nodes']) - 1)
-    gltf['buffers'][0]['byteLength'] = len(binary) + (-len(binary) % 4)
+    PAINTED, CLEAR, FLOOR = 0, 1, 2
 
-    write_glb(sys.argv[1], gltf, binary)
+    def primitive(m, material, frame=None, even=None):
+        pos = to_game(m['pos']).reshape(-1, 3)
+        nrm = normals_to_game(m['nrm']).reshape(-1, 3)
+        if even is not None:
+            mid, k = even
+            pos = mid + (pos - mid) * k
+            nrm = axes(m['nrm']).reshape(-1, 3)
+        if frame is not None:
+            o, b = frame
+            pos = (pos - o) @ b
+            nrm = nrm @ b
+        p, n, u, index = share_corners(pos.astype(np.float32), nrm.astype(np.float32),
+                                       m['uv'].reshape(-1, 2).astype(np.float32))
+        return out.primitive(p, n, index, material, u)
+
+    name = os.path.splitext(os.path.basename(dst))[0]
+    roots = [out.node(name, mesh=out.mesh(name, [primitive(groups['body'], PAINTED),
+                                                 primitive(glass, CLEAR),
+                                                 primitive(underbody, FLOOR)]))]
+    for group in ('bumper_front', 'bumper_rear'):
+        roots.append(out.node(group, mesh=out.mesh(group, [primitive(groups[group], PAINTED)])))
+
+    # The steering wheel, scaled evenly about the rim's middle so it stays round.
+    wheel = to_game(groups['driving_wheel']['pos']).reshape(-1, 3)
+    mid = (wheel.min(0) + wheel.max(0)) / 2
+    even = (mid, scale.mean() / scale)
+    hub, axis = ring_axis(mid + (wheel - mid) * even[1])
+    across = np.array([1.0, 0.0, 0.0]) - axis[0] * axis
+    across /= np.linalg.norm(across)
+    basis = np.stack([across, np.cross(axis, across), axis], 1)
+    steer = out.mesh('driving_wheel_mesh', [primitive(groups['driving_wheel'], PAINTED, (hub, basis), even)])
+    roots.append(out.node('driving_wheel', translation=hub, rotation=quaternion(basis),
+                          children=[out.node('driving_wheel_mesh', mesh=steer)]))
+
+    # The gauges.
+    pods = dash.build([to_game(interior['pos'][i]) for i in faces])
+    out.materials.append(dash.needle_material())
+    needle_mat = len(out.materials) - 1
+    for pod, center, pbasis, radius, kind, needle_name, ntris, nnrm in pods:
+        out.materials.append(dash.face_material(kind, add_image_png(out, dash.face_png(kind))))
+        ft, fnrm, fuv = dash.face_mesh(radius)
+        fp, fnn, fu, fidx = share_corners(ft.reshape(-1, 3).astype(np.float32),
+                                          fnrm.reshape(-1, 3).astype(np.float32),
+                                          fuv.reshape(-1, 2).astype(np.float32))
+        face = out.node(f'{pod}_face', mesh=out.mesh(f'{pod}_face', [out.primitive(fp, fnn, fidx, len(out.materials) - 1, fu)]))
+        np_, nn, _, nidx = share_corners(ntris.reshape(-1, 3).astype(np.float32),
+                                         nnrm.reshape(-1, 3).astype(np.float32),
+                                         np.zeros((ntris.size // 3, 2), np.float32))
+        hand_name = needle_name or f'{pod}_needle'
+        hand = out.node(hand_name, mesh=out.mesh(hand_name, [out.primitive(np_, nn, nidx, needle_mat)]))
+        roots.append(out.node(pod, translation=center, rotation=quaternion(pbasis), children=[face, hand]))
+    out.write(dst, roots)
+
+    report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub, axis)
+
+
+def add_image_png(out, png):
+    out.images.append(png)
+    out.textures.append(len(out.images) - 1)
+    return len(out.textures) - 1
+
+
+def report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub, axis):
+    size_m = (kept.max(0) - kept.min(0)) * scale
+    print(f'{dst}: {os.path.getsize(dst) / 1e6:.1f} MB, size {size_m.round(3)} m '
+          f'({(size_m / IN).round(1)} in), scale {scale.round(4)} m per model unit')
+    print('parts:', {g: len(i) for g, i in parts.items()}, 'triangles')
+    w = to_game(interior['pos'][parts['wheels']]).reshape(-1, 3)
+    ground = w[:, 1].min()
     for t, name in zip(tires, ('rear', 'front')):
-        print(f"{name} tire: x {t['x']:.2f} radius {t['r']:.2f} top {t['top']:.2f} "
-              f"inner face {t['inner']:.2f}")
-    print(f'floor at y {sill:.2f}; underbody {len(pos) // 3} triangles -> {sys.argv[1]}')
+        z = (t['x'] - origin[2]) * scale[2]
+        q = w[np.abs(w[:, 2] - z) < t['r'] * scale[2] * 1.2]
+        right = q[q[:, 0] > 0]
+        y_mid = (q[:, 1].min() + q[:, 1].max()) / 2
+        r = (q[:, 1].max() - q[:, 1].min()) / 2
+        tread = right[np.hypot(right[:, 1] - y_mid, right[:, 2] - z) > 0.85 * r]
+        print(f'{name} wheels: z {z:.3f}, center y {y_mid:.3f}, track x ±{(tread[:, 0].min() + tread[:, 0].max()) / 2:.3f}, '
+              f'tire radius {r:.3f} m ({2 * r / IN:.1f} in)')
+    zs = [(t['x'] - origin[2]) * scale[2] for t in tires]
+    print(f'wheelbase {(zs[1] - zs[0]):.3f} m ({(zs[1] - zs[0]) / IN:.1f} in); ground clearance {-ground:.3f} m')
+    plate = to_game(interior['pos'][parts['plate']]).reshape(-1, 3)
+    if len(plate):
+        print('rear plate at', ((plate.min(0) + plate.max(0)) / 2).round(3))
+    for pod, center, basis, radius, kind, *_ in pods:
+        print(f'{pod}: {kind} at {center.round(3)}, face radius {radius:.4f}, facing {(-basis[:, 1]).round(3)}')
+    print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) != 2:
+        sys.exit(__doc__)
+    build(sys.argv[1])
