@@ -32,7 +32,7 @@ The model is a reference only: the game's blowers are drawn by `tools/make_blowe
 | --- | --- |
 | Chevy small-block | The distributor's cap stands at the back up to 16.7 in over the crank (x 6.7 to 11.0), so the case ends ahead of it (rotor case from x -10.05) |
 | Ford small-block | The distributor is at the front (cap up to 14.97 in on the 302, 15.87 on the 351, back to x -7.32): the case sits back (rotor case from x -4.6), on a box the floor's length behind the cap, and a long snout (about 9 in) reaches forward over the cap, 0.4 in clear, to the belt ahead of the water pump (the user's call, 2026-11-26) |
-| Y-block | Still drawn with the old engine-v8-283 model, which has no script to build a manifold from |
+| Y-block | Still drawn with the old engine-v8-283 model, which has no script to build a manifold from; it gets a blower once the new Y-block is built (the user, 2026-11-26) |
 | 426 Hemi | The distributor at the right front clears the box by 3 in; the case sits back on the same long snout as the Ford's (the user's call, 2026-11-26) |
-| Flathead | The generator stands on top at the front, where the snout goes |
+| Flathead | The generator stands on top at the front, where the snout goes. It will get a blower, but first needs references for the 3-71 and 4-71 blowers that were run on flatheads (the user, 2026-11-26) |
 | Stovebolt | Its intake is on the left side, not on top |
