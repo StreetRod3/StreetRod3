@@ -2,6 +2,8 @@
 """Build a Roots blower intake for an engine in SolidCraft and export it as a game GLB.
 
     python3 tools/make_blower.py sbc        # the Chevy small-block's
+    python3 tools/make_blower.py sbf-302    # the small-block Ford's, on the 302's deck or the 351's
+    python3 tools/make_blower.py hemi-426   # the 426 Hemi's
 
 A blower intake is everything that takes the intake's place: a low manifold bolted to the
 heads, a GMC-type Roots blower standing on it with two four-barrel pads in tandem on its
@@ -29,12 +31,15 @@ has:
                 the belt round the three
 
 The case is a 6-71's on the V8s. The belt runs down the engine's middle in front of the
-water pump, so the engine's fan comes off with a blower (the game hides it).
+water pump, so the engine's fan comes off with a blower (the game hides it). On the Chevy
+the case sits over the middle of the engine, ahead of the distributor at the back; the Ford
+and the Hemi have theirs at the front, so their cases sit back on a box the floor's length,
+and a long snout reaches forward over the distributor to the belt.
 
 Every part is a body of its own, drawn from numbers in this script and, for what bolts to
-the engine, from the engine's own script (make_sbc.py), in the engines' design frame:
-inches, +X toward the back, +Y right, +Z up, the crank on the X axis. Writes
-resources/engines/blower-FAMILY.sc and assets/parts/blower-FAMILY.glb, in the engine
+the engine, from the engine's own script (make_sbc.py, make_sbf.py, make_hemi.py), in the
+engines' design frame: inches, +X toward the back, +Y right, +Z up, the crank on the X
+axis. Writes resources/engines/blower-ENGINE.sc and assets/parts/blower-ENGINE.glb, in the engine
 models' frame (engine units of 0.22 m, the crank at Z -0.36). Needs SolidCraft's command
 line and Blender, as tools/make_flathead.py does.
 """
@@ -109,22 +114,52 @@ IDLER_BRACKET = (0.4, 2.1, 0.9)
 CRANK_HUB_R = 1.4
 
 # Each engine: where the case's front face and base are (x, z), the belt's middle plane,
-# and the front of the engine's crank pulley (where the drive's hub starts).
+# the front of the engine's crank pulley (where the drive's hub starts), and the manifold's
+# box (its foot's front and back along x, its head's front; the head's back is the case's).
 ENGINES = {
     "sbc": {
         # The case ends ahead of the distributor's cap at the back (from x 6.74, up to z
         # 16.7); the belt clears the water pump's hub (-14.45).
-        "case": (-9.65, 13.6),
+        "case": (-10.05, 13.6),
         "belt_x": -16.1,
         "crank_front": -14.4,
         "manifold": "sbc",
+    },
+    # The Ford's distributor stands at the front (its cap back to x -7.32, up to z 14.97 on
+    # the 302 and 15.87 on the 351), so the case sits back behind it, its front cover clear
+    # of the cap, and a long snout reaches forward over the cap to the belt ahead of the
+    # water pump's pulley (-16.3). The box starts behind the cap and runs the floor's length.
+    "sbf-302": {
+        "case": (-4.6, 14.3),
+        "belt_x": -18.05,
+        "crank_front": -16.3,
+        "manifold": "sbf",
+        "deck": "302",
+        "box": (-7.1, 9.2, -7.1),
+    },
+    "sbf-351": {
+        "case": (-4.6, 15.2),
+        "belt_x": -18.05,
+        "crank_front": -16.3,
+        "manifold": "sbf",
+        "deck": "351",
+        "box": (-7.1, 9.2, -7.1),
+    },
+    # The Hemi's distributor at the right front stands lower than the box (cap up to z
+    # 15.95, back to x -8.28); the case sits back as the Ford's, on the same long snout.
+    "hemi-426": {
+        "case": (-4.6, 17.8),
+        "belt_x": -17.9,
+        "crank_front": -16.15,
+        "manifold": "hemi",
+        "box": (-8.0, 9.6, -8.0),
     },
 }
 
 POLISHED = {"name": "polished aluminum", "pbrMetallicRoughness": {
     "baseColorFactor": [0.86, 0.86, 0.85, 1], "metallicFactor": 1.0, "roughnessFactor": 0.22}}
 FINISHES = [
-    ("intake_manifold_bolts", STEEL), ("intake_manifold", CAST_ALUMINUM), ("thermostat_neck_bore", BLACK),
+    ("intake_manifold_bolts", STEEL), ("intake_bolts", STEEL), ("intake_manifold", CAST_ALUMINUM), ("thermostat_neck_bore", BLACK),
     ("thermostat", CAST_ALUMINUM), ("blower_top_floor", BLACK), ("blower_nuts", STEEL),
     ("blower_bearing_bolts", STEEL), ("blower_pulley_nut", STEEL), ("blower_belt", RUBBER),
     ("blower_idler_bracket", CAST_ALUMINUM), ("blower_idler", SATIN_ALUMINUM),
@@ -134,7 +169,7 @@ FINISHES = [
 ROUND = "r0.35"
 REDUCE_FACTORS = [
     ("intake_manifold_bolt_bosses", 1), ("intake_manifold_distributor", 1),
-    ("intake_manifold", 0), ("thermostat", 1), ("blower_bosses", 1), ("blower_nuts", 0),
+    ("intake_manifold", 0), ("intake_bolts", 0), ("thermostat", 1), ("blower_bosses", 1), ("blower_nuts", 0),
     ("blower_bearing_bolts", 0), ("blower_top_floor", 0), ("blower_top", 2), ("blower_snout", 1),
     ("blower_pulley", 1), ("blower_idler", 1), ("blower_crank", 1), ("blower_belt", 3), ("blower", 0),
 ]
@@ -337,71 +372,118 @@ def drive(d):
     d.extrude(sk, "blower_belt", bw, "symmetric")
 
 
-def sbc_manifold(d):
+def flanges(d, M, bolts, bolt_xs, inset=0.1, front_right=None):
+    """The intake's flange on each head's intake face as the engine's own intake has it
+    (module M's numbers), the bolts down through it on round bosses; bolt_xs(s) are the
+    bolts' places along bank s, `bolts` the bolt bodies' name."""
+    t0, t1, thick = M.INTAKE_FLANGE
+    for s in (1, -1):
+        f0, up, n = M.intake_face(s)
+        xa, xb = M.bank_x(s, -M.HEAD_HALF) + inset, M.bank_x(s, M.HEAD_HALF) - inset
+        if s == 1 and front_right is not None:
+            xa = front_right
+        sk, to2d = d.plane(p3(0.0, f0), (1, 0, 0), v3(n), f"Intake flange {s}")
+        d.rounded(to2d(p3(xa, f0 + t0 * up)), to2d(p3(xb, f0 + t1 * up)), 0.3)
+        d.finish()
+        d.extrude(sk, f"intake_manifold_flange_{s}", thick)
+        bolt = f0 + M.INTAKE_BOLT_T * up + thick * n
+        xs = [x for x in bolt_xs(s) if xa + 0.5 < x < xb - 0.5]
+        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolt bosses {s}")
+        for x in xs:
+            d.circle(to2d(p3(x, bolt)), 0.48)
+        d.finish()
+        d.extrude(sk, f"intake_manifold_bolt_bosses_{s}", 0.15, start_offset=inch(-0.05))
+        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolts {s}")
+        for x in xs:
+            d.hexagon(to2d(p3(x, bolt)), 0.5)
+        d.finish()
+        d.extrude(sk, f"{bolts}_{s}", 0.28, start_offset=inch(0.1))
+
+
+def floor(d, outline, z0, z1):
+    sk = d.sketch("XY", "Intake floor", offset=z0)
+    d.poly(outline)
+    d.finish()
+    d.extrude(sk, "intake_manifold", z1 - z0)
+
+
+def water_outlet(d, x, y, z):
+    """The water outlet out of the box's front at (x, y, z), its neck forward and a little up."""
+    d.cylinder("thermostat_housing", (x, y, z), (-1, 0, 0), 2.3, 1.3)
+    d.cylinder("thermostat_flange", (x - 1.3, y, z), (-1, 0, 0), 2.6, 0.25)
+    hose_neck(d, "thermostat_neck", np.array([x - 1.55, y, z]), unit([-1.0, 0.0, 0.25]), 0.775, 0.6, 1.8, 1.2)
+
+
+def sbc_manifold(d, engine):
     """The small-block's: the L79 intake's floor, flanges and bolts (make_sbc.py), a box up
     from them flaring out under the case, the water outlet on its front, the distributor's
     boss."""
     S = make_sbc
     z0, z1 = S.INTAKE_BASE
-    sk = d.sketch("XY", "Intake floor", offset=z0)
-    d.poly(ccw([tuple(p) for p in S.INTAKE_FLOOR]))
-    d.finish()
-    d.extrude(sk, "intake_manifold", z1 - z0)
-
-    t0, t1, thick = S.INTAKE_FLANGE
-    for s in (1, -1):
-        f0, up, n = S.intake_face(s)
-        x0, x1 = S.bank_x(s, -S.HEAD_HALF) + 0.05, S.bank_x(s, S.HEAD_HALF) - 0.05
-        sk, to2d = d.plane(p3(0.0, f0), (1, 0, 0), v3(n), f"Intake flange {s}")
-        d.rounded(to2d(p3(x0, f0 + t0 * up)), to2d(p3(x1, f0 + t1 * up)), 0.3)
-        d.finish()
-        d.extrude(sk, f"intake_manifold_flange_{s}", thick)
-        bolt = f0 + S.INTAKE_BOLT_T * up + thick * n
-        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolt bosses {s}")
-        for x in S.INTAKE_BOLT_X:
-            d.circle(to2d(p3(S.bank_x(s, s * x), bolt)), 0.48)
-        d.finish()
-        d.extrude(sk, f"intake_manifold_bolt_bosses_{s}", 0.15, start_offset=inch(-0.05))
-        sk, to2d = d.plane(p3(0.0, bolt), (1, 0, 0), v3(n), f"Intake bolts {s}")
-        for x in S.INTAKE_BOLT_X:
-            d.hexagon(to2d(p3(S.bank_x(s, s * x), bolt)), 0.5)
-        d.finish()
-        d.extrude(sk, f"intake_manifold_bolts_{s}", 0.28, start_offset=inch(0.1))
-
-    box(d, z1 - 0.1, inset=(0.4, 3.6))
+    floor(d, ccw([tuple(p) for p in S.INTAKE_FLOOR]), z0, z1)
+    flanges(d, S, "intake_manifold_bolts", lambda s: [S.bank_x(s, s * x) for x in S.INTAKE_BOLT_X], inset=0.05)
+    x0 = d.x0
+    box(d, z1 - 0.1, (x0 + 0.4, x0 + CASE_LEN - 0.4, 3.6), x0)
     d.cylinder("intake_manifold_distributor_boss", (S.DIST[0], S.DIST[1], 10.2), (0, 0, 1), 2.1, 0.8)
-
-    # The water outlet out of the box's front where the intake's thermostat was, its neck
-    # forward and a little up.
-    tx, ty = S.THERMOSTAT
-    zc = 11.5
-    xf = d.x0 + 0.5
-    d.cylinder("thermostat_housing", (xf, ty, zc), (-1, 0, 0), 2.3, 1.3)
-    d.cylinder("thermostat_flange", (xf - 1.3, ty, zc), (-1, 0, 0), 2.6, 0.25)
-    neck = np.array([xf - 1.55, ty, zc])
-    hose_neck(d, "thermostat_neck", neck, unit([-1.0, 0.0, 0.25]), 0.775, 0.6, 1.8, 1.2)
+    water_outlet(d, x0 + 0.5, S.THERMOSTAT[1], 11.5)
 
 
-def box(d, z_floor, inset):
-    """The manifold's box from the floor (inset along x and its half width there) up,
-    flaring out to the case's footprint, and the flat top the case sits on."""
+def sbf_manifold(d, engine):
+    """The small-block Ford's, on either deck: the dual-plane intake's floor (with its lobe
+    round the distributor's boss and the clamp's ear), flanges and bolts (make_sbf.py); a
+    box the floor's length behind the distributor, flaring out under the case, which sits
+    back on its top; the water outlet on the box's front at the right, where the intake's
+    thermostat was; the distributor's boss and the clamp's ear."""
+    import make_sbf as F
+    F.DECK = F.DECKS[engine["deck"]]
+    z0, z1, _, _ = F.intake_levels()
+    floor(d, F.floor_outline(), z0, z1)
+    flanges(d, F, "intake_bolts", lambda s: [F.bank_x(s, s * x) for x in F.INTAKE_BOLT_X])
+    fx0, fx1, hx0 = engine["box"]
+    box(d, z1 - 0.1, (fx0, fx1, F.flange_face_y() + 1.0), hx0)
+    dx, dy = F.DIST
+    d.cylinder("intake_manifold_distributor_boss", (dx, dy, z0 - 0.3), (0, 0, 1), 2.3, z1 - z0 + 0.6)
+    bx, by = F.clamp_bolt()
+    d.cylinder("intake_manifold_distributor_ear", (bx, by, z0), (0, 0, 1), 0.95, z1 - z0 + 0.75)
+    water_outlet(d, fx0 + 0.5, F.THERMOSTAT[1], z1 + 1.3)
+
+
+def hemi_manifold(d, engine):
+    """The Hemi's: the intake's floor (stopping short at the right front for the
+    distributor), flanges and bolts (make_hemi.py), and the box the floor's length behind
+    the distributor, flaring out under the case, which sits back on its top. The Hemi's
+    thermostat is on its water pump."""
+    import make_hemi as H
+    z0, z1, _, _ = H.intake_levels()
+    floor(d, H.floor_outline(), z0, z1)
+    flanges(d, H, "intake_bolts", lambda s: [H.bank_x(s, x) for x in H.INTAKE_BOLT_X],
+            front_right=H.INTAKE_FRONT_RIGHT)
+    fx0, fx1, hx0 = engine["box"]
+    box(d, z1 - 0.1, (fx0, fx1, H.flange_face_y() + 1.0), hx0)
+
+
+def box(d, z_floor, foot, head_front):
+    """The manifold's box from the floor (its foot: front and back along x, half wide) up,
+    flaring out to its head under the case, from head_front back to the case's back end,
+    and the flat top there that the case sits on."""
     x0, zb = d.x0, d.zb
-    ix, iw = inset
+    fx0, fx1, fw = foot
+    hx0, hx1 = min(head_front, x0), x0 + CASE_LEN
     hw, ft = CASE_FLANGE
     lower = d.sketch("XY", "Box foot", offset=z_floor)
-    d.rounded((x0 + ix, -iw), (x0 + CASE_LEN - ix, iw), 0.8)
+    d.rounded((fx0, -fw), (fx1, fw), 0.8)
     d.finish()
     upper = d.sketch("XY", "Box head", offset=zb - 0.5)
-    d.rounded((x0, -(hw - 0.3)), (x0 + CASE_LEN, hw - 0.3), 0.6)
+    d.rounded((hx0, -(hw - 0.3)), (hx1, hw - 0.3), 0.6)
     d.finish()
     d.loft("intake_manifold_box", [lower, upper])
     sk = d.sketch("XY", "Manifold top", offset=zb - 0.5)
-    d.rounded((x0, -hw), (x0 + CASE_LEN, hw), 0.35)
+    d.rounded((hx0, -hw), (hx1, hw), 0.35)
     d.finish()
     d.extrude(sk, "intake_manifold_top", 0.5)
 
 
-MANIFOLDS = {"sbc": sbc_manifold}
+MANIFOLDS = {"sbc": sbc_manifold, "sbf": sbf_manifold, "hemi": hemi_manifold}
 
 
 def reduce_obj(src, dst, blender):
@@ -441,7 +523,7 @@ def main():
 
     engine = ENGINES[args.engine]
     d = Blower(engine)
-    MANIFOLDS[engine["manifold"]](d)
+    MANIFOLDS[engine["manifold"]](d, engine)
     case(d)
     pads = top(d)
     drive(d)
