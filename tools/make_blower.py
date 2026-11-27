@@ -161,9 +161,10 @@ ENGINES = {
     },
 }
 
-# Not a mirror: fully metallic, the shop's dark reflections turned it gunmetal on the hood screen.
+# Polished to a mirror, as the chrome air cleaner: the hood screen's reflection probe gives it
+# the bay to show (half-metal at 0.3 roughness read as flat grey paint).
 POLISHED = {"name": "polished aluminum", "pbrMetallicRoughness": {
-    "baseColorFactor": [0.88, 0.88, 0.87, 1], "metallicFactor": 0.7, "roughnessFactor": 0.3}}
+    "baseColorFactor": [0.9, 0.9, 0.92, 1], "metallicFactor": 1.0, "roughnessFactor": 0.12}}
 FINISHES = [
     ("intake_manifold_bolts", STEEL), ("intake_bolts", STEEL), ("intake_manifold", CAST_ALUMINUM), ("thermostat_neck_bore", BLACK),
     ("thermostat", CAST_ALUMINUM), ("blower_top_floor", BLACK), ("blower_nuts", STEEL),

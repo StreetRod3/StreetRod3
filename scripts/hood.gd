@@ -86,6 +86,7 @@ const _RATE := 22050
 @onready var _ui: Control = $UI/Root
 
 var _engine: Node3D
+var _reflections: ReflectionProbe
 ## Per part key: bolt nodes, their materials, where they go, and whether each is backing out.
 var _bolts: Dictionary = {}
 var _bolt_mats: Dictionary = {}
@@ -149,6 +150,7 @@ func _ready() -> void:
 	GameState.update_music()
 	_build_world()
 	_build_bay()
+	_build_reflections()
 	_engine = _EngineAssembly.new()
 	_engine.name = "Engine"
 	_engine.position = Vector3(0.0, CRANK_Y - _EngineAssembly.CRANK_Z * _EngineAssembly.ENGINE_SCALE, 0.0)
@@ -674,6 +676,7 @@ func _part_name(key: String) -> String:
 
 ## Click boxes around each part, from its meshes' bounds.
 func _refresh_part_bodies() -> void:
+	_recapture_reflections()
 	for bodies: Array in _part_bodies.values():
 		for body: Node3D in bodies:
 			(body as Node3D).queue_free()
@@ -1169,17 +1172,34 @@ func _build_world() -> void:
 	add_child(fill)
 
 
-## Chrome and polished metal need something to reflect: a dim shop, lighter overhead.
+## Chrome and polished metal need something to reflect: a dim shop, lighter overhead, with
+## fluorescent tubes on the ceiling and the open door (shaders/shop_sky.gdshader).
 static func _shop_reflections(env: Environment) -> void:
-	var sky_mat := ProceduralSkyMaterial.new()
-	sky_mat.sky_top_color = Color(0.55, 0.52, 0.48)
-	sky_mat.sky_horizon_color = Color(0.3, 0.28, 0.25)
-	sky_mat.ground_horizon_color = Color(0.2, 0.19, 0.17)
-	sky_mat.ground_bottom_color = Color(0.08, 0.075, 0.07)
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = preload("res://shaders/shop_sky.gdshader")
 	var sky := Sky.new()
 	sky.sky_material = sky_mat
 	env.sky = sky
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+
+
+## A probe over the bay so chrome and polished parts (the blower case, chrome air cleaners)
+## show the engine and bay around them as well as the shop; the sky alone left a mirror
+## finish one flat tone. It captures once, and again whenever the engine changes.
+func _build_reflections() -> void:
+	_reflections = ReflectionProbe.new()
+	_reflections.position = Vector3(0.0, 0.98, 0.0)
+	_reflections.size = Vector3(2.4, 2.2, 3.0)
+	_reflections.box_projection = true
+	_reflections.update_mode = ReflectionProbe.UPDATE_ONCE
+	_reflections.ambient_mode = ReflectionProbe.AMBIENT_DISABLED
+	add_child(_reflections)
+
+
+func _recapture_reflections() -> void:
+	if _reflections != null:
+		# Setting its cull mask marks it for another capture (its intensity does not).
+		_reflections.cull_mask = _reflections.cull_mask
 
 
 ## The bay around the engine: floor, frame rails, inner fenders, radiator and its support,
