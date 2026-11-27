@@ -1,0 +1,75 @@
+{
+  "id": "shelby-cobra-1965",
+  "name": "Shelby Cobra 1965",
+  "make": "Ford",
+  "model": {
+    "path": "res://assets/cars/shelby-cobra-1965.glb",
+    "position": [0.0, 0.097, 0.0],
+    "height": 1.0362,
+    "ground_clearance": 0.097,
+    "paint": {"metallic": 0.1, "roughness": 0.12, "clearcoat": 1.0, "clearcoat_roughness": 0.02},
+    "accent": {"color": [0.93, 0.93, 0.92]}
+  },
+  "register": "res://assets/parts/parts.register",
+  "wheels": {
+    "mounts": [
+      {
+        "node": "WheelFrontLeft",
+        "position": [-0.746, 0.33, 1.346],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelFrontRight",
+        "position": [0.746, 0.33, 1.346],
+        "rotation": [0, 180, -90]
+      },
+      {
+        "node": "WheelBackLeft",
+        "position": [-0.815, 0.33, -0.981],
+        "rotation": [0, 180, 90]
+      },
+      {
+        "node": "WheelBackRight",
+        "position": [0.815, 0.33, -0.981],
+        "rotation": [0, 180, -90]
+      }
+    ]
+  },
+  "parts": {
+    "engine": "ford-289",
+    "transmission": "gb_man4-ford",
+    "wheels": "wheel-mag"
+  },
+  "driver": {
+    "position": [0.345, 0.98, -0.5]
+  },
+  "cameras": {
+    "far": {
+      "position": [0.0, 2.4, -9.6],
+      "pitch": -14.0,
+      "fov": 68.0
+    },
+    "close": {
+      "position": [0.0, 1.7, -5.8],
+      "pitch": -10.0,
+      "fov": 70.0
+    },
+    "cockpit": {
+      "position": [0.345, 1.03, -0.45],
+      "pitch": -2.0,
+      "fov": 72.0
+    },
+    "bumper": {
+      "position": [0.0, 0.45, 2.35],
+      "pitch": -1.0,
+      "fov": 72.0
+    }
+  },
+  "chassis": {
+    "mass": 920,
+    "wheelbase": 2.326,
+    "cg_height": 0.42,
+    "front_axle_fraction": 0.48,
+    "max_steer_deg": 30
+  }
+}

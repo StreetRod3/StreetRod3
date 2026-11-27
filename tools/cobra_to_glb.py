@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Convert super7's AC Cobra 427 into a car body GLB.
 
-    python3 -I tools/cobra_to_glb.py assets/cars/shelby-cobra-1966.glb
+    python3 -I tools/cobra_to_glb.py assets/cars/shelby-cobra-1965.glb
 
 Source: "AC Cobra classic" by super7, CC-BY-4.0,
 https://sketchfab.com/3d-models/ac-cobra-classic-e6a38042e6e84189bc158682478e8b24
@@ -29,20 +29,26 @@ The GLB is laid out like the Impala's (tools/impala_to_glb.py):
   * Y up, nose along +Z, driver's side +X;
   * centered on X over the body and on Z over the whole car, lowest point at Y = 0;
   * real size in meters: the 427's 156 in length and 68 in width (over the body, not
-    the side pipes), each on its own; the height is scaled as the two are on average
-    (the model stands 11% under the published 49 in, which would stretch it);
-    the steering wheel is scaled evenly so it stays round;
+    the side pipes), each on its own; the height is scaled as the two are on average.
+    The published 47-49 in is from the ground to the top of the windscreen; the model
+    stands 44.6 in on its own tires, but only 3.8 in off the ground, so the difference
+    is its ride height rather than its body, and the body is not stretched; the
+    steering wheel is scaled evenly so it stays round;
   * the texture with the paint as a mask for car_paint_mask.gdshader: the body's blue
     is white with alpha 1, the white stripes the same with blue 0 (the accent, the car
     file's model.accent), the dirt and rust left off; everything else has alpha 0 and
-    keeps its colors; the plate's lettering is painted out;
+    keeps its colors;
   * an ORM texture (R = AO, G = roughness, B = metallic) and the model's normal map;
   * the glass as its own clear material, so the paint shader never touches it;
-  * the overriders as `bumper_front` and `bumper_rear` nodes so the game can strip them;
+  * the rear plate keeps its holder, and the blank plate (assets/cars/plate-blank.png),
+    a US plate's 12 x 6 in, is laid over its smaller face on a material named `plate`,
+    where the game prints the car's own number (the model's lettering is painted out of the texture as well);
+  * no bumpers: the Cobra has none, and the small bars at the corners are jacking
+    points, which stay on the body;
   * the steering wheel as its own `driving_wheel` node, its +Z down the column.
 
-The wheels, their spinners and the rear plate are left out: the game mounts its own
-wheels and plates. The numbers the .car file needs are printed at the end.
+The wheels and their spinners are left out: the game mounts its own. The numbers the
+.car file needs are printed at the end.
 """
 import json
 import os
@@ -79,10 +85,6 @@ END_RISE = 0.6
 ## Parts of INTERIOR by their boxes (raw units, the model's frame).
 ## A part wholly inside a tire's box is that wheel's (tire, rim, spinner): left out.
 WHEEL_BOX = 0.2   # past the tire's radius along X and above its top
-## The overriders: the parts starting ahead of FRONT_X down low, and the parts reaching
-## back past REAR_X (nothing else does).
-FRONT_X = 9.2
-REAR_X = -9.9
 ## The steering wheel (rim, spokes and hub): wholly inside this box.
 STEERING = ((-0.1, 0.45), (0.2, 1.35), (-2.55, -0.8))
 ## The texture: where the rear plate's face is (px; the part also holds its bracket), and
@@ -102,6 +104,10 @@ ROUGHNESS = 0.6
 ## The glass: a plain clear.
 GLASS_COLOR = [0.9, 0.93, 0.95, 0.18]
 UNDERBODY_COLOR = [0.05, 0.05, 0.05, 1.0]
+## The blank plate every converted car wears (tools/make_blank_plate.py).
+PLATE_IMAGE = os.path.join(ROOT, 'assets', 'cars', 'plate-blank.png')
+PLATE_W = 12.0 * IN
+PLATE_H = 6.0 * IN
 
 
 def read_glb(path):
@@ -297,10 +303,10 @@ def join(*meshes):
 
 
 def split_interior(interior, tires, size):
-    """INTERIOR's triangle indices by group: body, wheels, bumper_front, bumper_rear,
-    driving_wheel, plate."""
+    """INTERIOR's triangle indices by group: body, wheels, driving_wheel, plate (the
+    plate with its holder)."""
     from impala_dash import islands
-    groups = {g: [] for g in ('body', 'wheels', 'bumper_front', 'bumper_rear', 'driving_wheel', 'plate')}
+    groups = {g: [] for g in ('body', 'wheels', 'driving_wheel', 'plate')}
     x0, y0, x1, y1 = PLATE
     for idx in islands(interior['pos']):
         q = interior['pos'][idx].reshape(-1, 3)
@@ -314,10 +320,6 @@ def split_interior(interior, tires, size):
                and lo[2] * hi[2] > 0 and min(abs(lo[2]), abs(hi[2])) >= t['inner'] - 0.05
                and hi[1] <= t['top'] + WHEEL_BOX for t in tires):
             group = 'wheels'
-        elif lo[0] > FRONT_X and lo[1] < -1.5:
-            group = 'bumper_front'
-        elif lo[0] < REAR_X:
-            group = 'bumper_rear'
         elif all(a <= l and h <= b for (a, b), l, h in zip(STEERING, lo, hi)):
             group = 'driving_wheel'
         elif on_plate >= PLATE_SHARE:
@@ -372,6 +374,7 @@ def build(dst):
     from PIL import Image
     from studebaker_to_glb import Gltf, png_bytes, ring_axis, share_corners
     from studebaker_dash import quaternion
+    from variety_pack_to_glb import plate_quad
     import cobra_dash as dash
 
     gltf, binary = read_glb(os.path.join(ROOT, SOURCE))
@@ -392,11 +395,10 @@ def build(dst):
     parts = split_interior(interior, tires, size)
     faces = dial_faces(interior, parts['body'], size)
     groups = {
-        'body': join(body_shell, pick(interior, parts['body'])),
-        'bumper_front': pick(interior, parts['bumper_front']),
-        'bumper_rear': pick(interior, parts['bumper_rear']),
+        'body': join(body_shell, pick(interior, parts['body']), pick(interior, parts['plate'])),
         'driving_wheel': pick(interior, parts['driving_wheel']),
     }
+    plate_face = plate_face_tris(interior, parts['plate'], size)
 
     # The model's frame (Y up, nose +X, driver -Z) to the game's (Y up, nose +Z,
     # driver +X): a quarter turn about Y.
@@ -429,6 +431,9 @@ def build(dst):
                                         Image.new('L', base.size, int(ROUGHNESS * 255)),
                                         Image.new('L', base.size, 0)]))
     nrm_tex = add_image(normal)
+    blank = Image.open(PLATE_IMAGE).convert('RGB')
+    blank.putalpha(0)
+    plate_tex = add_image(blank)
     out.materials += [
         {'name': 'cobra', 'doubleSided': True,
          'pbrMetallicRoughness': {'baseColorTexture': {'index': albedo},
@@ -441,8 +446,11 @@ def build(dst):
         {'name': 'underbody', 'doubleSided': True,
          'pbrMetallicRoughness': {'baseColorFactor': UNDERBODY_COLOR, 'metallicFactor': 0.0,
                                   'roughnessFactor': 0.9}},
+        {'name': 'plate', 'doubleSided': True,
+         'pbrMetallicRoughness': {'baseColorTexture': {'index': plate_tex}, 'metallicFactor': 0.3,
+                                  'roughnessFactor': 0.5}},
     ]
-    PAINTED, CLEAR, FLOOR = 0, 1, 2
+    PAINTED, CLEAR, FLOOR, PLATE_MAT = 0, 1, 2, 3
 
     def primitive(m, material, frame=None, even=None):
         pos = to_game(m['pos']).reshape(-1, 3)
@@ -459,12 +467,27 @@ def build(dst):
                                        m['uv'].reshape(-1, 2).astype(np.float32))
         return out.primitive(p, n, index, material, u)
 
+    # The blank plate over the model's: in the plate's plane, PLATE_OUT in front of it.
+    qp, qn, qu, plate_size = plate_quad(to_game(plate_face), -1)
+    # The model's plate is small (7.9 x 3.8 in): the US plate is laid over it at its own
+    # size, about the same middle.
+    c0, c1, c2, c3 = qp[0, 0], qp[0, 1], qp[0, 2], qp[1, 2]
+    right = (c1 - c0) / np.linalg.norm(c1 - c0)
+    up = (c3 - c0) / np.linalg.norm(c3 - c0)
+    mid = (c0 + c2) / 2
+    corners = [mid + (sx * PLATE_W * right + sy * PLATE_H * up) / 2
+               for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1))]
+    qp = np.array([[corners[0], corners[1], corners[2]], [corners[0], corners[2], corners[3]]])
+    plate_size = (PLATE_W, PLATE_H)
+    p, n, u, index = share_corners(qp.reshape(-1, 3).astype(np.float32), qn.reshape(-1, 3).astype(np.float32),
+                                   qu.reshape(-1, 2).astype(np.float32))
+    plate_prim = out.primitive(p, n, index, PLATE_MAT, u)
+
     name = os.path.splitext(os.path.basename(dst))[0]
     roots = [out.node(name, mesh=out.mesh(name, [primitive(groups['body'], PAINTED),
                                                  primitive(glass, CLEAR),
-                                                 primitive(underbody, FLOOR)]))]
-    for group in ('bumper_front', 'bumper_rear'):
-        roots.append(out.node(group, mesh=out.mesh(group, [primitive(groups[group], PAINTED)])))
+                                                 primitive(underbody, FLOOR),
+                                                 plate_prim]))]
 
     # The steering wheel, scaled evenly about the rim's middle so it stays round.
     wheel = to_game(groups['driving_wheel']['pos']).reshape(-1, 3)
@@ -497,7 +520,7 @@ def build(dst):
         roots.append(out.node(pod, translation=center, rotation=quaternion(pbasis), children=[face, hand]))
     out.write(dst, roots)
 
-    report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub, axis)
+    report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub, axis, plate_size, qp)
 
 
 def add_image_png(out, png):
@@ -506,7 +529,16 @@ def add_image_png(out, png):
     return len(out.textures) - 1
 
 
-def report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub, axis):
+def plate_face_tris(interior, plate_idx, size):
+    """The plate's face: the triangles of the plate part drawn from the plate's face in
+    the texture."""
+    x0, y0, x1, y1 = PLATE
+    uv = interior['uv'][plate_idx].mean(1) * size
+    on = (uv[:, 0] > x0) & (uv[:, 0] < x1) & (uv[:, 1] > y0) & (uv[:, 1] < y1)
+    return interior['pos'][plate_idx[on]]
+
+
+def report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub, axis, plate_size, plate):
     size_m = (kept.max(0) - kept.min(0)) * scale
     print(f'{dst}: {os.path.getsize(dst) / 1e6:.1f} MB, size {size_m.round(3)} m '
           f'({(size_m / IN).round(1)} in), scale {scale.round(4)} m per model unit')
@@ -524,9 +556,15 @@ def report(dst, kept, scale, origin, to_game, interior, parts, tires, pods, hub,
               f'tire radius {r:.3f} m ({2 * r / IN:.1f} in)')
     zs = [(t['x'] - origin[2]) * scale[2] for t in tires]
     print(f'wheelbase {(zs[1] - zs[0]):.3f} m ({(zs[1] - zs[0]) / IN:.1f} in); ground clearance {-ground:.3f} m')
-    plate = to_game(interior['pos'][parts['plate']]).reshape(-1, 3)
-    if len(plate):
-        print('rear plate at', ((plate.min(0) + plate.max(0)) / 2).round(3))
+    plate = plate.reshape(-1, 3)
+    print(f'rear plate at {((plate.min(0) + plate.max(0)) / 2).round(3)}, '
+          f'{plate_size[0] / IN:.1f} x {plate_size[1] / IN:.1f} in')
+    print(f'model height {(kept[:, 1].max() - kept[:, 1].min()) * scale[1]:.4f} m; front end z {(kept[:, 2].max() - origin[2]) * scale[2]:.3f}, '
+          f'rear end z {(kept[:, 2].min() - origin[2]) * scale[2]:.3f}')
+    seats = to_game(interior['pos'][parts['body']]).reshape(-1, 3)
+    near = seats[(np.abs(seats[:, 0] - hub[0]) < 0.15) & (seats[:, 2] < hub[2] - 0.2) & (seats[:, 2] > hub[2] - 1.2)]
+    print('driver\'s seat (near the wheel\'s line): y', near[:, 1].min().round(3), '..', near[:, 1].max().round(3),
+          'z', near[:, 2].min().round(3), '..', near[:, 2].max().round(3))
     for pod, center, basis, radius, kind, *_ in pods:
         print(f'{pod}: {kind} at {center.round(3)}, face radius {radius:.4f}, facing {(-basis[:, 1]).round(3)}')
     print('steering wheel hub', hub.round(3), 'axis', axis.round(3))
