@@ -141,3 +141,7 @@ resources/engines/hemi-426-headers-shorty.sc filter=lfs diff=lfs merge=lfs -text
 resources/engines/hemi-426-intake-aluminum.sc filter=lfs diff=lfs merge=lfs -text
 resources/engines/hemi-426-intake-crossram.sc filter=lfs diff=lfs merge=lfs -text
 assets/parts/hemi-426-intake-crossram.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/blower-sbc.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/blower-sbf-302.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/blower-sbf-351.glb filter=lfs diff=lfs merge=lfs -text
+assets/parts/blower-hemi-426.glb filter=lfs diff=lfs merge=lfs -text

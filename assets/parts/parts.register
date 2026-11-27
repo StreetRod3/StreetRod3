@@ -532,6 +532,18 @@
       "price": 860,
       "hp": 34,
       "vmax": 5
+    },
+    {
+      "id": "intake-blower",
+      "slot": "intake",
+      "families": ["chevy-sbc", "ford-windsor", "chrysler-hemi"],
+      "style": "blower",
+      "carbs": 2,
+      "barrels": 4,
+      "name": "6-71 blower",
+      "price": 1650,
+      "hp": 95,
+      "vmax": 7
     }
   ],
   "fuel": [

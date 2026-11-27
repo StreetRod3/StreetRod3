@@ -186,6 +186,20 @@ const SB_HEADERS := {
 	"shorty": "res://assets/parts/sbc-headers-shorty.glb",
 	"long-tube": "res://assets/parts/sbc-headers-long.glb",
 }
+## The blower intake (tools/make_blower.py): the intake style, and on each small-block its
+## model (manifold, blower, water outlet and the belt drive down to the crank) and its two
+## carburetor pads in tandem on the blower's top. The Ford's pads are on the 302's deck.
+const BLOWER := "blower"
+const SB_BLOWER := "res://assets/parts/blower-sbc.glb"
+const SB_BLOWER_PADS: Array[Vector3] = [Vector3(-6.6, 0.0, 21.65), Vector3(1.9, 0.0, 21.65)]
+## Its two hold-down bolts, on the case's front right and back left studs' bosses (their
+## nuts left out of the model): the intake's flange bolts are under the case.
+const SB_BLOWER_BOLTS: Array[Vector3] = [Vector3(-6.97, 4.85, 14.95), Vector3(2.27, -4.85, 14.95)]
+const SBF_BLOWER := "res://assets/parts/blower-sbf-%s.glb"
+const SBF_BLOWER_PADS: Array[Vector3] = [Vector3(-1.15, 0.0, 22.35), Vector3(7.35, 0.0, 22.35)]
+const SBF_BLOWER_BOLTS: Array[Vector3] = [Vector3(-1.52, 4.85, 15.65), Vector3(7.72, -4.85, 15.65)]
+const HEMI_BLOWER_PADS: Array[Vector3] = [Vector3(-1.15, 0.0, 25.85), Vector3(7.35, 0.0, 25.85)]
+const HEMI_BLOWER_BOLTS: Array[Vector3] = [Vector3(-1.52, 4.85, 19.15), Vector3(7.72, -4.85, 19.15)]
 ## Under the car: where each exhaust's outlet takes the head pipe on the right bank (x
 ## before the bank's offset), under the cast-iron manifold's middle or at the end of a
 ## header's collector; and the manifolds' run along the exhaust face.
@@ -347,6 +361,7 @@ const HEMI_COVERS := {"finned": "res://assets/parts/hemi-426-valve-covers-finned
 const HEMI_INTAKES := {
 	"hemi-aluminum": "res://assets/parts/hemi-426-intake-aluminum.glb",
 	"hemi-crossram": "res://assets/parts/hemi-426-intake-crossram.glb",
+	BLOWER: "res://assets/parts/blower-hemi-426.glb",
 }
 const HEMI_ALUMINUM_PADS: Array[Vector3] = [Vector3(-0.5, 0.0, 21.0)]
 ## The cross-ram's two, one on each side's plenum, staggered.
@@ -425,6 +440,8 @@ class SmallBlock:
 	var nodes_cover_right: Array[String] = []
 	var nodes_cover_left: Array[String] = []
 	var nodes_intake: Array[String]
+	## The blower's two hold-down bolts (in place of the intake's flange bolts).
+	var blower_bolts: Array[Vector3] = []
 
 	## `x` along the engine as the bores are numbered, moved to bank `side`'s bores.
 	func bank_x(side: float, x: float) -> float:
@@ -505,6 +522,9 @@ static func _chevy_layout() -> SmallBlock:
 	sb.thermostat = SB_THERMOSTAT
 	sb.dist_boss_top = SB_DIST_BOSS_TOP
 	sb.headers = SB_HEADERS
+	sb.intakes = {BLOWER: SB_BLOWER}
+	sb.style_pads = {BLOWER: SB_BLOWER_PADS}
+	sb.blower_bolts = SB_BLOWER_BOLTS
 	for style: String in SB_OUTLETS:
 		var p: Vector3 = SB_OUTLETS[style]
 		sb.outlets[style] = [Vector3(sb.bank_x(1.0, p.x), p.y, p.z), Vector3(sb.bank_x(-1.0, p.x), -p.y, p.z)]
@@ -569,7 +589,13 @@ static func _windsor_layout(deck: String) -> SmallBlock:
 		"long-tube": "res://assets/parts/sbf-%s-headers-long.glb" % deck,
 	}
 	sb.covers = {"finned": "res://assets/parts/sbf-%s-valve-covers-finned.glb" % deck}
-	sb.intakes = {"sbf-aluminum": "res://assets/parts/sbf-%s-intake-aluminum.glb" % deck}
+	sb.intakes = {"sbf-aluminum": "res://assets/parts/sbf-%s-intake-aluminum.glb" % deck, BLOWER: SBF_BLOWER % deck}
+	var blower_pads: Array[Vector3] = []
+	for p: Vector3 in SBF_BLOWER_PADS:
+		blower_pads.append(p + up)
+	sb.style_pads = {BLOWER: blower_pads}
+	for p: Vector3 in SBF_BLOWER_BOLTS:
+		sb.blower_bolts.append(p + up)
 	var outlet := SBF_LOG_OUTLET + Vector3(0.0, lift, lift)
 	sb.outlets["log"] = [outlet, Vector3(SBF_LOG_OUTLET_LEFT_X, -outlet.y, outlet.z)]
 	for style: String in SBF_COLLECTOR_ENDS:
@@ -626,10 +652,11 @@ static func _hemi_layout() -> SmallBlock:
 	sb.thermostat = HEMI_THERMOSTAT
 	sb.dist_boss_top = HEMI_DIST.z
 	sb.stock_intake = "hemi-dualquad"
-	sb.style_pads = {"hemi-dualquad": HEMI_PADS, "hemi-aluminum": HEMI_ALUMINUM_PADS, "hemi-crossram": HEMI_CROSSRAM_PADS}
+	sb.style_pads = {"hemi-dualquad": HEMI_PADS, "hemi-aluminum": HEMI_ALUMINUM_PADS, "hemi-crossram": HEMI_CROSSRAM_PADS, BLOWER: HEMI_BLOWER_PADS}
 	sb.headers = HEMI_HEADERS
 	sb.covers = HEMI_COVERS
 	sb.intakes = HEMI_INTAKES
+	sb.blower_bolts = HEMI_BLOWER_BOLTS
 	sb.cleaner_carbs = 2
 	sb.badge = HEMI_BADGE
 	sb.outlets["log"] = HEMI_LOG_OUTLETS
@@ -788,6 +815,11 @@ func _sb() -> SmallBlock:
 	return small_block_of(_view_engine())
 
 
+## Whether the intake on is a blower.
+func has_blower() -> bool:
+	return is_sbc() and str(_view_part(GameState.SLOT_INTAKE).get("style", "")) == BLOWER
+
+
 ## Where the balancer's back face is along the crank, and the crank pulley's belt line.
 func balancer_x() -> float:
 	if is_six():
@@ -927,9 +959,6 @@ func bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in MOUNT_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, p))
-		GameState.SLOT_CAM:
-			for p in CAM_BOLTS:
-				out.append(Transform3D(Basis.IDENTITY, p))
 		GameState.SLOT_HEADS:
 			var slope := HEAD_DECK_OUT - HEAD_DECK_IN
 			var z := HEAD_DECK_IN.y + slope.y * (HEAD_BOLT_Y - HEAD_DECK_IN.x) / slope.x
@@ -961,9 +990,6 @@ func _fh_bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in FH_MOUNTS:
 				out.append(Transform3D(Basis.IDENTITY, fh(p)))
-		GameState.SLOT_CAM:
-			for y: float in [-0.12, 0.12]:
-				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(FH_CAM.x + 1.0, 0.0, FH_CAM.z)) + Vector3(0.0, y, -0.035)))
 		GameState.SLOT_HEADS:
 			var top := float(FH_HEAD_TOP.get(str(_view_part(GameState.SLOT_HEADS).get("finish", "")), FH_HEAD_TOP[""]))
 			for side in head_sides():
@@ -992,9 +1018,6 @@ func _six_bolt_spots(key: String) -> Array[Transform3D]:
 		GameState.HOOD_ENGINE:
 			for p in SIX_MOUNTS:
 				out.append(Transform3D(Basis.IDENTITY, six(p)))
-		GameState.SLOT_CAM:
-			for y: float in [-0.9, 0.9]:
-				out.append(Transform3D(Basis.IDENTITY, six(Vector3(SIX_CAM.x + 0.6, SIX_CAM.y + y, SIX_CAM.z + 0.1))))
 		GameState.SLOT_HEADS:
 			for p in SIX_HEAD_BOLTS:
 				out.append(Transform3D(Basis.IDENTITY, six(p)))
@@ -1022,15 +1045,16 @@ func _sb_bolt_spots(key: String) -> Array[Transform3D]:
 			for side: float in [1.0, -1.0]:
 				var way := Vector3(sb.mount_dir.x, sb.mount_dir.y * side, sb.mount_dir.z)
 				out.append(Transform3D(_axis_basis(way), fh(Vector3(sb.mount.x, sb.mount.y * side, sb.mount.z))))
-		GameState.SLOT_CAM:
-			for y: float in [-1.0, 1.0]:
-				out.append(Transform3D(Basis.IDENTITY, fh(Vector3(sb.cam.x + 0.8, y, sb.cam.z + 0.4))))
 		GameState.SLOT_HEADS:
 			for side in head_sides():
 				var normal := Vector3(0.0, sb.intake_normal.x * side, sb.intake_normal.y)
 				for x: float in [-sb.head_bolt_x, sb.head_bolt_x]:
 					out.append(Transform3D(_axis_basis(normal), fh(Vector3(sb.bank_x(side, x), sb.head_bolt.x * side, sb.head_bolt.y))))
 		GameState.SLOT_INTAKE:
+			if has_blower():
+				for p in sb.blower_bolts:
+					out.append(Transform3D(Basis.IDENTITY, fh(p)))
+				return out
 			for side: float in [1.0, -1.0]:
 				var normal := Vector3(0.0, sb.intake_normal.x * side, sb.intake_normal.y)
 				var at := Vector3(sb.bank_x(side, -sb.intake_bolt_x * side), sb.intake_bolt.x * side, sb.intake_bolt.y)
@@ -1177,7 +1201,9 @@ func _build_front(rig: Node3D) -> void:
 		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _FH_NODES_FRONT))
 		return
 	if is_sbc():
-		_add_model_nodes(rig, _SB_NODES_FRONT, true)
+		# A blower's belt runs across the water pump's shaft, so its fan comes off.
+		var fan := not has_blower()
+		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _SB_NODES_FRONT) and (fan or not n.begins_with("fan_")))
 		return
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
 	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
@@ -1353,7 +1379,12 @@ func _build_cam(rig: Node3D, part: Dictionary) -> void:
 			var lobe := _cyl_x(turned, lobe_r, 0.07, 0.035, metal, 16)
 			lobe.scale.x = 0.62
 			phase += 2.4
-	var plate := bolt_spots(GameState.SLOT_CAM)[0].origin if flathead or sbc else CAM_BOLTS[0]
+	# The retainer plate at the front (the cam has no bolts to turn under the hood).
+	var plate := CAM_BOLTS[0]
+	if flathead:
+		plate = fh(Vector3(FH_CAM.x + 1.0, 0.0, FH_CAM.z)) + Vector3(0.0, 0.0, -0.035)
+	elif sbc:
+		plate = fh(_sb().cam + Vector3(0.8, 0.0, 0.4))
 	_box(rig, Vector3(0.14, 0.36, 0.03), Vector3(plate.x, 0.0, plate.z - 0.015), _mat("steel", _STEEL, 0.6, 0.35))
 
 
@@ -1501,6 +1532,10 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	if is_sbc():
 		var sb := _sb()
 		var cast := str(sb.intakes.get(style, ""))
+		if style == BLOWER and ResourceLoader.exists(cast):
+			# The blower's model is all of it: manifold, blower, water outlet and drive.
+			_add_model_filtered(rig, cast, func(_n: String) -> bool: return true)
+			return
 		if style == sb.stock_intake:
 			_add_model_nodes(rig, sb.nodes_intake, true)
 		elif not cast.is_empty() and ResourceLoader.exists(cast):

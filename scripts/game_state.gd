@@ -191,9 +191,10 @@ const STOCK_SLOT_PARTS := {
 const HOOD_ENGINE := "engine"
 ## Bolts holding each part under the hood. They turn like the bellhousing bolts, out
 ## (0) to `GEARBOX_BOLT_TIGHT`. The heads have `HEAD_BOLTS` each and the air cleaner one per carburetor (`hood_bolt_count()`).
+## The camshaft has none: with the heads off it lifts out when clicked.
 const HOOD_BOLT_COUNTS := {
 	HOOD_ENGINE: 2,
-	SLOT_CAM: 2,
+	SLOT_CAM: 0,
 	SLOT_HEADS: 4,
 	SLOT_INTAKE: 2,
 	SLOT_CARB: 2,

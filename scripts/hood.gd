@@ -67,7 +67,6 @@ const PART_NAMES := {
 }
 const BOLT_NAMES := {
 	"engine": ["Right engine mount bolt", "Left engine mount bolt"],
-	"cam": ["Right cam retainer bolt", "Left cam retainer bolt"],
 	"heads": ["Right head, front bolt", "Right head, rear bolt", "Left head, front bolt", "Left head, rear bolt"],
 	"intake": ["Front intake bolt", "Rear intake bolt"],
 	"carb": ["Front carburetor nut", "Rear carburetor nut"],
@@ -468,7 +467,9 @@ func _settle() -> void:
 		for key in TOP_DOWN:
 			if not GameState.is_hood_part_fitted(key) or not GameState.hood_part_blocker(key).is_empty():
 				continue
-			if GameState.hood_bolts(key).max() > 0:
+			# A part with no bolts (the camshaft) waits to be clicked.
+			var bolts := GameState.hood_bolts(key)
+			if bolts.is_empty() or bolts.max() > 0:
 				continue
 			await _lift_out(key)
 			again = true
@@ -493,6 +494,8 @@ func _lift_out(key: String) -> void:
 		_engine.rigs.erase(_EngineAssembly.FRONT)
 	if key == GameState.SLOT_DISTRIBUTOR:
 		_engine.rebuild(_EngineAssembly.WIRES)
+	if key == GameState.SLOT_INTAKE:
+		_engine.rebuild(_EngineAssembly.FRONT)
 	_hint.text = "Lifting the %s off…" % str(PART_NAMES[key]).to_lower()
 	_play(_sfx_clunk)
 	if rig != null:
@@ -521,6 +524,9 @@ func _fit(key: String, part_id: String) -> void:
 	_refresh_ui()
 	var lift := LIFT_ENGINE if key == GameState.HOOD_ENGINE else LIFT_PART
 	var rig: Node3D = _engine.rebuild(key)
+	if key == GameState.SLOT_INTAKE:
+		# A blower takes the fan off the front, and any other intake puts it back.
+		_engine.rebuild(_EngineAssembly.FRONT)
 	_build_bolts(key)
 	var count := (_bolts.get(key, []) as Array).size()
 	for i in count:
@@ -592,8 +598,13 @@ func _on_target(target: Array) -> void:
 		return
 	# A part left free with its bolts out, as an older save can have it, lifts off when
 	# clicked.
-	if not _busy and GameState.hood_part_blocker(key).is_empty() and GameState.hood_bolts(key).max() <= 0:
-		await _settle_now()
+	var bolts := GameState.hood_bolts(key)
+	if not _busy and GameState.hood_part_blocker(key).is_empty() and (bolts.is_empty() or bolts.max() <= 0):
+		if bolts.is_empty():
+			# A part with no bolts (the camshaft) lifts out itself, which settling leaves to the click.
+			await _lift_now(key)
+		else:
+			await _settle_now()
 		return
 	_hint.text = _part_hint(key)
 
@@ -679,7 +690,8 @@ func _refresh_part_bodies() -> void:
 		# whole top of the engine between them; the front drive a box for each piece
 		# (belt, fan, generator, pulleys), so it does not cover the front of the engine.
 		var pieces: Array = rig.get_children() if key == GameState.SLOT_HEADS else [rig]
-		if key == _EngineAssembly.FRONT:
+		# A blower's too: its belt runs down the front past the crank.
+		if key == _EngineAssembly.FRONT or (key == GameState.SLOT_INTAKE and _engine.has_blower()):
 			pieces = rig.find_children("*", "MeshInstance3D", true, false)
 		var bodies: Array[Node3D] = []
 		for piece: Node in pieces:
@@ -795,6 +807,16 @@ func _settle_now() -> void:
 	_busy = true
 	_refresh_ui()
 	await _settle()
+	if not is_instance_valid(self):
+		return
+	_busy = false
+	_refresh_ui()
+
+
+func _lift_now(key: String) -> void:
+	_busy = true
+	_refresh_ui()
+	await _lift_out(key)
 	if not is_instance_valid(self):
 		return
 	_busy = false
@@ -981,6 +1003,9 @@ func _refresh_peek_ui() -> void:
 
 func _bolt_state(key: String) -> String:
 	var bolts := GameState.hood_bolts(key)
+	# The camshaft has none.
+	if bolts.is_empty():
+		return "in place"
 	if bolts.min() >= GameState.GEARBOX_BOLT_TIGHT:
 		return "tight"
 	if bolts.max() == 0:
