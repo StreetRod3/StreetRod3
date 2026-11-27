@@ -1,7 +1,7 @@
 {
   "id": "plymouth-superbird-1970",
   "name": "Plymouth Superbird 1970",
-  "make": "GM",
+  "make": "Chrysler",
   "model": {
     "path": "res://assets/cars/plymouth-superbird-1970.glb",
     "position": [0.0, 0.165, 0.0],
@@ -36,8 +36,8 @@
     ]
   },
   "parts": {
-    "engine": "v8-350",
-    "transmission": "gb_man4",
+    "engine": "chrysler-426-hemi",
+    "transmission": "gb_man4-chrysler",
     "wheels": "wheel-std"
   },
   "driver": {

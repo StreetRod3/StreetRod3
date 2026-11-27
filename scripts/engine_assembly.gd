@@ -279,6 +279,81 @@ const _SBF_NODES_COVER_LEFT: Array[String] = ["valve_cover_filler", "oil_filler_
 const _SBF_NODES_COVER_RIGHT: Array[String] = ["valve_cover_breather"]
 const _SBF_NODES_INTAKE: Array[String] = ["intake_manifold", "intake_bolts", "thermostat"]
 
+## The 426 Hemi, laid out as tools/make_hemi.py builds its model: its own block on the
+## raised-block wedge's dimensions, drawn as the small-blocks are though it is a big block.
+## Its left bank is the one ahead, as the Chevy's; its distributor at the valley's right
+## front, its coil on the left head's front, its thermostat on the water pump. The plugs
+## are down tubes in the middle of the heads, so their wires come into wells on the valve
+## covers' tops. The stock intake carries two four-barrels in tandem under one oval air
+## cleaner; the model has the front one, which is set on each pad.
+const HEMI_FAMILY := "chrysler-hemi"
+const HEMI_MODEL := "res://assets/parts/engine-hemi-426.glb"
+const HEMI_BORE_MID := -0.3
+const HEMI_BANK_SHIFT := 0.47
+const HEMI_BORES_X: Array[float] = [-7.2, -2.4, 2.4, 7.2]
+const HEMI_BLOCK_BACK := 11.35
+## The stock intake's two pads (their tops), front and back.
+const HEMI_PADS: Array[Vector3] = [Vector3(-4.6, 0.0, 21.0), Vector3(3.6, 0.0, 21.0)]
+const HEMI_CARB_TOP := 24.15
+const HEMI_WINGNUT_TOP := 27.92
+## The badge on the oval cleaner's lid, from the front pad: on the flat top ahead of the
+## front wing nut, clear of the lid's sloping edge.
+const HEMI_BADGE := Vector3(-3.0, 0.0, 3.32)
+const HEMI_DIST := Vector3(-10.3, 2.3, 10.9)
+const HEMI_TOWER_R := 1.15
+const HEMI_TOWER_TOP := 16.5
+const HEMI_CAP_MIDDLE_TOP := 16.8
+const HEMI_CLAMP_BOLT := Vector3(-10.76, 0.767, 11.55)
+const HEMI_COIL_TOP := Vector3(-12.4, -5.6, 18.15)
+## The plug wells on the right cover's top (y, z) at each bore, and the way out of them.
+const HEMI_PLUG_EXIT := Vector2(13.183, 16.242)
+const HEMI_PLUG_DIR := Vector3(0.0, 0.544, 0.839)
+## The wires leave ahead of the covers' fronts, run back along their tops and come down
+## into the boots from above.
+const HEMI_WIRE_LEAVE := Vector3(-11.0, 7.5, 18.2)
+const HEMI_WIRE_OVER := Vector2(10.8, 17.9)
+const HEMI_WIRE_BEND := Vector2(12.4, 17.7)
+const HEMI_INTAKE_BOLT_X := 4.8
+const HEMI_INTAKE_BOLT := Vector2(5.109, 15.433)
+const HEMI_INTAKE_NORMAL := Vector2(-0.707, 0.707)
+const HEMI_HEAD_BOLT_X := 9.6
+const HEMI_HEAD_BOLT := Vector2(4.685, 11.897)
+const HEMI_MOUNT := Vector3(-5.1, 8.684, 1.428)
+const HEMI_MOUNT_DIR := Vector3(0.0, 0.894, -0.448)
+const HEMI_CAM := Vector3(-10.6, 10.0, 6.4)
+const HEMI_COVER_X := -12.6
+const HEMI_SEAL_X := -12.3
+const HEMI_BELT_X := -15.15
+const HEMI_PULLEY_R := 3.5
+const HEMI_PORT := Vector3(5.109, 15.433, 45.0)
+const HEMI_FLOOR := Vector3(13.922, 14.472, 4.048)
+const HEMI_THERMOSTAT := Vector2(-13.6, -2.0)
+## The stock manifolds' outlets, the right bank's and the left's, where the head pipes
+## bolt on, and the run along the exhaust face the under-car hot spot covers.
+const HEMI_LOG_OUTLETS: Array[Vector3] = [Vector3(12.19, 12.2, 0.56), Vector3(11.25, -12.2, 0.56)]
+const HEMI_EXHAUST_RUN := Vector3(9.0, 13.0, 7.0)
+## The headers' collector ends (x along the bank, before its offset; |y|, z), where the
+## head pipes bolt on.
+const HEMI_COLLECTOR_ENDS := {
+	"shorty": Vector3(8.62, 13.4, -4.34),
+	"long-tube": Vector3(14.8, 12.8, -9.73),
+}
+## The speed parts' own models, and the pads of the intakes that are not the stock one's.
+const HEMI_HEADERS := {
+	"shorty": "res://assets/parts/hemi-426-headers-shorty.glb",
+	"long-tube": "res://assets/parts/hemi-426-headers-long.glb",
+}
+const HEMI_COVERS := {"finned": "res://assets/parts/hemi-426-valve-covers-finned.glb"}
+const HEMI_INTAKES := {
+	"hemi-aluminum": "res://assets/parts/hemi-426-intake-aluminum.glb",
+	"hemi-crossram": "res://assets/parts/hemi-426-intake-crossram.glb",
+}
+const HEMI_ALUMINUM_PADS: Array[Vector3] = [Vector3(-0.5, 0.0, 21.0)]
+## The cross-ram's two, one on each side's plenum, staggered.
+const HEMI_CROSSRAM_PADS: Array[Vector3] = [Vector3(-3.1, -3.1, 23.5), Vector3(3.1, 3.1, 23.5)]
+const _HEMI_NODES_HEADS: Array[String] = ["cylinder_head", "valve_cover", "valve_bolt", "head_bolts", "valve_cover_body", "valve_cover_well", "valve_cover_well_hole"]
+const _HEMI_NODES_INTAKE: Array[String] = ["intake_manifold", "intake_bolts"]
+
 
 ## Where things are on one small-block's model, in inches from the crank.
 class SmallBlock:
@@ -337,6 +412,16 @@ class SmallBlock:
 	var outlets: Dictionary = {}
 	var exhaust_run: Vector3
 	var nodes_heads: Array[String]
+	## The stock intake's style (its model is the engine's), the pads of intakes whose
+	## pads are not the stock one's (by style, in inches), how many carburetors the stock
+	## air cleaner covers, and where the engine's badge lies on it from the first pad.
+	var stock_intake: String = "iron4"
+	var style_pads: Dictionary = {}
+	var cleaner_carbs: int = 1
+	var badge: Vector3 = Vector3(-3.6, 0.0, 3.74)
+	## How far over the boot's end a wire comes in: above it on the small-blocks, whose
+	## plugs lie out of the heads' sides; on the Hemi none, its boots stand up.
+	var wire_drop: float = 0.5
 	var nodes_cover_right: Array[String] = []
 	var nodes_cover_left: Array[String] = []
 	var nodes_intake: Array[String]
@@ -368,10 +453,17 @@ static func small_block_of(engine: Dictionary) -> SmallBlock:
 		key = SB_MODEL
 	elif family == SBF_FAMILY and SBF_MODELS.has(model):
 		key = model
+	elif family == HEMI_FAMILY:
+		key = HEMI_MODEL
 	if key.is_empty():
 		return null
 	if not _small_blocks.has(key):
-		_small_blocks[key] = _chevy_layout() if key == SB_MODEL else _windsor_layout(str(SBF_MODELS[key]))
+		if key == SB_MODEL:
+			_small_blocks[key] = _chevy_layout()
+		elif key == HEMI_MODEL:
+			_small_blocks[key] = _hemi_layout()
+		else:
+			_small_blocks[key] = _windsor_layout(str(SBF_MODELS[key]))
 	return _small_blocks[key]
 
 
@@ -488,6 +580,67 @@ static func _windsor_layout(deck: String) -> SmallBlock:
 	sb.nodes_cover_right = _SBF_NODES_COVER_RIGHT
 	sb.nodes_cover_left = _SBF_NODES_COVER_LEFT
 	sb.nodes_intake = _SBF_NODES_INTAKE
+	return sb
+
+
+static func _hemi_layout() -> SmallBlock:
+	var sb := SmallBlock.new()
+	sb.family = HEMI_FAMILY
+	sb.bore_mid = HEMI_BORE_MID
+	sb.bank_shift = HEMI_BANK_SHIFT
+	sb.bores_x = HEMI_BORES_X
+	sb.block_back = HEMI_BLOCK_BACK
+	sb.pad = HEMI_PADS[0]
+	sb.carb_top = HEMI_CARB_TOP
+	sb.wingnut_top = HEMI_WINGNUT_TOP
+	sb.dist = HEMI_DIST
+	sb.tower_r = HEMI_TOWER_R
+	sb.tower_top = HEMI_TOWER_TOP
+	sb.clamp_bolt = HEMI_CLAMP_BOLT
+	sb.plug_exit = HEMI_PLUG_EXIT
+	sb.plug_dir = HEMI_PLUG_DIR
+	sb.plug_boot = 0.1
+	# The coil lead: up off the coil, across over the left cover's front, down onto the
+	# cap's middle tower.
+	var cap := Vector3(HEMI_DIST.x, HEMI_DIST.y, HEMI_CAP_MIDDLE_TOP)
+	sb.coil_lead = [HEMI_COIL_TOP, HEMI_COIL_TOP + Vector3(0.1, 0.15, 0.5), (HEMI_COIL_TOP + cap) * 0.5 + Vector3(0.0, 0.0, 1.2), cap + Vector3(0.0, 0.0, 0.7), cap]
+	sb.coil_on_intake = false
+	sb.wire_leave = HEMI_WIRE_LEAVE
+	sb.wire_over = HEMI_WIRE_OVER
+	sb.wire_bend = HEMI_WIRE_BEND
+	sb.wire_drop = 0.0
+	sb.intake_bolt_x = HEMI_INTAKE_BOLT_X
+	sb.intake_bolt = HEMI_INTAKE_BOLT
+	sb.intake_normal = HEMI_INTAKE_NORMAL
+	sb.head_bolt_x = HEMI_HEAD_BOLT_X
+	sb.head_bolt = HEMI_HEAD_BOLT
+	sb.mount = HEMI_MOUNT
+	sb.mount_dir = HEMI_MOUNT_DIR
+	sb.cam = HEMI_CAM
+	sb.cover_x = HEMI_COVER_X
+	sb.seal_x = HEMI_SEAL_X
+	sb.belt_x = HEMI_BELT_X
+	sb.pulley_r = HEMI_PULLEY_R
+	sb.port = HEMI_PORT
+	sb.valley_floor = HEMI_FLOOR
+	sb.thermostat = HEMI_THERMOSTAT
+	sb.dist_boss_top = HEMI_DIST.z
+	sb.stock_intake = "hemi-dualquad"
+	sb.style_pads = {"hemi-dualquad": HEMI_PADS, "hemi-aluminum": HEMI_ALUMINUM_PADS, "hemi-crossram": HEMI_CROSSRAM_PADS}
+	sb.headers = HEMI_HEADERS
+	sb.covers = HEMI_COVERS
+	sb.intakes = HEMI_INTAKES
+	sb.cleaner_carbs = 2
+	sb.badge = HEMI_BADGE
+	sb.outlets["log"] = HEMI_LOG_OUTLETS
+	for style: String in HEMI_COLLECTOR_ENDS:
+		var p: Vector3 = HEMI_COLLECTOR_ENDS[style]
+		sb.outlets[style] = [Vector3(sb.bank_x(1.0, p.x), p.y, p.z), Vector3(sb.bank_x(-1.0, p.x), -p.y, p.z)]
+	sb.exhaust_run = HEMI_EXHAUST_RUN
+	sb.nodes_heads = _HEMI_NODES_HEADS
+	sb.nodes_cover_right = _SBF_NODES_COVER_RIGHT
+	sb.nodes_cover_left = _SBF_NODES_COVER_LEFT
+	sb.nodes_intake = _HEMI_NODES_INTAKE
 	return sb
 
 ## The Chevy Stovebolt (216 and 235), laid out as tools/make_235.py builds its model: inches
@@ -907,6 +1060,11 @@ func pads_for(style: String) -> Array[Vector3]:
 		return [six(SIX_PAD)]
 	if is_sbc():
 		var pad := _sb().pad
+		if _sb().style_pads.has(style):
+			var own: Array[Vector3] = []
+			for p: Vector3 in _sb().style_pads[style]:
+				own.append(fh(p))
+			return own
 		match style:
 			"highrise":
 				return [fh(pad + Vector3(0.0, 0.0, 1.0))]
@@ -956,9 +1114,15 @@ func _cleaner_top() -> float:
 
 
 ## Whether the small-block's own air cleaner is the one on: the stock cleaner on its one
-## four-barrel.
+## four-barrel, or on the Hemi its oval one on the stock intake's two.
 func _sb_stock_cleaner() -> bool:
-	return str(_view_part(GameState.SLOT_AIR_CLEANER).get("style", "stock")) == "stock" and _view_carb_slots().size() <= 1 and int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) == 4
+	if str(_view_part(GameState.SLOT_AIR_CLEANER).get("style", "stock")) != "stock" or int(_view_part(GameState.SLOT_INTAKE).get("barrels", 4)) != 4:
+		return false
+	var sb := _sb()
+	if sb.cleaner_carbs > 1:
+		# A cleaner over several carburetors fits only the intake it came on.
+		return str(_view_part(GameState.SLOT_INTAKE).get("style", sb.stock_intake)) == sb.stock_intake and _view_carb_slots().size() == sb.cleaner_carbs
+	return _view_carb_slots().size() <= 1
 
 
 ## Whether the six's own oil-bath cleaner is the one on: the stock cleaner on its one carburetor.
@@ -1337,13 +1501,15 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	if is_sbc():
 		var sb := _sb()
 		var cast := str(sb.intakes.get(style, ""))
-		if style == "iron4":
+		if style == sb.stock_intake:
 			_add_model_nodes(rig, sb.nodes_intake, true)
 		elif not cast.is_empty() and ResourceLoader.exists(cast):
 			# An intake of its own cast to the stock one's pattern, under the engine's own
-			# thermostat housing.
+			# thermostat housing where the stock intake carries it (the Hemi's is on its
+			# water pump, so stays with the block).
 			_add_model_filtered(rig, cast, func(n: String) -> bool: return _begins_any(n, sb.nodes_intake))
-			_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return n.begins_with("thermostat"))
+			if sb.nodes_intake.has("thermostat"):
+				_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return n.begins_with("thermostat"))
 		else:
 			_build_sbc_intake(rig, style)
 		return
@@ -1603,8 +1769,8 @@ func _build_sbc_cleaner(rig: Node3D, pad: Vector3) -> void:
 	label.modulate = Color(0.85, 0.12, 0.08)
 	label.outline_size = 0
 	# Lying on the lid, read from the front of the car: the lid is about 3.7 in over the
-	# cleaner's base this far out.
-	var at := pad + Vector3(-3.6, 0.0, _sb().carb_top - _sb().pad.z + 3.74) * FH_IN
+	# cleaner's base this far out (on the Hemi's oval one, 3.3 in, ahead of the front wing nut).
+	var at := pad + (_sb().badge + Vector3(0.0, 0.0, _sb().carb_top - _sb().pad.z)) * FH_IN
 	label.transform = Transform3D(Basis(Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1)), at)
 	rig.add_child(label)
 
@@ -1727,7 +1893,7 @@ func _sb_wire_stops(tower: Vector3, plug: Transform3D, plugs: Array[Transform3D]
 	stops.append(fh(Vector3(x + 0.3 * toward, side * (sb.wire_bend.x + 0.15 * lane), sb.wire_bend.y)))
 	# Hanging straight down outside the exhaust, curving in to meet the boot a little above
 	# its line, so it never dips below the boot and hooks back up.
-	stops.append(out + plug.basis.z * 0.9 * FH_IN + Vector3(0.0, 0.0, 0.5 * FH_IN))
+	stops.append(out + plug.basis.z * 0.9 * FH_IN + Vector3(0.0, 0.0, sb.wire_drop * FH_IN))
 	stops.append(out)
 	return stops
 

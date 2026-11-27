@@ -19,6 +19,10 @@
     "ford-windsor": {
       "name": "Ford small-block",
       "make": "Ford"
+    },
+    "chrysler-hemi": {
+      "name": "Chrysler Hemi",
+      "make": "Chrysler"
     }
   },
   "engines": [
@@ -169,12 +173,27 @@
       "vmax": 258,
       "cid": 351,
       "model": "res://assets/parts/engine-sbf-351.glb"
+    },
+    {
+      "id": "chrysler-426-hemi",
+      "make": "Chrysler",
+      "family": "chrysler-hemi",
+      "name": "426 Hemi V8",
+      "price": 4800,
+      "hp": 430,
+      "vmax": 270,
+      "cid": 426,
+      "badge": "426 HEMI",
+      "model": "res://assets/parts/engine-hemi-426.glb",
+      "stock": {
+        "carb_2": "carb-4bbl-stock"
+      }
     }
   ],
   "transmissions": [
     {
       "id": "gb_auto3",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "name": "Automatic 3-speed",
       "price": 260,
       "automatic": true,
@@ -184,7 +203,7 @@
     },
     {
       "id": "gb_man3",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "name": "3-speed manual",
       "price": 420,
       "automatic": false,
@@ -194,7 +213,7 @@
     },
     {
       "id": "gb_man4",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "name": "4-speed manual",
       "price": 740,
       "automatic": false,
@@ -204,7 +223,7 @@
     },
     {
       "id": "gb_man5",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "name": "5-speed manual",
       "price": 1150,
       "automatic": false,
@@ -214,7 +233,7 @@
     },
     {
       "id": "gb_race5",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "name": "5-speed racing",
       "price": 1850,
       "automatic": false,
@@ -274,7 +293,7 @@
     {
       "id": "heads-iron",
       "slot": "heads",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "stock": true,
       "name": "Cast-iron heads",
       "price": 240,
@@ -284,7 +303,7 @@
     {
       "id": "heads-ported",
       "slot": "heads",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "name": "Ported cast-iron heads",
       "price": 280,
       "hp": 18,
@@ -293,7 +312,7 @@
     {
       "id": "heads-aluminum",
       "slot": "heads",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "finish": "aluminum",
       "name": "Aluminum heads",
       "price": 650,
@@ -348,6 +367,16 @@
       "family": "ford-windsor",
       "name": "High-performance heads, finned aluminum covers",
       "price": 420,
+      "finish": "finned",
+      "hp": 22,
+      "vmax": 3
+    },
+    {
+      "id": "heads-hemi-finned",
+      "slot": "heads",
+      "family": "chrysler-hemi",
+      "name": "High-performance Hemi heads, finned aluminum covers",
+      "price": 460,
       "finish": "finned",
       "hp": 22,
       "vmax": 3
@@ -466,6 +495,43 @@
       "price": 240,
       "hp": 10,
       "vmax": 1
+    },
+    {
+      "id": "intake-hemi-dualquad",
+      "slot": "intake",
+      "family": "chrysler-hemi",
+      "stock": true,
+      "style": "hemi-dualquad",
+      "carbs": 2,
+      "barrels": 4,
+      "name": "Street Hemi dual-quad intake",
+      "price": 320,
+      "hp": 0,
+      "vmax": 0
+    },
+    {
+      "id": "intake-hemi-aluminum",
+      "slot": "intake",
+      "family": "chrysler-hemi",
+      "style": "hemi-aluminum",
+      "carbs": 1,
+      "barrels": 4,
+      "name": "Aluminum Hemi four-barrel intake",
+      "price": 260,
+      "hp": 6,
+      "vmax": 1
+    },
+    {
+      "id": "intake-hemi-crossram",
+      "slot": "intake",
+      "family": "chrysler-hemi",
+      "style": "hemi-crossram",
+      "carbs": 2,
+      "barrels": 4,
+      "name": "Race Hemi cross-ram intake",
+      "price": 860,
+      "hp": 34,
+      "vmax": 5
     }
   ],
   "fuel": [
@@ -551,7 +617,7 @@
     {
       "id": "dist-points",
       "slot": "distributor",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "stock": true,
       "cap": "black",
       "drift": 1.0,
@@ -563,7 +629,7 @@
     {
       "id": "dist-dualpoint",
       "slot": "distributor",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "cap": "red",
       "drift": 0.6,
       "name": "Dual-point distributor",
@@ -574,7 +640,7 @@
     {
       "id": "dist-transistor",
       "slot": "distributor",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "cap": "blue",
       "drift": 0.3,
       "name": "Transistor ignition",
@@ -611,7 +677,7 @@
     {
       "id": "cam-stock",
       "slot": "cam",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "stock": true,
       "style": "stock",
       "name": "Stock camshaft",
@@ -622,7 +688,7 @@
     {
       "id": "cam",
       "slot": "cam",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "style": "racing",
       "name": "Racing camshaft",
       "price": 520,
@@ -702,7 +768,7 @@
     {
       "id": "manifold-iron",
       "slot": "manifold",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "stock": true,
       "style": "log",
       "name": "Cast-iron manifolds",
@@ -713,7 +779,7 @@
     {
       "id": "exhaust",
       "slot": "manifold",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "style": "shorty",
       "name": "Tube headers",
       "price": 380,
@@ -723,7 +789,7 @@
     {
       "id": "headers-long",
       "slot": "manifold",
-      "families": ["chevy-sbc", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "style": "long-tube",
       "name": "Long-tube headers, ceramic coated",
       "price": 690,
@@ -821,7 +887,7 @@
     {
       "id": "diff-308",
       "slot": "differential",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "stock": true,
       "style": "iron",
       "name": "3.08 rear end",
@@ -833,7 +899,7 @@
     {
       "id": "diff-355",
       "slot": "differential",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "style": "chrome",
       "name": "3.55 rear end",
       "price": 260,
@@ -844,7 +910,7 @@
     {
       "id": "diff-411",
       "slot": "differential",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "style": "finned",
       "name": "4.11 Positraction rear end",
       "price": 480,
@@ -855,7 +921,7 @@
     {
       "id": "diff-456",
       "slot": "differential",
-      "makes": ["GM", "Ford"],
+      "makes": ["GM", "Ford", "Chrysler"],
       "style": "girdle",
       "name": "4.56 drag rear end",
       "price": 620,
@@ -949,7 +1015,7 @@
   "mounts": [
     {
       "id": "mounts",
-      "families": ["chevy-sbc", "chevy-stovebolt", "ford-flathead", "ford-yblock", "ford-windsor"],
+      "families": ["chevy-sbc", "chevy-stovebolt", "ford-flathead", "ford-yblock", "ford-windsor", "chrysler-hemi"],
       "name": "Engine mounts",
       "price": 150,
       "shop": "speed",
