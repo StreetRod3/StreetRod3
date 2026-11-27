@@ -493,6 +493,8 @@ func _lift_out(key: String) -> void:
 		_engine.rigs.erase(_EngineAssembly.FRONT)
 	if key == GameState.SLOT_DISTRIBUTOR:
 		_engine.rebuild(_EngineAssembly.WIRES)
+	if key == GameState.SLOT_INTAKE:
+		_engine.rebuild(_EngineAssembly.FRONT)
 	_hint.text = "Lifting the %s off…" % str(PART_NAMES[key]).to_lower()
 	_play(_sfx_clunk)
 	if rig != null:
@@ -521,6 +523,9 @@ func _fit(key: String, part_id: String) -> void:
 	_refresh_ui()
 	var lift := LIFT_ENGINE if key == GameState.HOOD_ENGINE else LIFT_PART
 	var rig: Node3D = _engine.rebuild(key)
+	if key == GameState.SLOT_INTAKE:
+		# A blower takes the fan off the front, and any other intake puts it back.
+		_engine.rebuild(_EngineAssembly.FRONT)
 	_build_bolts(key)
 	var count := (_bolts.get(key, []) as Array).size()
 	for i in count:
@@ -679,7 +684,8 @@ func _refresh_part_bodies() -> void:
 		# whole top of the engine between them; the front drive a box for each piece
 		# (belt, fan, generator, pulleys), so it does not cover the front of the engine.
 		var pieces: Array = rig.get_children() if key == GameState.SLOT_HEADS else [rig]
-		if key == _EngineAssembly.FRONT:
+		# A blower's too: its belt runs down the front past the crank.
+		if key == _EngineAssembly.FRONT or (key == GameState.SLOT_INTAKE and _engine.has_blower()):
 			pieces = rig.find_children("*", "MeshInstance3D", true, false)
 		var bodies: Array[Node3D] = []
 		for piece: Node in pieces:

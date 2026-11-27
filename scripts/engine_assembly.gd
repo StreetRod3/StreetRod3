@@ -186,6 +186,15 @@ const SB_HEADERS := {
 	"shorty": "res://assets/parts/sbc-headers-shorty.glb",
 	"long-tube": "res://assets/parts/sbc-headers-long.glb",
 }
+## The blower intake (tools/make_blower.py): the intake style, and on each small-block its
+## model (manifold, blower, water outlet and the belt drive down to the crank) and its two
+## carburetor pads in tandem on the blower's top. The Ford's pads are on the 302's deck.
+const BLOWER := "blower"
+const SB_BLOWER := "res://assets/parts/blower-sbc.glb"
+const SB_BLOWER_PADS: Array[Vector3] = [Vector3(-6.6, 0.0, 21.65), Vector3(1.9, 0.0, 21.65)]
+const SBF_BLOWER := "res://assets/parts/blower-sbf-%s.glb"
+const SBF_BLOWER_PADS: Array[Vector3] = [Vector3(-1.15, 0.0, 22.35), Vector3(7.35, 0.0, 22.35)]
+const HEMI_BLOWER_PADS: Array[Vector3] = [Vector3(-1.15, 0.0, 25.85), Vector3(7.35, 0.0, 25.85)]
 ## Under the car: where each exhaust's outlet takes the head pipe on the right bank (x
 ## before the bank's offset), under the cast-iron manifold's middle or at the end of a
 ## header's collector; and the manifolds' run along the exhaust face.
@@ -347,6 +356,7 @@ const HEMI_COVERS := {"finned": "res://assets/parts/hemi-426-valve-covers-finned
 const HEMI_INTAKES := {
 	"hemi-aluminum": "res://assets/parts/hemi-426-intake-aluminum.glb",
 	"hemi-crossram": "res://assets/parts/hemi-426-intake-crossram.glb",
+	BLOWER: "res://assets/parts/blower-hemi-426.glb",
 }
 const HEMI_ALUMINUM_PADS: Array[Vector3] = [Vector3(-0.5, 0.0, 21.0)]
 ## The cross-ram's two, one on each side's plenum, staggered.
@@ -505,6 +515,8 @@ static func _chevy_layout() -> SmallBlock:
 	sb.thermostat = SB_THERMOSTAT
 	sb.dist_boss_top = SB_DIST_BOSS_TOP
 	sb.headers = SB_HEADERS
+	sb.intakes = {BLOWER: SB_BLOWER}
+	sb.style_pads = {BLOWER: SB_BLOWER_PADS}
 	for style: String in SB_OUTLETS:
 		var p: Vector3 = SB_OUTLETS[style]
 		sb.outlets[style] = [Vector3(sb.bank_x(1.0, p.x), p.y, p.z), Vector3(sb.bank_x(-1.0, p.x), -p.y, p.z)]
@@ -569,7 +581,11 @@ static func _windsor_layout(deck: String) -> SmallBlock:
 		"long-tube": "res://assets/parts/sbf-%s-headers-long.glb" % deck,
 	}
 	sb.covers = {"finned": "res://assets/parts/sbf-%s-valve-covers-finned.glb" % deck}
-	sb.intakes = {"sbf-aluminum": "res://assets/parts/sbf-%s-intake-aluminum.glb" % deck}
+	sb.intakes = {"sbf-aluminum": "res://assets/parts/sbf-%s-intake-aluminum.glb" % deck, BLOWER: SBF_BLOWER % deck}
+	var blower_pads: Array[Vector3] = []
+	for p: Vector3 in SBF_BLOWER_PADS:
+		blower_pads.append(p + up)
+	sb.style_pads = {BLOWER: blower_pads}
 	var outlet := SBF_LOG_OUTLET + Vector3(0.0, lift, lift)
 	sb.outlets["log"] = [outlet, Vector3(SBF_LOG_OUTLET_LEFT_X, -outlet.y, outlet.z)]
 	for style: String in SBF_COLLECTOR_ENDS:
@@ -626,7 +642,7 @@ static func _hemi_layout() -> SmallBlock:
 	sb.thermostat = HEMI_THERMOSTAT
 	sb.dist_boss_top = HEMI_DIST.z
 	sb.stock_intake = "hemi-dualquad"
-	sb.style_pads = {"hemi-dualquad": HEMI_PADS, "hemi-aluminum": HEMI_ALUMINUM_PADS, "hemi-crossram": HEMI_CROSSRAM_PADS}
+	sb.style_pads = {"hemi-dualquad": HEMI_PADS, "hemi-aluminum": HEMI_ALUMINUM_PADS, "hemi-crossram": HEMI_CROSSRAM_PADS, BLOWER: HEMI_BLOWER_PADS}
 	sb.headers = HEMI_HEADERS
 	sb.covers = HEMI_COVERS
 	sb.intakes = HEMI_INTAKES
@@ -786,6 +802,11 @@ func is_sbc() -> bool:
 ## The layout of the small-block on view, or null.
 func _sb() -> SmallBlock:
 	return small_block_of(_view_engine())
+
+
+## Whether the intake on is a blower.
+func has_blower() -> bool:
+	return is_sbc() and str(_view_part(GameState.SLOT_INTAKE).get("style", "")) == BLOWER
 
 
 ## Where the balancer's back face is along the crank, and the crank pulley's belt line.
@@ -1177,7 +1198,9 @@ func _build_front(rig: Node3D) -> void:
 		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _FH_NODES_FRONT))
 		return
 	if is_sbc():
-		_add_model_nodes(rig, _SB_NODES_FRONT, true)
+		# A blower's belt runs across the water pump's shaft, so its fan comes off.
+		var fan := not has_blower()
+		_add_model_filtered(rig, _model_path(), func(n: String) -> bool: return _begins_any(n, _SB_NODES_FRONT) and (fan or not n.begins_with("fan_")))
 		return
 	var steel := _mat("steel", _STEEL, 0.6, 0.35)
 	var dark := _mat("dark", Color(0.12, 0.12, 0.12), 0.6, 0.5)
@@ -1501,6 +1524,10 @@ func _build_intake(rig: Node3D, part: Dictionary) -> void:
 	if is_sbc():
 		var sb := _sb()
 		var cast := str(sb.intakes.get(style, ""))
+		if style == BLOWER and ResourceLoader.exists(cast):
+			# The blower's model is all of it: manifold, blower, water outlet and drive.
+			_add_model_filtered(rig, cast, func(_n: String) -> bool: return true)
+			return
 		if style == sb.stock_intake:
 			_add_model_nodes(rig, sb.nodes_intake, true)
 		elif not cast.is_empty() and ResourceLoader.exists(cast):

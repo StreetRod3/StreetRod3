@@ -84,7 +84,7 @@ NUT = (0.56, 0.35)
 # a pad's throttle bores as make_sbc.py's.
 INLET_FLANGE = (3.4, 0.35, 0.2)
 TOP_PLATE = (7.3, 3.5, 0.8)
-PADS_X = (-3.55, 3.55)
+PADS_X = (-4.25, 4.25)    # far enough apart for the game's two 8 in round cleaners
 PAD_HOLES = make_sbc.PAD_HOLES
 PAD_HOLE_R = make_sbc.PAD_HOLE_R
 PAD_SLOT = make_sbc.PAD_SLOT
@@ -114,7 +114,8 @@ IDLER_BRACKET = (0.4, 2.1, 0.9)
 CRANK_HUB_R = 1.4
 
 # Each engine: where the case's front face and base are (x, z), the belt's middle plane,
-# the front of the engine's crank pulley (where the drive's hub starts), and the manifold's
+# the front of the crank pulley the game draws (engine_assembly.gd's belt line less the
+# pulley's half width; the drive's hub starts there), and the manifold's
 # box (its foot's front and back along x, its head's front; the head's back is the case's).
 ENGINES = {
     "sbc": {
@@ -122,7 +123,7 @@ ENGINES = {
         # 16.7); the belt clears the water pump's hub (-14.45).
         "case": (-10.05, 13.6),
         "belt_x": -16.1,
-        "crank_front": -14.4,
+        "crank_front": -13.87,
         "manifold": "sbc",
     },
     # The Ford's distributor stands at the front (its cap back to x -7.32, up to z 14.97 on
@@ -132,7 +133,7 @@ ENGINES = {
     "sbf-302": {
         "case": (-4.6, 14.3),
         "belt_x": -18.05,
-        "crank_front": -16.3,
+        "crank_front": -15.82,
         "manifold": "sbf",
         "deck": "302",
         "box": (-7.1, 9.2, -7.1),
@@ -140,7 +141,7 @@ ENGINES = {
     "sbf-351": {
         "case": (-4.6, 15.2),
         "belt_x": -18.05,
-        "crank_front": -16.3,
+        "crank_front": -15.82,
         "manifold": "sbf",
         "deck": "351",
         "box": (-7.1, 9.2, -7.1),
@@ -150,14 +151,15 @@ ENGINES = {
     "hemi-426": {
         "case": (-4.6, 17.8),
         "belt_x": -17.9,
-        "crank_front": -16.15,
+        "crank_front": -15.67,
         "manifold": "hemi",
         "box": (-8.0, 9.6, -8.0),
     },
 }
 
+# Not a mirror: fully metallic, the shop's dark reflections turned it gunmetal on the hood screen.
 POLISHED = {"name": "polished aluminum", "pbrMetallicRoughness": {
-    "baseColorFactor": [0.86, 0.86, 0.85, 1], "metallicFactor": 1.0, "roughnessFactor": 0.22}}
+    "baseColorFactor": [0.88, 0.88, 0.87, 1], "metallicFactor": 0.7, "roughnessFactor": 0.3}}
 FINISHES = [
     ("intake_manifold_bolts", STEEL), ("intake_bolts", STEEL), ("intake_manifold", CAST_ALUMINUM), ("thermostat_neck_bore", BLACK),
     ("thermostat", CAST_ALUMINUM), ("blower_top_floor", BLACK), ("blower_nuts", STEEL),
