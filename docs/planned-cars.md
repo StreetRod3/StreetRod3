@@ -105,6 +105,7 @@ A car in more than one game is listed once. The 1963 Corvette is SR1's car 5, Th
 - [x] 1960 Corvette
 - [x] 1963 Chevy C10
 - [x] 1965 Jeep Dispatcher
+- [x] 1965 Shelby Cobra
 - [x] 1967 Chevy Impala
 - [x] 1970 Dodge Challenger
 - [x] 1970 Ford F100

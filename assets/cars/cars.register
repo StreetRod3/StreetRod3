@@ -242,6 +242,15 @@
       "hp": 300.0,
       "color": [0.06, 0.32, 0.75, 1.0],
       "car_file": "res://assets/cars/plymouth-superbird-1970.car"
+    },
+    {
+      "id": "shelby-cobra-1965",
+      "name": "1965 Shelby Cobra",
+      "price": 1600,
+      "vmax": 225.0,
+      "hp": 290.0,
+      "color": [0.13, 0.2, 0.36, 1.0],
+      "car_file": "res://assets/cars/shelby-cobra-1965.car"
     }
   ]
 }
